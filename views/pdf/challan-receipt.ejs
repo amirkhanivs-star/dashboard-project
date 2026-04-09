@@ -1,0 +1,441 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Paid Receipt</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: "Helvetica", "Arial", sans-serif;
+      color: #000;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      background: #fff;
+    }
+
+    .page {
+      position: relative;
+      width: 210mm;
+      height: 297mm;
+      margin: 0 auto;
+      padding: 15mm 15mm 0 15mm;
+      page-break-after: always;
+      background: #fff;
+      overflow: hidden;
+    }
+    .page:last-child { page-break-after: auto; }
+
+    .bannerWrap {
+      width: 100%;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .bannerWrap img {
+      width: 180mm;
+      max-height: 65mm;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+    }
+
+   .title {
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  color: #a52a2a;
+  margin-bottom: 12px;
+  letter-spacing: 0.3px;
+}
+
+    .info-grid {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 10px;
+    }
+    .info-col {
+      display: flex;
+      flex-direction: column;
+      gap: 5.5px;
+      width: 48%;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .lbl {
+      color: #646464;
+      font-weight: normal;
+      white-space: nowrap;
+    }
+    .val {
+      color: #000;
+      font-weight: bold;
+      text-align: right;
+      flex: 1;
+    }
+    .val-green {
+      color: #0a8f49;
+      font-weight: bold;
+      text-align: right;
+      flex: 1;
+    }
+
+    .currency-row {
+      margin-bottom: 10px;
+      font-size: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+    }
+   thead th {
+  background: #a52a2a;
+  color: #fff;
+  font-size: 8px;
+  font-weight: bold;
+  padding: 4px 3px;
+  text-align: left;
+  vertical-align: middle;
+}
+    thead th.right { text-align: right; }
+    thead th.center { text-align: center; }
+
+    tbody td {
+      font-size: 8px;
+      padding: 4px 3px;
+      border-bottom: 0.1mm solid #dcdcdc;
+      color: #1e1e1e;
+      vertical-align: middle;
+    }
+    tbody td.right { text-align: right; }
+    tbody td.center { text-align: center; }
+
+    .descSmall {
+      display: block;
+      font-size: 7.5px;
+      color: #646464;
+      margin-top: 1px;
+    }
+
+   .final-row {
+  background-color: #fff5f5;
+  border-top: 0.2mm solid #a52a2a;
+  border-bottom: 0.2mm solid #a52a2a;
+  color: #a52a2a;
+  font-weight: bold;
+  font-size: 10px;
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 6px;
+  margin-top: -10px;
+  margin-bottom: 12px;
+}
+
+    .receipt-note {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 14px;
+    }
+
+    .receipt-note-left {
+      flex: 1;
+      font-size: 8px;
+      color: #444;
+      line-height: 1.5;
+    }
+
+    .paid-stamp-wrap {
+      width: 150px;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .paid-stamp-wrap img {
+      max-width: 125px;
+      max-height: 70px;
+      object-fit: contain;
+      display: block;
+    }
+
+   .payment-title {
+  background: #a52a2a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  text-align: center;
+  padding: 4px 0;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+    .payment-grid {
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+    }
+    .pay-col {
+      width: 33%;
+      font-size: 7.5px;
+      color: #646464;
+      line-height: 1.4;
+    }
+    .pay-col-title {
+      font-size: 8px;
+      font-weight: bold;
+      color: #1e1e1e;
+      margin-bottom: 4px;
+    }
+
+    .pay-col.qr {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+    .pay-col.qr img {
+      width: 75px;
+      height: auto;
+      object-fit: contain;
+      margin-top: -2px;
+    }
+
+    .inst-wrap {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 20px;
+    }
+    .inst-left {
+      width: 70%;
+      font-size: 8px;
+      color: #323232;
+    }
+    .inst-title {
+      font-size: 10px;
+      font-weight: bold;
+      color: #223269;
+      margin-bottom: 6px;
+    }
+    .inst-line {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 3.5px;
+      line-height: 1.4;
+    }
+    .inst-check {
+      color: #00964b;
+      font-weight: bold;
+      margin-right: 5px;
+      font-size: 9px;
+      line-height: 1.2;
+    }
+
+    .inst-right {
+      width: 30%;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .inst-right img {
+      width: 110px;
+      height: auto;
+      object-fit: contain;
+      margin-bottom: 2px;
+    }
+    .sign-text {
+      font-size: 9px;
+      font-weight: bold;
+      color: #192864;
+      margin-bottom: 5px;
+    }
+
+  .fixed-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 210mm;
+  height: 17mm;
+  background-color: #a52a2a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15mm;
+  color: #fff;
+  font-size: 9px;
+}
+  </style>
+</head>
+<body>
+
+  <% (rowPages || []).forEach((pageRows, pageIndex) => { %>
+    <div class="page">
+
+      <div class="bannerWrap">
+        <img src="<%= bannerSrcAbs %>" alt="Header Banner">
+      </div>
+
+      <div class="title">PAID RECEIPT</div>
+
+      <div class="info-grid">
+        <div class="info-col">
+          <div class="info-row">
+            <span class="lbl">Paid By:</span>
+            <span class="val"><%= paidBy %></span>
+          </div>
+          <div class="info-row">
+            <span class="lbl">Receipt No:</span>
+            <span class="val"><%= receiptNo %></span>
+          </div>
+        </div>
+
+        <div class="info-col">
+          <div class="info-row">
+            <span class="lbl">Received on:</span>
+            <span class="val"><%= receivedOn %></span>
+          </div>
+          <div class="info-row">
+            <span class="lbl">Status:</span>
+            <span class="val-green"><%= statusText %></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="currency-row">
+        <div>
+          <span class="lbl">Currency:</span>
+          <span class="val"><%= currency %></span>
+        </div>
+        <div>
+          <span class="lbl">Month:</span>
+          <span class="val"><%= receiptMonth %></span>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 14%">Reg No</th>
+            <th style="width: 46%">Description</th>
+            <th style="width: 15%">Grade</th>
+            <th class="center" style="width: 10%">Month</th>
+            <th class="right" style="width: 15%">Amount (<%= currency %>)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% pageRows.forEach(r => { %>
+            <tr>
+              <td><%= r.regNo %></td>
+              <td>
+                <% const d = String(r.description || '').split('\n'); %>
+                <%= d[0] %>
+                <% if (d[1]) { %><span class="descSmall"><%= d[1] %></span><% } %>
+              </td>
+              <td><%= r.grade %></td>
+              <td class="center"><%= r.month %></td>
+              <td class="right"><%= r.amount %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+
+      <% if (pageIndex === rowPages.length - 1) { %>
+        <div class="final-row">
+          <div>TOTAL RECEIVED</div>
+          <div><%= totalText %></div>
+        </div>
+
+        <div class="receipt-note">
+          <div class="receipt-note-left">
+            This receipt confirms that the payment for the mentioned month has been received and recorded by the Accounts Department of Iqra Virtual School.
+          </div>
+
+          <% if (paidStampSrc) { %>
+            <div class="paid-stamp-wrap">
+              <img src="<%= baseUrl + paidStampSrc %>" alt="Paid Stamp">
+            </div>
+          <% } %>
+        </div>
+
+        <div class="payment-title">PAYMENT INFORMATION</div>
+        <div class="payment-grid">
+          <div class="pay-col">
+            <div class="pay-col-title">IQRA VIRTUALSOLUTIONS</div>
+            <div>IBAN#: PK71MEZN0007810111367793</div>
+            <div>(International Transfers)</div>
+            <div>A/C #: 07810111367793 (Local)</div>
+            <div>Branch Code: 0781</div>
+            <div>Bank: Meezan Bank Peshawar</div>
+            <div>Contact: +92 335 524 5551</div>
+          </div>
+
+          <div class="pay-col">
+            <div class="pay-col-title">IVSGLOBAL</div>
+            <div>Bank Name: Mashreq Bank</div>
+            <div>IBAN: AE620330000019101455931</div>
+            <div>A/C Number: 019101455931</div>
+            <div>Mobile: +971528838128</div>
+            <div>Beneficiary Address: Ajman Industrial Area 2, UAE</div>
+          </div>
+
+          <div class="pay-col qr">
+            <div class="pay-col-title" style="font-size:7px;">PayPal Account</div>
+            <img src="<%= baseUrl + '/img/receipt-qr.jpg' %>" alt="Scan to pay">
+            <div style="font-size:6px; font-weight:bold; margin-top:2px;">SCAN TO PAY</div>
+          </div>
+        </div>
+
+        <div class="inst-wrap">
+          <div class="inst-left">
+            <div class="inst-title">Instructions:</div>
+            <div class="inst-line">
+              <span class="inst-check">✓</span>
+              <span>Please keep this paid receipt for your record and future reference.</span>
+            </div>
+            <div class="inst-line">
+              <span class="inst-check">✓</span>
+              <span>For payment verification and record concerns, kindly fill out the fee receipt submission form:</span>
+            </div>
+            <div class="inst-line" style="margin-left: 12px; margin-bottom: 6px; color: blue;">
+              <%= formLink %>
+            </div>
+            <div class="inst-line">
+              <span class="inst-check">✓</span>
+              <span>If any mismatch is found in payment details, please contact the Accounts Department within 72 hours.</span>
+            </div>
+            <div class="inst-line">
+              <span class="inst-check">✓</span>
+              <span>Rejected or refunded transactions will not be treated as valid paid entries.</span>
+            </div>
+          </div>
+
+          <div class="inst-right">
+            <img src="<%= baseUrl + '/img/receipt-sign.jpg' %>" alt="Stamp and Signature">
+            <span class="sign-text">Authorized Signature</span>
+          </div>
+        </div>
+      <% } %>
+
+      <div class="fixed-footer">
+        <span><%= settings.phone %></span>
+        <span style="flex: 1; text-align: center;"><%= settings.email %></span>
+        <span><%= settings.website %></span>
+      </div>
+
+    </div>
+  <% }) %>
+
+</body>
+</html>

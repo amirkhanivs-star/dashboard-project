@@ -1,0 +1,2479 @@
+<%- include('partials/bootstrap-header', { user, pageTitle: pageTitle || 'Uploaded Files' }) %>
+<%- include('partials/flash') %>
+
+<%
+  // ===== Safe helpers (EJS) =====
+  const _safeStr = (v) => (v === null || typeof v === 'undefined') ? '' : String(v);
+  const _lower = (v) => _safeStr(v).toLowerCase();
+  const _isImg = (mime) => _safeStr(mime).startsWith('image/');
+  const _ext = (name) => {
+    const s = _safeStr(name);
+    const i = s.lastIndexOf('.');
+    return i >= 0 ? s.slice(i + 1).toLowerCase() : '';
+  };
+  const _fmtDate = (v) => _safeStr(v);
+
+  const _isAbsUrl = (s) => /^https?:\/\//i.test(_safeStr(s).trim());
+
+  // ✅ Build file link (works for uploads + stored links)
+  function _fileHref(f) {
+    let u =
+      (f && (f.file_url || f.url || f.link || f.public_url || f.href || f.download_url || f.file_link)) || '';
+
+    if (!u && f && f.stored_name) u = f.stored_name;
+
+    u = _safeStr(u).trim();
+    if (!u) return '';
+
+    if (_isAbsUrl(u)) return u;
+    if (u.startsWith('/')) return u;
+    if (u.startsWith('uploads/')) return '/' + u;
+    return '/uploads/' + u;
+  }
+
+  // ✅ detect REAL "link item" only
+  function _isLinkItem(f) {
+    if (!f) return false;
+    const mime = _safeStr(f.mime_type).trim().toLowerCase();
+    return mime === 'text/url';
+  }
+
+  // ✅ safe encode JSON for data-attribute
+  const _encJson = (obj) => encodeURIComponent(JSON.stringify(obj || {}));
+
+  // ✅ safe parse date
+  function _parseDate(s){
+    const d = new Date(_safeStr(s));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function _getYearMonth(createdAt){
+    const d = _parseDate(createdAt);
+    if (!d) return { year: 0, month: 0 };
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+  }
+
+  const MONTHS = [
+    { n: 1,  key: "jan", label: "January" },
+    { n: 2,  key: "feb", label: "February" },
+    { n: 3,  key: "mar", label: "March" },
+    { n: 4,  key: "apr", label: "April" },
+    { n: 5,  key: "may", label: "May" },
+    { n: 6,  key: "jun", label: "June" },
+    { n: 7,  key: "jul", label: "July" },
+    { n: 8,  key: "aug", label: "August" },
+    { n: 9,  key: "sep", label: "September" },
+    { n: 10, key: "oct", label: "October" },
+    { n: 11, key: "nov", label: "November" },
+    { n: 12, key: "dec", label: "December" }
+  ];
+
+  const IS_SINGLE_ADMISSION_VIEW = !!admissionId;
+  const FAMILY_NUMBER = _safeStr(typeof familyNumber !== 'undefined' ? familyNumber : '').trim();
+  const FAMILY_ADMISSION_IDS = Array.isArray(typeof familyAdmissionIds !== 'undefined' ? familyAdmissionIds : null)
+    ? familyAdmissionIds
+    : [];
+
+  const IS_FAMILY_VIEW = !!(IS_SINGLE_ADMISSION_VIEW && FAMILY_NUMBER);
+  const FAMILY_COUNT = FAMILY_ADMISSION_IDS.length || 0;
+
+  // Role flags (for delete routing)
+  const _isSuper =
+    !!(user && (
+      user.role === 'super_admin' ||
+      user.role === 'superadmin' ||
+      user.agentType === 'super_admin' ||
+      user.agentType === 'superadmin' ||
+      user.isSuperAdmin === true ||
+      user.is_super_admin === true
+    ));
+
+  // Perms
+  let _perms =
+    (typeof perms !== "undefined" && perms)
+      ? perms
+      : ((user && (user.permissions || user.perms || user.permission || user.permissionMap)) || null);
+
+  try { if (typeof _perms === 'string') _perms = JSON.parse(_perms); } catch(e) {}
+
+  function _canDeleteFiles() {
+    if (_isSuper) return true;
+    if (!_perms) return false;
+    if (Array.isArray(_perms)) return _perms.includes("canDeleteFiles");
+    if (typeof _perms === "object") return !!_perms.canDeleteFiles;
+    return false;
+  }
+
+  function _canUploadFiles() {
+    if (_isSuper) return true;
+    if (!_perms) return false;
+
+    if (Array.isArray(_perms)) {
+      return _perms.includes("btnUpload") ||
+             _perms.includes("btnUploadFiles") ||
+             _perms.includes("canUploadFiles") ||
+             _perms.includes("uploadFiles") ||
+             _perms.includes("canUpload");
+    }
+
+    if (typeof _perms === "object") {
+      return !!(_perms.btnUpload ||
+                _perms.btnUploadFiles ||
+                _perms.canUploadFiles ||
+                _perms.uploadFiles ||
+                _perms.canUpload);
+    }
+
+    return false;
+  }
+
+  const ALLOW_DELETE = _canDeleteFiles();
+  const ALLOW_UPLOAD_URL = _canUploadFiles();
+
+  const filesList = files || [];
+
+  // ✅ Build Year -> Month counts (for folder UI)
+  const yearMap = {};
+  (filesList || []).forEach(f => {
+    const created = _safeStr(f.created_at);
+    const ym = _getYearMonth(created);
+    if (!ym.year || !ym.month) return;
+
+    if (!yearMap[ym.year]) yearMap[ym.year] = { total: 0, months: {} };
+    if (!yearMap[ym.year].months[ym.month]) yearMap[ym.year].months[ym.month] = 0;
+
+    yearMap[ym.year].total += 1;
+    yearMap[ym.year].months[ym.month] += 1;
+  });
+
+  const years = Object.keys(yearMap).map(n => parseInt(n, 10)).filter(Boolean).sort((a,b)=>b-a);
+
+  // current year/month (for uploads default folder)
+  const _now = new Date();
+  const CURRENT_YEAR = _now.getFullYear();
+  const CURRENT_MONTH = _now.getMonth() + 1;
+%>
+
+<style>
+  html, body { overflow-x: hidden; }
+  .vf-shell{
+    max-width:100%;
+    min-width:0;
+    overflow-x:hidden;
+    padding: 14px 14px 22px;
+  }
+
+  .vf-hero{
+    border-radius: 24px;
+    border: 1px solid rgba(148,163,184,.24);
+    background:
+      radial-gradient(1100px 360px at 12% 12%, rgba(56,189,248,.18), transparent 56%),
+      radial-gradient(900px 320px at 88% 20%, rgba(99,102,241,.14), transparent 56%),
+      linear-gradient(135deg, rgba(255,255,255,0.995), rgba(248,250,252,0.98));
+    padding: 18px;
+    box-shadow: 0 18px 38px rgba(2,8,23,.07);
+    position: relative;
+    overflow: hidden;
+  }
+  .vf-hero:before{
+    content:"";
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:
+      linear-gradient(120deg, rgba(255,255,255,.26), transparent 35%),
+      radial-gradient(700px 220px at 100% 0%, rgba(14,165,233,.08), transparent 60%);
+  }
+
+  .vf-chip{
+    background: rgba(59,130,246,.10);
+    color: #1d4ed8;
+    border: 1px solid rgba(59,130,246,.18);
+    font-weight: 800;
+    padding: 7px 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.55);
+  }
+
+  .vf-chip-soft{
+    background: rgba(15,23,42,.04);
+    color: #334155;
+    border: 1px solid rgba(15,23,42,.08);
+  }
+
+  .vf-toolbar{
+    border-radius: 22px;
+    border: 1px solid rgba(148,163,184,.24);
+    background:
+      radial-gradient(900px 240px at 10% 0%, rgba(34,197,94,.08), transparent 55%),
+      radial-gradient(900px 240px at 90% 0%, rgba(59,130,246,.09), transparent 55%),
+      linear-gradient(180deg, rgba(255,255,255,.995), rgba(250,251,253,.99));
+    box-shadow: 0 12px 24px rgba(2,8,23,.06);
+    padding: 16px;
+  }
+
+  .vf-input, .vf-select{
+    border-radius: 14px !important;
+    border: 1px solid rgba(15,23,42,.12) !important;
+    background: rgba(248,250,252,.94) !important;
+    min-height: 44px;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease, transform .15s ease;
+  }
+  .vf-input:focus, .vf-select:focus{
+    border-color: rgba(59,130,246,.75) !important;
+    box-shadow: 0 0 0 4px rgba(59,130,246,.14) !important;
+    background: #fff !important;
+    transform: translateY(-1px);
+  }
+
+  .vf-toolbar .form-label{
+    font-weight: 700;
+    color: #475569;
+  }
+
+  .vf-viewbtn{
+    border-radius: 999px !important;
+    padding: 8px 14px !important;
+    min-height: 44px;
+  }
+
+  .vf-grid{ margin-top: 14px; }
+  .vf-card{
+    border-radius: 20px;
+    border: 1px solid rgba(15,23,42,.07);
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(255,255,255,1), rgba(251,252,254,.98));
+    box-shadow: 0 12px 22px rgba(2,8,23,.06);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    position: relative;
+  }
+  .vf-card:hover{
+    transform: translateY(-4px);
+    box-shadow: 0 22px 36px rgba(2,8,23,.12);
+    border-color: rgba(59,130,246,.20);
+  }
+
+  .vf-card-topglow{
+    position:absolute;
+    inset:0 0 auto 0;
+    height:4px;
+    background: linear-gradient(90deg, #38bdf8, #6366f1, #22c55e);
+    opacity:.9;
+  }
+
+  .vf-family-ribbon{
+    position:absolute;
+    top:12px;
+    left:-34px;
+    transform: rotate(-36deg);
+    min-width: 122px;
+    text-align:center;
+    z-index: 3;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .3px;
+    color: #fff;
+    box-shadow: 0 10px 18px rgba(2,8,23,.18);
+    border-radius: 999px;
+    pointer-events: none;
+  }
+  .vf-family-ribbon.family-a{ background: linear-gradient(135deg,#2563eb,#1d4ed8); }
+  .vf-family-ribbon.family-b{ background: linear-gradient(135deg,#7c3aed,#6d28d9); }
+  .vf-family-ribbon.family-c{ background: linear-gradient(135deg,#059669,#047857); }
+  .vf-family-ribbon.family-d{ background: linear-gradient(135deg,#ea580c,#c2410c); }
+  .vf-family-ribbon.family-e{ background: linear-gradient(135deg,#db2777,#be185d); }
+  .vf-family-ribbon.family-f{ background: linear-gradient(135deg,#0891b2,#0e7490); }
+
+  .vf-thumb{
+    height: 180px;
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(241,245,249,1), rgba(248,250,252,1));
+    overflow: hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border: 1px solid rgba(15,23,42,.06);
+  }
+  .vf-thumb img{
+    width:100%;
+    height:180px;
+    object-fit: cover;
+  }
+
+  .vf-fileBadge{
+    border: 1px solid rgba(15,23,42,.08);
+    background: rgba(248,250,252,.96);
+    color: rgba(15,23,42,.78);
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 5px 11px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+  }
+
+  .vf-type-image{
+    background: rgba(59,130,246,.10);
+    color: #1d4ed8;
+    border-color: rgba(59,130,246,.18);
+  }
+  .vf-type-pdf{
+    background: rgba(239,68,68,.10);
+    color: #b91c1c;
+    border-color: rgba(239,68,68,.18);
+  }
+  .vf-type-doc{
+    background: rgba(79,70,229,.10);
+    color: #4338ca;
+    border-color: rgba(79,70,229,.18);
+  }
+  .vf-type-xls{
+    background: rgba(34,197,94,.10);
+    color: #15803d;
+    border-color: rgba(34,197,94,.18);
+  }
+  .vf-type-link{
+    background: rgba(14,165,233,.10);
+    color: #0369a1;
+    border-color: rgba(14,165,233,.18);
+  }
+  .vf-type-other{
+    background: rgba(15,23,42,.06);
+    color: #475569;
+    border-color: rgba(15,23,42,.10);
+  }
+
+  .vf-name{
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.35;
+    padding-right: 4px;
+  }
+
+  .vf-actions{
+    row-gap: 10px !important;
+  }
+  .vf-actions .btn{
+    border-radius: 999px !important;
+    font-weight: 800;
+    min-height: 40px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    white-space: nowrap;
+    min-width: 104px;
+    transition: all .16s ease;
+  }
+
+  .vf-btn-open{
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    border: 0 !important;
+    color: #fff !important;
+    box-shadow: 0 10px 18px rgba(37,99,235,.20);
+  }
+  .vf-btn-open:hover{
+    filter: brightness(1.03);
+    color:#fff !important;
+    transform: translateY(-1px);
+  }
+
+  .vf-btn-save{
+    border-color: rgba(15,23,42,.12) !important;
+    background: #fff !important;
+    color: #475569 !important;
+    box-shadow: 0 4px 12px rgba(15,23,42,.04);
+  }
+  .vf-btn-save:hover{
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    border-color: rgba(59,130,246,.20) !important;
+    transform: translateY(-1px);
+  }
+
+  .vf-btn-edit{
+    border-color: rgba(15,23,42,.12) !important;
+    background: #fff !important;
+    color: #475569 !important;
+    box-shadow: 0 4px 12px rgba(15,23,42,.04);
+  }
+  .vf-btn-edit:hover{
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    border-color: rgba(59,130,246,.20) !important;
+    transform: translateY(-1px);
+  }
+
+  .vf-btn-delete{
+    border-color: rgba(239,68,68,.32) !important;
+    color: #dc2626 !important;
+    background: rgba(254,242,242,.9) !important;
+    box-shadow: 0 4px 12px rgba(239,68,68,.07);
+  }
+  .vf-btn-delete:hover{
+    background: #fee2e2 !important;
+    color: #b91c1c !important;
+    transform: translateY(-1px);
+  }
+
+  .vf-empty{
+    border-radius: 20px;
+    border: 1px dashed rgba(148,163,184,.55);
+    background: rgba(248,250,252,.92);
+    padding: 24px;
+  }
+
+  .vf-hidden{ display:none !important; }
+
+  @keyframes flashScaleIn { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes flashFadeOut { to { opacity: 0; visibility: hidden; } }
+  #file-delete-overlay.fade-out,
+  #file-success-overlay.fade-out,
+  #url-upload-overlay.fade-out,
+  #url-success-overlay.fade-out,
+  #url-edit-overlay.fade-out,
+  #file-delete-all-overlay.fade-out { animation: flashFadeOut 250ms ease-in forwards; }
+
+  .vf-modal-card{
+    min-width:320px;
+    max-width:520px;
+    animation:flashScaleIn 220ms ease-out;
+    border-radius: 22px !important;
+  }
+
+  .vf-folders{
+    border-radius: 22px;
+    border: 1px solid rgba(148,163,184,.26);
+    background: linear-gradient(180deg, rgba(255,255,255,.99), rgba(250,251,253,.98));
+    box-shadow: 0 12px 24px rgba(2,8,23,.06);
+    padding: 16px;
+    margin-top: 14px;
+  }
+
+  .vf-breadcrumb{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+    padding: 6px 2px 14px;
+    border-bottom: 1px solid rgba(15,23,42,.08);
+    margin-bottom: 14px;
+  }
+  .vf-path{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    font-weight:700;
+  }
+  .vf-path .seg{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding: 7px 12px;
+    border: 1px solid rgba(15,23,42,.08);
+    background: rgba(248,250,252,.9);
+    border-radius: 999px;
+    cursor: pointer;
+    user-select:none;
+    transition: all .15s ease;
+  }
+  .vf-path .seg:hover{
+    background:#fff;
+    border-color: rgba(59,130,246,.20);
+    color: #1d4ed8;
+  }
+  .vf-path .seg.active{
+    background: rgba(59,130,246,.10);
+    border-color: rgba(59,130,246,.22);
+    color: #1d4ed8;
+  }
+
+  .vf-folderGrid{ margin-top: 10px; }
+  .vf-folder{
+    border-radius: 18px;
+    border: 1px solid rgba(15,23,42,.08);
+    background: linear-gradient(180deg, rgba(255,255,255,.99), rgba(248,250,252,.98));
+    box-shadow: 0 10px 18px rgba(2,8,23,.05);
+    padding: 15px;
+    cursor: pointer;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    min-height: 90px;
+    position: relative;
+    overflow: hidden;
+  }
+  .vf-folder:before{
+    content:"";
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background: radial-gradient(500px 100px at 0% 0%, rgba(59,130,246,.08), transparent 55%);
+  }
+  .vf-folder:hover{
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 18px 28px rgba(2,8,23,.10);
+    border-color: rgba(59,130,246,.22);
+  }
+  .vf-folder.disabled{
+    opacity: .45;
+    cursor: not-allowed;
+  }
+  .vf-folderTop{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+  }
+  .vf-folderTitle{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-weight:800;
+    color: #0f172a;
+  }
+  .vf-folderTitle i{ font-size: 22px; }
+  .vf-folderMeta{
+    margin-top: 7px;
+    color: rgba(15,23,42,.65);
+    font-size: 12px;
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+
+  .vf-stageHint{
+    border-radius: 18px;
+    border: 1px solid rgba(15,23,42,.08);
+    background: linear-gradient(135deg, rgba(248,250,252,.92), rgba(255,255,255,.96));
+    padding: 13px 15px;
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    margin-top: 12px;
+  }
+  .vf-stageHint i{ margin-top:2px; }
+
+  .vf-sectionTitle{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-top: 16px;
+    padding: 0 2px;
+  }
+  .vf-sectionTitle h5{
+    margin:0;
+    font-weight:900;
+    color: #0f172a;
+  }
+  .vf-kpi{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+
+  .vf-family-banner{
+    margin-top: 14px;
+    padding: 16px;
+    border-radius: 20px;
+    border: 1px solid rgba(59,130,246,.14);
+    background:
+      radial-gradient(900px 220px at 0% 0%, rgba(59,130,246,.10), transparent 55%),
+      radial-gradient(800px 220px at 100% 0%, rgba(16,185,129,.10), transparent 55%),
+      linear-gradient(135deg, rgba(255,255,255,.98), rgba(248,250,252,.98));
+    box-shadow: 0 12px 22px rgba(2,8,23,.05);
+  }
+
+  .vf-super-danger{
+    margin-top: 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(239,68,68,.16);
+    background: linear-gradient(180deg, rgba(255,245,245,.95), rgba(254,242,242,.88));
+    padding: 12px 14px;
+  }
+
+  .vf-super-danger-row{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+
+  .vf-danger-note{
+    color:#b91c1c;
+    font-size:12px;
+    font-weight:700;
+    opacity:.78;
+  }
+
+  #vfListWrap{
+    border-radius: 22px !important;
+    overflow: hidden;
+    border: 1px solid rgba(15,23,42,.08) !important;
+    background: #fff !important;
+    box-shadow: 0 12px 24px rgba(2,8,23,.06) !important;
+  }
+
+  #vfListWrap table{
+    margin-bottom: 0;
+  }
+
+  #vfListWrap thead{
+    background: linear-gradient(180deg,#0f172a,#111827) !important;
+    color:#fff !important;
+  }
+
+  #vfListWrap thead th{
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 14px 12px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  #vfListWrap tbody tr{
+    transition: background .12s ease, transform .12s ease;
+  }
+  #vfListWrap tbody tr:hover{
+    background: rgba(248,250,252,.8);
+  }
+
+  #vfListWrap tbody td{
+    padding: 14px 12px;
+    border-color: rgba(15,23,42,.06);
+    vertical-align: middle;
+  }
+
+  .vf-list-preview{
+    width:50px;
+    height:40px;
+    border-radius:12px;
+    overflow:hidden;
+    background:linear-gradient(180deg,#f1f5f9,#f8fafc);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border:1px solid rgba(15,23,42,.08);
+  }
+
+  .vf-stat-pill{
+    border-radius: 999px;
+    padding: 6px 11px;
+    font-size: 12px;
+    font-weight: 800;
+    border: 1px solid rgba(15,23,42,.08);
+    background: rgba(255,255,255,.75);
+    color: #334155;
+  }
+
+  .vf-list-badge{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width: 62px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    border: 1px solid rgba(15,23,42,.08);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.55);
+  }
+
+  .vf-list-adm{
+    background: rgba(37,99,235,.08);
+    color: #1d4ed8;
+    border-color: rgba(37,99,235,.18);
+  }
+
+  .vf-list-family{
+    background: rgba(124,58,237,.08);
+    color: #6d28d9;
+    border-color: rgba(124,58,237,.18);
+  }
+
+  .vf-list-student{
+    background: rgba(15,23,42,.05);
+    color: #334155;
+    border-color: rgba(15,23,42,.08);
+  }
+
+  .vf-url-line{
+    display:block;
+    color:#64748b !important;
+    text-decoration:none !important;
+  }
+  .vf-url-line:hover{
+    color:#0f172a !important;
+  }
+
+  .vf-delete-all-btn{
+    border-radius: 999px !important;
+    padding: 10px 16px !important;
+    font-weight: 800 !important;
+    box-shadow: 0 10px 18px rgba(239,68,68,.14);
+    min-height: 44px;
+  }
+
+  @media (max-width: 767.98px){
+    .vf-toolbar, .vf-folders, .vf-hero{
+      border-radius: 18px;
+      padding: 14px;
+    }
+
+    .vf-thumb{
+      height: 160px;
+    }
+    .vf-thumb img{
+      height: 160px;
+    }
+
+    .vf-actions .btn{
+      min-width: 96px;
+      font-size: 13px;
+    }
+
+    .vf-family-ribbon{
+      transform: rotate(-32deg);
+      left:-38px;
+      min-width: 116px;
+      font-size: 10px;
+    }
+  }
+</style>
+
+<div class="vf-shell">
+
+  <!-- HERO -->
+  <div class="vf-hero mb-3">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+          <span class="badge rounded-pill vf-chip">
+            <i class="bi bi-folder2-open me-1"></i> Uploaded Files
+          </span>
+
+          <% if (admissionId) { %>
+            <span class="badge rounded-pill vf-chip">
+              <i class="bi bi-hash me-1"></i> Admission ID: <strong class="ms-1"><%= admissionId %></strong>
+            </span>
+          <% } %>
+
+          <% if (IS_FAMILY_VIEW) { %>
+            <span class="badge rounded-pill vf-chip">
+              <i class="bi bi-people me-1"></i> Family Files View
+            </span>
+
+            <span class="badge rounded-pill vf-chip">
+              <i class="bi bi-diagram-3 me-1"></i> Family #: <strong class="ms-1"><%= FAMILY_NUMBER %></strong>
+            </span>
+
+            <span class="badge rounded-pill vf-chip">
+              <i class="bi bi-collection me-1"></i> Admissions in Family: <strong class="ms-1"><%= FAMILY_COUNT %></strong>
+            </span>
+          <% } %>
+
+          <span class="badge rounded-pill vf-chip">
+            <i class="bi bi-collection me-1"></i> Total: <strong class="ms-1"><%= filesList.length %></strong>
+          </span>
+
+          <% if (!ALLOW_DELETE) { %>
+            <span class="badge rounded-pill vf-chip-soft">
+              <i class="bi bi-shield-lock me-1"></i> Delete disabled
+            </span>
+          <% } %>
+        </div>
+
+        <h4 class="mb-1 fw-bold">View Files</h4>
+
+        <% if (admissionId) { %>
+          <% if (IS_FAMILY_VIEW) { %>
+            <div class="text-muted small">
+              Showing <strong>family files</strong> for Admission ID: <strong><%= admissionId %></strong>
+              · Family #: <strong><%= FAMILY_NUMBER %></strong>
+              · Included admissions: <strong><%= FAMILY_COUNT %></strong>
+            </div>
+          <% } else { %>
+            <div class="text-muted small">Showing files for Admission ID: <%= admissionId %></div>
+          <% } %>
+        <% } else { %>
+          <div class="text-muted small">Open Year → Month. Month open hoga to us month ka data show hoga.</div>
+        <% } %>
+      </div>
+
+      <div class="d-flex gap-2 flex-wrap">
+        <% if (ALLOW_UPLOAD_URL) { %>
+          <button id="btnUploadUrl" type="button" class="btn btn-sm btn-dark rounded-pill px-3">
+            <i class="bi bi-link-45deg me-1"></i> Upload URL
+          </button>
+        <% } %>
+
+        <% if (admissionId) { %>
+          <a href="<%=
+            _isSuper
+              ? '/dashboard/super/files'
+              : (user && user.role === 'admin')
+                ? '/admin/files'
+                : '/files?admission_id=' + admissionId
+          %>"
+             class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+            <i class="bi bi-arrow-left me-1"></i> Back
+          </a>
+        <% } %>
+
+        <a href="/dashboard" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+          <i class="bi bi-grid-1x2 me-1"></i> Back to Dashboard
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <% if (IS_FAMILY_VIEW) { %>
+    <div class="vf-family-banner">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+          <div class="fw-bold mb-1">
+            <i class="bi bi-diagram-3 me-2 text-primary"></i>Family Files Overview
+          </div>
+          <div class="text-muted small">
+            This page is showing files from all admissions linked with Family # <strong><%= FAMILY_NUMBER %></strong>.
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap">
+          <span class="vf-stat-pill">
+            <i class="bi bi-hash me-1"></i>Base Admission: <strong><%= admissionId %></strong>
+          </span>
+          <span class="vf-stat-pill">
+            <i class="bi bi-people me-1"></i>Admissions: <strong><%= FAMILY_COUNT %></strong>
+          </span>
+        </div>
+      </div>
+    </div>
+  <% } %>
+
+  <!-- ✅ FOLDER UI (Years -> Months) -->
+  <div class="vf-folders" id="vfFolders">
+    <div class="vf-breadcrumb">
+      <div class="vf-path">
+        <span class="seg" id="vfCrumbRoot" title="All Years">
+          <i class="bi bi-folder"></i> Years
+        </span>
+        <span class="text-muted" id="vfCrumbSep1" style="display:none;">/</span>
+        <span class="seg" id="vfCrumbYear" style="display:none;"></span>
+        <span class="text-muted" id="vfCrumbSep2" style="display:none;">/</span>
+        <span class="seg" id="vfCrumbMonth" style="display:none;"></span>
+      </div>
+
+      <div class="small text-muted">
+        Default upload folder: <strong><%= CURRENT_YEAR %></strong> / <strong><%= MONTHS[CURRENT_MONTH-1].label %></strong>
+      </div>
+    </div>
+
+    <div class="vf-stageHint" id="vfStageHint">
+      <i class="bi bi-info-circle text-primary fs-5"></i>
+      <div>
+        <div class="fw-semibold">Folders view</div>
+        <div class="text-muted small">Year open karo, phir month select karo. Month select hoga to neeche files show ho jayengi.</div>
+      </div>
+    </div>
+
+    <div id="vfYearsView">
+      <% if (!years.length) { %>
+        <div class="vf-empty text-center mt-3">
+          <div class="mb-2"><i class="bi bi-folder-x fs-1 text-muted"></i></div>
+          <div class="fw-semibold">No files yet.</div>
+          <div class="text-muted small">Upload any file or URL, then it will appear inside year/month folders.</div>
+        </div>
+      <% } else { %>
+        <div class="row g-3 vf-folderGrid mt-2">
+          <% years.forEach(y => { %>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+              <div class="vf-folder" role="button" tabindex="0"
+                   data-open-year="<%= y %>"
+                   title="Open <%= y %>">
+                <div class="vf-folderTop">
+                  <div class="vf-folderTitle">
+                    <i class="bi bi-folder-fill text-warning"></i>
+                    <div><%= y %></div>
+                  </div>
+                  <span class="vf-fileBadge">Total: <%= (yearMap[y] && yearMap[y].total) ? yearMap[y].total : 0 %></span>
+                </div>
+                <div class="vf-folderMeta">
+                  <span><i class="bi bi-calendar3 me-1"></i>Year folder</span>
+                  <span><i class="bi bi-grid me-1"></i>12 months inside</span>
+                </div>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+    </div>
+
+    <div id="vfMonthsView" class="vf-hidden">
+      <div class="row g-3 vf-folderGrid mt-2">
+        <% MONTHS.forEach(m => { %>
+          <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+            <div class="vf-folder"
+                 role="button" tabindex="0"
+                 data-open-month="<%= m.n %>"
+                 data-month-label="<%= m.label %>">
+              <div class="vf-folderTop">
+                <div class="vf-folderTitle">
+                  <i class="bi bi-folder-fill text-warning"></i>
+                  <div><%= m.label %></div>
+                </div>
+                <span class="vf-fileBadge" id="vfMonthCount_<%= m.n %>">Total: 0</span>
+              </div>
+              <div class="vf-folderMeta">
+                <span><i class="bi bi-archive me-1"></i>Month folder</span>
+                <span class="text-muted">Click to view files</span>
+              </div>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+  </div>
+
+  <div class="vf-sectionTitle vf-hidden" id="vfMonthHeader">
+    <h5><i class="bi bi-folder2-open me-2 text-primary"></i><span id="vfMonthHeaderText">Files</span></h5>
+    <div class="vf-kpi">
+      <span class="vf-fileBadge" id="vfCountBadge">Showing: <%= filesList.length %></span>
+      <% if (!ALLOW_DELETE) { %>
+        <span class="vf-fileBadge"><i class="bi bi-shield-lock me-1"></i>Delete disabled</span>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="vf-toolbar vf-hidden" id="vfToolbar">
+    <div class="row g-2 align-items-end">
+
+      <% if (!IS_SINGLE_ADMISSION_VIEW) { %>
+        <div class="col-12 col-md-5">
+          <label class="form-label small mb-1">Search (file / student / id)</label>
+          <div class="input-group">
+            <span class="input-group-text bg-white border-0" style="border-radius:14px 0 0 14px; border:1px solid rgba(15,23,42,.12); min-height:44px;">
+              <i class="bi bi-search"></i>
+            </span>
+            <input id="vfSearch" type="text" class="form-control vf-input"
+                   style="border-left:0 !important; border-radius:0 14px 14px 0 !important;"
+                   placeholder="e.g. receipt, pdf, Ali, admission id, family #">
+          </div>
+        </div>
+
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Admission ID</label>
+          <input id="vfAdmission" type="text" class="form-control vf-input" placeholder="e.g. 1234">
+        </div>
+
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Student</label>
+          <input id="vfStudent" type="text" class="form-control vf-input" placeholder="e.g. Ali">
+        </div>
+      <% } %>
+
+      <div class="col-6 col-md-3">
+        <label class="form-label small mb-1">Type</label>
+        <select id="vfType" class="form-select vf-select">
+          <option value="">All</option>
+          <option value="image">Images</option>
+          <option value="pdf">PDF</option>
+          <option value="doc">Docs</option>
+          <option value="xls">Sheets</option>
+          <option value="link">Links</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+
+      <div class="col-6 col-md-2">
+        <label class="form-label small mb-1">Date</label>
+        <select id="vfDatePreset" class="form-select vf-select">
+          <option value="">All time</option>
+          <option value="today">Today</option>
+          <option value="month">This month</option>
+          <option value="year">This year</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+
+      <div class="col-6 col-md-2 vf-hidden" id="vfFromWrap">
+        <label class="form-label small mb-1">From</label>
+        <input id="vfFrom" type="date" class="form-control vf-input">
+      </div>
+
+      <div class="col-6 col-md-2 vf-hidden" id="vfToWrap">
+        <label class="form-label small mb-1">To</label>
+        <input id="vfTo" type="date" class="form-control vf-input">
+      </div>
+
+      <div class="col-6 col-md-2">
+        <label class="form-label small mb-1">Sort</label>
+        <select id="vfSort" class="form-select vf-select">
+          <option value="new">Newest first</option>
+          <option value="old">Oldest first</option>
+          <option value="name_az">Name A → Z</option>
+          <option value="name_za">Name Z → A</option>
+        </select>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <label class="form-label small mb-1">View</label>
+        <div class="d-flex gap-2 flex-wrap">
+          <select id="vfView" class="form-select vf-select" style="max-width: 230px;">
+            <option value="lg">Large</option>
+            <option value="md" selected>Medium</option>
+            <option value="sm">Small</option>
+            <option value="list">List</option>
+          </select>
+
+          <button id="vfClear" type="button" class="btn btn-sm btn-outline-secondary vf-viewbtn">
+            <i class="bi bi-x-circle me-1"></i> Clear
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+      <div class="small text-muted" id="vfTipLine">
+        Tip: Filters sirf selected month ke data par apply hongay.
+      </div>
+      <div class="small">
+        <span class="vf-fileBadge" id="vfCountBadge2">Showing: <%= filesList.length %></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="vf-empty mt-3 text-center vf-hidden" id="vfEmptyMonth">
+    <div class="mb-2">
+      <i class="bi bi-folder-x fs-1 text-muted"></i>
+    </div>
+    <div class="fw-semibold">No files found in this month.</div>
+    <div class="text-muted small">Try another month, or clear filters.</div>
+  </div>
+
+  <% if (user && user.role === "super_admin") { %>
+    <div class="vf-super-danger">
+      <div class="vf-super-danger-row">
+        <span class="vf-danger-note">Danger action for all uploaded files</span>
+
+        <form id="deleteAllFilesForm" method="POST" action="/dashboard/super/files/delete-all" style="display:inline-block;">
+          <button id="btnDeleteAllFiles" type="button" class="btn btn-danger btn-sm vf-delete-all-btn">
+            <i class="bi bi-trash3 me-1"></i> Delete All Files
+          </button>
+        </form>
+      </div>
+    </div>
+  <% } %>
+
+  <div id="vfGrid" class="row g-3 vf-grid vf-hidden">
+    <% (filesList || []).forEach((f, idx) => {
+      const name = (f.original_name || f.name || f.title || 'File');
+      const summary = _safeStr(f.summary || f.description || f.note || '');
+      const mime = f.mime_type || '';
+      const isLink = _isLinkItem(f);
+
+      const href = _fileHref(f);
+
+      let typeKey = 'other';
+      const isImg = (!isLink) && _isImg(mime);
+      const ext = _ext(name);
+
+      if (isLink) typeKey = 'link';
+      else if (isImg) typeKey = 'image';
+      else if (ext === 'pdf') typeKey = 'pdf';
+      else if (['doc','docx'].includes(ext)) typeKey = 'doc';
+      else if (['xls','xlsx','csv'].includes(ext)) typeKey = 'xls';
+
+      const student = _safeStr(f.student_name);
+      const created = _safeStr(f.created_at);
+      const linkedAdmissionId = _safeStr(f.linked_admission_id || f.admission_id);
+      const linkedFamilyNumber = _safeStr(f.family_number || FAMILY_NUMBER);
+
+      const ym = _getYearMonth(created);
+
+      const dsName = _lower(name);
+      const dsStudent = _lower(student);
+      const dsAdmission = _lower(linkedAdmissionId);
+      const dsType = typeKey;
+      const dsDate = created;
+      const dsFamily = _lower(linkedFamilyNumber);
+
+      const editPayload = {
+        id: f.id,
+        name: name,
+        summary: summary,
+        link: href
+      };
+
+      const typeBadgeClass =
+        typeKey === 'image' ? 'vf-type-image' :
+        typeKey === 'pdf'   ? 'vf-type-pdf'   :
+        typeKey === 'doc'   ? 'vf-type-doc'   :
+        typeKey === 'xls'   ? 'vf-type-xls'   :
+        typeKey === 'link'  ? 'vf-type-link'  :
+                              'vf-type-other';
+
+      const ribbonClass = ['family-a','family-b','family-c','family-d','family-e','family-f'][idx % 6];
+    %>
+
+      <div class="col-12 col-sm-6 col-md-4 col-lg-3 vf-col"
+           id="fileCard_<%= f.id %>"
+           data-name="<%= dsName %>"
+           data-student="<%= dsStudent %>"
+           data-admission="<%= dsAdmission %>"
+           data-family="<%= dsFamily %>"
+           data-type="<%= dsType %>"
+           data-date="<%= dsDate %>"
+           data-year="<%= ym.year %>"
+           data-month="<%= ym.month %>">
+
+        <div class="vf-card h-100">
+          <div class="vf-card-topglow"></div>
+
+          <% if (linkedFamilyNumber) { %>
+            <div class="vf-family-ribbon <%= ribbonClass %>">Family # <%= linkedFamilyNumber %></div>
+          <% } %>
+
+          <div class="p-3">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div class="small vf-name" title="<%= name %>">
+                <%= name %>
+              </div>
+
+              <span class="vf-fileBadge text-uppercase <%= typeBadgeClass %>">
+                <%= (typeKey === 'link' ? 'LINK' : (isImg ? 'IMG' : (ext ? ext : 'FILE'))) %>
+              </span>
+            </div>
+
+            <% if (summary) { %>
+              <div class="text-muted small mt-1" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                <i class="bi bi-card-text me-1"></i><%= summary %>
+              </div>
+            <% } %>
+
+            <div class="text-muted small mb-2 mt-2">
+              <i class="bi bi-clock me-1"></i><%= _fmtDate(created) %>
+            </div>
+
+            <div class="vf-thumb mb-3">
+              <% if (isImg && href) { %>
+                <img src="<%= href %>" alt="preview">
+              <% } else { %>
+                <div class="text-center">
+                  <div class="mb-1">
+                    <% if (typeKey === 'link') { %>
+                      <i class="bi bi-link-45deg fs-1 text-primary"></i>
+                    <% } else if (ext === 'pdf') { %>
+                      <i class="bi bi-file-earmark-pdf fs-1 text-danger"></i>
+                    <% } else if (['doc','docx'].includes(ext)) { %>
+                      <i class="bi bi-file-earmark-word fs-1 text-primary"></i>
+                    <% } else if (['xls','xlsx','csv'].includes(ext)) { %>
+                      <i class="bi bi-file-earmark-excel fs-1 text-success"></i>
+                    <% } else { %>
+                      <i class="bi bi-file-earmark fs-1 text-muted"></i>
+                    <% } %>
+                  </div>
+                  <div class="text-muted small">Preview not available</div>
+                </div>
+              <% } %>
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap vf-actions">
+              <a class="btn btn-sm vf-btn-open px-3"
+                 href="<%= href || '#' %>" target="_blank" rel="noopener">
+                <i class="bi bi-box-arrow-up-right"></i><span>Open</span>
+              </a>
+
+              <% if (typeKey !== 'link') { %>
+                <a class="btn btn-sm btn-outline-secondary px-3 vf-btn-save"
+                   href="<%= href || '#' %>" download title="Save">
+                  <i class="bi bi-download"></i><span>Save</span>
+                </a>
+              <% } %>
+
+              <% if (typeKey === 'link') { %>
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary px-3 vf-btn-edit"
+                        data-edit-url="1"
+                        data-url-json="<%= _encJson(editPayload) %>">
+                  <i class="bi bi-pencil-square"></i><span>Edit</span>
+                </button>
+              <% } %>
+
+              <% if (ALLOW_DELETE) { %>
+                <button type="button"
+                        class="btn btn-sm px-3 vf-btn-delete"
+                        data-delete-id="<%= f.id %>">
+                  <i class="bi bi-trash"></i><span>Delete</span>
+                </button>
+              <% } %>
+            </div>
+
+            <% if (href) { %>
+              <div class="small text-muted mt-2 text-truncate" title="<%= href %>">
+                <i class="bi bi-link-45deg me-1"></i>
+                <a href="<%= href %>" target="_blank" rel="noopener" class="text-muted text-decoration-none vf-url-line">
+                  <%= href %>
+                </a>
+              </div>
+            <% } %>
+
+            <% if (linkedAdmissionId || student || linkedFamilyNumber) { %>
+              <div class="text-muted small mt-3 d-flex flex-column gap-1">
+                <div class="d-flex flex-wrap gap-3">
+                  <% if (linkedAdmissionId) { %>
+                    <span><i class="bi bi-hash me-1"></i>Admission: <strong><%= linkedAdmissionId %></strong></span>
+                  <% } %>
+
+                  <% if (student) { %>
+                    <span><i class="bi bi-person me-1"></i>Student: <strong><%= student %></strong></span>
+                  <% } %>
+                </div>
+
+                <% if (linkedFamilyNumber) { %>
+                  <div>
+                    <i class="bi bi-diagram-3 me-1"></i>Family #: <strong><%= linkedFamilyNumber %></strong>
+                  </div>
+                <% } %>
+              </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+    <% }) %>
+  </div>
+
+  <div id="vfListWrap" class="vf-hidden mt-3">
+    <div class="table-responsive" style="max-height: 72vh; overflow:auto;">
+      <table class="table table-sm mb-0 align-middle">
+        <thead>
+          <tr>
+            <th style="width:70px;">Preview</th>
+            <th>File</th>
+            <th style="width:120px;">Type</th>
+            <th style="width:190px;">Date</th>
+            <th style="width:110px;">Admission</th>
+            <th style="width:140px;">Family #</th>
+            <th style="width:220px;">Student</th>
+            <th class="text-end" style="width:260px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="vfListBody">
+          <% (filesList || []).forEach((f, idx) => {
+            const name = (f.original_name || f.name || f.title || 'File');
+            const summary = _safeStr(f.summary || f.description || f.note || '');
+            const mime = f.mime_type || '';
+            const isLink = _isLinkItem(f);
+
+            const href = _fileHref(f);
+
+            let typeKey = 'other';
+            const isImg = (!isLink) && _isImg(mime);
+            const ext = _ext(name);
+
+            if (isLink) typeKey = 'link';
+            else if (isImg) typeKey = 'image';
+            else if (ext === 'pdf') typeKey = 'pdf';
+            else if (['doc','docx'].includes(ext)) typeKey = 'doc';
+            else if (['xls','xlsx','csv'].includes(ext)) typeKey = 'xls';
+
+            const student = _safeStr(f.student_name);
+            const created = _safeStr(f.created_at);
+            const linkedAdmissionId = _safeStr(f.linked_admission_id || f.admission_id);
+            const linkedFamilyNumber = _safeStr(f.family_number || FAMILY_NUMBER);
+
+            const ym = _getYearMonth(created);
+
+            const dsName = _lower(name);
+            const dsStudent = _lower(student);
+            const dsAdmission = _lower(linkedAdmissionId);
+            const dsType = typeKey;
+            const dsDate = created;
+            const dsFamily = _lower(linkedFamilyNumber);
+
+            const editPayload = {
+              id: f.id,
+              name: name,
+              summary: summary,
+              link: href
+            };
+
+            const typeBadgeClass =
+              typeKey === 'image' ? 'vf-type-image' :
+              typeKey === 'pdf'   ? 'vf-type-pdf'   :
+              typeKey === 'doc'   ? 'vf-type-doc'   :
+              typeKey === 'xls'   ? 'vf-type-xls'   :
+              typeKey === 'link'  ? 'vf-type-link'  :
+                                    'vf-type-other';
+          %>
+            <tr id="fileRow_<%= f.id %>"
+                data-name="<%= dsName %>"
+                data-student="<%= dsStudent %>"
+                data-admission="<%= dsAdmission %>"
+                data-family="<%= dsFamily %>"
+                data-type="<%= dsType %>"
+                data-date="<%= dsDate %>"
+                data-year="<%= ym.year %>"
+                data-month="<%= ym.month %>">
+              <td>
+                <div class="vf-list-preview">
+                  <% if (isImg && href) { %>
+                    <img src="<%= href %>" alt="preview" style="width:100%;height:100%;object-fit:cover;">
+                  <% } else if (typeKey === 'link') { %>
+                    <i class="bi bi-link-45deg text-primary"></i>
+                  <% } else { %>
+                    <i class="bi bi-file-earmark text-muted"></i>
+                  <% } %>
+                </div>
+              </td>
+
+              <td>
+                <div class="fw-semibold text-truncate" style="max-width:360px;" title="<%= name %>"><%= name %></div>
+
+                <% if (summary) { %>
+                  <div class="small text-muted text-truncate" style="max-width:360px;" title="<%= summary %>"><%= summary %></div>
+                <% } %>
+
+                <% if (href) { %>
+                  <div class="small text-muted text-truncate" style="max-width:360px;" title="<%= href %>">
+                    <a href="<%= href %>" target="_blank" rel="noopener" class="text-muted text-decoration-none vf-url-line">
+                      <%= href %>
+                    </a>
+                  </div>
+                <% } %>
+              </td>
+
+              <td class="text-uppercase">
+                <span class="vf-fileBadge <%= typeBadgeClass %>"><%= (typeKey === 'link' ? 'link' : (isImg ? 'image' : (ext || 'file'))) %></span>
+              </td>
+
+              <td class="text-muted small"><%= _fmtDate(created) %></td>
+              <td>
+                <span class="vf-list-badge vf-list-adm"><%= linkedAdmissionId || '—' %></span>
+              </td>
+              <td>
+                <span class="vf-list-badge vf-list-family"><%= linkedFamilyNumber || '—' %></span>
+              </td>
+              <td>
+                <span class="vf-list-badge vf-list-student"><%= student || '—' %></span>
+              </td>
+
+              <td class="text-end">
+                <div class="d-inline-flex gap-2 flex-wrap justify-content-end vf-actions">
+                  <a class="btn btn-sm vf-btn-open px-3"
+                     href="<%= href || '#' %>" target="_blank" rel="noopener">
+                    <i class="bi bi-box-arrow-up-right"></i><span>Open</span>
+                  </a>
+
+                  <% if (typeKey !== 'link') { %>
+                    <a class="btn btn-sm btn-outline-secondary px-3 vf-btn-save"
+                       href="<%= href || '#' %>" download title="Save">
+                      <i class="bi bi-download"></i><span>Save</span>
+                    </a>
+                  <% } %>
+
+                  <% if (typeKey === 'link') { %>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary px-3 vf-btn-edit"
+                            data-edit-url="1"
+                            data-url-json="<%= _encJson(editPayload) %>">
+                      <i class="bi bi-pencil-square"></i><span>Edit</span>
+                    </button>
+                  <% } %>
+
+                  <% if (ALLOW_DELETE) { %>
+                    <button type="button"
+                            class="btn btn-sm px-3 vf-btn-delete"
+                            data-delete-id="<%= f.id %>">
+                      <i class="bi bi-trash"></i><span>Delete</span>
+                    </button>
+                  <% } %>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ✅ URL UPLOAD POPUP -->
+<div id="url-upload-overlay"
+     class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center d-none"
+     style="background:rgba(15,23,42,0.35); z-index:1080;">
+  <div class="card border-0 shadow-lg vf-modal-card">
+    <div class="card-body p-4">
+      <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+        <div>
+          <h5 class="mb-1 fw-bold"><i class="bi bi-link-45deg me-1"></i> Upload URL</h5>
+          <div class="text-muted small">Name, Summary aur Link fill karo. Save pe click karo.</div>
+        </div>
+        <button type="button" id="url-close-x" class="btn btn-sm btn-outline-secondary rounded-pill">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label small mb-1">Name</label>
+        <input id="urlName" type="text" class="form-control vf-input" placeholder="e.g. Fee Invoice (Drive)">
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label small mb-1">Summary</label>
+        <textarea id="urlSummary" class="form-control vf-input" rows="3" placeholder="Short description..."></textarea>
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label small mb-1">Link</label>
+        <input id="urlLink" type="text" class="form-control vf-input" placeholder="https://...">
+        <div class="text-muted small mt-1">Link http/https se start hona chahiye. Na ho to auto https add ho jayega.</div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button id="url-cancel" type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-4">
+          Cancel
+        </button>
+        <button id="url-save" type="button" class="btn btn-sm btn-dark rounded-pill px-4">
+          <i class="bi bi-check2 me-1"></i> Save
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ URL EDIT POPUP -->
+<div id="url-edit-overlay"
+     class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center d-none"
+     style="background:rgba(15,23,42,0.35); z-index:1080;">
+  <div class="card border-0 shadow-lg vf-modal-card">
+    <div class="card-body p-4">
+      <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+        <div>
+          <h5 class="mb-1 fw-bold"><i class="bi bi-pencil-square me-1"></i> Edit URL</h5>
+          <div class="text-muted small">Name, Summary aur Link update karo. Save pe click karo.</div>
+        </div>
+        <button type="button" id="url-edit-close-x" class="btn btn-sm btn-outline-secondary rounded-pill">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+
+      <input type="hidden" id="urlEditId" value="">
+
+      <div class="mt-3">
+        <label class="form-label small mb-1">Name</label>
+        <input id="urlEditName" type="text" class="form-control vf-input" placeholder="e.g. Fee Invoice (Drive)">
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label small mb-1">Summary</label>
+        <textarea id="urlEditSummary" class="form-control vf-input" rows="3" placeholder="Short description..."></textarea>
+      </div>
+
+      <div class="mt-3">
+        <label class="form-label small mb-1">Link</label>
+        <input id="urlEditLink" type="text" class="form-control vf-input" placeholder="https://...">
+        <div class="text-muted small mt-1">Link http/https se start hona chahiye. Na ho to auto https add ho jayega.</div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button id="url-edit-cancel" type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-4">
+          Cancel
+        </button>
+        <button id="url-edit-save" type="button" class="btn btn-sm btn-dark rounded-pill px-4">
+          <i class="bi bi-check2 me-1"></i> Save
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="url-success-overlay"
+     class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center d-none"
+     style="background:rgba(15,23,42,0.35); z-index:1080;">
+  <div class="card border-0 shadow-lg rounded-4"
+       style="min-width:320px; max-width:420px; animation:flashScaleIn 220ms ease-out;">
+    <div class="card-body p-4 text-center">
+      <div class="mb-3">
+        <div class="rounded-circle mx-auto d-flex align-items-center justify-content-center"
+             style="width:56px;height:56px;background:linear-gradient(135deg,#22c55e,#16a34a);">
+          <i class="bi bi-check-lg text-white fs-3"></i>
+        </div>
+      </div>
+
+      <h5 class="mb-2">Saved</h5>
+      <p class="text-muted small mb-3">URL successfully saved.</p>
+
+      <button id="url-success-ok" type="button" class="btn btn-sm btn-dark rounded-pill px-4">
+        Okay
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ FILE DELETE CONFIRM + SUCCESS POPUPS -->
+<div id="file-delete-overlay"
+     class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center d-none"
+     style="background:rgba(15,23,42,0.35); z-index:1080;">
+  <div class="card border-0 shadow-lg rounded-4"
+       style="min-width:320px; max-width:420px; animation:flashScaleIn 220ms ease-out;">
+    <div class="card-body p-4 text-center">
+      <div class="mb-3">
+        <div class="rounded-circle mx-auto d-flex align-items-center justify-content-center"
+             style="width:56px;height:56px;background:linear-gradient(135deg,#ef4444,#b91c1c);">
+          <i class="bi bi-exclamation-lg text-white fs-3"></i>
+        </div>
+      </div>
+
+      <h5 class="mb-2">Confirm delete</h5>
+      <p class="text-muted small mb-3">Are you sure you want to delete this file?</p>
+
+      <div class="d-flex justify-content-center gap-2">
+        <button id="file-delete-cancel" type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-4">
+          Cancel
+        </button>
+        <button id="file-delete-ok" type="button" class="btn btn-sm btn-danger rounded-pill px-4">
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ DELETE ALL FILES CONFIRM POPUP -->
+<div id="file-delete-all-overlay"
+     class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center d-none"
+     style="background:rgba(15,23,42,0.35); z-index:1080;">
+  <div class="card border-0 shadow-lg rounded-4"
+       style="min-width:320px; max-width:440px; animation:flashScaleIn 220ms ease-out;">
+    <div class="card-body p-4 text-center">
+      <div class="mb-3">
+        <div class="rounded-circle mx-auto d-flex align-items-center justify-content-center"
+             style="width:56px;height:56px;background:linear-gradient(135deg,#ef4444,#b91c1c);">
+          <i class="bi bi-exclamation-lg text-white fs-3"></i>
+        </div>
+      </div>
+
+      <h5 class="mb-2">Confirm delete</h5>
+      <p class="text-muted small mb-3">Are you sure you want to delete all files?</p>
+
+      <div class="d-flex justify-content-center gap-2">
+        <button id="file-delete-all-cancel" type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-4">
+          Cancel
+        </button>
+        <button id="file-delete-all-ok" type="button" class="btn btn-sm btn-danger rounded-pill px-4">
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="file-success-overlay"
+     class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center d-none"
+     style="background:rgba(15,23,42,0.35); z-index:1080;">
+  <div class="card border-0 shadow-lg rounded-4"
+       style="min-width:320px; max-width:420px; animation:flashScaleIn 220ms ease-out;">
+    <div class="card-body p-4 text-center">
+      <div class="mb-3">
+        <div class="rounded-circle mx-auto d-flex align-items-center justify-content-center"
+             style="width:56px;height:56px;background:linear-gradient(135deg,#22c55e,#16a34a);">
+          <i class="bi bi-check-lg text-white fs-3"></i>
+        </div>
+      </div>
+
+      <h5 class="mb-2">Deleted</h5>
+      <p class="text-muted small mb-3">Successfully deleted.</p>
+
+      <button id="file-success-ok" type="button" class="btn btn-sm btn-dark rounded-pill px-4">
+        Okay
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const grid = document.getElementById("vfGrid");
+    const listWrap = document.getElementById("vfListWrap");
+    const countBadge = document.getElementById("vfCountBadge");
+    const countBadge2 = document.getElementById("vfCountBadge2");
+    const toolbar = document.getElementById("vfToolbar");
+    const monthHeader = document.getElementById("vfMonthHeader");
+    const monthHeaderText = document.getElementById("vfMonthHeaderText");
+    const emptyMonth = document.getElementById("vfEmptyMonth");
+    const stageHint = document.getElementById("vfStageHint");
+
+    const yearsView = document.getElementById("vfYearsView");
+    const monthsView = document.getElementById("vfMonthsView");
+
+    const crumbRoot = document.getElementById("vfCrumbRoot");
+    const crumbYear = document.getElementById("vfCrumbYear");
+    const crumbMonth = document.getElementById("vfCrumbMonth");
+    const sep1 = document.getElementById("vfCrumbSep1");
+    const sep2 = document.getElementById("vfCrumbSep2");
+
+    const elSearch = document.getElementById("vfSearch");
+    const elAdmission = document.getElementById("vfAdmission");
+    const elStudent = document.getElementById("vfStudent");
+    const elType = document.getElementById("vfType");
+    const elDatePreset = document.getElementById("vfDatePreset");
+    const elFromWrap = document.getElementById("vfFromWrap");
+    const elToWrap = document.getElementById("vfToWrap");
+    const elFrom = document.getElementById("vfFrom");
+    const elTo = document.getElementById("vfTo");
+    const elSort = document.getElementById("vfSort");
+    const elView = document.getElementById("vfView");
+    const elClear = document.getElementById("vfClear");
+
+    const gridItems = Array.from(document.querySelectorAll(".vf-col"));
+    const listRows = Array.from(document.querySelectorAll("#vfListBody tr"));
+
+    let selectedYear = null;
+    let selectedMonth = null;
+
+    const VIEW_KEY = "vfViewMode::super-files";
+    function getSavedView() {
+      try { return localStorage.getItem(VIEW_KEY) || ""; } catch(e) { return ""; }
+    }
+    function saveView(v) {
+      try { localStorage.setItem(VIEW_KEY, v); } catch(e) {}
+    }
+
+    function applyViewMode(mode) {
+      if (mode === "list") {
+        if (grid) grid.classList.add("vf-hidden");
+        if (listWrap) listWrap.classList.remove("vf-hidden");
+      } else {
+        if (listWrap) listWrap.classList.add("vf-hidden");
+        if (grid) grid.classList.remove("vf-hidden");
+      }
+
+      function setCols(cls) {
+        gridItems.forEach(item => {
+          const toRemove = Array.from(item.classList).filter(c => c.startsWith("col-"));
+          toRemove.forEach(c => item.classList.remove(c));
+          cls.split(' ').forEach(c => item.classList.add(c));
+        });
+      }
+
+      if (mode === "lg") setCols("col-12 col-sm-6 col-lg-4");
+      else if (mode === "md") setCols("col-12 col-sm-6 col-md-4 col-lg-3");
+      else if (mode === "sm") setCols("col-12 col-sm-6 col-md-3 col-lg-2");
+    }
+
+    function parseAnyDate(s) {
+      if (!s) return null;
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) return d;
+      return null;
+    }
+
+    function inDateRange(dateObj, preset, fromStr, toStr) {
+      if (!preset) return true;
+      const now = new Date();
+      if (!dateObj) return false;
+
+      if (preset === "today") return dateObj.toDateString() === now.toDateString();
+      if (preset === "month") return dateObj.getFullYear() === now.getFullYear() && dateObj.getMonth() === now.getMonth();
+      if (preset === "year") return dateObj.getFullYear() === now.getFullYear();
+
+      if (preset === "custom") {
+        const from = fromStr ? new Date(fromStr + "T00:00:00") : null;
+        const to = toStr ? new Date(toStr + "T23:59:59") : null;
+        if (from && dateObj < from) return false;
+        if (to && dateObj > to) return false;
+        return true;
+      }
+      return true;
+    }
+
+    function matchesText(haystack, needle) {
+      if (!needle) return true;
+      return (haystack || "").includes(needle);
+    }
+
+    function matchType(itemType, filterType) {
+      if (!filterType) return true;
+      return itemType === filterType;
+    }
+
+    function matchFolder(y, m, selY, selM) {
+      if (!selY) return true;
+      if (Number(y) !== Number(selY)) return false;
+      if (!selM) return true;
+      return Number(m) === Number(selM);
+    }
+
+    function getFilters() {
+      return {
+        q: ((elSearch && elSearch.value) || "").toLowerCase().trim(),
+        admission: ((elAdmission && elAdmission.value) || "").toLowerCase().trim(),
+        student: ((elStudent && elStudent.value) || "").toLowerCase().trim(),
+        type: (elType && elType.value || "").toLowerCase().trim(),
+        datePreset: (elDatePreset && elDatePreset.value || "").toLowerCase().trim(),
+        from: ((elFrom && elFrom.value) || "").trim(),
+        to: ((elTo && elTo.value) || "").trim(),
+      };
+    }
+
+    function setCount(n) {
+      if (countBadge) countBadge.textContent = "Showing: " + n;
+      if (countBadge2) countBadge2.textContent = "Showing: " + n;
+    }
+
+    function applyFilters() {
+      const f = getFilters();
+      let visible = 0;
+
+      gridItems.forEach(item => {
+        const name = item.getAttribute("data-name") || "";
+        const student = item.getAttribute("data-student") || "";
+        const admission = item.getAttribute("data-admission") || "";
+        const family = item.getAttribute("data-family") || "";
+        const type = item.getAttribute("data-type") || "";
+        const dateRaw = item.getAttribute("data-date") || "";
+        const dateObj = parseAnyDate(dateRaw);
+
+        const y = item.getAttribute("data-year") || "0";
+        const m = item.getAttribute("data-month") || "0";
+
+        const ok =
+          matchFolder(y, m, selectedYear, selectedMonth) &&
+          (
+            matchesText(name, f.q) ||
+            matchesText(type, f.q) ||
+            matchesText(student, f.q) ||
+            matchesText(admission, f.q) ||
+            matchesText(family, f.q)
+          ) &&
+          matchesText(admission, f.admission) &&
+          matchesText(student, f.student) &&
+          matchType(type, f.type) &&
+          inDateRange(dateObj, f.datePreset, f.from, f.to);
+
+        item.style.display = ok ? "" : "none";
+        if (ok) visible++;
+      });
+
+      listRows.forEach(row => {
+        const name = row.getAttribute("data-name") || "";
+        const student = row.getAttribute("data-student") || "";
+        const admission = row.getAttribute("data-admission") || "";
+        const family = row.getAttribute("data-family") || "";
+        const type = row.getAttribute("data-type") || "";
+        const dateRaw = row.getAttribute("data-date") || "";
+        const dateObj = parseAnyDate(dateRaw);
+
+        const y = row.getAttribute("data-year") || "0";
+        const m = row.getAttribute("data-month") || "0";
+
+        const ok =
+          matchFolder(y, m, selectedYear, selectedMonth) &&
+          (
+            matchesText(name, f.q) ||
+            matchesText(type, f.q) ||
+            matchesText(student, f.q) ||
+            matchesText(admission, f.q) ||
+            matchesText(family, f.q)
+          ) &&
+          matchesText(admission, f.admission) &&
+          matchesText(student, f.student) &&
+          matchType(type, f.type) &&
+          inDateRange(dateObj, f.datePreset, f.from, f.to);
+
+        row.style.display = ok ? "" : "none";
+      });
+
+      setCount(visible);
+
+      if (emptyMonth) {
+        const showEmpty = !!selectedYear && !!selectedMonth && visible === 0;
+        emptyMonth.classList.toggle("vf-hidden", !showEmpty);
+      }
+    }
+
+    function sortItems() {
+      const mode = (elSort && elSort.value || "new").toLowerCase().trim();
+
+      function keyFor(el) {
+        const name = el.getAttribute("data-name") || "";
+        const dateRaw = el.getAttribute("data-date") || "";
+        const dateObj = parseAnyDate(dateRaw);
+        const ts = dateObj ? dateObj.getTime() : 0;
+        return { name, ts };
+      }
+
+      const gridSorted = gridItems.slice().sort((a, b) => {
+        const ka = keyFor(a), kb = keyFor(b);
+        if (mode === "old") return ka.ts - kb.ts;
+        if (mode === "name_az") return ka.name.localeCompare(kb.name);
+        if (mode === "name_za") return kb.name.localeCompare(ka.name);
+        return kb.ts - ka.ts;
+      });
+      if (grid) gridSorted.forEach(el => grid.appendChild(el));
+
+      const listSorted = listRows.slice().sort((a, b) => {
+        const ka = keyFor(a), kb = keyFor(b);
+        if (mode === "old") return ka.ts - kb.ts;
+        if (mode === "name_az") return ka.name.localeCompare(kb.name);
+        if (mode === "name_za") return kb.name.localeCompare(ka.name);
+        return kb.ts - ka.ts;
+      });
+      const tbody = document.getElementById("vfListBody");
+      if (tbody) listSorted.forEach(el => tbody.appendChild(el));
+    }
+
+    function updateDatePresetUi() {
+      const preset = (elDatePreset && elDatePreset.value || "").toLowerCase().trim();
+      const showCustom = preset === "custom";
+      if (elFromWrap) elFromWrap.classList.toggle("vf-hidden", !showCustom);
+      if (elToWrap) elToWrap.classList.toggle("vf-hidden", !showCustom);
+      applyFilters();
+    }
+
+    function clearAll() {
+      if (elSearch) elSearch.value = "";
+      if (elAdmission) elAdmission.value = "";
+      if (elStudent) elStudent.value = "";
+      if (elType) elType.value = "";
+      if (elDatePreset) elDatePreset.value = "";
+      if (elFrom) elFrom.value = "";
+      if (elTo) elTo.value = "";
+      if (elSort) elSort.value = "new";
+
+      if (elView) {
+        elView.value = "md";
+        saveView("md");
+        applyViewMode("md");
+      }
+
+      updateDatePresetUi();
+      sortItems();
+      applyFilters();
+    }
+
+    const YEAR_DATA = <%- JSON.stringify(yearMap || {}) %>;
+    const MONTHS = <%- JSON.stringify(MONTHS || []) %>;
+
+    function labelOfMonth(m){
+      const mm = MONTHS.find(x => Number(x.n) === Number(m));
+      return mm ? mm.label : ("Month " + m);
+    }
+
+    function setCrumbs(y, m) {
+      if (!crumbYear || !crumbMonth || !sep1 || !sep2) return;
+
+      crumbRoot.classList.toggle("active", !y);
+
+      if (!y) {
+        crumbYear.style.display = "none";
+        crumbMonth.style.display = "none";
+        sep1.style.display = "none";
+        sep2.style.display = "none";
+        return;
+      }
+
+      crumbYear.style.display = "";
+      crumbYear.textContent = " " + y;
+      crumbYear.setAttribute("data-crumb-year", String(y));
+      crumbYear.classList.toggle("active", !!y && !m);
+      sep1.style.display = "";
+
+      if (!m) {
+        crumbMonth.style.display = "none";
+        sep2.style.display = "none";
+        return;
+      }
+
+      crumbMonth.style.display = "";
+      crumbMonth.textContent = " " + labelOfMonth(m);
+      crumbMonth.setAttribute("data-crumb-month", String(m));
+      crumbMonth.classList.add("active");
+      sep2.style.display = "";
+    }
+
+    function showDataArea(show) {
+      if (!toolbar) return;
+      toolbar.classList.toggle("vf-hidden", !show);
+      if (monthHeader) monthHeader.classList.toggle("vf-hidden", !show);
+
+      if (show) {
+        const v = (elView && elView.value || "md").toLowerCase().trim();
+        if (v === "list") {
+          if (grid) grid.classList.add("vf-hidden");
+          if (listWrap) listWrap.classList.remove("vf-hidden");
+        } else {
+          if (listWrap) listWrap.classList.add("vf-hidden");
+          if (grid) grid.classList.remove("vf-hidden");
+        }
+      } else {
+        if (grid) grid.classList.add("vf-hidden");
+        if (listWrap) listWrap.classList.add("vf-hidden");
+        if (emptyMonth) emptyMonth.classList.add("vf-hidden");
+      }
+    }
+
+    function showYears() {
+      selectedYear = null;
+      selectedMonth = null;
+      setCrumbs(null, null);
+
+      if (yearsView) yearsView.classList.remove("vf-hidden");
+      if (monthsView) monthsView.classList.add("vf-hidden");
+
+      if (stageHint) stageHint.classList.remove("vf-hidden");
+      showDataArea(false);
+      setCount(0);
+    }
+
+    function showMonths(y) {
+      selectedYear = Number(y);
+      selectedMonth = null;
+      setCrumbs(selectedYear, null);
+
+      const yearInfo = YEAR_DATA[String(selectedYear)] || { months: {} };
+
+      MONTHS.forEach(m => {
+        const c = Number((yearInfo.months || {})[String(m.n)] || 0);
+        const el = document.getElementById("vfMonthCount_" + m.n);
+        if (el) el.textContent = "Total: " + c;
+
+        const card = document.querySelector('[data-open-month="' + m.n + '"]');
+        if (card) {
+          card.classList.toggle("disabled", c === 0);
+          card.setAttribute("data-month-count", String(c));
+        }
+      });
+
+      if (yearsView) yearsView.classList.add("vf-hidden");
+      if (monthsView) monthsView.classList.remove("vf-hidden");
+
+      if (stageHint) stageHint.classList.remove("vf-hidden");
+      showDataArea(false);
+      setCount(0);
+    }
+
+    function openMonth(m) {
+      selectedMonth = Number(m);
+      setCrumbs(selectedYear, selectedMonth);
+
+      if (monthHeaderText) monthHeaderText.textContent = `${selectedYear} / ${labelOfMonth(selectedMonth)} — Uploaded Files`;
+
+      if (stageHint) stageHint.classList.add("vf-hidden");
+
+      showDataArea(true);
+      sortItems();
+      applyFilters();
+
+      try {
+        if (monthHeader) monthHeader.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch(e){}
+    }
+
+    const saved = getSavedView();
+    if (saved && elView) elView.value = saved;
+
+    applyViewMode((elView && elView.value || "md").toLowerCase().trim());
+    updateDatePresetUi();
+    sortItems();
+
+    const IS_SINGLE_ADMISSION_VIEW = <%- JSON.stringify(!!IS_SINGLE_ADMISSION_VIEW) %>;
+    if (IS_SINGLE_ADMISSION_VIEW) {
+      if (stageHint) stageHint.classList.add("vf-hidden");
+      if (yearsView) yearsView.classList.add("vf-hidden");
+      if (monthsView) monthsView.classList.add("vf-hidden");
+      setCrumbs(null, null);
+      showDataArea(true);
+      selectedYear = null;
+      selectedMonth = null;
+      sortItems();
+      applyFilters();
+
+      const IS_FAMILY_VIEW = <%- JSON.stringify(!!IS_FAMILY_VIEW) %>;
+      const FAMILY_NUMBER = <%- JSON.stringify(FAMILY_NUMBER || "") %>;
+      const FAMILY_COUNT = <%- JSON.stringify(FAMILY_COUNT || 0) %>;
+
+      if (monthHeaderText) {
+        monthHeaderText.textContent = IS_FAMILY_VIEW
+          ? `Family Files · Family # ${FAMILY_NUMBER} · ${FAMILY_COUNT} Admissions`
+          : `Admission ID Files`;
+      }
+    } else {
+      showYears();
+    }
+
+    document.addEventListener("click", (e) => {
+      const yBtn = e.target.closest("[data-open-year]");
+      if (yBtn) {
+        const y = yBtn.getAttribute("data-open-year");
+        if (y) showMonths(y);
+        return;
+      }
+
+      const mBtn = e.target.closest("[data-open-month]");
+      if (mBtn) {
+        const cnt = Number(mBtn.getAttribute("data-month-count") || "0");
+        if (cnt === 0) return;
+        const m = mBtn.getAttribute("data-open-month");
+        if (m) openMonth(m);
+        return;
+      }
+    });
+
+    if (crumbRoot) crumbRoot.addEventListener("click", showYears);
+    if (crumbYear) crumbYear.addEventListener("click", () => {
+      const y = crumbYear.getAttribute("data-crumb-year");
+      if (y) showMonths(y);
+    });
+
+    if (elSearch) elSearch.addEventListener("input", applyFilters);
+    if (elAdmission) elAdmission.addEventListener("input", applyFilters);
+    if (elStudent) elStudent.addEventListener("input", applyFilters);
+
+    if (elType) elType.addEventListener("change", applyFilters);
+    if (elDatePreset) elDatePreset.addEventListener("change", updateDatePresetUi);
+    if (elFrom) elFrom.addEventListener("change", applyFilters);
+    if (elTo) elTo.addEventListener("change", applyFilters);
+
+    if (elSort) elSort.addEventListener("change", () => { sortItems(); applyFilters(); });
+
+    if (elView) elView.addEventListener("change", () => {
+      const v = (elView.value || "md").toLowerCase().trim();
+      saveView(v);
+      applyViewMode(v);
+      applyFilters();
+    });
+
+    if (elClear) elClear.addEventListener("click", clearAll);
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      const active = document.activeElement;
+      if (!active) return;
+
+      if (active.hasAttribute("data-open-year")) {
+        const y = active.getAttribute("data-open-year");
+        if (y) showMonths(y);
+      }
+      if (active.hasAttribute("data-open-month")) {
+        const cnt = Number(active.getAttribute("data-month-count") || "0");
+        if (cnt === 0) return;
+        const m = active.getAttribute("data-open-month");
+        if (m) openMonth(m);
+      }
+    });
+  })();
+</script>
+
+<script>
+  (function () {
+    const overlay = document.getElementById("url-upload-overlay");
+    const successOverlay = document.getElementById("url-success-overlay");
+    const btnOpen = document.getElementById("btnUploadUrl");
+    const btnCancel = document.getElementById("url-cancel");
+    const btnSave = document.getElementById("url-save");
+    const btnCloseX = document.getElementById("url-close-x");
+    const btnSuccessOk = document.getElementById("url-success-ok");
+
+    const inputName = document.getElementById("urlName");
+    const inputSummary = document.getElementById("urlSummary");
+    const inputLink = document.getElementById("urlLink");
+
+    if (!overlay || !btnOpen || !btnCancel || !btnSave || !inputName || !inputSummary || !inputLink) return;
+
+    const CURRENT_USER = <%- JSON.stringify(user || null) %>;
+    const ADMISSION_ID = <%- JSON.stringify(admissionId || null) %>;
+    const CURRENT_YEAR = <%- JSON.stringify(CURRENT_YEAR) %>;
+    const CURRENT_MONTH = <%- JSON.stringify(CURRENT_MONTH) %>;
+
+    function getRoleKey(u) {
+      if (!u) return "guest";
+      const r = (u.role || "").toLowerCase();
+      const t = (u.agentType || "").toLowerCase();
+
+      if (r === "super_admin" || r === "superadmin" || t === "super_admin" || t === "superadmin") return "super";
+      if (r === "admin") return "admin";
+      if (r === "agent") return "agent";
+      if (r === "sub_agent" || r === "sub-agent" || r === "subagent") return "sub_agent";
+      return "other";
+    }
+
+    const URL_POST_ENDPOINTS = {
+      super: "/dashboard/super/files/link",
+      admin: "/dashboard/admin/files/link",
+      agent: "/dashboard/agent/files/link",
+      sub_agent: "/dashboard/sub-agent/files/link"
+    };
+
+    function closeOverlay(ov) {
+      ov.classList.add("fade-out");
+      setTimeout(() => {
+        ov.classList.add("d-none");
+        ov.classList.remove("fade-out");
+      }, 260);
+    }
+
+    function openOverlay() {
+      inputName.value = "";
+      inputSummary.value = "";
+      inputLink.value = "";
+      overlay.classList.remove("d-none");
+      setTimeout(() => inputName.focus(), 100);
+    }
+
+    btnOpen.addEventListener("click", openOverlay);
+    btnCancel.addEventListener("click", () => closeOverlay(overlay));
+    if (btnCloseX) btnCloseX.addEventListener("click", () => closeOverlay(overlay));
+
+    if (btnSuccessOk) btnSuccessOk.addEventListener("click", () => {
+      closeOverlay(successOverlay);
+      window.location.reload();
+    });
+
+    btnSave.addEventListener("click", async () => {
+      const name = (inputName.value || "").trim();
+      const summary = (inputSummary.value || "").trim();
+      let link = (inputLink.value || "").trim();
+
+      if (!name) return alert("Name required hai.");
+      if (!link) return alert("Link required hai.");
+
+      if (!/^https?:\/\//i.test(link)) link = "https://" + link;
+
+      try {
+        btnSave.disabled = true;
+
+        const roleKey = getRoleKey(CURRENT_USER);
+        const url = URL_POST_ENDPOINTS[roleKey];
+
+        if (!url) {
+          alert("Your role is not allowed to upload URL.");
+          btnSave.disabled = false;
+          return;
+        }
+
+        const payload = {
+          name,
+          summary,
+          link,
+          admission_id: ADMISSION_ID,
+          folder_year: CURRENT_YEAR,
+          folder_month: CURRENT_MONTH
+        };
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+          alert((data && data.message) || "URL save failed");
+          btnSave.disabled = false;
+          return;
+        }
+
+        closeOverlay(overlay);
+        successOverlay.classList.remove("d-none");
+
+      } catch (e) {
+        console.error(e);
+        alert("URL save failed");
+      } finally {
+        btnSave.disabled = false;
+      }
+    });
+  })();
+</script>
+
+<script>
+  (function () {
+    const overlay = document.getElementById("url-edit-overlay");
+    const successOverlay = document.getElementById("url-success-overlay");
+
+    const btnCancel = document.getElementById("url-edit-cancel");
+    const btnSave = document.getElementById("url-edit-save");
+    const btnCloseX = document.getElementById("url-edit-close-x");
+    const btnSuccessOk = document.getElementById("url-success-ok");
+
+    const inputId = document.getElementById("urlEditId");
+    const inputName = document.getElementById("urlEditName");
+    const inputSummary = document.getElementById("urlEditSummary");
+    const inputLink = document.getElementById("urlEditLink");
+
+    if (!overlay || !btnCancel || !btnSave || !inputId || !inputName || !inputSummary || !inputLink) return;
+
+    const CURRENT_USER = <%- JSON.stringify(user || null) %>;
+    const ADMISSION_ID = <%- JSON.stringify(admissionId || null) %>;
+    const CURRENT_YEAR = <%- JSON.stringify(CURRENT_YEAR) %>;
+    const CURRENT_MONTH = <%- JSON.stringify(CURRENT_MONTH) %>;
+
+    function getRoleKey(u) {
+      if (!u) return "guest";
+      const r = (u.role || "").toLowerCase();
+      const t = (u.agentType || "").toLowerCase();
+
+      if (r === "super_admin" || r === "superadmin" || t === "super_admin" || t === "superadmin") return "super";
+      if (r === "admin") return "admin";
+      if (r === "agent") return "agent";
+      if (r === "sub_agent" || r === "sub-agent" || r === "subagent") return "sub_agent";
+      return "other";
+    }
+
+    const URL_EDIT_ENDPOINTS = {
+      super: "/dashboard/super/files/link/",
+      admin: "/dashboard/admin/files/link/",
+      agent: "/dashboard/agent/files/link/",
+      sub_agent: "/dashboard/sub-agent/files/link/"
+    };
+
+    function closeOverlay(ov) {
+      ov.classList.add("fade-out");
+      setTimeout(() => {
+        ov.classList.add("d-none");
+        ov.classList.remove("fade-out");
+      }, 260);
+    }
+
+    function openEdit(payload) {
+      inputId.value = payload.id || "";
+      inputName.value = payload.name || "";
+      inputSummary.value = payload.summary || "";
+      inputLink.value = payload.link || "";
+
+      overlay.classList.remove("d-none");
+      setTimeout(() => inputName.focus(), 100);
+    }
+
+    btnCancel.addEventListener("click", () => closeOverlay(overlay));
+    if (btnCloseX) btnCloseX.addEventListener("click", () => closeOverlay(overlay));
+    if (btnSuccessOk) btnSuccessOk.addEventListener("click", () => {
+      closeOverlay(successOverlay);
+      window.location.reload();
+    });
+
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-edit-url]");
+      if (!btn) return;
+
+      const raw = btn.getAttribute("data-url-json") || "";
+      let payload = null;
+
+      try {
+        payload = JSON.parse(decodeURIComponent(raw));
+      } catch (err) {
+        console.error(err);
+        alert("Edit data invalid");
+        return;
+      }
+
+      if (!payload || !payload.id) {
+        alert("Invalid item");
+        return;
+      }
+
+      openEdit(payload);
+    });
+
+    btnSave.addEventListener("click", async () => {
+      const id = (inputId.value || "").trim();
+      const name = (inputName.value || "").trim();
+      const summary = (inputSummary.value || "").trim();
+      let link = (inputLink.value || "").trim();
+
+      if (!id) return alert("Invalid item id.");
+      if (!name) return alert("Name required hai.");
+      if (!link) return alert("Link required hai.");
+
+      if (!/^https?:\/\//i.test(link)) link = "https://" + link;
+
+      const roleKey = getRoleKey(CURRENT_USER);
+      const baseUrl = URL_EDIT_ENDPOINTS[roleKey];
+
+      if (!baseUrl) {
+        alert("Your role is not allowed to edit URL.");
+        return;
+      }
+
+      try {
+        btnSave.disabled = true;
+
+        const payload = {
+          name,
+          summary,
+          link,
+          admission_id: ADMISSION_ID,
+          folder_year: CURRENT_YEAR,
+          folder_month: CURRENT_MONTH
+        };
+
+        const res = await fetch(baseUrl + encodeURIComponent(id) + "/edit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+          alert((data && data.message) || "URL update failed");
+          btnSave.disabled = false;
+          return;
+        }
+
+        closeOverlay(overlay);
+        successOverlay.classList.remove("d-none");
+
+      } catch (err) {
+        console.error(err);
+        alert("URL update failed");
+      } finally {
+        btnSave.disabled = false;
+      }
+    });
+  })();
+</script>
+
+<script>
+  (function () {
+    const confirmOverlay = document.getElementById("file-delete-overlay");
+    const successOverlay = document.getElementById("file-success-overlay");
+
+    const btnCancel = document.getElementById("file-delete-cancel");
+    const btnOk = document.getElementById("file-delete-ok");
+    const btnSuccessOk = document.getElementById("file-success-ok");
+
+    if (!confirmOverlay || !successOverlay || !btnCancel || !btnOk || !btnSuccessOk) return;
+
+    const CURRENT_USER = <%- JSON.stringify(user || null) %>;
+    const ALLOW_DELETE = <%- JSON.stringify(!!ALLOW_DELETE) %>;
+
+    function isSuperUser(u) {
+      if (!u) return false;
+      return (
+        u.role === "super_admin" ||
+        u.role === "superadmin" ||
+        u.agentType === "super_admin" ||
+        u.agentType === "superadmin" ||
+        u.isSuperAdmin === true ||
+        u.is_super_admin === true
+      );
+    }
+
+    let pendingId = null;
+
+    function closeOverlay(overlay) {
+      overlay.classList.add("fade-out");
+      setTimeout(() => {
+        overlay.classList.add("d-none");
+        overlay.classList.remove("fade-out");
+      }, 260);
+    }
+
+    function openConfirm(id) {
+      pendingId = id;
+      confirmOverlay.classList.remove("d-none");
+    }
+
+    btnCancel.addEventListener("click", () => {
+      pendingId = null;
+      closeOverlay(confirmOverlay);
+    });
+
+    btnOk.addEventListener("click", async () => {
+      if (!pendingId) return;
+
+      if (!ALLOW_DELETE) {
+        alert("You do not have permission to delete files.");
+        pendingId = null;
+        closeOverlay(confirmOverlay);
+        return;
+      }
+
+      try {
+        const url = isSuperUser(CURRENT_USER)
+          ? `/dashboard/super/files/${pendingId}`
+          : `/files/${pendingId}`;
+
+        const res = await fetch(url, { method: "DELETE" });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+          alert((data && data.message) || "Delete failed");
+          return;
+        }
+
+        const card = document.getElementById(`fileCard_${pendingId}`);
+        if (card) card.remove();
+
+        const row = document.getElementById(`fileRow_${pendingId}`);
+        if (row) row.remove();
+
+        closeOverlay(confirmOverlay);
+        successOverlay.classList.remove("d-none");
+        pendingId = null;
+
+      } catch (e) {
+        console.error(e);
+        alert("Delete failed");
+      }
+    });
+
+    btnSuccessOk.addEventListener("click", () => closeOverlay(successOverlay));
+
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-delete-id]");
+      if (!btn) return;
+      const id = btn.getAttribute("data-delete-id");
+      openConfirm(id);
+    });
+  })();
+</script>
+
+<script>
+  (function () {
+    const btnDeleteAll = document.getElementById("btnDeleteAllFiles");
+    const formDeleteAll = document.getElementById("deleteAllFilesForm");
+    const overlay = document.getElementById("file-delete-all-overlay");
+    const btnCancel = document.getElementById("file-delete-all-cancel");
+    const btnOk = document.getElementById("file-delete-all-ok");
+
+    if (!btnDeleteAll || !formDeleteAll || !overlay || !btnCancel || !btnOk) return;
+
+    function closeOverlay(ov) {
+      ov.classList.add("fade-out");
+      setTimeout(() => {
+        ov.classList.add("d-none");
+        ov.classList.remove("fade-out");
+      }, 260);
+    }
+
+    function openOverlay() {
+      overlay.classList.remove("d-none");
+    }
+
+    btnDeleteAll.addEventListener("click", openOverlay);
+
+    btnCancel.addEventListener("click", () => closeOverlay(overlay));
+
+    btnOk.addEventListener("click", () => {
+      formDeleteAll.submit();
+    });
+  })();
+</script>
+
+<%- include('partials/bootstrap-footer') %>

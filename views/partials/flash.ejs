@@ -1,0 +1,76 @@
+<% if (flash) { %>
+  <style>
+    @keyframes flashScaleIn {
+      from { transform: scale(0.9); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    @keyframes flashFadeOut {
+      to { opacity: 0; visibility: hidden; }
+    }
+    #flash-overlay.fade-out {
+      animation: flashFadeOut 250ms ease-in forwards;
+    }
+  </style>
+
+  <div id="flash-overlay"
+       class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+       style="background:rgba(15,23,42,0.35); z-index:1080;">
+    <div class="card border-0 shadow-lg rounded-4"
+         style="min-width:320px; max-width:420px; animation:flashScaleIn 220ms ease-out;">
+      <div class="card-body p-4 text-center">
+
+        <div class="mb-3">
+          <% if (flash.type === 'success') { %>
+            <div class="rounded-circle mx-auto d-flex align-items-center justify-content-center"
+                 style="width:56px;height:56px;background:linear-gradient(135deg,#22c55e,#16a34a);">
+              <i class="bi bi-check-lg text-white fs-3"></i>
+            </div>
+          <% } else if (flash.type === 'danger' || flash.type === 'error') { %>
+            <div class="rounded-circle mx-auto d-flex align-items-center justify-content-center"
+                 style="width:56px;height:56px;background:linear-gradient(135deg,#ef4444,#b91c1c);">
+              <i class="bi bi-exclamation-lg text-white fs-3"></i>
+            </div>
+          <% } else { %>
+            <div class="rounded-circle mx-auto d-flex align-items-center justify-content-center bg-primary"
+                 style="width:56px;height:56px;">
+              <i class="bi bi-info-lg text-white fs-4"></i>
+            </div>
+          <% } %>
+        </div>
+
+        <h5 class="mb-2"><%= flash.title || 'Notification' %></h5>
+        <p class="text-muted small mb-3">
+          <%= flash.message || '' %>
+        </p>
+
+        <button id="flash-close-btn"
+                type="button"
+                class="btn btn-sm btn-dark rounded-pill px-4">
+          Okay
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const overlay = document.getElementById('flash-overlay');
+      if (!overlay) return;
+
+      const close = () => {
+        overlay.classList.add('fade-out');
+        setTimeout(() => {
+          if (overlay && overlay.parentNode) {
+            overlay.parentNode.removeChild(overlay);
+          }
+        }, 260);
+      };
+
+      const btn = document.getElementById('flash-close-btn');
+      if (btn) btn.addEventListener('click', close);
+
+      // ❌ Auto close and click-outside close removed
+      // Popup ab sirf "Okay" button click se band hoga
+    })();
+  </script>
+<% } %>

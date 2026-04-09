@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IVS Login</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+<style>
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+:root{
+  --super:#ef4444;
+  --super-soft:#fecaca;
+
+  --admin:#22c55e;
+  --admin-soft:#bbf7d0;
+
+  --agent:#facc15;
+  --agent-soft:#fde68a;
+
+  --sub:#3b82f6;
+  --sub-soft:#bfdbfe;
+
+  --text:#ffffff;
+  --muted:rgba(255,255,255,.78);
+  --card:rgba(255,255,255,.10);
+  --card-border:rgba(255,255,255,.16);
+  --input-bg:rgba(255,255,255,.96);
+  --input-text:#111827;
+}
+
+html,body{
+  width:100%;
+  height:100%;
+}
+
+body{
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  min-height:100vh;
+  overflow:hidden;
+  color:var(--text);
+  position:relative;
+}
+
+/* ROLE THEMES */
+body.theme-super{
+  background:
+    radial-gradient(circle at 82% 82%, rgba(239,68,68,.32), transparent 22%),
+    radial-gradient(circle at 18% 78%, rgba(255,255,255,.08), transparent 22%),
+    radial-gradient(circle at 82% 20%, rgba(248,113,113,.14), transparent 18%),
+    linear-gradient(135deg,#070b16 0%, #0a1328 42%, #17090d 100%);
+}
+
+body.theme-admin{
+  background:
+    radial-gradient(circle at 82% 82%, rgba(34,197,94,.30), transparent 22%),
+    radial-gradient(circle at 18% 78%, rgba(255,255,255,.07), transparent 22%),
+    radial-gradient(circle at 82% 20%, rgba(134,239,172,.12), transparent 18%),
+    linear-gradient(135deg,#07110e 0%, #0a1a22 42%, #09140d 100%);
+}
+
+body.theme-agent{
+  background:
+    radial-gradient(circle at 82% 82%, rgba(250,204,21,.30), transparent 22%),
+    radial-gradient(circle at 18% 78%, rgba(255,255,255,.07), transparent 22%),
+    radial-gradient(circle at 82% 20%, rgba(253,224,71,.14), transparent 18%),
+    linear-gradient(135deg,#120d04 0%, #161e2c 42%, #1b1205 100%);
+}
+
+body.theme-sub{
+  background:
+    radial-gradient(circle at 82% 82%, rgba(59,130,246,.30), transparent 22%),
+    radial-gradient(circle at 18% 78%, rgba(255,255,255,.07), transparent 22%),
+    radial-gradient(circle at 82% 20%, rgba(96,165,250,.13), transparent 18%),
+    linear-gradient(135deg,#060c18 0%, #0a1630 42%, #09101e 100%);
+}
+
+/* GRID OVERLAY */
+body::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+  background-size:42px 42px;
+  opacity:.55;
+  pointer-events:none;
+}
+
+body::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(to bottom, rgba(255,255,255,.02), rgba(255,255,255,0));
+  pointer-events:none;
+}
+
+.wrapper{
+  position:relative;
+  z-index:2;
+  width:100%;
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:40px;
+  padding:36px 52px;
+}
+
+/* LEFT SIDE */
+.left{
+  flex:1;
+  min-width:0;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-start;
+  align-items:flex-start;
+  padding:28px 0 28px 0;
+}
+
+.logo{
+  display:inline-flex;
+  align-items:center;
+  gap:14px;
+  padding:10px 18px 10px 10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+  box-shadow:
+    0 14px 36px rgba(0,0,0,.18),
+    inset 0 1px 0 rgba(255,255,255,.08);
+  width:max-content;
+}
+
+.logo-box{
+  width:42px;
+  height:42px;
+  border-radius:14px;
+  background:linear-gradient(135deg,#ef4444 0%, #f59e0b 35%, #22c55e 65%, #38bdf8 100%);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:900;
+  color:#fff;
+  font-size:17px;
+  letter-spacing:.03em;
+  box-shadow:0 10px 24px rgba(0,0,0,.24);
+  flex-shrink:0;
+}
+
+.logo-text{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  line-height:1.15;
+}
+
+.logo-title{
+  font-size:17px;
+  font-weight:800;
+  color:#fff;
+}
+
+.logo-sub{
+  font-size:9px;
+  color:rgba(255,255,255,.66);
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  margin-top:4px;
+}
+
+.hero-copy{
+  max-width:760px;
+  width:100%;
+  min-height:66vh;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:flex-start;
+  padding-left:0;
+  margin-left:0;
+  padding-bottom:0;
+}
+
+.heading{
+  font-size:clamp(56px, 5.6vw, 92px);
+  font-weight:900;
+  line-height:.98;
+  margin-bottom:24px;
+  letter-spacing:-2.5px;
+  color:#fff;
+  text-wrap:balance;
+  max-width:700px;
+}
+
+.sub{
+  color:rgba(255,255,255,.78);
+  font-size:clamp(17px, 1.2vw, 22px);
+  line-height:1.75;
+  max-width:680px;
+}
+
+/* RIGHT LOGIN CARD */
+.right{
+  width:100%;
+  max-width:520px;
+  display:flex;
+  justify-content:flex-end;
+}
+
+.login-card{
+  width:100%;
+  max-width:450px;
+  padding:34px;
+  border-radius:30px;
+  background:rgba(255,255,255,.09);
+  border:1px solid rgba(255,255,255,.15);
+  backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  box-shadow:
+    0 28px 90px rgba(0,0,0,.38),
+    inset 0 1px 0 rgba(255,255,255,.10);
+  position:relative;
+  overflow:hidden;
+}
+
+.login-card::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:30px;
+  background:linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.02));
+  pointer-events:none;
+}
+
+.login-card > *{
+  position:relative;
+  z-index:2;
+}
+
+.login-title{
+  font-size:clamp(38px, 3vw, 48px);
+  font-weight:900;
+  margin-bottom:8px;
+  line-height:1;
+  letter-spacing:-1px;
+  color:#fff;
+  text-align:center;
+}
+
+.login-desc{
+  color:rgba(255,255,255,.70);
+  font-size:15px;
+  margin-bottom:22px;
+  text-align:center;
+}
+
+/* ROLE BUTTONS */
+.role-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-bottom:18px;
+}
+
+.role{
+  position:relative;
+  padding:13px 12px;
+  border-radius:14px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);
+  text-align:center;
+  text-decoration:none;
+  font-size:15px;
+  font-weight:800;
+  color:#fff;
+  transition:.22s ease;
+  overflow:hidden;
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+
+.role::before{
+  content:"";
+  position:absolute;
+  inset:auto 0 0 0;
+  height:0;
+  transition:.22s ease;
+}
+
+.role:hover{
+  transform:translateY(-1px);
+  background:rgba(255,255,255,.12);
+  color:#fff;
+}
+
+.role-super.active{
+  border:2px solid var(--super);
+  background:linear-gradient(180deg, rgba(239,68,68,.14), rgba(255,255,255,.05));
+  box-shadow:0 0 0 1px rgba(239,68,68,.12), 0 10px 24px rgba(239,68,68,.10);
+}
+.role-super.active::before{
+  height:100%;
+  background:linear-gradient(90deg, rgba(239,68,68,.08), rgba(255,255,255,.01));
+}
+
+.role-admin.active{
+  border:2px solid var(--admin);
+  background:linear-gradient(180deg, rgba(34,197,94,.14), rgba(255,255,255,.05));
+  box-shadow:0 0 0 1px rgba(34,197,94,.12), 0 10px 24px rgba(34,197,94,.10);
+}
+.role-admin.active::before{
+  height:100%;
+  background:linear-gradient(90deg, rgba(34,197,94,.08), rgba(255,255,255,.01));
+}
+
+.role-agent.active{
+  border:2px solid var(--agent);
+  background:linear-gradient(180deg, rgba(250,204,21,.18), rgba(255,255,255,.05));
+  box-shadow:0 0 0 1px rgba(250,204,21,.10), 0 10px 24px rgba(250,204,21,.10);
+  color:#fff;
+}
+.role-agent.active::before{
+  height:100%;
+  background:linear-gradient(90deg, rgba(250,204,21,.10), rgba(255,255,255,.01));
+}
+
+.role-sub.active{
+  border:2px solid var(--sub);
+  background:linear-gradient(180deg, rgba(59,130,246,.16), rgba(255,255,255,.05));
+  box-shadow:0 0 0 1px rgba(59,130,246,.12), 0 10px 24px rgba(59,130,246,.10);
+}
+.role-sub.active::before{
+  height:100%;
+  background:linear-gradient(90deg, rgba(59,130,246,.10), rgba(255,255,255,.01));
+}
+
+/* FORM */
+.form-control{
+  background:var(--input-bg);
+  border:1px solid rgba(255,255,255,.45);
+  border-radius:14px;
+  padding:14px 15px;
+  margin-bottom:12px;
+  font-size:15px;
+  color:var(--input-text);
+  box-shadow:none;
+}
+
+.form-control::placeholder{
+  color:#6b7280;
+}
+
+.form-control:focus{
+  border-color:rgba(255,255,255,.7);
+  box-shadow:0 0 0 3px rgba(255,255,255,.10);
+}
+
+/* LOGIN BUTTON */
+.btn-login{
+  width:100%;
+  border:none;
+  padding:14px;
+  border-radius:14px;
+  font-weight:800;
+  font-size:16px;
+  transition:.22s ease;
+  box-shadow:
+    0 12px 24px rgba(0,0,0,.14),
+    inset 0 1px 0 rgba(255,255,255,.25);
+}
+
+.btn-login:hover{
+  transform:translateY(-1px);
+  filter:brightness(1.03);
+}
+
+.btn-super{
+  background:linear-gradient(135deg,#ff5757 0%, #ef4444 45%, #dc2626 100%);
+  color:#fff;
+}
+
+.btn-admin{
+  background:linear-gradient(135deg,#34d399 0%, #22c55e 45%, #16a34a 100%);
+  color:#fff;
+}
+
+.btn-agent{
+  background:linear-gradient(135deg,#fde047 0%, #facc15 45%, #eab308 100%);
+  color:#111827;
+}
+
+.btn-sub{
+  background:linear-gradient(135deg,#60a5fa 0%, #3b82f6 45%, #2563eb 100%);
+  color:#fff;
+}
+
+.mak-footer{
+  position:absolute;
+  left:50%;
+  bottom:18px;
+  transform:translateX(-50%);
+  z-index:3;
+  color:rgba(255,255,255,.86);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  white-space:nowrap;
+}
+
+/* RESPONSIVE */
+@media (max-width: 1200px){
+  .wrapper{
+    padding:30px 30px 70px;
+    gap:28px;
+  }
+
+  .heading{
+    font-size:64px;
+  }
+
+  .login-card{
+    max-width:430px;
+  }
+}
+
+@media (max-width: 992px){
+  body{
+    overflow:auto;
+  }
+
+  .wrapper{
+    min-height:100vh;
+    flex-direction:column;
+    align-items:flex-start;
+    justify-content:center;
+    padding:28px 20px 80px;
+  }
+
+  .left{
+    min-height:auto;
+    width:100%;
+    padding:0;
+    gap:40px;
+  }
+
+  .hero-copy{
+    padding-bottom:0;
+  }
+
+  .heading{
+    font-size:48px;
+    letter-spacing:-1.5px;
+  }
+
+  .sub{
+    font-size:16px;
+  }
+
+  .right{
+    max-width:100%;
+    width:100%;
+    justify-content:center;
+  }
+
+  .login-card{
+    max-width:480px;
+  }
+
+  .mak-footer{
+    bottom:14px;
+    width:100%;
+    text-align:center;
+    padding:0 12px;
+    white-space:normal;
+  }
+}
+
+@media (max-width: 576px){
+  .wrapper{
+    padding:20px 14px 78px;
+  }
+
+  .logo{
+    transform:scale(.95);
+    transform-origin:left center;
+  }
+
+  .heading{
+    font-size:38px;
+  }
+
+  .login-card{
+    padding:24px 18px;
+    border-radius:24px;
+  }
+
+  .login-title{
+    font-size:32px;
+  }
+
+  .role{
+    font-size:14px;
+    padding:12px 10px;
+  }
+
+  .form-control{
+    padding:13px 14px;
+  }
+
+  .btn-login{
+    padding:13px;
+  }
+}
+</style>
+</head>
+
+<%
+  let themeClass = 'theme-super';
+  if(type === 'admin') themeClass = 'theme-admin';
+  if(type === 'agent') themeClass = 'theme-agent';
+  if(type === 'sub_agent') themeClass = 'theme-sub';
+%>
+
+<body class="<%= themeClass %>">
+
+<div class="wrapper">
+
+  <div class="left">
+    <div class="logo">
+      <div class="logo-box">IVS</div>
+      <div class="logo-text">
+        <div class="logo-title">IQRA Virtual School</div>
+        <div class="logo-sub">Internal Dashboard Access</div>
+      </div>
+    </div>
+
+    <div class="hero-copy">
+      <div class="heading">
+        Smart login for<br>School teams.
+      </div>
+
+      <div class="sub">
+        Streamline your institution’s core operations with an all-inclusive internal system,
+        designed to manage student admissions, departmental oversight, and accounts management.
+      </div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="login-card">
+      <div class="login-title">Welcome back</div>
+      <div class="login-desc">Select role and login</div>
+
+      <div class="role-grid">
+        <a href="/login?type=super" class="role role-super <%= type==='super'?'active':'' %>">Super</a>
+        <a href="/login?type=admin" class="role role-admin <%= type==='admin'?'active':'' %>">Admin</a>
+        <a href="/login?type=agent" class="role role-agent <%= type==='agent'?'active':'' %>">Agent</a>
+        <a href="/login?type=sub_agent" class="role role-sub <%= type==='sub_agent'?'active':'' %>">Sub</a>
+      </div>
+
+      <% if(type){ 
+        let btnClass = 'btn-super';
+        if(type === 'admin') btnClass = 'btn-admin';
+        if(type === 'agent') btnClass = 'btn-agent';
+        if(type === 'sub_agent') btnClass = 'btn-sub';
+      %>
+
+      <form method="POST" action="/login">
+        <input type="hidden" name="loginType" value="<%= type %>">
+
+        <input type="email" name="email" class="form-control" placeholder="Email" required>
+        <input type="password" name="password" class="form-control" placeholder="Password" required>
+
+        <button class="btn-login <%= btnClass %>">Login</button>
+      </form>
+
+      <% } %>
+    </div>
+  </div>
+
+</div>
+
+<div class="mak-footer">POWERED AND DESIGNED BY MAK</div>
+
+</body>
+</html>

@@ -1,0 +1,257 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Fee Invoice</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0;
+      font-family: "Helvetica", "Arial", sans-serif;
+      color: #000;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      background: #fff;
+    }
+
+    .page {
+      position: relative;
+      width: 210mm;
+      height: 297mm;
+      margin: 0 auto;
+      padding: 15mm 15mm 0 15mm;
+      page-break-after: always;
+      background: #fff;
+      overflow: hidden;
+    }
+    .page:last-child { page-break-after: auto; }
+
+    .bannerWrap { width: 100%; text-align: center; margin-bottom: 10px; }
+    .bannerWrap img {
+      width: 180mm;
+      max-height: 65mm;
+      object-fit: contain; display: block; margin: 0 auto;
+    }
+
+   .title {
+  text-align: center; font-size: 24px; font-weight: bold;
+  color: #a52a2a;
+  margin-bottom: 12px;
+}
+
+    .info-grid {
+      display: flex; justify-content: space-between;
+      margin-bottom: 10px; font-size: 10px;
+    }
+    .info-col { display: flex; flex-direction: column; gap: 5.5px; width: 48%; }
+    .info-row { display: flex; justify-content: space-between; }
+    .lbl { color: #646464; font-weight: normal; }
+    .val { color: #000; font-weight: bold; }
+    .val-red { color: #b40000; font-weight: bold; }
+    .currency-row { margin-bottom: 10px; font-size: 10px; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+   thead th {
+  background: #a52a2a;
+  color: #fff; font-size: 8px; font-weight: bold;
+  padding: 4px 3px; text-align: left; vertical-align: middle;
+}
+    thead th.right { text-align: right; }
+    thead th.center { text-align: center; }
+
+    tbody td {
+      font-size: 8px; padding: 4px 3px;
+      border-bottom: 0.1mm solid #dcdcdc;
+      color: #1e1e1e; vertical-align: middle;
+    }
+    tbody td.right { text-align: right; }
+    tbody td.center { text-align: center; }
+
+    .descSmall { display: block; font-size: 7.5px; color: #646464; margin-top: 1px; }
+
+  .final-row {
+  background-color: #fff5f5;
+  border-top: 0.2mm solid #a52a2a;
+  border-bottom: 0.2mm solid #a52a2a;
+  color: #a52a2a;
+  font-weight: bold;
+  font-size: 10px;
+  display: flex; justify-content: space-between;
+  padding: 4px 6px; margin-top: -10px; margin-bottom: 15px;
+}
+       .monthStripTitle {
+      font-size: 10px;
+      font-weight: bold;
+      color: #a52a2a;
+      margin-bottom: 6px;
+    }
+    .monthStrip { margin-bottom: 15px; }
+   .stripTable th { background: #a52a2a; color: #fff; font-size: 7px; padding: 3px; text-align: center; border-right: 1px solid rgba(255,255,255,0.2); }
+    .stripTable td { font-size: 6.5px; padding: 3px; text-align: center; border: 0.1mm solid #dcdcdc; height: 18px; }
+    .stripStatus { color: #b40000; display: block; font-weight: bold; }
+
+   .payment-title {
+  background: #a52a2a; color: #fff; font-size: 10px; font-weight: bold;
+  text-align: center; padding: 4px 0; margin-bottom: 8px; width: 100%;
+}
+    .payment-grid { display: flex; justify-content: space-between; gap: 15px; }
+    .pay-col { width: 33%; font-size: 7.5px; color: #646464; line-height: 1.4; }
+    .pay-col-title { font-size: 8px; font-weight: bold; color: #1e1e1e; margin-bottom: 4px; }
+    
+    /* QR Dimensions Adjusted: 594x881 aspect */
+    .pay-col.qr { display: flex; flex-direction: column; align-items: flex-end; }
+    .pay-col.qr img { width: 75px; height: auto; object-fit: contain; margin-top: -2px; }
+
+    .inst-wrap { display: flex; justify-content: space-between; margin-top: 20px; }
+    .inst-left { width: 70%; font-size: 8px; color: #323232; }
+    .inst-title { font-size: 10px; font-weight: bold; color: #223269; margin-bottom: 6px; }
+    .inst-line { display: flex; align-items: flex-start; margin-bottom: 3.5px; }
+    .inst-check { color: #00964b; font-weight: bold; margin-right: 5px; font-size: 9px; }
+    
+    /* Stamp/Sign Dimensions Adjusted: 636x673 aspect */
+    .inst-right { width: 30%; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;}
+    .inst-right img { width: 110px; height: auto; object-fit: contain; margin-bottom: 2px;}
+    .sign-text { font-size: 9px; font-weight: bold; color: #192864; margin-bottom: 5px; }
+
+   .fixed-footer {
+  position: absolute; bottom: 0; left: 0;
+  width: 210mm; height: 17mm;
+  background-color: #a52a2a;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 15mm;
+  color: #fff; font-size: 9px;
+}
+  </style>
+</head>
+<body>
+
+  <% (rowPages || []).forEach((pageRows, pageIndex) => { %>
+    <div class="page">
+      
+      <div class="bannerWrap">
+        <img src="<%= bannerSrcAbs %>" alt="Header Banner">
+      </div>
+
+      <div class="title">FEE INVOICE</div>
+
+      <div class="info-grid">
+        <div class="info-col">
+          <div class="info-row"><span class="lbl">Parent's Name:</span> <span class="val"><%= parentName %></span></div>
+          <div class="info-row"><span class="lbl">F.Code:</span> <span class="val"><%= familyNo %></span></div>
+        </div>
+        <div class="info-col">
+          <div class="info-row"><span class="lbl">Issued on:</span> <span class="val"><%= issuedOn %></span></div>
+          <div class="info-row"><span class="lbl">Due Date:</span> <span class="val-red"><%= dueOn %></span></div>
+        </div>
+      </div>
+      <div class="currency-row">
+        <span class="lbl">Currency:</span> <span class="val"><%= currency %></span>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 12%">Reg No</th>
+            <th style="width: 48%">Description</th>
+            <th style="width: 15%">Grade</th>
+            <th class="center" style="width: 10%">Month</th>
+            <th class="right" style="width: 15%">Amount (<%= currency %>)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% pageRows.forEach(r => { %>
+            <tr>
+              <td><%= r.regNo %></td>
+              <td>
+                <% const d = String(r.description || '').split('\n'); %>
+                <%= d[0] %>
+                <% if (d[1]) { %><span class="descSmall"><%= d[1] %></span><% } %>
+              </td>
+              <td><%= r.grade %></td>
+              <td class="center"><%= r.month %></td>
+              <td class="right"><%= r.amount %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+
+      <% if (pageIndex === rowPages.length - 1) { %>
+        
+        <div class="final-row">
+          <div>TOTAL PAYABLE</div>
+          <div><%= totalText %></div>
+        </div>
+        
+        <% if (monthStrip && monthStrip.length > 0) { %>
+                  <div style="font-size: 10px; font-weight: bold; color: #a52a2a; margin-bottom: 6px;">Previous Months Record</div>
+        <div class="monthStrip">
+          <table class="stripTable" style="margin-bottom:0;">
+            <tr>
+              <% monthStrip.forEach(m => { %> <th><%= m.labelTop || '-' %></th> <% }) %>
+            </tr>
+            <tr>
+             <% monthStrip.forEach(m => { %>
+  <td>
+    <span style="font-weight: bold; display:block;"><%= m.labelBottom || '-' %></span>
+  </td>
+<% }) %>
+            </tr>
+          </table>
+        </div>
+        <% } %>
+
+        <div class="payment-title">PAYMENT INFORMATION</div>
+        <div class="payment-grid">
+          <div class="pay-col">
+            <div class="pay-col-title">IQRA VIRTUALSOLUTIONS</div>
+            <div>IBAN#: PK71MEZN0007810111367793</div>
+            <div>(International Transfers)</div>
+            <div>A/C #: 07810111367793 (Local)</div>
+            <div>Branch Code: 0781</div>
+            <div>Bank: Meezan Bank Peshawar</div>
+            <div>Contact: +92 335 524 5551</div>
+          </div>
+          <div class="pay-col">
+            <div class="pay-col-title">IVSGLOBAL</div>
+            <div>Bank Name: Mashreq Bank</div>
+            <div>IBAN: AE620330000019101455931</div>
+            <div>A/C Number: 019101455931</div>
+            <div>Mobile: +971528838128</div>
+            <div>Beneficiary Address: Ajman Industrial Area 2, UAE</div>
+          </div>
+          <div class="pay-col qr">
+            <div class="pay-col-title" style="font-size:7px;">PayPal Account</div>
+            <img src="<%= baseUrl + '/img/receipt-qr.jpg' %>" alt="Scan to pay">
+            <div style="font-size:6px; font-weight:bold; margin-top:2px;">SCAN TO PAY</div>
+          </div>
+        </div>
+
+        <div class="inst-wrap">
+          <div class="inst-left">
+            <div class="inst-title">Instructions:</div>
+            <div class="inst-line"><span class="inst-check">✓</span> <span>Please fill out the fee receipt submission form:</span></div>
+            <div class="inst-line" style="margin-left: 12px; margin-bottom: 6px; color: blue;">https://forms.gle/W4y3Q1VjyU8cRDvp7</div>
+            <div class="inst-line"><span class="inst-check">✓</span> <span>Kindly fill out all information in the link accurately.</span></div>
+            <div class="inst-line"><span class="inst-check">✓</span> <span>If you do not receive the slip within 72 hours, contact us.</span></div>
+            <div class="inst-line"><span class="inst-check">✓</span> <span>Rejected/Refunded payments will not be considered as paid.</span></div>
+          </div>
+          <div class="inst-right">
+            <img src="<%= baseUrl + '/img/receipt-sign.jpg' %>" alt="Stamp and Signature">
+            <span class="sign-text">Authorized Signature</span>
+          </div>
+        </div>
+
+      <% } %>
+
+      <div class="fixed-footer">
+        <span>+92 335 524 5551</span>
+        <span style="flex: 1; text-align: center;">acivs2021@gmail.com</span>
+        <span>iqravirtualschool.com</span>
+      </div>
+
+    </div>
+  <% }) %>
+
+</body>
+</html>

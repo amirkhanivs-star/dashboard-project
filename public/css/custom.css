@@ -1,0 +1,618 @@
+/* ============ BASE LAYOUT (same as before) ============ */
+
+/* Make layout wrapper and sidebar always full height */
+html,
+body {
+  height: 100%;
+}
+
+body > .d-flex {
+  min-height: 100vh;
+}
+
+/* Sidebar should never shrink */
+.layout-dashboard #ivsSidebar{
+  flex-shrink: 0;
+}
+
+/* Force red header/footer in system dark mode (login page etc.) 
+   but NOT on dashboard layout pages */
+@media (prefers-color-scheme: dark) {
+  body:not(.layout-dashboard) nav.navbar {
+    background-color: #b10000 !important;
+  }
+  body:not(.layout-dashboard) footer {
+    background-color: #b10000 !important;
+  }
+}
+
+/* ============ DASHBOARD DARK MODE (for pages using bootstrap-header.ejs) ============ */
+/* This is applied when <body> has class="dark-mode-dashboard" */
+
+body.dark-mode-dashboard {
+  background-color: #020617;
+  color: #e5e7eb;
+}
+
+/* Main content background (area under top bar) */
+body.dark-mode-dashboard .flex-grow-1.bg-light {
+  background:
+    radial-gradient(circle at 0 0, rgba(56,189,248,.12) 0, transparent 55%),
+    radial-gradient(circle at 100% 0, rgba(96,165,250,.16) 0, transparent 55%),
+    #020617 !important;
+}
+
+/* Cards (stats, panels, etc.) */
+body.dark-mode-dashboard .card {
+  background-color: #020617 !important;
+  border-color: #1f2937 !important;
+  color: #e5e7eb !important;
+  box-shadow: 0 10px 30px rgba(15,23,42,0.45);
+}
+
+/* Card headers / info strips */
+body.dark-mode-dashboard .card-header {
+  background-color: #020617 !important;
+  border-bottom-color: #1f2937 !important;
+}
+
+/* Alerts / info banners */
+body.dark-mode-dashboard .alert-info {
+  background-color: rgba(56,189,248,0.10) !important;
+  border-color: rgba(56,189,248,0.6) !important;
+  color: #e0f2fe !important;
+}
+
+/* ================= TABLE + GRID FIX (NO WHITE LINES) ================= */
+
+body.dark-mode-dashboard table.table {
+  color: #e5e7eb;
+  border-color: #1f2937 !important;
+  background-color: #020617 !important;
+  border-collapse: separate;
+}
+
+/* header + cells background and borders */
+body.dark-mode-dashboard table.table thead,
+body.dark-mode-dashboard table.table thead tr,
+body.dark-mode-dashboard table.table thead th,
+body.dark-mode-dashboard table.table tbody,
+body.dark-mode-dashboard table.table tbody tr,
+body.dark-mode-dashboard table.table tbody td {
+  background-color: #020617 !important;
+  border-color: #1f2937 !important;
+}
+
+/* striping (very subtle) */
+body.dark-mode-dashboard table.table tbody tr:nth-child(even) {
+  background-color: #020617 !important;
+}
+
+body.dark-mode-dashboard table.table tbody tr:nth-child(odd) {
+  background-color: #020617 !important;
+}
+
+/* ================= INPUTS / SELECTS ================= */
+
+body.dark-mode-dashboard .form-control,
+body.dark-mode-dashboard .form-select {
+  background-color: #020617 !important;
+  border-color: #4b5563 !important;
+  color: #e5e7eb !important;
+  box-shadow: none !important;
+}
+
+body.dark-mode-dashboard .form-control::placeholder,
+body.dark-mode-dashboard .form-select::placeholder {
+  color: #9ca3af;
+}
+
+body.dark-mode-dashboard .form-control:focus,
+body.dark-mode-dashboard .form-select:focus {
+  background-color: #020617 !important;
+  border-color: #38bdf8 !important;
+  color: #e5e7eb !important;
+  box-shadow: 0 0 0 0.15rem rgba(56,189,248,0.4) !important;
+}
+
+/* Filter row inputs (first row of tables) */
+body.dark-mode-dashboard table.table thead input.form-control,
+body.dark-mode-dashboard table.table thead select.form-select {
+  background-color: #020617 !important;
+  border-color: #4b5563 !important;
+  color: #e5e7eb !important;
+}
+
+/* ============== BADGES, BUTTONS, TEXT TWEAKS ============== */
+
+/* Badges / small labels */
+body.dark-mode-dashboard .badge.text-bg-secondary,
+body.dark-mode-dashboard .badge.text-bg-light {
+  background-color: #111827 !important;
+  color: #e5e7eb !important;
+  border-color: #1f2937 !important;
+}
+
+/* “All departments” chip on super admin page */
+body.dark-mode-dashboard .badge.text-bg-primary {
+  background-color: #2563eb !important;
+}
+
+/* Buttons keep existing colors, just tweak shadow a bit */
+body.dark-mode-dashboard .btn-primary,
+body.dark-mode-dashboard .btn-success,
+body.dark-mode-dashboard .btn-warning,
+body.dark-mode-dashboard .btn-info,
+body.dark-mode-dashboard .btn-danger {
+  box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+}
+
+/* Sidebar text colors (sidebar color itself still comes from inline themeColor) */
+body.dark-mode-dashboard aside {
+  box-shadow: 4px 0 20px rgba(0,0,0,0.4);
+}
+
+body.dark-mode-dashboard aside .opacity-75 {
+  opacity: .9 !important;
+}
+
+/* Top bar: keep theme color, just soften text a bit */
+body.dark-mode-dashboard nav.navbar .navbar-brand {
+  text-shadow: 0 1px 3px rgba(0,0,0,0.45);
+}
+
+/* Small muted text */
+body.dark-mode-dashboard .text-muted {
+  color: #9ca3af !important;
+}
+
+/* “Save / Update” buttons in last column */
+body.dark-mode-dashboard td .btn-primary,
+body.dark-mode-dashboard td .btn-sm.btn-primary {
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+body.dark-mode-dashboard td .btn-primary:hover,
+body.dark-mode-dashboard td .btn-sm.btn-primary:hover {
+  background-color: #1d4ed8;
+  border-color: #1d4ed8;
+}
+/* ===== Super Admin dashboard styling ===== */
+
+.super-shell {
+  border-radius: 22px;
+  padding: 18px 20px 22px;
+  background: #f9fafb;
+  box-shadow: 0 18px 40px rgba(15,23,42,0.08);
+}
+
+/* dark mode shell */
+body.dark-mode-dashboard .super-shell {
+  background: rgba(15,23,42,0.96);
+  box-shadow: 0 18px 46px rgba(0,0,0,0.65);
+}
+
+/* top hero */
+.super-header-card {
+  border-radius: 18px;
+  padding: 16px 18px;
+  background:
+    radial-gradient(circle at 0 0, rgba(59,130,246,.12) 0, transparent 55%),
+    #ffffff;
+  border: 1px solid rgba(148,163,184,0.45);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+body.dark-mode-dashboard .super-header-card {
+  background:
+    radial-gradient(circle at 0 0, rgba(56,189,248,.18) 0, transparent 55%),
+    #020617;
+  border-color: #1f2937;
+}
+
+.text-super-heading {
+  letter-spacing: .04em;
+}
+
+.super-chip {
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  background: #ffffff;
+  border: 1px solid rgba(148,163,184,0.6);
+  color: #4b5563;
+}
+
+body.dark-mode-dashboard .super-chip {
+  background: rgba(15,23,42,0.96);
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+.super-dept-pill {
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+body.dark-mode-dashboard .super-dept-pill {
+  background: rgba(15,23,42,0.96);
+  border-color: #22c55e;
+  color: #bbf7d0;
+}
+
+.super-dept-pill .dept-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #22c55e;
+}
+
+/* stats */
+.super-stat-card {
+  border-radius: 18px;
+  border: none;
+  color: #fff;
+  overflow: hidden;
+  box-shadow: 0 18px 34px rgba(148,163,184,0.55);
+}
+
+.super-stat-card .card-body {
+  padding: 14px 16px 12px;
+}
+
+.stat-label {
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: .14em;
+  opacity: .9;
+}
+
+.stat-value {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.stat-value-sm {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.stat-icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgba(15,23,42,.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-icon {
+  font-size: 22px;
+}
+
+.stat-footer {
+  font-size: 11px;
+  padding: 6px 14px 8px;
+  border-top: none;
+  opacity: .9;
+}
+
+.stat-link {
+  color: inherit;
+}
+
+/* stat colors */
+.stat-primary { background: linear-gradient(135deg,#2563eb,#1d4ed8); }
+.stat-info    { background: linear-gradient(135deg,#0ea5e9,#0284c7); }
+.stat-warning { background: linear-gradient(135deg,#facc15,#eab308); color:#1f2937; }
+.stat-danger  { background: linear-gradient(135deg,#ef4444,#b91c1c); }
+
+/* quick links */
+.super-quick-link {
+  border-radius: 16px;
+}
+
+.quick-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+}
+
+.quick-icon i {
+  font-size: 18px;
+}
+
+.quick-icon.q-quran  { background:#eff6ff; color:#1d4ed8; }
+.quick-icon.q-tuition{ background:#ecfeff; color:#0284c7; }
+.quick-icon.q-school { background:#fffbeb; color:#eab308; }
+
+body.dark-mode-dashboard .super-quick-link {
+  background:#020617;
+  border:1px solid #1f2937;
+}
+
+/* table card */
+.super-table-card {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.super-filter-row th {
+  border-top: none !important;
+}
+/* ===== Layout: dashboard shell, sidebar, topbar ===== */
+
+body.layout-dashboard {
+  background: #f3f4f6;
+}
+
+/* make main wrapper already full-height (you already have the flex rules above) */
+
+/* Sidebar base */
+.layout-dashboard .ivs-sidebar {
+  width: 230px;
+  background:
+    radial-gradient(circle at 0 0, rgba(255,255,255,0.22) 0, transparent 55%),
+    linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.35)),
+    var(--ivs-theme);
+  background-blend-mode: screen, soft-light, normal;
+  color: #f9fafb;
+  box-shadow: 4px 0 22px rgba(15,23,42,0.35);
+  border-right: 1px solid rgba(15,23,42,0.35);
+  flex-shrink: 0;
+}
+
+/* Sidebar header */
+.ivs-sidebar-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(15,23,42,0.18);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-logo-pill {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--ivs-theme);
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 16px rgba(15,23,42,0.35);
+}
+
+/* Sidebar nav */
+.layout-dashboard .ivs-sidebar nav {
+  padding: 14px 16px 18px;
+  font-size: 13px;
+}
+
+.sidebar-section-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  opacity: .78;
+  margin: 4px 0 6px;
+}
+
+.layout-dashboard .ivs-sidebar nav a {
+  border-radius: 999px;
+  padding: 6px 10px;
+  display: block;
+  margin-bottom: 4px;
+  transition: background .15s ease, transform .08s ease;
+}
+
+.layout-dashboard .ivs-sidebar nav a:hover {
+  background: rgba(15,23,42,0.18);
+  transform: translateX(2px);
+}
+
+/* Top bar */
+.layout-dashboard .ivs-topbar {
+  background:
+    radial-gradient(circle at 0 0, rgba(255,255,255,0.22) 0, transparent 55%),
+    linear-gradient(90deg, rgba(255,255,255,0.14), rgba(0,0,0,0.26)),
+    var(--ivs-theme);
+  background-blend-mode: screen, soft-light, normal;
+  border-bottom: 1px solid rgba(15,23,42,0.25);
+  box-shadow: 0 6px 20px rgba(15,23,42,0.35);
+  border-radius: 0 0 16px 0;
+  color: #ffffff;
+}
+
+.layout-dashboard .ivs-topbar .navbar-brand {
+  color: #ffffff;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-size: 13px;
+}
+
+.topbar-icon-pill {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(15,23,42,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.layout-dashboard .ivs-topbar .user-block div {
+  line-height: 1.3;
+}
+
+/* Dark mode tweaks for dashboard */
+body.dark-mode-dashboard.layout-dashboard {
+  background:
+    radial-gradient(circle at 0 0, rgba(56,189,248,.12) 0, transparent 55%),
+    #020617;
+}
+
+body.dark-mode-dashboard .ivs-sidebar {
+  border-right-color: #020617;
+  box-shadow: 4px 0 28px rgba(0,0,0,0.8);
+}
+
+body.dark-mode-dashboard .ivs-sidebar-header {
+  border-bottom-color: #111827;
+}
+
+body.dark-mode-dashboard .sidebar-logo-pill {
+  box-shadow: 0 8px 18px rgba(0,0,0,0.9);
+}
+
+body.dark-mode-dashboard .ivs-topbar {
+  box-shadow: 0 10px 32px rgba(0,0,0,0.9);
+}
+/* ========== Department Admin dashboard ========== */
+
+.admin-hero-card {
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 0 0, rgba(255,255,255,0.9) 0, transparent 60%),
+    linear-gradient(135deg, #f9fafb, #e0f2fe);
+}
+
+.dark-mode-dashboard .admin-hero-card {
+  background:
+    radial-gradient(circle at 0 0, rgba(56,189,248,0.16) 0, transparent 60%),
+    #020617;
+}
+
+/* small chips under heading */
+.admin-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15,23,42,0.03);
+  border: 1px solid rgba(148,163,184,0.4);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: #4b5563;
+}
+
+.dark-mode-dashboard .admin-chip {
+  background: rgba(15,23,42,0.7);
+  border-color: rgba(148,163,184,0.45);
+  color: #e5e7eb;
+}
+
+/* stat cards */
+.admin-stat-card {
+  border-radius: 14px;
+  border: 0;
+  box-shadow: 0 8px 22px rgba(15,23,42,0.18);
+}
+
+.admin-stat-card--primary {
+  background: linear-gradient(135deg, #e0f2fe, #dbeafe);
+}
+
+.admin-stat-card--success {
+  background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+}
+
+.admin-stat-card--warning {
+  background: linear-gradient(135deg, #fef3c7, #fee2e2);
+}
+
+.admin-stat-card--info {
+  background: linear-gradient(135deg, #e0f2fe, #f5f3ff);
+}
+
+.dark-mode-dashboard .admin-stat-card {
+  box-shadow: 0 10px 30px rgba(0,0,0,0.75);
+  background: #020617;
+}
+
+/* round icon inside stat card */
+.admin-stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgba(15,23,42,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: #111827;
+}
+
+.dark-mode-dashboard .admin-stat-icon {
+  background: rgba(15,23,42,0.9);
+  color: #f9fafb;
+}
+
+/* info alert spacing */
+.admin-info-alert {
+  border-radius: 999px;
+}
+
+/* table card */
+.admin-table-card .card-header {
+  background: linear-gradient(90deg, #f9fafb, #eff6ff);
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dark-mode-dashboard .admin-table-card .card-header {
+  background: #020617;
+  border-bottom-color: #1f2937;
+}
+
+/* ================= Sidebar Toggle (Premium - Full Hide) ================= */
+
+#ivsSidebar{
+  width: 230px;
+  flex-shrink: 0;
+  transition: transform .25s ease, width .25s ease, opacity .2s ease;
+}
+
+/* ✅ When hidden: sidebar fully gone */
+body.sidebar-collapsed #ivsSidebar{
+  transform: translateX(-110%);
+  width: 0 !important;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-right: 0 !important;
+  padding: 0 !important;
+}
+
+/* ✅ Mobile overlay feel */
+@media (max-width: 768px){
+  #ivsSidebar{
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    z-index: 9999;
+    width: 230px;
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  body.sidebar-collapsed #ivsSidebar{
+    transform: translateX(-110%);
+    opacity: 0;
+    pointer-events: none;
+  }
+}

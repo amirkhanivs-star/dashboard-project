@@ -1,0 +1,585 @@
+<%- include('partials/bootstrap-header', { user, pageTitle: 'Department Users' }) %>
+<%- include('partials/flash') %>
+
+<%
+  // ---------------------------
+  // Safe labels + admin permissions
+  // ---------------------------
+  const deptLabel = user.dept ? user.dept.charAt(0).toUpperCase() + user.dept.slice(1) : 'Department';
+
+  const adminPerms = (user && user.permissions) ? user.permissions : {};
+
+  const canCreateUsers = (typeof adminPerms.btnCreateUser !== 'undefined')
+    ? !!adminPerms.btnCreateUser
+    : ((typeof adminPerms.canCreateUsers === 'undefined') ? true : !!adminPerms.canCreateUsers);
+
+  const canEditUsers = (typeof adminPerms.btnEditUser !== 'undefined')
+    ? !!adminPerms.btnEditUser
+    : ((typeof adminPerms.canEditUsers === 'undefined') ? true : !!adminPerms.canEditUsers);
+
+  const canDeleteUsers = (typeof adminPerms.btnDeleteUser !== 'undefined')
+    ? !!adminPerms.btnDeleteUser
+    : ((typeof adminPerms.canDeleteUsers === 'undefined') ? true : !!adminPerms.canDeleteUsers);
+
+  const showActionCol = canEditUsers || canDeleteUsers;
+
+  // ---------------------------
+  // Role filter
+  // Admin page supports: all | agent | sub_agent
+  // ---------------------------
+  const roleFilterNorm =
+    (typeof roleFilter !== 'undefined' && roleFilter)
+      ? String(roleFilter)
+      : 'all';
+
+  // ---------------------------
+  // Normalize list
+  // Admin can only view their department agents/sub agents
+  // ---------------------------
+  const safeList = Array.isArray(deptUsers) ? deptUsers : [];
+  const onlyPipeline = safeList.filter(u => u && (u.role === 'agent' || u.role === 'sub_agent'));
+
+  const usersFiltered = (roleFilterNorm === 'all')
+    ? onlyPipeline
+    : onlyPipeline.filter(u => u.role === roleFilterNorm);
+
+  const totalDeptUsers = onlyPipeline.length;
+  const agentsCount = onlyPipeline.filter(u => u.role === 'agent').length;
+  const subAgentsCount = onlyPipeline.filter(u => u.role === 'sub_agent').length;
+
+  const ALL_COLS = [
+    { key:'colStatus', label:'Current Status' },
+    { key:'colFeeStatus', label:'Fee Status' },
+
+    { key:'colDept', label:'Dept' },
+    { key:'colStudentName', label:'Student' },
+    { key:'colFatherName', label:'Father' },
+    { key:'colFatherEmail', label:'Father Email' },
+    { key:'colGrade', label:'Grade' },
+    { key:'colTuitionGrade', label:'Grade Section' },
+    { key:'colPhone', label:'Phone Number', legacy:'showPhone' },
+    { key:'colPaymentStatus', label:'Payment Status', legacy:'showPaymentStatus' },
+    { key:'colPaidUpto', label:'Paid Upto', legacy:'showPaidUpto' },
+    { key:'colVerificationNumber', label:'Verif #' , legacy:'showVerificationNumber' },
+    { key:'colRegistrationNumber', label:'Reg #', legacy:'showRegistrationNumber' },
+    { key:'colFamilyNumber', label:'Family Num #' },
+    { key:'colRegistrationFee', label:'Registration Fee' },
+    { key:'colFees', label:'Fees' },
+    { key:'colCurrency', label:'Currency' },
+    { key:'colMonth', label:'Month' },
+    { key:'colTotalFees', label:'Total Fees' },
+    { key:'colPendingDues', label:'Pending Dues' },
+{ key:'colReceivedPayment', label:'Received Payment' },
+{ key:'colInvoiceStatus', label:'Invoice Status' },
+{ key:'colInvoiceStatusTimestamp', label:'Invoice Status Timestamp' },
+{ key:'colPaidInvoiceStatus', label:'Paid Invoice Status' },
+{ key:'colPaidInvoiceStatusTimestamp', label:'Paid Invoice Status Timestamp' },
+{ key:'colActionButtons', label:'Action Buttons' }
+  ];
+
+const getRoleBadgeClass = (role) => {
+  if (role === 'agent') return 'agent-role-badge-soft';
+  if (role === 'sub_agent') return 'subagent-role-badge';
+  return 'bg-secondary';
+};
+%>
+ <style>
+  .cards-wrap {
+    padding: 0;
+  }
+
+  .empty-box {
+    min-height: 260px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    text-align: center;
+    color: #64748b;
+    background: transparent;
+  }
+
+  .empty-box i {
+    font-size: 2rem;
+    display: inline-block;
+    margin-bottom: .6rem;
+    color: #16a34a;
+  }
+
+  @keyframes flashScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+  .subagent-role-badge{
+    background: rgba(59, 130, 246, 0.14) !important;
+    color: #1d4ed8 !important;
+    border: 1px solid rgba(59, 130, 246, 0.30) !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.10);
+  }
+
+.subagent-filter-active{
+  background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%) !important;
+  color: #111827 !important;
+  border: 1px solid #3b82f6 !important;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+}
+
+.subagent-filter-active i{
+  color: #111827 !important;
+}
+
+.subagent-filter-btn{
+  border: 1px solid rgba(37, 99, 235, 0.38) !important;
+  color: #111827 !important;
+  background: #fff !important;
+}
+
+.subagent-filter-btn i{
+  color: #111827 !important;
+}
+
+  .subagent-support-badge{
+    background: rgba(59, 130, 246, 0.12) !important;
+    color: #1d4ed8 !important;
+    border: 1px solid rgba(59, 130, 246, 0.26) !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08);
+  }
+
+  .subagent-avatar{
+    background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%) !important;
+    color: #fff !important;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+  }
+  .agent-role-badge-soft{
+  background: rgba(244, 180, 0, 0.14) !important;
+  color: #9a6a00 !important;
+  border: 1px solid rgba(244, 180, 0, 0.30) !important;
+  box-shadow: 0 4px 12px rgba(244, 180, 0, 0.08);
+}
+.all-filter-active{
+  background: #198754 !important;
+  color: #fff !important;
+  border: 1px solid #198754 !important;
+  box-shadow: 0 6px 14px rgba(25, 135, 84, 0.16);
+}
+
+.all-filter-active i{
+  color: #fff !important;
+}
+
+.all-filter-btn{
+  background: #fff !important;
+  color: #198754 !important;
+  border: 1px solid rgba(25, 135, 84, 0.45) !important;
+}
+
+.all-filter-btn i{
+  color: #198754 !important;
+}
+</style>
+<div class="container-fluid py-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h4 class="mb-1 d-flex align-items-center">
+        <span class="badge rounded-pill bg-light text-muted border me-2">
+          <i class="bi bi-diagram-3-fill text-success me-1"></i>
+          Department Access
+        </span>
+        <span>Users Directory</span>
+      </h4>
+      <p class="text-muted small mb-0">
+        <strong class="text-capitalize"><%= deptLabel %></strong> department overview for agents and sub agents only.
+      </p>
+    </div>
+
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <div class="input-group input-group-sm" style="max-width:360px;">
+        <span class="input-group-text bg-white border-end-0">
+          <i class="bi bi-search text-success"></i>
+        </span>
+        <input id="userSearch" type="text" class="form-control border-start-0"
+               placeholder="Search name, email, or id...">
+        <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+          Clear
+        </button>
+      </div>
+
+      <% if (canCreateUsers) { %>
+        <a href="/dashboard/admin/agents/new" class="btn btn-sm btn-success shadow-sm rounded-pill px-3">
+          <i class="bi bi-person-plus me-1"></i>
+          Create Agent / Sub Agent
+        </a>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div class="d-flex flex-wrap gap-2">
+         <a href="/dashboard/admin/users?role=all"
+   class="btn btn-sm rounded-pill px-3 <%= roleFilterNorm === 'all' ? 'all-filter-active' : 'all-filter-btn' %>">
+  <i class="bi bi-grid-3x3-gap me-1"></i> All
+</a>
+
+         <a href="/dashboard/admin/users?role=agent"
+            class="btn btn-sm rounded-pill px-3 <%= roleFilterNorm === 'agent' ? 'btn-warning text-dark border-warning' : 'btn-outline-warning text-dark' %>">
+            <i class="bi bi-person-workspace me-1"></i> Agents
+         </a>
+
+       <a href="/dashboard/admin/users?role=sub_agent"
+   class="btn btn-sm rounded-pill px-3 <%= roleFilterNorm === 'sub_agent' ? 'subagent-filter-active' : 'subagent-filter-btn' %>">
+  <i class="bi bi-headset me-1"></i> Sub Agents
+</a>
+        </div>
+
+        <div class="small text-muted">
+          Filter by role to inspect access and pipeline responsibilities inside your department.
+        </div>
+      </div>
+
+      <div class="row g-3 small">
+        <div class="col-md-4">
+          <div class="card border-0 shadow-sm h-100 rounded-3">
+            <div class="card-body py-2 d-flex align-items-center justify-content-between">
+              <div>
+                <div class="text-muted">Total department users</div>
+                <div class="h5 mb-0"><%= totalDeptUsers %></div>
+              </div>
+              <span class="badge rounded-pill bg-light text-muted">
+                <i class="bi bi-people me-1"></i>All
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="card border-0 shadow-sm h-100 rounded-3">
+            <div class="card-body py-2 d-flex align-items-center justify-content-between">
+              <div>
+                <div class="text-muted">Agents</div>
+                <div class="h5 mb-0"><%= agentsCount %></div>
+              </div>
+              <span class="badge rounded-pill bg-warning-subtle text-dark">
+                <i class="bi bi-person-workspace me-1"></i>Pipeline
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="card border-0 shadow-sm h-100 rounded-3">
+            <div class="card-body py-2 d-flex align-items-center justify-content-between">
+              <div>
+                <div class="text-muted">Sub Agents</div>
+                <div class="h5 mb-0"><%= subAgentsCount %></div>
+              </div>
+             <span class="badge rounded-pill subagent-support-badge">
+  <i class="bi bi-headset me-1"></i>Support
+</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <% if (!usersFiltered || usersFiltered.length === 0) { %>
+    <div class="alert alert-light border small shadow-sm rounded-3">
+      No users found for this filter.
+    </div>
+  <% } else { %>
+        <div class="cards-wrap">
+      <div class="row g-3" id="usersGrid">
+      <% usersFiltered.forEach(u => {
+          const p = (u.permissions || {});
+          const roleLabel = String(u.role || '').replace(/_/g, ' ');
+          const badgeClass = getRoleBadgeClass(u.role);
+
+          const isColOn = (key, legacy) => {
+            if (typeof p[key] !== 'undefined') return !!p[key];
+            if (legacy && typeof p[legacy] !== 'undefined') return !!p[legacy];
+            return false;
+          };
+
+          const isBtnOn = (key) => !!p[key];
+
+          const enabledCols = ALL_COLS.reduce((acc, c) => acc + (isColOn(c.key, c.legacy) ? 1 : 0), 0);
+          const totalCols = ALL_COLS.length;
+      %>
+        <div class="col-lg-4 col-md-6 user-card"
+             data-search="<%= String([u.id, u.name, u.email, u.role, u.dept, u.agentType].filter(Boolean).join(' ')).toLowerCase() %>">
+          <div class="card border-0 shadow-sm h-100 rounded-4 position-relative" style="overflow:hidden;">
+            <div class="position-absolute top-0 start-0 w-100"
+                 style="height:4px; background:linear-gradient(90deg,#16a34a,#22c55e,#16a34a); opacity:0.7;"></div>
+
+            <div class="card-body d-flex flex-column pt-3">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <div class="d-flex align-items-center gap-2">
+                 <div class="rounded-circle d-flex align-items-center justify-content-center fw-semibold <%= u.role === 'agent' ? 'bg-warning text-dark' : 'subagent-avatar' %>"
+     style="width:36px;height:36px;">
+                    <%= (u.name || 'U').charAt(0).toUpperCase() %>
+                  </div>
+                  <div>
+                    <div class="fw-semibold d-flex align-items-center gap-2">
+                      <span><%= u.name %></span>
+
+                      <% if (u.updateNoticeUnread) { %>
+                        <span class="badge rounded-pill bg-warning-subtle text-warning border">
+                          <i class="bi bi-bell-fill me-1"></i>Updated
+                        </span>
+                      <% } %>
+                    </div>
+                    <div class="small text-muted"><%= u.email %></div>
+                  </div>
+                </div>
+
+                <span class="badge rounded-pill px-3 text-capitalize <%= badgeClass %>">
+                  <i class="bi bi-shield-check me-1"></i>
+                  <%= roleLabel %>
+                </span>
+              </div>
+
+              <div class="small mb-2">
+                <div class="mb-1">
+                  <span class="text-muted">Dept:</span>
+                  <span class="badge rounded-pill bg-light text-dark border text-capitalize ms-1">
+                    <%= u.dept || user.dept || '—' %>
+                  </span>
+                </div>
+
+                <div class="mb-1">
+                  <span class="text-muted">Agent Type:</span>
+                  <span class="badge rounded-pill bg-light text-dark border text-capitalize ms-1">
+                    <%= u.agentType || '—' %>
+                  </span>
+                </div>
+
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                  <span class="text-muted">ID:</span>
+                  <span class="badge rounded-pill bg-light text-dark border">#<%= u.id %></span>
+
+                  <% if (u.lastUpdatedAt) { %>
+                    <span class="badge rounded-pill bg-light text-muted border">
+                      <i class="bi bi-clock-history me-1"></i>
+                      <%= String(u.lastUpdatedAt).replace('T',' ').slice(0,19) %>
+                    </span>
+                  <% } %>
+                </div>
+              </div>
+
+              <div class="small mb-3">
+                <div class="text-muted mb-1">Access summary</div>
+
+                <div class="d-flex flex-wrap gap-1">
+                  <span class="badge rounded-pill bg-light text-dark border">
+                    <i class="bi bi-table me-1"></i>
+                    Columns: <strong><%= enabledCols %>/<%= totalCols %></strong>
+                  </span>
+
+                  <span class="badge rounded-pill <%= isBtnOn('btnDetails') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                    <i class="bi bi-eye me-1"></i>Details
+                  </span>
+                  <span class="badge rounded-pill <%= isBtnOn('btnUpdateRow') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                    <i class="bi bi-check2-circle me-1"></i>Update
+                  </span>
+                  <span class="badge rounded-pill <%= isBtnOn('btnPdf') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                    <i class="bi bi-filetype-pdf me-1"></i>PDF
+                  </span>
+                  <span class="badge rounded-pill <%= isBtnOn('btnBilling') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                    <i class="bi bi-receipt me-1"></i>Billing
+                  </span>
+                  <span class="badge rounded-pill <%= isBtnOn('btnWhatsApp') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                    <i class="bi bi-whatsapp me-1"></i>WhatsApp
+                  </span>
+                  <span class="badge rounded-pill <%= isBtnOn('btnUpload') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                    <i class="bi bi-cloud-upload me-1"></i>Upload
+                  </span>
+                  <span class="badge rounded-pill <%= isBtnOn('btnFiles') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                    <i class="bi bi-folder2-open me-1"></i>Files
+                  </span>
+                </div>
+
+                <% if (u.lastUpdatedBy) { %>
+                  <div class="text-muted mt-2" style="font-size:.78rem;">
+                    Last updated by: <strong class="text-dark"><%= u.lastUpdatedBy %></strong>
+                    <% if (u.lastUpdatedByRole) { %>
+                      <span class="text-muted">(<%= String(u.lastUpdatedByRole).replace(/_/g,' ') %>)</span>
+                    <% } %>
+                  </div>
+                <% } %>
+              </div>
+
+              <% if (showActionCol) { %>
+                <div class="mt-auto d-flex justify-content-between align-items-center pt-2 border-top">
+                  <% if (canEditUsers) { %>
+                    <a href="/dashboard/admin/users/<%= u.id %>/edit"
+                       class="btn btn-sm btn-outline-success rounded-pill px-3">
+                      <i class="bi bi-pencil-square me-1"></i>
+                      Edit
+                    </a>
+                  <% } else { %>
+                    <span class="small text-muted">No edit permission</span>
+                  <% } %>
+
+                  <% if (canDeleteUsers) { %>
+                   <form method="POST"
+      action="/dashboard/admin/users/<%= u.id %>/delete"
+      class="js-delete-user-form">
+  <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3">
+    <i class="bi bi-trash3 me-1"></i>
+    Delete
+  </button>
+</form>
+                  <% } %>
+                </div>
+              <% } %>
+
+            </div>
+          </div>
+        </div>
+      <% }) %>
+       </div>
+       </div>
+
+    <div id="noSearchResults" class="empty-box d-none">
+      <i class="bi bi-search text-success"></i>
+      <div class="fw-semibold mb-1">No matching users found</div>
+      <div class="small">Try another name, email, or id.</div>
+    </div>
+  <% } %>
+</div>
+
+<script>
+  (function () {
+    const input = document.getElementById("userSearch");
+    const clearBtn = document.getElementById("clearSearch");
+    const cards = Array.from(document.querySelectorAll(".user-card"));
+    const noRes = document.getElementById("noSearchResults");
+
+    function applySearch() {
+      const q = (input.value || "").trim().toLowerCase();
+      let visible = 0;
+
+      cards.forEach(card => {
+        const hay = (card.getAttribute("data-search") || "");
+        const ok = !q || hay.includes(q);
+        card.classList.toggle("d-none", !ok);
+        if (ok) visible++;
+      });
+
+      if (noRes) noRes.classList.toggle("d-none", visible !== 0);
+    }
+
+    if (input) input.addEventListener("input", applySearch);
+    if (clearBtn) clearBtn.addEventListener("click", () => {
+      input.value = "";
+      applySearch();
+      input.focus();
+    });
+
+    applySearch();
+  })();
+</script>
+
+<%- include('partials/bootstrap-footer') %>
+
+<div id="deleteConfirmOverlay"
+     class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center d-none"
+     style="background:rgba(15,23,42,0.35); z-index:1080;">
+
+  <div class="card border-0 shadow-lg rounded-4"
+       style="width:min(92vw, 430px); animation:flashScaleIn 220ms ease-out;">
+    <div class="card-body p-4 text-center">
+
+      <div class="mb-3">
+        <div class="mx-auto d-flex align-items-center justify-content-center rounded-circle"
+             style="width:56px;height:56px;background:#fee2e2;color:#dc2626;">
+          <i class="bi bi-trash3-fill fs-4"></i>
+        </div>
+      </div>
+
+      <h4 class="mb-2 fw-semibold">Confirm Delete</h4>
+      <p class="text-muted mb-4 small" id="deleteConfirmText">
+        Delete this user? This cannot be undone.
+      </p>
+
+      <div class="d-flex justify-content-center gap-2">
+        <button type="button"
+                class="btn btn-light rounded-pill px-4"
+                id="deleteConfirmCancelBtn">
+          Cancel
+        </button>
+
+        <button type="button"
+                class="btn btn-danger rounded-pill px-4"
+                id="deleteConfirmOkBtn">
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const overlay = document.getElementById("deleteConfirmOverlay");
+    const okBtn = document.getElementById("deleteConfirmOkBtn");
+    const cancelBtn = document.getElementById("deleteConfirmCancelBtn");
+    const textEl = document.getElementById("deleteConfirmText");
+
+    if (!overlay || !okBtn || !cancelBtn) return;
+
+    let pendingForm = null;
+
+    function openDeletePopup(form) {
+      pendingForm = form;
+      if (textEl) {
+        textEl.textContent = "Delete this user? This cannot be undone.";
+      }
+      overlay.classList.remove("d-none");
+      overlay.setAttribute("aria-hidden", "false");
+    }
+
+    function closeDeletePopup() {
+      overlay.classList.add("d-none");
+      overlay.setAttribute("aria-hidden", "true");
+      pendingForm = null;
+    }
+
+    document.addEventListener("submit", function (e) {
+      const form = e.target.closest(".js-delete-user-form");
+      if (!form) return;
+
+      e.preventDefault();
+      openDeletePopup(form);
+    });
+
+    okBtn.addEventListener("click", function () {
+      if (!pendingForm) return;
+      const form = pendingForm;
+      closeDeletePopup();
+      form.submit();
+    });
+
+    cancelBtn.addEventListener("click", closeDeletePopup);
+
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) closeDeletePopup();
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !overlay.classList.contains("d-none")) {
+        closeDeletePopup();
+      }
+    });
+  })();
+</script>

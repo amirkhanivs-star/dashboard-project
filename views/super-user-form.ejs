@@ -1,0 +1,550 @@
+<%- include('partials/bootstrap-header', { user, pageTitle: 'Create Admin / Agent / Sub Agent' }) %>
+
+<div class="container-fluid py-4">
+  <a href="/dashboard/super/users" class="small text-danger text-decoration-none mb-3 d-inline-flex align-items-center fw-semibold">
+    <i class="bi bi-arrow-left me-1"></i> Back to Users
+  </a>
+
+  <!-- Step indicator bar -->
+  <div class="card border-0 shadow-sm rounded-4 mb-3">
+    <div class="card-body py-3 d-flex flex-wrap align-items-center gap-3">
+      <span class="badge rounded-pill bg-light text-muted border d-flex align-items-center">
+        <i class="bi bi-compass me-2 text-danger"></i>
+        User Creation Wizard
+      </span>
+
+      <div class="d-flex flex-wrap gap-3 small">
+        <div class="d-flex align-items-center gap-2">
+         <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger text-white"
+          style="width:22px;height:22px;font-size:.75rem;">1</span>
+          <span>Basic info</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-success-subtle text-success"
+                style="width:22px;height:22px;font-size:.75rem;">2</span>
+          <span>Role &amp; department</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-warning-subtle text-warning"
+           style="width:22px;height:22px;font-size:.75rem;">3</span>
+          <span>Columns</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+         <span class="d-inline-flex align-items-center justify-content-center rounded-circle"
+         style="width:22px;height:22px;font-size:.75rem; background:rgba(59,130,246,.10); color:#2563eb; border:1px solid rgba(59,130,246,.26); box-shadow:0 4px 12px rgba(59,130,246,.08);">4</span>
+          <span>Buttons &amp; Permissions</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- Left wizard steps -->
+    <div class="col-lg-3">
+      <div class="card shadow-sm h-100 border-0 rounded-4">
+        <div class="card-body small">
+          <h6 class="mb-3 d-flex align-items-center">
+            <i class="bi bi-compass me-2 text-danger"></i>
+            User Creation Wizard
+          </h6>
+          <p class="text-muted mb-3">
+            The Super Admin can create an Admin, Agent, or Sub Agent for any department from here.
+          </p>
+
+          <ol class="ps-3 mb-0">
+            <li class="mb-1">Set the basic information.</li>
+            <li class="mb-1">Choose the role, department & Pipeline / Agent Type for Agents/SubAgents.</li>
+            <li class="mb-1">Choose the allowed columns.</li>
+            <li class="mb-1">Turn columns & buttons permissions on or off.</li>
+          </ol>
+
+          <hr>
+          <p class="text-muted mb-0">
+            Configure column and button access from here. The user will only see the allowed items.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right main form -->
+    <div class="col-lg-9">
+      <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-header border-0 bg-white bg-opacity-75">
+          <h5 class="mb-0 d-flex align-items-center">
+            <i class="bi bi-person-plus me-2 text-danger"></i>
+            Create Admin / Agent / Sub Agent
+          </h5>
+          <small class="text-muted">
+            <strong>Tip:</strong> Keep a strong password. The user cannot change it later.
+          </small>
+        </div>
+
+        <div class="card-body">
+          <% if (error) { %>
+          <div class="alert alert-danger py-2 small"><%= error %></div>
+          <% } %>
+
+          <form method="POST" action="/dashboard/super/users">
+            <div class="row g-3">
+              <!-- BASIC INFO -->
+              <div class="col-12">
+                <h6 class="mb-1">1. Basic information</h6>
+                <p class="text-muted small mb-2">
+                  Set the name, email, and  password.
+                </p>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Name</label>
+                <input
+                  type="text"
+                  name="name"
+                  class="form-control"
+                  placeholder=""
+                  required
+                >
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  class="form-control"
+                  placeholder="name@ivs.com"
+                  required
+                >
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Password</label>
+                <input
+                  type="text"
+                  name="password"
+                  class="form-control"
+                  placeholder=""
+                  required
+                >
+              </div>
+
+              <!-- ROLE & DEPARTMENT -->
+              <div class="col-12 mt-3">
+                <h6 class="mb-1">2. Role &amp; Department</h6>
+                <p class="text-muted small mb-2">
+                  Admin is assigned a primary department. Agent and Sub Agent work according to the selected pipeline.
+                </p>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Role</label>
+                <select name="role" id="roleSelect" class="form-select" required>
+                  <option value="">Select role</option>
+                  <option value="admin">Admin</option>
+                  <option value="agent">Agent</option>
+                  <option value="sub_agent">Sub Agent</option>
+                </select>
+                <small class="text-muted d-block">
+                  Admin = department head. Agent/Sub Agent = pipeline users.
+                </small>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Department</label>
+                <select name="dept" class="form-select" required>
+                  <option value="">Select department</option>
+                  <option value="quran">Quran</option>
+                  <option value="tuition">Tuition</option>
+                  <option value="school">School</option>
+                </select>
+                <small class="text-muted d-block">
+                  Assign each user to one primary department.
+                </small>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Pipeline / Agent Type</label>
+               <select name="agentType" id="agentTypeSelect" class="form-select">
+               <option value="">Select type</option>
+               <option value="accounts">Accounts</option>
+               <option value="admission">Admission</option>
+               <option value="management">Management</option>
+              </select>
+                <small class="text-muted d-block">
+                  Only for Agent and Sub Agent. It will be ignored for Admin.
+                </small>
+              </div>
+
+              <!-- QUICK TOGGLES -->
+              <div class="col-12 mt-3">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                  <span class="small text-muted">Quick:</span>
+                  <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btnSelectAll">
+                    Select all
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btnSelectNone">
+                    Select none
+                  </button>
+                  <span class="small text-muted ms-2">
+                    (Applies only to permission and column checkboxes)
+                  </span>
+                </div>
+              </div>
+
+              <!-- COLUMNS + BUTTONS ACCORDION -->
+              <div class="col-12 mt-3">
+                <h6 class="mb-1">3. Columns & Buttons Permissions</h6>
+                <p class="text-muted small mb-2">
+                  Turn columns and buttons on or off one by one.
+                </p>
+
+                <div class="accordion" id="permAccordion">
+
+                  <!-- ALL COLUMNS -->
+                  <div class="accordion-item border-0 shadow-sm rounded-4 mb-2">
+                    <h2 class="accordion-header" id="headingAllCols">
+                      <button class="accordion-button rounded-4" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAllCols" aria-expanded="true" aria-controls="collapseAllCols">
+                        <i class="bi bi-table me-2 text-danger"></i>
+                        Admissions pipeline columns
+                      </button>
+                    </h2>
+                    <div id="collapseAllCols" class="accordion-collapse collapse show" aria-labelledby="headingAllCols" data-bs-parent="#permAccordion">
+                      <div class="accordion-body">
+                        <div id="allColsWrap" class="row g-2">
+
+                          <!-- ✅ NEW: Current Status column permission -->
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colStatus" name="colStatus" checked>
+                              <label class="form-check-label" for="colStatus">Current Status</label>
+                            </div>
+                          </div>
+
+                          <!-- ✅ NEW: Fee Status column permission -->
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colFeeStatus" name="colFeeStatus" checked>
+                              <label class="form-check-label" for="colFeeStatus">Fee Status</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colDept" name="colDept" checked>
+                              <label class="form-check-label" for="colDept">Dept</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colStudentName" name="colStudentName" checked>
+                              <label class="form-check-label" for="colStudentName">Student</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colFatherName" name="colFatherName" checked>
+                              <label class="form-check-label" for="colFatherName">Father</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colFatherEmail" name="colFatherEmail" checked>
+                              <label class="form-check-label" for="colFatherEmail">Father Email</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colGrade" name="colGrade" checked>
+                              <label class="form-check-label" for="colGrade">Grade</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colTuitionGrade" name="colTuitionGrade" checked>
+                              <label class="form-check-label" for="colTuitionGrade">Grade Section</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colPhone" name="colPhone" checked>
+                              <label class="form-check-label" for="colPhone">Phone Number</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                             <input class="form-check-input col-toggle" type="checkbox" id="colProcessedBy" name="colProcessedBy" checked>
+                             <label class="form-check-label" for="colProcessedBy">Processed By</label>
+                            </div>
+                         </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colPaymentStatus" name="colPaymentStatus" checked>
+                              <label class="form-check-label" for="colPaymentStatus">Payment Status</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colPaidUpto" name="colPaidUpto" checked>
+                              <label class="form-check-label" for="colPaidUpto">Paid Upto</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colVerificationNumber" name="colVerificationNumber" checked>
+                              <label class="form-check-label" for="colVerificationNumber">Verif #</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colRegistrationNumber" name="colRegistrationNumber" checked>
+                              <label class="form-check-label" for="colRegistrationNumber">Reg #</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colFamilyNumber" name="colFamilyNumber" checked>
+                              <label class="form-check-label" for="colFamilyNumber">Family Num #</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colRegistrationFee" name="colRegistrationFee" checked>
+                              <label class="form-check-label" for="colRegistrationFee">Registration Fee</label>
+                              </div>
+                         </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colFees" name="colFees" checked>
+                              <label class="form-check-label" for="colFees">Fees</label>
+                            </div>
+                          </div>
+
+                          <!-- ✅ ADDED: Currency column permission -->
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colCurrency" name="colCurrency" checked>
+                              <label class="form-check-label" for="colCurrency">Currency</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colMonth" name="colMonth" checked>
+                              <label class="form-check-label" for="colMonth">Month</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colTotalFees" name="colTotalFees" checked>
+                              <label class="form-check-label" for="colTotalFees">Total Fees</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colPendingDues" name="colPendingDues" checked>
+                              <label class="form-check-label" for="colPendingDues">Pending Dues</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colReceivedPayment" name="colReceivedPayment" checked>
+                              <label class="form-check-label" for="colReceivedPayment">Received Payment</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+  <div class="form-check small">
+    <input class="form-check-input col-toggle" type="checkbox" id="colInvoiceStatus" name="colInvoiceStatus" checked>
+    <label class="form-check-label" for="colInvoiceStatus">Invoice Status</label>
+  </div>
+</div>
+
+<div class="col-md-4">
+  <div class="form-check small">
+    <input class="form-check-input col-toggle" type="checkbox" id="colInvoiceStatusTimestamp" name="colInvoiceStatusTimestamp" checked>
+    <label class="form-check-label" for="colInvoiceStatusTimestamp">Invoice Status Timestamp</label>
+  </div>
+</div>
+
+<div class="col-md-4">
+  <div class="form-check small">
+    <input class="form-check-input col-toggle" type="checkbox" id="colPaidInvoiceStatus" name="colPaidInvoiceStatus" checked>
+    <label class="form-check-label" for="colPaidInvoiceStatus">Paid Invoice Status</label>
+  </div>
+</div>
+
+<div class="col-md-4">
+  <div class="form-check small">
+    <input class="form-check-input col-toggle" type="checkbox" id="colPaidInvoiceStatusTimestamp" name="colPaidInvoiceStatusTimestamp" checked>
+    <label class="form-check-label" for="colPaidInvoiceStatusTimestamp">Paid Invoice Status Timestamp</label>
+  </div>
+</div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colActionButtons" name="colActionButtons" checked>
+                              <label class="form-check-label" for="colActionButtons">Action Buttons</label>
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+               <!-- BUTTONS -->
+<div class="accordion-item border-0 shadow-sm rounded-4">
+  <h2 class="accordion-header" id="headingButtons">
+    <button class="accordion-button collapsed rounded-4" type="button" data-bs-toggle="collapse" data-bs-target="#collapseButtons" aria-expanded="false" aria-controls="collapseButtons">
+      <i class="bi bi-hand-index-thumb me-2 text-danger"></i>
+      Buttons
+    </button>
+  </h2>
+  <div id="collapseButtons" class="accordion-collapse collapse" aria-labelledby="headingButtons" data-bs-parent="#permAccordion">
+    <div class="accordion-body">
+      <div class="row g-2">
+        <div class="col-md-4">
+          <div class="form-check small">
+            <input class="form-check-input perm-toggle" type="checkbox" id="btnEditRow" name="btnEditRow" checked>
+            <label class="form-check-label" for="btnEditRow">Show Edit button</label>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+         <div class="form-check small">
+           <input class="form-check-input perm-toggle" type="checkbox" id="btnDetails" name="btnDetails" checked>
+           <label class="form-check-label" for="btnDetails">Show View Details button</label>
+         </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="form-check small">
+            <input class="form-check-input perm-toggle" type="checkbox" id="btnUpdateRow" name="btnUpdateRow" checked>
+            <label class="form-check-label" for="btnUpdateRow">Show Update/Save button</label>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="form-check small">
+            <input class="form-check-input perm-toggle" type="checkbox" id="btnPdf" name="btnPdf" checked>
+            <label class="form-check-label" for="btnPdf">Show PDF button</label>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="form-check small">
+            <input class="form-check-input perm-toggle" type="checkbox" id="btnBilling" name="btnBilling" checked>
+            <label class="form-check-label" for="btnBilling">Show Billing button</label>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="form-check small">
+            <input class="form-check-input perm-toggle" type="checkbox" id="btnWhatsApp" name="btnWhatsApp" checked>
+            <label class="form-check-label" for="btnWhatsApp">Show WhatsApp button</label>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="form-check small">
+            <input class="form-check-input perm-toggle" type="checkbox" id="btnUpload" name="btnUpload" checked>
+            <label class="form-check-label" for="btnUpload">Show Upload button</label>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="form-check small">
+            <input class="form-check-input perm-toggle" type="checkbox" id="btnFiles" name="btnFiles" checked>
+            <label class="form-check-label" for="btnFiles">Show Files button</label>
+          </div>
+        </div>
+
+        <!-- ✅ NEW: match edit screen -->
+        <div class="col-md-4">
+          <div class="form-check small">
+            <input class="form-check-input perm-toggle" type="checkbox" id="canDeleteFiles" name="canDeleteFiles" checked>
+            <label class="form-check-label" for="canDeleteFiles">Can Delete Files</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+                </div>
+              </div>
+            </div>
+
+            <hr>
+            <div class="d-flex justify-content-between">
+              <a href="/dashboard/super/users" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                Cancel
+              </a>
+               <button type="submit" class="btn btn-danger rounded-pill px-4">
+                <i class="bi bi-save me-1"></i>
+                Save User
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const roleSelect = document.getElementById("roleSelect");
+    const agentTypeSelect = document.getElementById("agentTypeSelect");
+
+    const btnSelectAll = document.getElementById("btnSelectAll");
+    const btnSelectNone = document.getElementById("btnSelectNone");
+
+    function syncRoleUI() {
+      const role = (roleSelect && roleSelect.value) ? roleSelect.value : "";
+
+    if (agentTypeSelect) {
+  if (role === "admin") {
+    agentTypeSelect.value = "";
+    agentTypeSelect.disabled = true;
+    agentTypeSelect.classList.add("bg-light");
+  } else {
+    agentTypeSelect.disabled = false;
+    agentTypeSelect.classList.remove("bg-light");
+  }
+}
+    }
+
+    function toggleAll(on) {
+      document.querySelectorAll(".perm-toggle, .col-toggle").forEach((cb) => {
+        if (cb.disabled) return;
+        cb.checked = !!on;
+      });
+    }
+
+    if (roleSelect) roleSelect.addEventListener("change", syncRoleUI);
+
+    if (btnSelectAll) btnSelectAll.addEventListener("click", () => toggleAll(true));
+    if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));
+
+    // init
+    syncRoleUI();
+  })();
+</script>
+
+<%- include('partials/bootstrap-footer') %>

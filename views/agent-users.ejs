@@ -1,0 +1,832 @@
+<%- include('partials/bootstrap-header', { user, pageTitle: 'My Sub Agents' }) %>
+<%- include('partials/flash') %>
+
+<%
+  const myList = mySubAgents || [];
+  const total = myList.length;
+
+  const cap = (txt) => (txt ? txt.charAt(0).toUpperCase() + txt.slice(1) : '-');
+  const deptLabel = cap(user.dept || 'Department');
+  const managerName = user.name || 'Manager';
+  const ALL_COLS = [
+  { key: 'colStatus' },
+  { key: 'colFeeStatus' },
+  { key: 'colDept' },
+  { key: 'colStudentName' },
+  { key: 'colFatherName' },
+  { key: 'colFatherEmail' },
+  { key: 'colGrade' },
+  { key: 'colTuitionGrade' },
+  { key: 'colPhone' },
+  { key: 'colProcessedBy' },
+  { key: 'colPaymentStatus' },
+  { key: 'colPaidUpto' },
+  { key: 'colVerificationNumber' },
+  { key: 'colRegistrationNumber' },
+  { key: 'colFamilyNumber' },
+  { key: 'colRegistrationFee' },
+  { key: 'colFees' },
+  { key: 'colCurrency' },
+  { key: 'colMonth' },
+  { key: 'colTotalFees' },
+  { key: 'colPendingDues' },
+{ key: 'colReceivedPayment' },
+{ key: 'colInvoiceStatus' },
+{ key: 'colInvoiceStatusTimestamp' },
+{ key: 'colPaidInvoiceStatus' },
+{ key: 'colPaidInvoiceStatusTimestamp' },
+];
+
+  let permRaw = user && (user.permissions || user.perms || user.permissionMap)
+    ? (user.permissions || user.perms || user.permissionMap)
+    : {};
+  try { if (typeof permRaw === 'string') permRaw = JSON.parse(permRaw); } catch(e) { permRaw = {}; }
+
+  const isSuper =
+    !!(user && (
+      user.role === 'superadmin' ||
+      user.role === 'super_admin' ||
+      user.agentType === 'superadmin' ||
+      user.agentType === 'super_admin' ||
+      user.isSuperAdmin === true ||
+      user.is_super_admin === true
+    ));
+
+  function hasPerm(key, fallback = false){
+    if (isSuper) return true;
+    if (!permRaw) return fallback;
+
+    if (permRaw === true) return true;
+
+    if (Array.isArray(permRaw)) {
+      return permRaw.includes(key) || permRaw.includes('*') || permRaw.includes('all');
+    }
+
+    if (typeof permRaw === 'object') {
+      if (key in permRaw) return !!permRaw[key];
+      return fallback;
+    }
+
+    return fallback;
+  }
+
+  const canCreateUsers = hasPerm('btnCreateUser', true) || hasPerm('canCreateUsers', true);
+  const canManageUsers = hasPerm('canManageUsers', true);
+
+  const canEditUsers   = hasPerm('btnEditUser', true)   || hasPerm('canEditUsers', true);
+  const canDeleteUsers = hasPerm('btnDeleteUser', true) || hasPerm('canDeleteUsers', true);
+
+  const showEdit = canManageUsers && canEditUsers;
+  const showDelete = canManageUsers && canDeleteUsers;
+  const showActions = showEdit || showDelete;
+
+%>
+
+<style>
+  .agent-page {
+    --agent-primary: #f4b400;
+    --agent-primary-dark: #d89b00;
+    --agent-soft: #fff7db;
+    --agent-soft-2: #fffaf0;
+    --agent-border: rgba(15, 23, 42, 0.08);
+    --agent-text-muted: #64748b;
+    --agent-card-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+    --agent-card-shadow-hover: 0 16px 38px rgba(15, 23, 42, 0.10);
+  }
+
+  .agent-page .page-shell {
+    display: flex;
+    flex-direction: column;
+    gap: .8rem;
+  }
+
+  .agent-page .hero-card,
+  .agent-page .stats-card,
+  .agent-page .directory-card,
+  .agent-page .user-card,
+  .agent-page .toolbar-card {
+    border: 0;
+    border-radius: 22px;
+    background: #fff;
+    box-shadow: var(--agent-card-shadow);
+  }
+
+  .agent-page .hero-card {
+    background:
+      radial-gradient(1000px 280px at 0% 0%, rgba(244, 180, 0, 0.16) 0%, rgba(255,255,255,0) 55%),
+      linear-gradient(135deg, #ffffff 0%, #fffaf0 45%, #f8fafc 100%);
+    border: 1px solid var(--agent-border);
+    padding: 1rem 1.15rem;
+  }
+
+  .agent-page .hero-badge,
+  .agent-page .soft-badge {
+    border-radius: 999px;
+    border: 1px solid var(--agent-border);
+    background: #fff;
+    padding: .38rem .72rem;
+    font-size: .78rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+  }
+
+  .agent-page .hero-mini {
+    color: var(--agent-text-muted);
+    font-size: .87rem;
+  }
+
+  .agent-page .hero-title {
+    margin: 0;
+    font-weight: 800;
+    letter-spacing: -.2px;
+  }
+
+  .agent-page .hero-subtitle {
+    color: var(--agent-text-muted);
+    font-size: .92rem;
+    margin-top: .2rem;
+  }
+
+  .agent-page .btn-agent {
+    background: var(--agent-primary);
+    border-color: var(--agent-primary);
+    color: #111827;
+    font-weight: 700;
+  }
+
+  .agent-page .btn-agent:hover,
+  .agent-page .btn-agent:focus {
+    background: var(--agent-primary-dark);
+    border-color: var(--agent-primary-dark);
+    color: #111827;
+  }
+
+  .agent-page .btn-agent-outline {
+    border-color: rgba(244, 180, 0, 0.45);
+    color: #8a6500;
+    background: #fff;
+  }
+
+  .agent-page .btn-agent-outline:hover {
+    background: var(--agent-soft);
+    border-color: rgba(244, 180, 0, 0.65);
+    color: #6f5200;
+  }
+
+  .agent-page .stats-card {
+    padding: 1rem 1.1rem;
+  }
+
+  .agent-page .stats-label {
+    color: var(--agent-text-muted);
+    font-size: .9rem;
+    margin-bottom: .25rem;
+  }
+
+  .agent-page .stats-value {
+    font-size: 1.9rem;
+    line-height: 1;
+    font-weight: 800;
+    margin: 0;
+  }
+
+  .agent-page .search-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+}
+
+.agent-page .search-box {
+  display: flex;
+  align-items: center;
+  min-width: 320px;
+  max-width: 420px;
+  width: 100%;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: var(--agent-card-shadow);
+}
+
+.agent-page .search-box i {
+  padding: 0 .8rem;
+  color: #f4b400;
+}
+
+.agent-page .search-box input {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  width: 100%;
+  padding: .7rem .2rem;
+  font-size: .92rem;
+  background: transparent;
+}
+
+.agent-page .search-clear-btn {
+  border: 0;
+  border-left: 1px solid rgba(15, 23, 42, 0.12);
+  background: #f8fafc;
+  color: #475569;
+  padding: .7rem .9rem;
+  font-size: .88rem;
+}
+
+.agent-page .search-clear-btn:hover {
+  background: #eef2f7;
+}
+
+@media (max-width: 767.98px) {
+  .agent-page .search-toolbar {
+    justify-content: stretch;
+  }
+
+  .agent-page .search-box {
+    min-width: 100%;
+    max-width: 100%;
+  }
+}
+
+  .agent-page .cards-wrap {
+  padding: 0;
+}
+
+.agent-page .user-card {
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  transition: transform .15s ease, box-shadow .15s ease;
+  border-top: 4px solid var(--agent-primary);
+}
+
+  .agent-page .user-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--agent-card-shadow-hover);
+  }
+
+ .agent-page .user-card-body {
+  padding: 1rem;
+  padding-top: 1rem;
+}
+
+.agent-page .avatar-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1rem;
+  color: #ffffff;
+  background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06);
+  flex-shrink: 0;
+}
+
+  .agent-page .user-name {
+    font-weight: 800;
+    font-size: 1.03rem;
+    margin: 0;
+    line-height: 1.2;
+  }
+
+  .agent-page .user-email {
+    color: var(--agent-text-muted);
+    font-size: .9rem;
+  }
+
+.agent-page .agent-role-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .22rem;
+  border-radius: 999px;
+  padding: .35em .9em;
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid rgba(59, 130, 246, 0.26);
+  background: rgba(59, 130, 246, 0.10);
+  color: #2563eb;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08);
+}
+.agent-page .agent-role-badge i{
+  font-size: .72rem;
+  line-height: 1;
+  color: #2563eb;
+}
+
+ .agent-page .meta-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: .55rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+  .agent-page .meta-row {
+    display: flex;
+    gap: .45rem;
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: .88rem;
+  }
+
+  .agent-page .meta-label {
+    color: var(--agent-text-muted);
+    min-width: 64px;
+  }
+
+  .agent-page .soft-tag {
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    padding: .18rem .48rem;
+    font-size: .72rem;
+    font-weight: 700;
+    color: #0f172a;
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+  }
+
+ .agent-page .perm-chip {
+  border-radius: 999px;
+  padding: .22rem .58rem;
+  font-size: .72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  border: 1px solid transparent;
+  line-height: 1.1;
+}
+
+.agent-page .perm-columns {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #111827;
+}
+
+.agent-page .perm-details,
+.agent-page .perm-update,
+.agent-page .perm-pdf,
+.agent-page .perm-billing,
+.agent-page .perm-whatsapp,
+.agent-page .perm-upload,
+.agent-page .perm-files {
+  background: #dbeafe;
+  border-color: #bfdbfe;
+  color: #2563eb;
+}
+
+  .agent-page .access-strip {
+    margin-top: .9rem;
+  }
+
+  .agent-page .access-title {
+    font-size: .86rem;
+    color: var(--agent-text-muted);
+    margin-bottom: .35rem;
+  }
+
+.agent-page .action-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  margin-top: 1rem;
+}
+
+
+  .agent-page .empty-box {
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: var(--agent-text-muted);
+  }
+
+  .agent-page .empty-box i {
+    font-size: 2rem;
+    color: var(--agent-primary);
+    display: inline-block;
+    margin-bottom: .6rem;
+  }
+
+  @media (max-width: 767.98px) {
+    .agent-page .hero-actions {
+      width: 100%;
+    }
+
+    .agent-page .hero-actions .btn,
+    .agent-page .hero-actions .soft-badge {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .agent-page .action-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .agent-page .action-row > * {
+      width: 100%;
+    }
+
+    .agent-page .action-row .btn,
+    .agent-page .action-row form button {
+      width: 100%;
+    }
+  }
+
+  @keyframes flashScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+</style>
+
+<div class="container-fluid py-4 agent-page">
+  <div class="page-shell">
+
+    <div class="hero-card">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+          <div class="d-inline-flex align-items-center gap-2 mb-2">
+            <span class="hero-badge">
+              <i class="bi bi-diagram-3"></i>
+              Team Access
+            </span>
+            <span class="hero-mini">
+              Manager: <strong><%= managerName %></strong>
+            </span>
+          </div>
+
+          <h3 class="hero-title d-flex align-items-center">
+            <i class="bi bi-people-fill me-2" style="color:#f4b400;"></i>
+            My Sub Agents
+          </h3>
+
+          <div class="hero-subtitle">
+            This page shows only the sub agents created under your account.
+          </div>
+        </div>
+
+        <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end hero-actions">
+          <span class="soft-badge">
+            <i class="bi bi-buildings"></i>
+            Dept: <span class="text-capitalize"><%= user.dept || 'N/A' %></span>
+          </span>
+
+
+          <% if (canCreateUsers) { %>
+            <a href="/dashboard/agent/agents/new" class="btn btn-sm btn-agent rounded-pill px-3 shadow-sm">
+              <i class="bi bi-person-plus me-1"></i>
+              Create Sub Agent
+            </a>
+          <% } else { %>
+            <button class="btn btn-sm btn-agent rounded-pill px-3" disabled>
+              <i class="bi bi-person-plus me-1"></i>
+              Create Sub Agent
+            </button>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <div class="search-toolbar">
+  <div class="search-box">
+    <i class="bi bi-search"></i>
+    <input
+      type="text"
+      id="subAgentSearch"
+      placeholder="Search name, email, or id..."
+      autocomplete="off"
+    >
+    <button type="button" class="search-clear-btn" id="subAgentSearchClear">Clear</button>
+  </div>
+</div>
+
+    <div class="stats-card mb-3" style="max-width: 260px; padding: .85rem 1rem;">
+  <div class="d-flex justify-content-between align-items-center gap-2">
+    <div>
+      <div class="stats-label mb-1">Total sub agents</div>
+      <p class="stats-value mb-0" style="font-size: 1.6rem;"><%= total %></p>
+    </div>
+
+    <span class="soft-badge">
+      <i class="bi bi-people"></i>
+      Total
+    </span>
+  </div>
+</div>
+    
+
+    
+    <div>
+      <% if (total === 0) { %>
+        <div class="empty-box">
+          <i class="bi bi-inboxes-fill"></i>
+          <div class="fw-semibold mb-1">No sub agents found</div>
+          <div class="small">You have not created any sub agents yet.</div>
+        </div>
+      <% } else { %>
+         <div class="cards-wrap">
+  <div class="row g-3" id="subAgentCards">
+    <% myList.forEach((sa, index) => { 
+      let p = sa.permissions || {};
+      try { if (typeof p === 'string') p = JSON.parse(p); } catch (e) { p = {}; }
+
+      const isColOn = (key, legacy) => {
+        if (typeof p[key] !== 'undefined') return !!p[key];
+        if (legacy && typeof p[legacy] !== 'undefined') return !!p[legacy];
+        return false;
+      };
+
+      const isBtnOn = (key) => !!p[key];
+
+      const enabledCols = ALL_COLS.reduce((acc, c) => acc + (isColOn(c.key, c.legacy) ? 1 : 0), 0);
+      const totalCols = ALL_COLS.length;
+      const typeValue = String(sa.agentType || '').toLowerCase() || 'unknown';
+      const firstLetter = (sa.name && String(sa.name).trim()) ? String(sa.name).trim().charAt(0).toUpperCase() : '#';
+    %>
+      <div
+        class="col-12 col-md-6 col-lg-4 user-item"
+        data-type="<%= typeValue %>"
+        data-search="<%= [
+          sa.name || '',
+          sa.email || '',
+          sa.dept || '',
+          sa.role || '',
+          sa.agentType || '',
+          sa.id || '',
+          sa.lastUpdatedBy || ''
+        ].join(' ').toLowerCase() %>"
+      >
+        <div class="user-card">
+          <div class="user-card-body">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <div class="d-flex align-items-center gap-2">
+                <div class="avatar-circle"><%= firstLetter %></div>
+                <div>
+                  <p class="user-name"><%= sa.name || 'Unnamed User' %></p>
+                  <div class="user-email"><%= sa.email || '-' %></div>
+                </div>
+              </div>
+
+              <span class="agent-role-badge">
+                <i class="bi bi-shield-check me-1"></i>
+                Sub Agent
+              </span>
+            </div>
+
+            <div class="meta-grid">
+              <div class="meta-row">
+                <span class="meta-label">Dept:</span>
+                <span class="soft-tag text-capitalize"><%= sa.dept || '-' %></span>
+              </div>
+
+              <div class="meta-row">
+                <span class="meta-label">Type:</span>
+                <span class="soft-tag text-capitalize"><%= sa.agentType || '-' %></span>
+              </div>
+
+              <div class="meta-row">
+                <span class="meta-label">ID:</span>
+                <span class="perm-chip">#<%= sa.id %></span>
+              </div>
+            </div>
+
+            <div class="access-strip">
+              <div class="access-title">Access summary</div>
+
+              <div class="d-flex flex-wrap gap-1">
+                <span class="badge rounded-pill bg-light text-dark border">
+                  <i class="bi bi-table me-1"></i>
+                  Columns: <strong><%= enabledCols %>/<%= totalCols %></strong>
+                </span>
+
+                <span class="badge rounded-pill <%= isBtnOn('btnDetails') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                  <i class="bi bi-eye me-1"></i>Details
+                </span>
+
+                <span class="badge rounded-pill <%= isBtnOn('btnUpdateRow') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                  <i class="bi bi-check2-circle me-1"></i>Update
+                </span>
+
+                <span class="badge rounded-pill <%= isBtnOn('btnPdf') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                  <i class="bi bi-filetype-pdf me-1"></i>PDF
+                </span>
+
+                <span class="badge rounded-pill <%= isBtnOn('btnBilling') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                  <i class="bi bi-receipt me-1"></i>Billing
+                </span>
+
+                <span class="badge rounded-pill <%= isBtnOn('btnWhatsApp') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                  <i class="bi bi-whatsapp me-1"></i>WhatsApp
+                </span>
+
+                <span class="badge rounded-pill <%= isBtnOn('btnUpload') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                  <i class="bi bi-cloud-upload me-1"></i>Upload
+                </span>
+
+                <span class="badge rounded-pill <%= isBtnOn('btnFiles') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                  <i class="bi bi-folder2-open me-1"></i>Files
+                </span>
+              </div>
+
+              <% if (sa.lastUpdatedBy) { %>
+                <div class="text-muted mt-2" style="font-size:.78rem;">
+                  Last updated by: <strong class="text-dark"><%= sa.lastUpdatedBy %></strong>
+                  <% if (sa.lastUpdatedByRole) { %>
+                    <span class="text-muted">(<%= String(sa.lastUpdatedByRole).replace(/_/g, ' ') %>)</span>
+                  <% } %>
+                </div>
+              <% } %>
+            </div>
+
+            <div class="action-row">
+              <% if (showEdit) { %>
+                <a href="/dashboard/agent/users/<%= sa.id %>/edit"
+                   class="btn btn-sm btn-agent-outline rounded-pill px-3">
+                  <i class="bi bi-pencil-square me-1"></i>
+                  Edit
+                </a>
+              <% } else { %>
+                <span></span>
+              <% } %>
+
+             <% if (showDelete) { %>
+  <form method="POST"
+        action="/dashboard/agent/users/<%= sa.id %>/delete"
+        class="js-delete-user-form"
+        style="display:inline;">
+    <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3">
+      <i class="bi bi-trash3 me-1"></i>
+      Delete
+    </button>
+  </form>
+<% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+
+  <div class="empty-box d-none" id="noSearchResults">
+    <i class="bi bi-search"></i>
+    <div class="fw-semibold mb-1">No matching users found</div>
+    <div class="small">Try another name, email, or id.</div>
+  </div>
+</div>
+<% } %>
+</div>
+</div>
+</div>
+<script>
+  (function () {
+    const searchInput = document.getElementById('subAgentSearch');
+    const clearBtn = document.getElementById('subAgentSearchClear');
+    const cards = document.querySelectorAll('.user-item');
+    const emptyState = document.getElementById('noSearchResults');
+
+    if (!searchInput || !cards.length) return;
+
+    function runSearch() {
+      const query = (searchInput.value || '').trim().toLowerCase();
+      let visibleCount = 0;
+
+      cards.forEach((card) => {
+        const haystack = (card.getAttribute('data-search') || '').toLowerCase();
+        const match = !query || haystack.includes(query);
+
+        card.classList.toggle('d-none', !match);
+        if (match) visibleCount += 1;
+      });
+
+      if (emptyState) {
+        emptyState.classList.toggle('d-none', visibleCount !== 0);
+      }
+    }
+
+    searchInput.addEventListener('input', runSearch);
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        searchInput.value = '';
+        runSearch();
+        searchInput.focus();
+      });
+    }
+  })();
+</script>
+<%- include('partials/bootstrap-footer') %>
+
+<div id="deleteConfirmOverlay"
+     class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center d-none"
+     style="background:rgba(15,23,42,0.35); z-index:1080;">
+
+  <div class="card border-0 shadow-lg rounded-4"
+       style="width:min(92vw, 430px); animation:flashScaleIn 220ms ease-out;">
+    <div class="card-body p-4 text-center">
+
+      <div class="mb-3">
+        <div class="mx-auto d-flex align-items-center justify-content-center rounded-circle"
+             style="width:56px;height:56px;background:#fee2e2;color:#dc2626;">
+          <i class="bi bi-trash3-fill fs-4"></i>
+        </div>
+      </div>
+
+      <h4 class="mb-2 fw-semibold">Confirm Delete</h4>
+      <p class="text-muted mb-4 small" id="deleteConfirmText">
+        Delete this sub agent? This action cannot be undone.
+      </p>
+
+      <div class="d-flex justify-content-center gap-2">
+        <button type="button"
+                class="btn btn-light rounded-pill px-4"
+                id="deleteConfirmCancelBtn">
+          Cancel
+        </button>
+
+        <button type="button"
+                class="btn btn-danger rounded-pill px-4"
+                id="deleteConfirmOkBtn">
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const overlay = document.getElementById("deleteConfirmOverlay");
+    const okBtn = document.getElementById("deleteConfirmOkBtn");
+    const cancelBtn = document.getElementById("deleteConfirmCancelBtn");
+    const textEl = document.getElementById("deleteConfirmText");
+
+    if (!overlay || !okBtn || !cancelBtn) return;
+
+    let pendingForm = null;
+
+    function openDeletePopup(form) {
+      pendingForm = form;
+      if (textEl) {
+        textEl.textContent = "Delete this sub agent? This action cannot be undone.";
+      }
+      overlay.classList.remove("d-none");
+      overlay.setAttribute("aria-hidden", "false");
+    }
+
+    function closeDeletePopup() {
+      overlay.classList.add("d-none");
+      overlay.setAttribute("aria-hidden", "true");
+      pendingForm = null;
+    }
+
+    document.addEventListener("submit", function (e) {
+      const form = e.target.closest(".js-delete-user-form");
+      if (!form) return;
+
+      e.preventDefault();
+      openDeletePopup(form);
+    });
+
+    okBtn.addEventListener("click", function () {
+      if (!pendingForm) return;
+      const form = pendingForm;
+      closeDeletePopup();
+      form.submit();
+    });
+
+    cancelBtn.addEventListener("click", closeDeletePopup);
+
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) {
+        closeDeletePopup();
+      }
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !overlay.classList.contains("d-none")) {
+        closeDeletePopup();
+      }
+    });
+  })();
+</script>

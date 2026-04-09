@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title><%= pageTitle || 'IQRA Virtual School - Dashboard' %></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Bootstrap 5.3 + Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/custom.css">
+
+  <style>
+    :root{
+      --ivs-sidebar-w: 260px;
+      --ivs-sidebar-w-collapsed: 72px; /* (kept for reference) */
+      --ivs-topbar-h: 64px;
+
+      --ivs-theme: #b30000; /* default super admin */
+      --ivs-sidebar-bg: rgba(30, 30, 46, 0.92);
+      --ivs-sidebar-border: rgba(255,255,255,0.08);
+      --ivs-hover-bg: rgba(255,255,255,0.07);
+      --ivs-active-bg: rgba(255,255,255,0.13);
+
+      --ivs-text: rgba(255,255,255,0.92);
+      --ivs-text-muted: rgba(255,255,255,0.60);
+      --ivs-glow: 0 8px 32px rgba(0,0,0,0.37);
+
+      --ivs-page-bg: #f0f2f5;
+    }
+
+    [data-theme="admin"]{ --ivs-theme:#28a745; }
+    [data-theme="agent"]{ --ivs-theme:#ffc107; }
+    [data-theme="sub_agent"]{ --ivs-theme:#0d6efd; }
+
+    html, body { height: 100%; }
+    body{ background: var(--ivs-page-bg); }
+
+    /* =========================
+       SIDEBAR
+    ========================= */
+    .ivs-sidebar{
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: var(--ivs-sidebar-w);
+      background: var(--ivs-sidebar-bg);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-right: 1px solid var(--ivs-sidebar-border);
+      box-shadow: var(--ivs-glow);
+      color: var(--ivs-text);
+      overflow-y: auto;
+      overflow-x: hidden;
+      z-index: 1050;
+      transition: transform .28s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* ✅ Collapsed = fully hidden */
+    body.sidebar-collapsed .ivs-sidebar{
+      transform: translateX(-100%);
+    }
+
+    .ivs-sidebar-header{
+      padding: .90rem .95rem;
+      border-bottom: 1px solid var(--ivs-sidebar-border);
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+
+    .sidebar-logo-pill{
+      width:34px;
+      height:34px;
+      border-radius:10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:800;
+      font-size:1.02rem;
+      color:#fff;
+      background: linear-gradient(135deg, var(--ivs-theme), #880000);
+      flex-shrink:0;
+    }
+
+    .sidebar-user-block{
+      padding: .85rem .95rem .55rem;
+      border-bottom: 1px solid var(--ivs-sidebar-border);
+    }
+
+    .sidebar-user-block .user-name{
+      font-size:.98rem;
+      font-weight:700;
+      color:#fff;
+      margin-bottom:2px;
+      line-height:1.15;
+    }
+
+    .sidebar-user-role{
+      font-size:.80rem;
+      font-weight:600;
+      color:#fff;
+      opacity:.92;
+      line-height:1.15;
+    }
+
+    .sidebar-section-label{
+      padding:.70rem .95rem .35rem;
+      font-size:.64rem;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.8px;
+      color: var(--ivs-text-muted);
+      opacity:.95;
+    }
+
+    .sidebar-nav a{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:.50rem .85rem;
+      margin:2px 10px;
+      border-radius:9px;
+      color: var(--ivs-text);
+      text-decoration:none;
+      font-size:.82rem;
+      white-space:nowrap;
+      transition: all .2s ease;
+    }
+
+    .sidebar-nav a i{
+      font-size:.88rem;
+      line-height:1;
+    }
+
+    .sidebar-nav a:hover{
+      background: var(--ivs-hover-bg);
+      color:#fff;
+    }
+
+    .sidebar-nav a.active{
+      background: var(--ivs-active-bg);
+      color:#fff;
+      border-left:3px solid var(--ivs-theme);
+      margin-left:7px;
+      border-top-left-radius:8px;
+      border-bottom-left-radius:8px;
+    }
+
+    .sidebar-footer{
+      padding:.90rem .95rem;
+      border-top:1px solid var(--ivs-sidebar-border);
+      margin-top:14px;
+    }
+
+    .logout-btn{
+      width:100%;
+      min-height:56px;
+      border:none;
+      outline:none;
+      border-radius:999px;
+      background: var(--ivs-theme);
+      color:#fff !important;
+      font-weight:800;
+      font-size:1.08rem;
+      letter-spacing:.5px;
+      text-transform:uppercase;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.24);
+      transition: all .22s ease;
+      text-decoration:none !important;
+    }
+
+    .logout-btn i{
+      color:#fff !important;
+      font-size:1.35rem;
+      line-height:1;
+    }
+
+    .logout-btn:hover{
+      transform: translateY(-1px);
+      color:#fff !important;
+      box-shadow: 0 10px 18px rgba(0,0,0,0.28);
+      opacity:.96;
+    }
+
+    .logout-btn:focus,
+    .logout-btn:active{
+      color:#fff !important;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.24);
+    }
+
+    /* =========================
+       MAIN + TOPBAR
+    ========================= */
+    .ivs-main{
+      margin-left: var(--ivs-sidebar-w);
+      min-height: 100vh;
+      background: var(--ivs-page-bg);   /* ✅ remove white feeling */
+      transition: margin-left .28s cubic-bezier(.4,0,.2,1);
+    }
+
+    body.sidebar-collapsed .ivs-main{
+      margin-left: 0 !important;
+    }
+
+    .ivs-topbar{
+      position: fixed;
+      top: 0;
+      left: var(--ivs-sidebar-w);
+      right: 0;
+      height: var(--ivs-topbar-h);
+      z-index: 1040;
+      background: var(--ivs-theme);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+      transition: left .28s cubic-bezier(.4,0,.2,1);
+    }
+
+    body.sidebar-collapsed .ivs-topbar{
+      left: 0 !important;
+    }
+
+    .ivs-content{
+      padding-top: calc(var(--ivs-topbar-h) + 8px);
+      min-height: 100vh;
+      background: var(--ivs-page-bg); /* ✅ consistent */
+    }
+
+    /* ✅ Keep container transparent so page bg shows */
+    .ivs-content .container-fluid{
+      background: transparent !important;
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+
+    /* =========================
+       Toggle button (white + small)
+    ========================= */
+    .ivs-sidebar-toggle{
+      color:#fff !important;
+      background: rgba(255,255,255,0.10) !important;
+      border: 1px solid rgba(255,255,255,0.18) !important;
+      padding: 2px 6px !important;
+      line-height: 1 !important;
+      border-radius: 8px;
+      min-width: auto !important;
+      min-height: auto !important;
+    }
+    .ivs-sidebar-toggle i{
+      color:#fff !important;
+      font-size: 16px !important; /* ✅ small icon */
+      line-height: 1 !important;
+    }
+    .ivs-sidebar-toggle:hover{
+      background: rgba(255,255,255,0.16) !important;
+    }
+    .ivs-sidebar-toggle:focus{
+      box-shadow:none !important;
+    }
+
+    .topbar-title{
+      font-weight: 800;
+      font-size: 1.15rem;
+      color: #fff;
+    }
+
+    /* =========================
+       Mobile
+    ========================= */
+    @media (max-width: 992px){
+      .ivs-sidebar{
+        transform: translateX(-100%);
+      }
+      body.sidebar-collapsed .ivs-sidebar{
+        transform: translateX(0);
+      }
+      .ivs-main{ margin-left: 0 !important; }
+      .ivs-topbar{ left: 0 !important; }
+    }
+  </style>
+</head>
+
+<%
+  const u = user || {};
+  const role = (u.role || '').toString();
+  const dept = (u.dept || '').toString();
+  const agentType = (u.agentType || '').toString();
+
+  const cap = (txt) => txt ? txt.charAt(0).toUpperCase() + txt.slice(1) : '';
+  const deptTitle  = cap(dept);
+  const agentTitle = cap(agentType);
+
+  const perms = u.permissions || {};
+  const can = (key, def = true) => (typeof perms[key] === 'undefined') ? def : !!perms[key];
+
+  let themeClass = '';
+  if (role === 'admin') themeClass = 'admin';
+  else if (role === 'agent') themeClass = 'agent';
+  else if (role === 'sub_agent') themeClass = 'sub_agent';
+
+  let headerTitle = pageTitle || (role === 'super_admin' ? 'Super Admin Dashboard' : 'Dashboard');
+
+  let headerRole = '';
+  if (role === 'super_admin') headerRole = 'Super Admin';
+  else if (role === 'admin') headerRole = deptTitle ? `${deptTitle} Admin` : 'Admin';
+  else if (role === 'agent') headerRole = (deptTitle || agentType) ? `${deptTitle || 'Dept'} ${agentTitle || 'Agent'} Agent`.trim() : 'Agent';
+  else if (role === 'sub_agent') headerRole = (deptTitle || agentType) ? `${deptTitle || 'Dept'} ${agentTitle || 'Sub Agent'} Sub Agent`.trim() : 'Sub Agent';
+  else headerRole = cap(role || 'User');
+
+  /* ✅ robust dept check */
+  const deptLower = dept.toLowerCase();
+  const isSchoolDept = deptLower.includes('school');
+%>
+
+<body class="layout-dashboard" data-theme="<%= themeClass %>">
+  <script>
+    try{
+      if (localStorage.getItem("ivs_sidebar_collapsed") === "1") {
+        document.body.classList.add("sidebar-collapsed");
+      }
+    }catch(e){}
+  </script>
+
+  <!-- SIDEBAR -->
+  <aside class="ivs-sidebar" id="ivsSidebar">
+    <div class="ivs-sidebar-header">
+      <div class="sidebar-logo-pill">IVS</div>
+      <div>
+        <div class="fw-bold" style="font-size:0.95rem; line-height:1.1;">IQRA Virtual School</div>
+        <small class="opacity-75" style="font-size:.72rem;">Central Dashboard</small>
+      </div>
+    </div>
+
+    <div class="sidebar-user-block text-center">
+      <div class="user-name"><%= u.name || 'Admin' %></div>
+      <div class="sidebar-user-role"><%= headerRole %></div>
+    </div>
+
+    <nav class="sidebar-nav mt-2">
+      <div class="sidebar-section-label">MAIN</div>
+
+      <% if (can('viewDashboard', true)) { %>
+        <a href="/dashboard" class="<%= (pageTitle||'').includes('Dashboard') ? 'active' : '' %>">
+          <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
+        </a>
+      <% } %>
+
+      <% if (role === 'super_admin') { %>
+        <% if (can('viewUsers')) { %>
+          <a href="/dashboard/super/users"><i class="bi bi-people"></i> <span>Users</span></a>
+        <% } %>
+        <% if (can('viewHistory')) { %>
+          <a href="/dashboard/super/history"><i class="bi bi-clock-history"></i> <span>History</span></a>
+        <% } %>
+        <% if (can('viewFiles')) { %>
+          <a href="/dashboard/super/files"><i class="bi bi-folder2-open"></i> <span>View Files</span></a>
+        <% } %>
+
+        <div class="sidebar-section-label mt-3">DEPARTMENTS</div>
+
+                <a href="/dashboard/overview" class="<%= (pageTitle||'').includes('Overview') ? 'active' : '' %>">
+          <i class="bi bi-bar-chart-line"></i> <span>Overview</span>
+        </a>
+
+        <% if (can('viewQuran')) { %>
+          <a href="/dashboard/super/quran"><i class="bi bi-moon-stars"></i> <span>Quran</span></a>
+        <% } %>
+        <% if (can('viewTuition')) { %>
+          <a href="/dashboard/super/tuition"><i class="bi bi-journal-text"></i> <span>Tuition</span></a>
+        <% } %>
+        <% if (can('viewSchool')) { %>
+          <a href="/dashboard/super/school"><i class="bi bi-building"></i> <span>School</span></a>
+        <% } %>
+
+        <div class="sidebar-section-label mt-3">DB SETTING</div>
+<a href="/db-settings" class="<%= (pageTitle||'').includes('DB Settings') ? 'active' : '' %>">
+  <i class="bi bi-database-gear"></i> <span>Database Settings</span>
+</a>
+
+        <div class="sidebar-section-label mt-3">FORMS</div>
+        <a href="https://ivs-admission-form.onrender.com" target="_blank" rel="noopener noreferrer">
+          <i class="bi bi-ui-checks-grid"></i> <span>School Admission Form</span>
+        </a>
+
+      <% } else { %>
+        <% if ((role === 'admin' || role === 'agent') && can('viewUsers', true)) { %>
+          <a href="<%= role === 'admin' ? '/dashboard/admin/users' : '/dashboard/agent/users' %>" class="<%= (pageTitle||'').includes('Users') ? 'active' : '' %>">
+            <i class="bi bi-people"></i> <span>Users</span>
+          </a>
+        <% } %>
+
+        <!-- ✅ Dept Admin/Agent side: show School form if user dept is school -->
+        <% if (isSchoolDept) { %>
+          <div class="sidebar-section-label mt-3">FORMS</div>
+          <a href="https://ivs-admission-form.onrender.com" target="_blank" rel="noopener noreferrer">
+            <i class="bi bi-ui-checks-grid"></i> <span>School Admission Form</span>
+          </a>
+        <% } %>
+      <% } %>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-section-label mb-2" style="padding:0; margin:0 0 8px 0;">Sign Out</div>
+        <a href="/logout" class="logout-btn d-flex align-items-center justify-content-center gap-2">
+          <i class="bi bi-arrow-left"></i>
+          <span>Logout</span>
+        </a>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- MAIN + TOPBAR -->
+  <main class="ivs-main d-flex flex-column">
+    <nav class="ivs-topbar navbar">
+      <div class="container-fluid px-3">
+        <div class="d-flex align-items-center gap-3">
+          <button class="ivs-sidebar-toggle" id="sidebarToggleBtn" title="Toggle Sidebar" type="button">
+            <i class="bi bi-list"></i>
+          </button>
+          <span class="topbar-title"><%= headerTitle %></span>
+        </div>
+      </div>
+    </nav>
+
+    <div class="ivs-content flex-grow-1">
+      <div class="container-fluid pt-2 pb-4">
+        <!-- Your page content goes here -->

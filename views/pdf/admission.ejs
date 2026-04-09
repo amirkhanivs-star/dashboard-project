@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>IVS Admission Registration Form (PDF)</title>
+
+  <%
+    function safe(v){ return (v === null || v === undefined) ? "" : String(v); }
+
+    // ✅ Permissions (optional). If server doesn't send perms, everything works as before.
+    const PERMS = (typeof perms !== "undefined" && perms) ? perms : null;
+    const ROLE = safe((typeof user !== "undefined" && user && user.role) ? user.role : "");
+    const isSuper = ROLE === "super_admin";
+
+    function can(key, fallback=true){
+      if (isSuper) return true;
+      if (!PERMS) return fallback; // keep old behavior if perms not provided
+      if (typeof PERMS[key] === "undefined") return fallback;
+      return !!PERMS[key];
+    }
+
+    const rd = safe(a.regDate || a.registration_date || a.date_of_registration);
+    let yyyy="", mm="", dd="";
+    if (rd) {
+      const normalized = rd.replaceAll("/", "-");
+      const parts = normalized.split("-");
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          yyyy = parts[0]; mm = parts[1]; dd = parts[2];
+        } else {
+          mm = parts[0]; dd = parts[1]; yyyy = parts[2];
+        }
+      }
+    }
+    const dateDigits = (mm.padStart(2,"0") + dd.padStart(2,"0") + yyyy.padStart(4,"0")).split("");
+    function digit(i){ return dateDigits[i] ? dateDigits[i] : ""; }
+
+    const dobRaw = safe(a.dob || a.date_of_birth);
+    let dobShow = dobRaw;
+    if (dobRaw && dobRaw.includes("-")) {
+      const p = dobRaw.split("-");
+      if (p.length === 3) dobShow = `${p[2]}/${p[1]}/${p[0]}`;
+    }
+
+    const baseHref = safe(typeof baseUrl !== "undefined" ? baseUrl : "");
+    const bannerPath = safe(typeof bannerSrc !== "undefined" && bannerSrc ? bannerSrc : "img/ivs-banner.png");
+
+    const genderVal = safe(a.gender);
+
+    // ✅ gated values (blank if not allowed)
+    const vStudentName = can("colStudentName", true) ? safe(a.student_name || a.studentName) : "";
+    const vGender      = can("colStudentName", true) ? safe(genderVal) : "";
+    const vDob         = can("colStudentName", true) ? safe(dobShow) : "";
+    const vGrade       = can("colGrade", true) ? safe(a.grade || a.gradeSelect) : "";
+
+    const vFatherName  = can("colFatherName", true) ? safe(a.father_name || a.fatherName) : "";
+    const vWhats       = can("colPhone", true) ? safe(a.guardian_whatsapp || a.gWhats) : "";
+
+    const vReligion    = can("colFatherName", true) ? safe(a.religion) : "";
+    const vFOcc        = can("colFatherName", true) ? safe(a.father_occupation || a.fOcc) : "";
+    const vNation      = can("colFatherName", true) ? safe(a.nationality || a.nation) : "";
+  %>
+
+  <% if (baseHref) { %>
+    <base href="<%= baseHref.endsWith('/') ? baseHref : (baseHref + '/') %>">
+  <% } %>
+
+  <style>
+    @page { size: A4; margin: 0; }
+
+    :root{
+      --blue:#253a77;
+      --maroon:#b41f2d;
+      --ink:#0f172a;
+      --line:#d9dee8;
+      --paper:#fff;
+      --bg:#ffffff;
+    }
+
+    *{ box-sizing:border-box; }
+
+    html, body{
+      margin:0;
+      padding:0;
+      width:210mm;
+      height:297mm;
+      background:var(--bg);
+      color:var(--ink);
+      font-family: Inter, system-ui, Segoe UI, Roboto, Arial, sans-serif;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
+      overflow:hidden;
+    }
+
+    img{ max-width:100%; height:auto; display:block; }
+
+    @media screen{
+      html, body{ width:auto; height:auto; overflow:auto; }
+    }
+
+    .wrapper{
+      margin:0;
+      padding:0;
+      width:210mm;
+      height:297mm;
+    }
+
+    .page{
+      width:210mm;
+      height:297mm;
+      margin:0;
+      background:var(--paper);
+      border:6px solid var(--maroon);
+      border-radius:0;
+      padding:0 18px 10px;
+      overflow:hidden;
+    }
+
+    .header-banner{
+      margin-left:-18px;
+      margin-right:-18px;
+      width:calc(100% + 36px);
+      margin-bottom:4px;
+      text-align:center;
+    }
+    .header-banner img{
+      width:100% !important;
+      height:auto !important;
+      object-fit:contain;
+    }
+
+    .title{
+      margin:0 0 4px 0;
+      text-align:center;
+      font-weight:900;
+      color:var(--maroon);
+      font-size:28px;
+    }
+    .title .title-accent{ color:#402c8e }
+
+    .meta.meta--top{
+      display:flex;
+      gap:14px;
+      align-items:flex-end;
+      flex-wrap:wrap;
+      margin-top:8px;
+    }
+    .field-stack{min-width:200px}
+    .stack-label{font-size:11px; font-weight:800; letter-spacing:.3px; text-transform:uppercase}
+    .stack-value{font-size:15px; font-weight:800; margin-top:2px}
+    .stack-underline{height:3px; background:#e5e7eb; border-radius:2px; margin-top:5px}
+    .meta.meta--top .field-stack:first-child .stack-underline{display:none}
+
+    .date-boxes{display:flex; align-items:center; gap:6px; margin-top:4px; flex-wrap:wrap}
+    .date-boxes .box{
+      width:28px; height:30px;
+      border:2px solid #9aa3b2; border-radius:4px;
+      display:flex; align-items:center; justify-content:center;
+      font-weight:800; font-size:13px;
+    }
+    .date-boxes .slash{font-weight:800; font-size:14px}
+
+    .section{
+      margin-top:10px;
+      border:1.4px solid #d8dde7;
+      border-radius:8px;
+      overflow:hidden;
+    }
+    .section h3{
+      margin:0;
+      padding:7px 10px;
+      background:#eef2f7;
+      color:var(--blue);
+      font-weight:800;
+      border-bottom:1.4px solid #dde3ee;
+      font-size:13px;
+    }
+    .section .content{padding:9px}
+
+    .grid{display:grid; gap:7px}
+    .grid.cols-2{grid-template-columns:1fr 1fr}
+    .grid.cols-3{grid-template-columns:repeat(3,1fr)}
+
+    .label{font-size:10.5px; color:#334155; margin-bottom:3px}
+
+    .value-box{
+      width:100%;
+      background:#fff;
+      border:1.4px solid var(--line);
+      border-radius:6px;
+      min-height:30px;
+      padding:6px 8px;
+      line-height:1.3;
+      font-weight:600;
+      font-size:12.5px;
+      color:#0f172a;
+      white-space:pre-wrap;
+      word-break:break-word;
+    }
+
+    .processed-by{
+      margin-top:6px;
+      text-align:right;
+      font-size:10.5px;
+      color:#334155;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrapper">
+    <div class="page" id="page1">
+
+      <div class="header-banner">
+        <img src="<%= bannerPath %>" alt="IQRA Virtual School — Al Furqan Children Academy" />
+      </div>
+
+      <h1 class="title">Admission Registration <span class="title-accent">Form</span></h1>
+
+      <div class="meta meta--top">
+        <div class="field-stack">
+          <div class="stack-label">SESSION:</div>
+          <div class="stack-value"><%= safe(a.session || "2025–26") %></div>
+          <div class="stack-underline"></div>
+        </div>
+
+        <div class="field-stack">
+          <div class="stack-label">DATE OF REGISTRATION</div>
+          <div class="date-boxes">
+            <div class="box"><%= digit(0) %></div>
+            <div class="box"><%= digit(1) %></div>
+            <span class="slash">/</span>
+            <div class="box"><%= digit(2) %></div>
+            <div class="box"><%= digit(3) %></div>
+            <span class="slash">/</span>
+            <div class="box"><%= digit(4) %></div>
+            <div class="box"><%= digit(5) %></div>
+            <div class="box"><%= digit(6) %></div>
+            <div class="box"><%= digit(7) %></div>
+          </div>
+        </div>
+      </div>
+
+      <section class="section" id="studentInfoSection">
+        <h3>Student Information</h3>
+        <div class="content">
+          <div class="grid cols-2">
+            <div>
+              <div class="label">Student Name</div>
+              <div class="value-box"><%= vStudentName %></div>
+            </div>
+            <div>
+              <div class="label">Gender</div>
+              <div class="value-box"><%= vGender %></div>
+            </div>
+          </div>
+
+          <div class="grid cols-2" style="margin-top:7px;">
+            <div>
+              <div class="label">Date of Birth</div>
+              <div class="value-box"><%= vDob %></div>
+            </div>
+            <div>
+              <div class="label">Grade</div>
+              <div class="value-box"><%= vGrade %></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="fatherInfoSection">
+        <h3>Father Information</h3>
+        <div class="content">
+          <div class="grid cols-2">
+            <div>
+              <div class="label">Father Name</div>
+              <div class="value-box"><%= vFatherName %></div>
+            </div>
+            <div>
+              <div class="label">Guardian WhatsApp #</div>
+              <div class="value-box"><%= vWhats %></div>
+            </div>
+          </div>
+
+          <div class="grid cols-2" style="margin-top:7px;">
+            <div>
+              <div class="label">Religion</div>
+              <div class="value-box"><%= vReligion %></div>
+            </div>
+            <div>
+              <div class="label">Father Occupation</div>
+              <div class="value-box"><%= vFOcc %></div>
+            </div>
+          </div>
+
+          <div style="margin-top:7px;">
+            <div class="label">Nationality</div>
+            <div class="value-box"><%= vNation %></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="addressSection">
+        <h3>Address Details</h3>
+        <div class="content">
+          <div class="grid">
+            <div>
+              <div class="label">Present Address</div>
+              <div class="value-box"><%= safe(a.present_address || a.addr) %></div>
+            </div>
+          </div>
+
+          <div class="grid cols-3" style="margin-top:7px;">
+            <div>
+              <div class="label">The City</div>
+              <div class="value-box"><%= safe(a.city) %></div>
+            </div>
+            <div>
+              <div class="label">Present State</div>
+              <div class="value-box"><%= safe(a.state) %></div>
+            </div>
+            <div>
+              <div class="label">Secondary Contact</div>
+              <div class="value-box"><%= safe(a.secondary_contact || a.sContact) %></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="processed-by">
+        Processed by:
+        <strong><%= safe(a.processed_by || a.processedBy || "—") %></strong>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,348 @@
+<%- include('partials/bootstrap-header', { user, pageTitle: 'Edit User' }) %>
+
+<%
+  // ✅ FIX: basePath fallback (route se pass na ho to default)
+  const BASE_PATH = (typeof basePath !== 'undefined' && basePath) ? basePath : '/dashboard/admin';
+
+  // Parent perms (Admin ki permissions)
+  let parentPerms = (typeof perms !== 'undefined' && perms) ? perms : (user.permissions || {});
+  try { if (typeof parentPerms === 'string') parentPerms = JSON.parse(parentPerms); } catch(e) { parentPerms = {}; }
+
+  // Child perms (Edited user ki permissions)
+  let childPermsRaw = (editUser && editUser.permissions) ? editUser.permissions : {};
+  try { if (typeof childPermsRaw === 'string') childPermsRaw = JSON.parse(childPermsRaw); } catch(e) { childPermsRaw = {}; }
+
+  const isAllowed = (key) => !!parentPerms[key];
+  const isChecked = (key) => !!childPermsRaw[key];
+
+ const COL_LABELS = {
+  colStatus: "Current Status",
+  colFeeStatus: "Fee Status",
+  colDept: "Dept",
+  colStudentName: "Student",
+  colFatherName: "Father",
+  colFatherEmail: "Father Email",
+  colGrade: "Grade",
+  colTuitionGrade: "Grade Section",
+  colPhone: "Phone Number",
+  colProcessedBy: "Processed By",
+  colPaymentStatus: "Payment Status",
+  colPaidUpto: "Paid Upto",
+  colVerificationNumber: "Verification #",
+  colRegistrationNumber: "Reg #",
+  colFamilyNumber: "Family Number",
+  colRegistrationFee: "Registration Fee",
+  colFees: "Fees",
+  colCurrency: "Currency",
+  colMonth: "Month",
+  colTotalFees: "Total Fees",
+  colPendingDues: "Pending Dues",
+  colReceivedPayment: "Received Payment",
+  colInvoiceStatus: "Invoice Status",
+  colInvoiceStatusTimestamp: "Invoice Status Timestamp",
+  colPaidInvoiceStatus: "Paid Invoice Status",
+  colPaidInvoiceStatusTimestamp: "Paid Invoice Status Timestamp",
+  colActionButtons: "Action Buttons"
+};
+
+const BTN_LABELS = {
+  btnEditRow: "Show Edit Button",
+  btnDetails: "Show View Details Button",
+  btnUpdateRow: "Show Update/Save Button",
+  btnPdf: "Show PDF Button",
+  btnBilling: "Show Billing Button",
+  btnWhatsApp: "Show WhatsApp Button",
+  btnUpload: "Show Upload Button",
+  btnFiles: "Show Files Button",
+  canDeleteFiles: "Can Delete Files"
+};
+
+  const COL_KEYS = Object.keys(COL_LABELS).filter(k => isAllowed(k));
+  const BTN_KEYS = Object.keys(BTN_LABELS).filter(k => isAllowed(k));
+const isAgentRoute = BASE_PATH.includes('/dashboard/agent');
+
+const themeTextClass = isAgentRoute ? 'text-warning' : 'text-success';
+const themeBtnClass = isAgentRoute ? 'btn-warning' : 'btn-success';
+const themeBackClass = isAgentRoute ? 'text-warning' : 'text-success';
+const themeAccordionBtnIconClass = isAgentRoute ? 'text-warning' : 'text-success';
+const themeButtonsIconClass = isAgentRoute ? 'text-warning' : 'text-success';
+
+const roleCircleClass =
+  editUser.role === 'admin' ? 'bg-success text-white'
+  : editUser.role === 'agent' ? 'bg-warning text-dark'
+  : 'subagent-role-circle';
+
+const roleBadgeClass =
+  editUser.role === 'admin' ? 'bg-success-subtle text-success'
+  : editUser.role === 'agent' ? 'bg-warning-subtle text-dark'
+  : 'subagent-role-badge';
+%>
+
+<style>
+  .subagent-role-circle{
+    background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%) !important;
+    color: #fff !important;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+  }
+
+  .subagent-role-badge{
+    background: rgba(59, 130, 246, 0.12) !important;
+    color: #1d4ed8 !important;
+    border: 1px solid rgba(59, 130, 246, 0.28) !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.10);
+  }
+</style>
+
+<div class="container-fluid py-4">
+
+  <!-- ✅ FIXED: Back link -->
+ <a href="<%= BASE_PATH %>/users" class="small <%= themeBackClass %> text-decoration-none mb-3 d-inline-flex align-items-center fw-semibold">
+  <i class="bi bi-arrow-left me-1"></i> Back to Users
+</a>
+
+  <!-- Top Info Card (same feel like super) -->
+  <div class="card border-0 shadow-sm rounded-4 mb-3">
+    <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-2 small">
+      <div class="d-flex align-items-center gap-2">
+        <span class="d-inline-flex align-items-center justify-content-center rounded-circle <%= roleCircleClass %>"
+              style="width:30px;height:30px;">
+          <%= (editUser.name || 'U').charAt(0).toUpperCase() %>
+        </span>
+        <div>
+          <div class="fw-semibold"><%= editUser.name %></div>
+          <div class="text-muted"><%= editUser.email %></div>
+        </div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <span class="badge rounded-pill bg-light text-muted border">
+          ID: <strong class="ms-1">#<%= editUser.id %></strong>
+        </span>
+
+       <span class="badge rounded-pill <%= roleBadgeClass %> text-capitalize">
+        <i class="bi bi-person-badge me-1"></i><%= String(editUser.role || '').replace(/_/g,' ') %>
+       </span>
+
+        <span class="badge rounded-pill bg-light text-muted text-capitalize">
+          Dept: <span class="ms-1"><%= editUser.dept || '—' %></span>
+        </span>
+      </div>
+    </div>
+  </div>
+
+
+
+  <div class="row g-3">
+    <div class="col-lg-3">
+      <div class="card shadow-sm h-100 small border-0 rounded-4">
+        <div class="card-body">
+          <h6 class="mb-2 d-flex align-items-center">
+            <i class="bi bi-sliders2-vertical me-2 <%= themeTextClass %>"></i>
+            Editing: <%= editUser.name %>
+          </h6>
+
+          <p class="text-muted mb-2">
+            ID: <strong><%= editUser.id %></strong><br>
+            Role: <span class="text-capitalize"><%= String(editUser.role || '').replace(/_/g,' ') %></span><br>
+            Dept: <span class="text-capitalize"><%= editUser.dept || '—' %></span>
+          </p>
+
+          <p class="text-muted mb-0">
+            From here, you can update the name, email, and allowed permissions.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-9">
+      <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-header border-0 bg-white bg-opacity-75">
+          <h5 class="mb-0 d-flex align-items-center">
+            <i class="bi bi-pencil-square me-2 <%= themeTextClass %>"></i>
+            Edit Agent / Sub Agent
+          </h5>
+          <small class="text-muted">
+            Permissions that are not enabled for the parent account will not appear here.
+          </small>
+        </div>
+
+        <div class="card-body">
+          <% if (error) { %>
+            <div class="alert alert-danger py-2 small"><%= error %></div>
+          <% } %>
+
+          <!-- ✅ FIXED: form action -->
+          <form method="POST" action="<%= BASE_PATH %>/users/<%= editUser.id %>/edit">
+
+            <!-- Basic info -->
+            <div class="row g-3">
+              <div class="col-12">
+                <h6 class="mb-1">1) Basic information</h6>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Name</label>
+                <input type="text" name="name" class="form-control" value="<%= editUser.name %>" required>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Email</label>
+                <input type="email" name="email" class="form-control" value="<%= editUser.email %>" required>
+              </div>
+
+             <div class="col-md-4">
+  <label class="form-label small">Pipeline / Agent Type</label>
+
+  <% if (isAgentRoute) { %>
+    <input type="text"
+           class="form-control bg-light"
+           value="<%= editUser.agentType ? editUser.agentType.charAt(0).toUpperCase() + editUser.agentType.slice(1) : '—' %>"
+           disabled>
+    <input type="hidden" name="agentType" value="<%= editUser.agentType || '' %>">
+    <small class="text-muted d-block mt-1">
+      Agent cannot change pipeline / agent type.
+    </small>
+  <% } else { %>
+    <select name="agentType" class="form-select">
+      <option value="accounts" <%= editUser.agentType === 'accounts' ? 'selected' : '' %>>Accounts</option>
+      <option value="admission" <%= editUser.agentType === 'admission' ? 'selected' : '' %>>Admission</option>
+      <option value="management" <%= editUser.agentType === 'management' ? 'selected' : '' %>>Management</option>
+    </select>
+    <small class="text-muted d-block mt-1">
+      Only admin can change pipeline / agent type.
+    </small>
+  <% } %>
+</div>
+</div>
+
+            <hr>
+            <div class="mb-2">
+  <div class="d-flex flex-wrap align-items-center gap-2 small">
+    <span class="text-dark fw-semibold">Quick:</span>
+
+    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1" id="btnSelectAll">
+      Select all
+    </button>
+
+    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1" id="btnSelectNone">
+      Select none
+    </button>
+  </div>
+</div>
+
+<div class="mb-2">
+  <h6 class="mb-1">2. Columns & Buttons Permissions</h6>
+  <p class="text-muted small mb-2">Turn columns and buttons on or off.</p>
+</div>
+
+            <div class="accordion" id="permAccordion">
+
+              <!-- Columns -->
+              <div class="accordion-item border-0 shadow-sm rounded-4 mb-2">
+                <h2 class="accordion-header" id="headingCols">
+                  <button class="accordion-button rounded-4" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCols" aria-expanded="true" aria-controls="collapseCols">
+                    <i class="bi bi-table me-2 <%= themeAccordionBtnIconClass %>"></i>
+                   Admissions pipeline Columns
+                  </button>
+                </h2>
+
+                <div id="collapseCols" class="accordion-collapse collapse show" aria-labelledby="headingCols" data-bs-parent="#permAccordion">
+                  <div class="accordion-body">
+                    <% if (!COL_KEYS.length) { %>
+                      <div class="alert alert-light border small mb-0">
+                        Only the columns allowed for this admin can be assigned here.
+                      </div>
+                    <% } else { %>
+                      <div class="row g-2">
+                        <% COL_KEYS.forEach(function(k){ %>
+                          <div class="col-md-4">
+                            <input type="hidden" name="<%= k %>" value="">
+                            <div class="form-check small">
+                              <input class="form-check-input perm-toggle" type="checkbox" id="<%= k %>" name="<%= k %>" value="on"
+                                     <%= isChecked(k) ? 'checked' : '' %>>
+                              <label class="form-check-label" for="<%= k %>"><%= COL_LABELS[k] %></label>
+                            </div>
+                          </div>
+                        <% }) %>
+                      </div>
+                    <% } %>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Buttons -->
+              <div class="accordion-item border-0 shadow-sm rounded-4">
+                <h2 class="accordion-header" id="headingBtns">
+                  <button class="accordion-button collapsed rounded-4" type="button" data-bs-toggle="collapse" data-bs-target="#collapseBtns" aria-expanded="false" aria-controls="collapseBtns">
+                    <i class="bi bi-hand-index-thumb me-2 <%= themeButtonsIconClass %>"></i>
+                    Buttons
+                  </button>
+                </h2>
+
+                <div id="collapseBtns" class="accordion-collapse collapse" aria-labelledby="headingBtns" data-bs-parent="#permAccordion">
+                  <div class="accordion-body">
+                    <% if (!BTN_KEYS.length) { %>
+                      <div class="alert alert-light border small mb-0">
+                        Only the buttons allowed for this admin can be assigned here.
+                      </div>
+                    <% } else { %>
+                      <div class="row g-2">
+                        <% BTN_KEYS.forEach(function(k){ %>
+                          <div class="col-md-4">
+                            <input type="hidden" name="<%= k %>" value="">
+                            <div class="form-check small">
+                              <input class="form-check-input perm-toggle" type="checkbox" id="<%= k %>" name="<%= k %>" value="on"
+                                     <%= isChecked(k) ? 'checked' : '' %>>
+                              <label class="form-check-label" for="<%= k %>"><%= BTN_LABELS[k] %></label>
+                            </div>
+                          </div>
+                        <% }) %>
+                      </div>
+                    <% } %>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <hr>
+
+            <div class="d-flex justify-content-between">
+              <!-- ✅ FIXED: Cancel link -->
+              <a href="<%= BASE_PATH %>/users" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                Cancel
+              </a>
+
+              <button type="submit" class="btn <%= themeBtnClass %> rounded-pill px-4">
+                <i class="bi bi-save me-1"></i>
+                Save Changes
+              </button>
+            </div>
+
+          </form>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  (function () {
+    const btnSelectAll = document.getElementById("btnSelectAll");
+    const btnSelectNone = document.getElementById("btnSelectNone");
+
+    function toggleAll(on) {
+      document.querySelectorAll(".perm-toggle").forEach((cb) => {
+        if (cb.disabled) return;
+        cb.checked = !!on;
+      });
+    }
+
+    if (btnSelectAll) btnSelectAll.addEventListener("click", () => toggleAll(true));
+    if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));
+  })();
+</script>
+
+<%- include('partials/bootstrap-footer') %>

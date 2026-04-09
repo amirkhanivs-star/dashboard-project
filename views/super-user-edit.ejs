@@ -1,0 +1,529 @@
+<%- include('partials/bootstrap-header', { user, pageTitle: 'Edit User' }) %>
+
+<%
+  let p = editUser.permissions || {};
+  try { if (typeof p === 'string') p = JSON.parse(p); } catch(e) { p = {}; }
+  const roleText = String(editUser.role || '').replace(/_/g, ' ');
+
+const roleCircleClass =
+  editUser.role === 'super_admin' ? 'bg-danger text-white' :
+  editUser.role === 'admin' ? 'bg-success text-white' :
+  editUser.role === 'agent' ? 'bg-warning text-dark' :
+  'subagent-role-circle';
+
+const roleBadgeClass =
+  editUser.role === 'super_admin' ? 'bg-danger-subtle text-danger' :
+  editUser.role === 'admin' ? 'bg-success-subtle text-success' :
+  editUser.role === 'agent' ? 'bg-warning-subtle text-dark' :
+  'subagent-role-badge';
+%>
+
+<style>
+  .subagent-role-circle{
+    background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%) !important;
+    color: #fff !important;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+  }
+
+  .subagent-role-badge{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .22rem;
+    border-radius: 999px;
+    padding: .35em .9em;
+    font-size: .75rem;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    background: rgba(59, 130, 246, 0.10) !important;
+    color: #2563eb !important;
+    border: 1px solid rgba(59, 130, 246, 0.26) !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08);
+  }
+
+  .subagent-role-badge i{
+    font-size: .72rem;
+    line-height: 1;
+    color: #2563eb !important;
+  }
+</style>
+
+<div class="container-fluid py-4">
+ <a href="/dashboard/super/users" class="small text-danger text-decoration-none mb-3 d-inline-flex align-items-center fw-semibold">
+  <i class="bi bi-arrow-left me-1"></i> Back to Users
+</a>
+
+  <div class="card border-0 shadow-sm rounded-4 mb-3">
+    <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-2 small">
+      <div class="d-flex align-items-center gap-2">
+        <span class="d-inline-flex align-items-center justify-content-center rounded-circle <%= roleCircleClass %>"
+              style="width:30px;height:30px;">
+          <%= (editUser.name || 'U').charAt(0).toUpperCase() %>
+        </span>
+        <div>
+          <div class="fw-semibold"><%= editUser.name %></div>
+          <div class="text-muted"><%= editUser.email %></div>
+        </div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <span class="badge rounded-pill bg-light text-muted border">
+          ID: <strong class="ms-1">#<%= editUser.id %></strong>
+        </span>
+         <span class="badge rounded-pill <%= roleBadgeClass %> text-capitalize">
+          <i class="bi bi-person-badge me-1"></i><%= roleText %>
+         </span>
+        <span class="badge rounded-pill bg-light text-muted text-capitalize">
+          Dept: <span class="ms-1"><%= editUser.dept || '—' %></span>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-4 mb-3">
+    <div class="card-body py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <div class="d-flex align-items-center gap-2 small text-muted">
+        <i class="bi bi-shield-lock text-danger"></i>
+        Edit permissions, columns, and buttons. The user will only see the items allowed here.
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-3">
+      <div class="card shadow-sm h-100 small border-0 rounded-4">
+        <div class="card-body">
+          <h6 class="mb-2 d-flex align-items-center">
+            <i class="bi bi-sliders2-vertical me-2 text-danger"></i>
+            Editing: <%= editUser.name %>
+          </h6>
+          <p class="text-muted mb-2">
+            ID: <strong><%= editUser.id %></strong><br>
+            Current role:
+            <span class="text-capitalize"><%= String(editUser.role || '').replace(/_/g,' ') %></span><br>
+            Dept:
+            <span class="text-capitalize"><%= editUser.dept || '—' %></span>
+          </p>
+          <p class="text-muted mb-0">
+            The Super Admin can edit the role, department, pipeline type, columns, and buttons from here.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-9">
+      <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-header border-0 bg-white bg-opacity-75">
+          <h5 class="mb-0 d-flex align-items-center">
+            <i class="bi bi-pencil-square me-2 text-danger"></i>
+            Edit Admin / Agent / Sub Agent
+          </h5>
+          <small class="text-muted">
+            After saving changes, the user will only see the allowed UI sections, columns, and buttons.
+          </small>
+        </div>
+
+        <div class="card-body">
+          <% if (error) { %>
+          <div class="alert alert-danger py-2 small"><%= error %></div>
+          <% } %>
+
+          <form method="POST" action="/dashboard/super/users/<%= editUser.id %>/edit">
+            <div class="row g-3">
+              <div class="col-12">
+                <h6 class="mb-1">1. Basic information</h6>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Name</label>
+                <input type="text" name="name" class="form-control" value="<%= editUser.name %>" required>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Email</label>
+                <input type="email" name="email" class="form-control" value="<%= editUser.email %>" required>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">New Password (optional)</label>
+                <input type="text" name="password" class="form-control" placeholder="Leave blank to keep same">
+              </div>
+
+              <div class="col-12 mt-3">
+                <h6 class="mb-1">2. Role &amp; Department</h6>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Role</label>
+                <select name="role" id="roleSelect" class="form-select" required>
+                  <option value="admin" <%= editUser.role === 'admin' ? 'selected' : '' %>>Admin</option>
+                  <option value="agent" <%= editUser.role === 'agent' ? 'selected' : '' %>>Agent</option>
+                  <option value="sub_agent" <%= editUser.role === 'sub_agent' ? 'selected' : '' %>>Sub Agent</option>
+                </select>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Department</label>
+                <select name="dept" class="form-select" required>
+                  <option value="quran" <%= editUser.dept === 'quran' ? 'selected' : '' %>>Quran</option>
+                  <option value="tuition" <%= editUser.dept === 'tuition' ? 'selected' : '' %>>Tuition</option>
+                  <option value="school" <%= editUser.dept === 'school' ? 'selected' : '' %>>School</option>
+                </select>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Pipeline / Agent Type</label>
+                <select name="agentType" id="agentTypeSelect" class="form-select">
+                  <option value="accounts" <%= editUser.agentType === 'accounts' ? 'selected' : '' %>>Accounts</option>
+                  <option value="admission" <%= editUser.agentType === 'admission' ? 'selected' : '' %>>Admission</option>
+                  <option value="management" <%= editUser.agentType === 'management' ? 'selected' : '' %>>Management</option>
+                </select>
+                <small class="text-muted d-block">
+                  This is only meaningful for Agent and Sub Agent. It will be ignored for Admin.
+                </small>
+              </div>
+
+           <div class="col-12 mt-2 mb-1">
+  <div class="d-flex flex-wrap align-items-center gap-2 small">
+    <span class="text-dark fw-semibold">Quick:</span>
+
+    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1" id="btnSelectAll">
+      Select all
+    </button>
+
+    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1" id="btnSelectNone">
+      Select none
+    </button>
+  </div>
+</div>
+
+              <div class="col-12 mt-3">
+                
+                <h6 class="mb-1">3. Columns & Buttons Permissions</h6>
+                
+                <p class="text-muted small mb-1">
+                  Turn columns and buttons on or off.
+                </p>
+
+                <div class="accordion" id="permAccordion">
+                  <div class="accordion-item border-0 shadow-sm rounded-4 mb-2">
+                    <h2 class="accordion-header" id="headingAllCols">
+                      <button class="accordion-button rounded-4" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAllCols" aria-expanded="true" aria-controls="collapseAllCols">
+                        <i class="bi bi-table me-2 text-danger"></i>
+                        Admissions pipeline columns
+                      </button>
+                    </h2>
+                    <div id="collapseAllCols" class="accordion-collapse collapse show" aria-labelledby="headingAllCols" data-bs-parent="#permAccordion">
+                      <div class="accordion-body">
+                        <div id="allColsWrap" class="row g-2">
+                          <%
+                            const colChecked = (key, legacyKey, defaultVal=false) => {
+                              if (typeof p[key] !== 'undefined') return !!p[key];
+                              if (legacyKey && typeof p[legacyKey] !== 'undefined') return !!p[legacyKey];
+                              return defaultVal;
+                            };
+                          %>
+
+                          <!-- ✅ ADDED: Current Status column permission -->
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colStatus" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colStatus" name="colStatus" value="on" <%= colChecked('colStatus') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colStatus">Current Status</label>
+                          </div></div>
+
+                          <!-- ✅ ADDED: Fee Status column permission -->
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colFeeStatus" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colFeeStatus" name="colFeeStatus" value="on" <%= colChecked('colFeeStatus') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colFeeStatus">Fee Status</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colDept" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colDept" name="colDept" value="on" <%= colChecked('colDept') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colDept">Dept</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colStudentName" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colStudentName" name="colStudentName" value="on" <%= colChecked('colStudentName') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colStudentName">Student</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colFatherName" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colFatherName" name="colFatherName" value="on" <%= colChecked('colFatherName') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colFatherName">Father</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colFatherEmail" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colFatherEmail" name="colFatherEmail" value="on" <%= colChecked('colFatherEmail') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colFatherEmail">Father Email</label>
+                         </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colGrade" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colGrade" name="colGrade" value="on" <%= colChecked('colGrade') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colGrade">Grade</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colTuitionGrade" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colTuitionGrade" name="colTuitionGrade" value="on" <%= colChecked('colTuitionGrade') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colTuitionGrade">Grade Section</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colPhone" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colPhone" name="colPhone" value="on" <%= colChecked('colPhone','showPhone') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colPhone">Phone Number</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                           <input type="hidden" name="colProcessedBy" value="">
+                           <input class="form-check-input col-toggle" type="checkbox" id="colProcessedBy" name="colProcessedBy" value="on" <%= colChecked('colProcessedBy') ? 'checked' : '' %>>
+                           <label class="form-check-label" for="colProcessedBy">Processed By</label>
+                         </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colPaymentStatus" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colPaymentStatus" name="colPaymentStatus" value="on" <%= colChecked('colPaymentStatus','showPaymentStatus') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colPaymentStatus">Payment Status</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colPaidUpto" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colPaidUpto" name="colPaidUpto" value="on" <%= colChecked('colPaidUpto','showPaidUpto') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colPaidUpto">Paid Upto</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colVerificationNumber" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colVerificationNumber" name="colVerificationNumber" value="on" <%= colChecked('colVerificationNumber','showVerificationNumber') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colVerificationNumber">Verif #</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colRegistrationNumber" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colRegistrationNumber" name="colRegistrationNumber" value="on" <%= colChecked('colRegistrationNumber','showRegistrationNumber') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colRegistrationNumber">Reg #</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colFamilyNumber" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colFamilyNumber" name="colFamilyNumber" value="on" <%= colChecked('colFamilyNumber') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colFamilyNumber">Family Num #</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                           <input type="hidden" name="colRegistrationFee" value="">
+                           <input class="form-check-input col-toggle" type="checkbox" id="colRegistrationFee" name="colRegistrationFee" value="on" <%= colChecked('colRegistrationFee') ? 'checked' : '' %>>
+                           <label class="form-check-label" for="colRegistrationFee">Registration Fee</label>
+                         </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colFees" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colFees" name="colFees" value="on" <%= colChecked('colFees') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colFees">Fees</label>
+                          </div></div>
+
+                          <!-- ✅ ADDED: Currency column permission -->
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colCurrency" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colCurrency" name="colCurrency" value="on" <%= colChecked('colCurrency') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colCurrency">Currency</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colMonth" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colMonth" name="colMonth" value="on" <%= colChecked('colMonth') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colMonth">Month</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colTotalFees" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colTotalFees" name="colTotalFees" value="on" <%= colChecked('colTotalFees') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colTotalFees">Total Fees</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colPendingDues" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colPendingDues" name="colPendingDues" value="on" <%= colChecked('colPendingDues') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colPendingDues">Pending Dues</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colReceivedPayment" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colReceivedPayment" name="colReceivedPayment" value="on" <%= colChecked('colReceivedPayment') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colReceivedPayment">Received Payment</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+  <input type="hidden" name="colInvoiceStatus" value="">
+  <input class="form-check-input col-toggle" type="checkbox" id="colInvoiceStatus" name="colInvoiceStatus" value="on" <%= colChecked('colInvoiceStatus') ? 'checked' : '' %>>
+  <label class="form-check-label" for="colInvoiceStatus">Invoice Status</label>
+</div></div>
+
+<div class="col-md-4"><div class="form-check small">
+  <input type="hidden" name="colInvoiceStatusTimestamp" value="">
+  <input class="form-check-input col-toggle" type="checkbox" id="colInvoiceStatusTimestamp" name="colInvoiceStatusTimestamp" value="on" <%= colChecked('colInvoiceStatusTimestamp') ? 'checked' : '' %>>
+  <label class="form-check-label" for="colInvoiceStatusTimestamp">Invoice Status Timestamp</label>
+</div></div>
+
+<div class="col-md-4"><div class="form-check small">
+  <input type="hidden" name="colPaidInvoiceStatus" value="">
+  <input class="form-check-input col-toggle" type="checkbox" id="colPaidInvoiceStatus" name="colPaidInvoiceStatus" value="on" <%= colChecked('colPaidInvoiceStatus') ? 'checked' : '' %>>
+  <label class="form-check-label" for="colPaidInvoiceStatus">Paid Invoice Status</label>
+</div></div>
+
+<div class="col-md-4"><div class="form-check small">
+  <input type="hidden" name="colPaidInvoiceStatusTimestamp" value="">
+  <input class="form-check-input col-toggle" type="checkbox" id="colPaidInvoiceStatusTimestamp" name="colPaidInvoiceStatusTimestamp" value="on" <%= colChecked('colPaidInvoiceStatusTimestamp') ? 'checked' : '' %>>
+  <label class="form-check-label" for="colPaidInvoiceStatusTimestamp">Paid Invoice Status Timestamp</label>
+</div></div>
+
+                        
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="colActionButtons" value="">
+                            <input class="form-check-input col-toggle" type="checkbox" id="colActionButtons" name="colActionButtons" value="on" <%= colChecked('colActionButtons') ? 'checked' : '' %>>
+                            <label class="form-check-label" for="colActionButtons">Action Buttons</label>
+                          </div></div>
+
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="accordion-item border-0 shadow-sm rounded-4">
+                    <h2 class="accordion-header" id="headingButtons">
+                      <button class="accordion-button collapsed rounded-4" type="button" data-bs-toggle="collapse" data-bs-target="#collapseButtons" aria-expanded="false" aria-controls="collapseButtons">
+                        <i class="bi bi-hand-index-thumb me-2 text-danger"></i>
+                        Buttons
+                      </button>
+                    </h2>
+                    <div id="collapseButtons" class="accordion-collapse collapse" aria-labelledby="headingButtons" data-bs-parent="#permAccordion">
+                      <div class="accordion-body">
+                        <div class="row g-2">
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="btnEditRow" value="">
+                            <input class="form-check-input perm-toggle" type="checkbox" id="btnEditRow" name="btnEditRow" value="on" <%= (p.btnEditRow ?? false) ? 'checked' : '' %>>
+                            <label class="form-check-label" for="btnEditRow">Show Edit button</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="btnDetails" value="">
+                            <input class="form-check-input perm-toggle" type="checkbox" id="btnDetails" name="btnDetails" value="on" <%= (p.btnDetails ?? false) ? 'checked' : '' %>>
+                            <label class="form-check-label" for="btnDetails">Show View Details button</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="btnUpdateRow" value="">
+                            <input class="form-check-input perm-toggle" type="checkbox" id="btnUpdateRow" name="btnUpdateRow" value="on" <%= (p.btnUpdateRow ?? false) ? 'checked' : '' %>>
+                            <label class="form-check-label" for="btnUpdateRow">Show Update/Save button</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="btnPdf" value="">
+                            <input class="form-check-input perm-toggle" type="checkbox" id="btnPdf" name="btnPdf" value="on" <%= (p.btnPdf ?? false) ? 'checked' : '' %>>
+                            <label class="form-check-label" for="btnPdf">Show PDF button</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="btnBilling" value="">
+                            <input class="form-check-input perm-toggle" type="checkbox" id="btnBilling" name="btnBilling" value="on" <%= (p.btnBilling ?? false) ? 'checked' : '' %>>
+                            <label class="form-check-label" for="btnBilling">Show Billing button</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="btnWhatsApp" value="">
+                            <input class="form-check-input perm-toggle" type="checkbox" id="btnWhatsApp" name="btnWhatsApp" value="on" <%= (p.btnWhatsApp ?? false) ? 'checked' : '' %>>
+                            <label class="form-check-label" for="btnWhatsApp">Show WhatsApp button</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="btnUpload" value="">
+                            <input class="form-check-input perm-toggle" type="checkbox" id="btnUpload" name="btnUpload" value="on" <%= (p.btnUpload ?? false) ? 'checked' : '' %>>
+                            <label class="form-check-label" for="btnUpload">Show Upload button</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="canDeleteFiles" value="">
+                            <input class="form-check-input perm-toggle" type="checkbox" id="canDeleteFiles" name="canDeleteFiles" value="on" <%= (p.canDeleteFiles ?? false) ? 'checked' : '' %>>
+                            <label class="form-check-label" for="canDeleteFiles">Can Delete Files</label>
+                          </div></div>
+
+                          <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="btnFiles" value="">
+                            <input class="form-check-input perm-toggle" type="checkbox" id="btnFiles" name="btnFiles" value="on" <%= (p.btnFiles ?? false) ? 'checked' : '' %>>
+                            <label class="form-check-label" for="btnFiles">Show Files button</label>
+                          </div></div>
+
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+            <hr>
+            <div class="d-flex justify-content-between">
+              <a href="/dashboard/super/users" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                Cancel
+              </a>
+
+              <button type="submit" class="btn btn-danger rounded-pill px-4">
+                <i class="bi bi-save me-1"></i>
+                Save Changes
+              </button>
+            </div>
+          </form>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const roleSelect = document.getElementById("roleSelect");
+    const agentTypeSelect = document.getElementById("agentTypeSelect");
+
+    const btnSelectAll = document.getElementById("btnSelectAll");
+    const btnSelectNone = document.getElementById("btnSelectNone");
+
+    function syncRoleUI() {
+      const role = (roleSelect && roleSelect.value) ? roleSelect.value : "";
+      if (!agentTypeSelect) return;
+
+      if (role === "admin") {
+        agentTypeSelect.disabled = true;
+        agentTypeSelect.classList.add("bg-light");
+      } else {
+        agentTypeSelect.disabled = false;
+        agentTypeSelect.classList.remove("bg-light");
+      }
+    }
+
+    function toggleAll(on) {
+      document.querySelectorAll(".perm-toggle, .col-toggle").forEach((cb) => {
+        if (cb.disabled) return;
+        cb.checked = !!on;
+      });
+    }
+
+    if (roleSelect) roleSelect.addEventListener("change", syncRoleUI);
+
+    if (btnSelectAll) btnSelectAll.addEventListener("click", () => toggleAll(true));
+    if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));
+
+    syncRoleUI();
+  })();
+</script>
+
+<%- include('partials/bootstrap-footer') %>

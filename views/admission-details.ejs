@@ -1,0 +1,1592 @@
+<%- include('partials/bootstrap-header', { user, pageTitle: 'Admission Details' }) %>
+<%- include('partials/flash') %>
+
+<%
+  const A = admission || {};
+
+  function statusClass(v){
+    v = String(v||'').toLowerCase().trim();
+    if (v === 'running') return 'status-running';
+    if (v === 'leave')   return 'status-leave';
+    if (v === 'stop')    return 'status-stop';
+    if (v === 'left')    return 'status-left';
+    if (v === 'freez')   return 'status-freez';
+    return '';
+  }
+
+  function feeClass(v){
+    v = String(v||'').toLowerCase().trim();
+    if (v === 'present + dues') return 'fee-dues';
+    if (v === 'present + no dues') return 'fee-nodues';
+    return '';
+  }
+
+  function billingStatusClass(v){
+    v = String(v||'').toLowerCase().trim();
+    if (v === 'not admitted')   return 'bill-notadmitted';
+    if (v === 'full payment')   return 'bill-full';
+    if (v === 'partial payment')return 'bill-partial';
+    if (v === 'extra payment')  return 'bill-extra';
+    if (v === 'no payment')     return 'bill-none';
+    return '';
+  }
+
+  const getCurStatus = (x) => String(x?.status || x?.currentStatus || x?.current_status || '').trim();
+  const getFeeStatus = (x) => String(x?.feeStatus || x?.fee_status || '').trim();
+
+  const getCurrency = (x) =>
+    (x?.currency_code || x?.currencyCode || x?.admission?.currencyCode || x?.admission?.currency_code || '-');
+
+  const getFamilyNo = (x) =>
+    String(
+      x?.accounts?.familyNumber ||
+      x?.admission?.familyNumber ||
+      x?.familyNumber ||
+      x?.family_number ||
+      x?.accounts_family_number ||
+      ''
+    ).trim();
+
+  const getStudentName = (x) => String(x?.student || x?.studentName || '').trim() || '-';
+
+  const initialsFromName = (name) => {
+    name = String(name || '').trim();
+    if (!name || name === '-') return 'S';
+    const parts = name.split(' ').filter(Boolean);
+    const a = parts[0] ? parts[0][0] : 'S';
+    const b = parts[1] ? parts[1][0] : '';
+    return (a + b).toUpperCase();
+  };
+
+  const safeStr = (v) => (v === null || v === undefined) ? '' : String(v);
+
+  const tryParseJSON = (s) => {
+    try { return JSON.parse(s); } catch(e){ return null; }
+  };
+
+  const toNumber = (v) => {
+    if (v === null || v === undefined) return NaN;
+    const s = String(v).replace(/[, ]/g,'').trim();
+    const n = Number(s);
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  const money = (v) => {
+    const n = toNumber(v);
+    if (!Number.isFinite(n)) return String(v ?? '-');
+    return String(n);
+  };
+
+  const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const MONTHS_ABBR = ['jan','feb','mar','apr','may','jun','jul','aug','sep','sept','oct','nov','dec'];
+
+  const normMonth = (m) => safeStr(m).toLowerCase().trim();
+
+  const extractMonthName = (raw) => {
+    const s = normMonth(raw);
+    if (!s) return '';
+    for (const mm of MONTHS){
+      if (s.includes(mm)) return mm;
+    }
+    for (let i=0;i<MONTHS_ABBR.length;i++){
+      const ab = MONTHS_ABBR[i];
+      if (s.includes(ab)) return MONTHS[i];
+    }
+    return '';
+  };
+
+  const monthIndex = (raw) => {
+    const mm = extractMonthName(raw) || normMonth(raw);
+    const i = MONTHS.indexOf(mm);
+    return i >= 0 ? i : 999;
+  };
+
+  const sameMonth = (a, b) => {
+    const aa = extractMonthName(a) || normMonth(a);
+    const bb = extractMonthName(b) || normMonth(b);
+    return aa && bb && aa === bb;
+  };
+
+  const sortBillingRowsByMonth = (bill) => {
+    return (Array.isArray(bill) ? bill.slice() : []).sort((x,y) => {
+      const a = monthIndex(x?.month);
+      const b = monthIndex(y?.month);
+      if (a !== b) return a - b;
+      return safeStr(x?.month).localeCompare(safeStr(y?.month));
+    });
+  };
+
+  const getFeeFromBillingRow = (b) => {
+    return (b?.fee || b?.currentFee || b?.fees || b?.monthFee || b?.monthlyFee || b?.month_fee || b?.monthly_fee);
+  };
+
+  const getAmountFromBillingRow = (b) => {
+    return (b?.amount || b?.amountReceived || b?.received || b?.receivedAmount || b?.amount_received || b?.received_amount);
+  };
+
+  const getVerificationFromBillingRow = (b) => {
+    return (
+      b?.verificationNumber ||
+      b?.verification_no ||
+      b?.verificationNo ||
+      b?.verif ||
+      b?.verifNo ||
+      b?.verif_no ||
+      b?.trx ||
+      b?.trxId ||
+      b?.transactionId ||
+      b?.bankRef ||
+      b?.bank_reference ||
+      b?.ref ||
+      b?.refNo ||
+      b?.ref_no
+    );
+  };
+
+  const getMonthNumberFromBillingRow = (b) => {
+    return (
+      b?.monthNumber ||
+      b?.month_number ||
+      b?.billNumber ||
+      b?.bill_number ||
+      b?.slipNumber ||
+      b?.slip_number ||
+      b?.receiptNumber ||
+      b?.receipt_number ||
+      b?.voucherNumber ||
+      b?.voucher_number ||
+      b?.number ||
+      b?.num ||
+      b?.monthlyNumber ||
+      b?.monthly_number ||
+      b?.monthSlipNo ||
+      b?.month_slip_no
+    );
+  };
+
+  const getBankFromBillingRow = (b) => {
+  return (
+    b?.bank ||
+    b?.bankName ||
+    b?.bank_name ||
+    b?.selectedBank ||
+    b?.paymentBank ||
+    b?.payment_bank
+  );
+};
+
+  const getRegistrationNumber = (x) => {
+    return (
+      x?.accounts?.registrationNumber ||
+      x?.accounts?.registration_no ||
+      x?.admission?.registrationNumber ||
+      x?.admission?.registration_no ||
+      x?.registrationNumber ||
+      x?.registration_no ||
+      ''
+    );
+  };
+
+  const BILLING_STATUS_LIST = [
+    "Not admitted",
+    "No payment",
+    "Partial payment",
+    "Full payment",
+    "Extra payment",
+  ];
+
+  const parseFirstNumber = (val) => {
+    const s = String(val ?? "");
+    const m = s.match(/(-?\d+(\.\d+)?)/);
+    if (!m) return 0;
+    const n = parseFloat(m[1]);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const splitBillingValue = (val) => {
+    const v = String(val || "").trim();
+    if (!v) return { status: "", rest: "", amount: 0 };
+
+    for (const st of BILLING_STATUS_LIST) {
+      if (v === st) return { status: st, rest: "", amount: 0 };
+      if (v.startsWith(st + " | ")) {
+        const rest = v.slice((st + " | ").length).trim();
+        return { status: st, rest, amount: parseFirstNumber(rest) };
+      }
+      if (v.startsWith(st + " - ")) {
+        const rest = v.slice((st + " - ").length).trim();
+        return { status: st, rest, amount: parseFirstNumber(rest) };
+      }
+    }
+    return { status: "", rest: v, amount: parseFirstNumber(v) };
+  };
+
+ const normalizeBillingEntry = (entry) => {
+  if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+    return {
+      status: safeStr(entry.status).trim(),
+      amount: safeStr(entry.amount).trim(),
+      feeOverride: safeStr(entry.feeOverride).trim(),
+      verificationNumber: safeStr(entry.verification || entry.verificationNumber || entry.verificationNo || entry.verification_no || entry.verif || entry.trx || entry.ref || '').trim(),
+      monthNumber: safeStr(entry.monthNumber || entry.month_number || entry.number || entry.num || entry.slipNumber || entry.receiptNumber || '').trim(),
+      receivedOn: safeStr(entry.receivedOn || entry.received_on || entry.paidOn || entry.paid_on || entry.date || '').trim(),
+      bank: safeStr(entry.bank || entry.bankName || entry.bank_name).trim(),
+    };
+  }
+
+  const raw = safeStr(entry).trim();
+  if (!raw) {
+    return {
+      status: "",
+      amount: "",
+      feeOverride: "",
+      verificationNumber: "",
+      monthNumber: "",
+      receivedOn: "",
+      bank: "",
+    };
+  }
+
+  const { status, amount } = splitBillingValue(raw);
+  return {
+    status: status || "",
+    amount: String(amount || ""),
+    feeOverride: "",
+    verificationNumber: "",
+    monthNumber: "",
+    receivedOn: "",
+    bank: "",
+  };
+};
+
+  const normalizeFeeHistory = (feeHistory, baseFee, startMonthRaw) => {
+    let h = feeHistory;
+    if (typeof h === 'string') h = tryParseJSON(h);
+    if (!Array.isArray(h)) h = [];
+
+    const cleaned = h
+      .map((x) => {
+        const rawMonth =
+          x?.effectiveMonthKey ||
+          x?.effective_month_key ||
+          x?.effectiveMonth ||
+          x?.effective_month ||
+          x?.month ||
+          x?.startMonth ||
+          x?.start_month ||
+          '';
+
+        const mk = extractMonthName(rawMonth) || String(rawMonth || "january").toLowerCase().trim();
+
+        return {
+          fee: parseFirstNumber(x?.fee),
+          effectiveMonthKey: mk,
+          changedAt: x?.changedAt || x?.changed_at || "",
+          changedBy: x?.changedBy || x?.changed_by || "",
+        };
+      })
+      .filter((x) => x.fee > 0 && MONTHS.includes(x.effectiveMonthKey));
+
+    if (cleaned.length === 0) {
+      const bf = parseFirstNumber(baseFee);
+      const startKey = extractMonthName(startMonthRaw) || "january";
+      if (bf > 0) {
+        cleaned.push({
+          fee: bf,
+          effectiveMonthKey: startKey,
+          changedAt: new Date().toISOString(),
+          changedBy: "system",
+        });
+      }
+    }
+
+    cleaned.sort((a, b) => {
+      const ai = MONTHS.indexOf(a.effectiveMonthKey);
+      const bi = MONTHS.indexOf(b.effectiveMonthKey);
+      if (ai !== bi) return ai - bi;
+      return String(a.changedAt).localeCompare(String(b.changedAt));
+    });
+
+    return cleaned;
+  };
+
+  const feeForMonthKey = (history, monthKey, fallbackFee) => {
+    const idx = MONTHS.indexOf(monthKey);
+    if (idx < 0) return parseFirstNumber(fallbackFee) || 0;
+
+    let chosen = null;
+    for (const h of history) {
+      const hi = MONTHS.indexOf(h.effectiveMonthKey);
+      if (hi < 0) continue;
+      if (hi <= idx) chosen = h;
+    }
+    return chosen ? parseFirstNumber(chosen.fee) : (parseFirstNumber(fallbackFee) || 0);
+  };
+
+  const readBillingJson = (x, admissionInfo) => {
+    const raw =
+      admissionInfo?.billingJson ||
+      admissionInfo?.billing_json ||
+      x?.billingJson ||
+      x?.billing_json ||
+      x?.billingJSON ||
+      admissionInfo?.billingJSON ||
+      null;
+
+    if (!raw) return {};
+    if (typeof raw === 'object') return raw;
+    if (typeof raw === 'string') {
+      const j = tryParseJSON(raw);
+      return (j && typeof j === 'object') ? j : {};
+    }
+    return {};
+  };
+
+  const buildMonthMatrix = (x, admissionInfo) => {
+    const currentFee = admissionInfo?.fees || admissionInfo?.fee || x?.fees || x?.fee || 0;
+
+    const feeHistoryRaw =
+      admissionInfo?.feeHistory || admissionInfo?.fee_history || x?.feeHistory || x?.fee_history || [];
+
+    const billingJson = readBillingJson(x, admissionInfo);
+    const billRows = Array.isArray(x?.billing) ? sortBillingRowsByMonth(x.billing) : [];
+
+    const billFeeCandidates = (billRows || [])
+      .map(r => parseFirstNumber(getFeeFromBillingRow(r)))
+      .filter(n => Number.isFinite(n) && n > 0);
+
+    const baseFeeFromBills = billFeeCandidates.length
+      ? billFeeCandidates.reduce((a,b)=> Math.min(a,b), billFeeCandidates[0])
+      : 0;
+
+    const history = normalizeFeeHistory(feeHistoryRaw, currentFee, admissionInfo?.month);
+
+    const baseFee =
+      (history && history.length ? parseFirstNumber(history[0].fee) : 0) ||
+      baseFeeFromBills ||
+      parseFirstNumber(currentFee) ||
+      0;
+
+    const rowByKey = new Map();
+    billRows.forEach(r => {
+      const mk = extractMonthName(r?.month) || normMonth(r?.month);
+      if (mk) rowByKey.set(mk, r);
+    });
+
+    const matrix = MONTHS.map((mk) => {
+      const entry = normalizeBillingEntry(billingJson?.[mk]);
+      const row = rowByKey.get(mk) || null;
+
+      const status = safeStr(row?.status).trim() || safeStr(entry.status).trim() || '';
+      const amountStr = safeStr(getAmountFromBillingRow(row)).trim() || safeStr(entry.amount).trim() || '';
+      const amount = parseFirstNumber(amountStr);
+
+      const feeOverride = parseFirstNumber(entry.feeOverride);
+
+      const stLower = String(status || '').toLowerCase().trim();
+      const hasStatus = !!stLower;
+
+      const feeFromRule = hasStatus
+        ? baseFee
+        : feeForMonthKey(history, mk, baseFee);
+
+      const feeComputed = (feeOverride > 0) ? feeOverride : feeFromRule;
+      const fee = feeComputed;
+
+      const verification =
+        safeStr(getVerificationFromBillingRow(row)).trim() ||
+        safeStr(entry.verification || entry.verificationNumber).trim() ||
+        '';
+
+      const monthNoField =
+        safeStr(getMonthNumberFromBillingRow(row)).trim() ||
+        safeStr(entry.monthNumber).trim() ||
+        '';
+
+      const receivedOn =
+        safeStr(row?.receivedOn || row?.received_on || row?.paidOn || row?.paid_on || row?.date || '').trim() ||
+        safeStr(entry.receivedOn).trim() ||
+        '';
+
+        const bank =
+  safeStr(getBankFromBillingRow(row)).trim() ||
+  safeStr(entry.bank).trim() ||
+  '';
+
+      const hasAny =
+        !!status ||
+        amount > 0 ||
+        feeOverride > 0 ||
+        !!verification ||
+        !!monthNoField ||
+        !!row;
+
+      return {
+        key: mk,
+        label: mk.charAt(0).toUpperCase() + mk.slice(1),
+        monthNo: MONTHS.indexOf(mk) + 1,
+        status: status || '',
+        statusCls: billingStatusClass(status || ''),
+        amount: amountStr ? amountStr : (amount > 0 ? String(amount) : ''),
+        amountNum: amount,
+        fee: fee > 0 ? fee : 0,
+        feeShown: fee > 0 ? String(fee) : '-',
+        verification: verification || '-',
+        monthNumber: monthNoField || '-',
+        bank: bank || '-',
+        receivedOn: receivedOn || '',
+        feeOverride: feeOverride > 0 ? feeOverride : 0,
+        hasAny
+      };
+    });
+
+    return { matrix, baseFee, history };
+  };
+
+  const buildPendingDues = (matrix, admissionInfo) => {
+    const mm = Array.isArray(matrix) ? matrix : [];
+
+    const rows = mm
+      .filter(m => {
+        const st = String(m?.status || '').toLowerCase().trim();
+        return (st === 'no payment' || st === 'partial payment');
+      })
+      .map(m => {
+        const feeN = parseFirstNumber(m?.fee);
+        const recvN = parseFirstNumber(m?.amount);
+        const dueN = Math.max(0, (feeN || 0) - (recvN || 0));
+
+        return {
+          month: m.label,
+          monthKey: m.key,
+          monthNo: m.monthNo,
+          verifNo: m.verification || '-',
+          monthSlipNo: m.monthNumber || '-',
+          due: Number.isFinite(dueN) ? dueN : NaN,
+          feeVal: m.feeShown || '-',
+          amountVal: (m.amount ? m.amount : '-'),
+          status: m.status || '-',
+          statusCls: m.statusCls || '',
+          receivedOn: m.receivedOn || ''
+        };
+      })
+      .filter(x => x.month && Number.isFinite(x.due) && x.due > 0)
+      .sort((a,b) => monthIndex(a.month) - monthIndex(b.month));
+
+    return rows;
+  };
+
+  const sumFromMonthMatrix = (matrix) => {
+    let feeTotal = 0;
+    let recvTotal = 0;
+    let hasFee = false;
+    let hasRecv = false;
+
+    (matrix || []).forEach(m => {
+      const st = String(m?.status || '').trim();
+      const amt = parseFirstNumber(m?.amount);
+      const fee = parseFirstNumber(m?.fee);
+
+      const isBlank = !st && amt <= 0 && parseFirstNumber(m?.feeOverride) <= 0 && (fee <= 0);
+      if (isBlank) return;
+
+      if (st && st.toLowerCase() === 'not admitted') return;
+
+      if (fee > 0) { feeTotal += fee; hasFee = true; }
+      if (amt > 0) { recvTotal += amt; hasRecv = true; }
+    });
+
+    return { feeTotal, recvTotal, hasFee, hasRecv };
+  };
+
+  const role = String(user?.role || '').toLowerCase();
+  const agentType = String(user?.agentType || '').toLowerCase();
+
+ let backUrl = '/dashboard';
+
+if (role === 'super_admin' || role === 'superadmin') backUrl = '/dashboard';
+else if (role === 'admin') backUrl = '/dashboard';
+else if (role === 'agent') backUrl = '/dashboard';
+else if (role === 'sub_agent' || role === 'subagent' || role === 'sub-agent') backUrl = '/dashboard';
+
+if (!user?.role && agentType) {
+  if (agentType === 'super_admin' || agentType === 'superadmin') backUrl = '/dashboard';
+  else if (agentType === 'admin') backUrl = '/dashboard';
+  else if (agentType === 'agent') backUrl = '/dashboard';
+  else if (agentType === 'sub_agent' || agentType === 'subagent' || agentType === 'sub-agent') backUrl = '/dashboard';
+}
+
+  const incomingList =
+    ((typeof admissions !== 'undefined') && Array.isArray(admissions) ? admissions : null) ||
+    ((typeof parentAdmissions !== 'undefined') && Array.isArray(parentAdmissions) ? parentAdmissions : null) ||
+    ((typeof familyAdmissions !== 'undefined') && Array.isArray(familyAdmissions) ? familyAdmissions : null) ||
+    ((typeof sameFamilyAdmissions !== 'undefined') && Array.isArray(sameFamilyAdmissions) ? sameFamilyAdmissions : null) ||
+    [];
+
+  const seen = new Set();
+  let familyList = (Array.isArray(incomingList) ? incomingList : []).filter(x => {
+    const id = String(x?.id || '');
+    if (!id) return false;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  const hasCurrent = familyList.some(x => String(x?.id) === String(A?.id));
+  if (!hasCurrent && A?.id) familyList.unshift(A);
+
+  familyList.sort((p, q) => {
+    if (String(p?.id) === String(A?.id)) return -1;
+    if (String(q?.id) === String(A?.id)) return 1;
+    return Number(q?.id || 0) - Number(p?.id || 0);
+  });
+
+  const familyNumber = getFamilyNo(A) || (familyList[0] ? getFamilyNo(familyList[0]) : '');
+
+  let famFeeTotal = 0;
+  let famRecvTotal = 0;
+  let famPendingTotal = 0;
+  let famHasFee = false;
+  let famHasRecv = false;
+  let famHasPending = false;
+
+  (familyList || []).forEach(X => {
+    const admissionInfo = X.admission || {};
+    const mm = buildMonthMatrix(X, admissionInfo);
+    const billTotals = sumFromMonthMatrix(mm.matrix);
+
+    if (billTotals.hasFee) { famFeeTotal += billTotals.feeTotal; famHasFee = true; }
+    if (billTotals.hasRecv){ famRecvTotal += billTotals.recvTotal; famHasRecv = true; }
+
+    const duesRows = buildPendingDues(mm.matrix, admissionInfo);
+    const p = duesRows.reduce((s,r)=> Number.isFinite(r?.due) ? (s + r.due) : s, 0);
+    if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; famHasPending = true; }
+  });
+
+  const famCurrency = String(getCurrency(A) || '').trim() || '-';
+
+  const CURRENT_YEAR = new Date().getFullYear();
+%>
+
+<div class="container-fluid py-2 admission-details-page"
+     data-family-number="<%= familyNumber %>"
+     data-primary-admission-id="<%= A?.id || '' %>"
+     data-user-role="<%= String(user?.role || user?.agentType || '').toLowerCase() %>"
+     data-details-url="<%= (role === 'admin') ? ('/admin/admission/' + (A?.id || '')) : ('/dashboard/super/admission/' + (A?.id || '')) %>">
+
+  <div class="d-flex justify-content-between align-items-center mb-2 top-head">
+    <div>
+      <h4 class="mb-0 page-title">Admission Details</h4>
+      <div class="text-muted small">
+        Admission ID: <b><%= A.id %></b>
+        <% if (familyNumber) { %>
+          <span class="mx-2">|</span> Family #: <b><%= familyNumber %></b>
+          <span class="mx-2">|</span> Students: <b><%= familyList.length %></b>
+        <% } %>
+      </div>
+    </div>
+
+    <a href="<%= backUrl %>" class="btn rounded-pill btn-premium-back btn-sm">
+      <i class="bi bi-arrow-left"></i> Back
+    </a>
+  </div>
+
+  <div class="card border-0 inner-card mb-3">
+    <div class="card-body p-3">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="sec-title">Family Billing Summary</div>
+        <div class="text-muted small">
+          Currency: <b><%= (famCurrency && famCurrency !== '-' ? famCurrency : '-') %></b>
+        </div>
+      </div>
+
+      <div class="dues-summary mt-2">
+        <div class="sum-item">
+          <div class="label">Total Fee (All Billing)</div>
+          <div class="val">
+            <%= (famHasFee ? money(famFeeTotal) : '-') %>
+            <% if (famCurrency && famCurrency !== '-' && famHasFee) { %>
+              <span class="text-muted small ms-1">( <%= famCurrency %> )</span>
+            <% } %>
+          </div>
+        </div>
+        <div class="sum-item">
+          <div class="label">Total Received (All Billing)</div>
+          <div class="val">
+            <%= (famHasRecv ? money(famRecvTotal) : '-') %>
+            <% if (famCurrency && famCurrency !== '-' && famHasRecv) { %>
+              <span class="text-muted small ms-1">( <%= famCurrency %> )</span>
+            <% } %>
+          </div>
+        </div>
+        <div class="sum-item">
+          <div class="label">Total Pending</div>
+          <div class="val">
+            <%= (famHasPending ? money(famPendingTotal) : '-') %>
+            <% if (famCurrency && famCurrency !== '-' && famHasPending) { %>
+              <span class="text-muted small ms-1">( <%= famCurrency %> )</span>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <% if (!familyList || familyList.length === 0) { %>
+    <div class="text-muted small">No admission data found.</div>
+  <% } else { %>
+
+    <% familyList.forEach((X, idx) => {
+         const isCurrent = String(X?.id) === String(A?.id);
+         const accounts = X.accounts || {};
+         const admissionInfo = X.admission || {};
+
+         const curStatus = getCurStatus(X);
+         const feeStatus = getFeeStatus(X);
+
+         const studentName = getStudentName(X);
+         const initials = initialsFromName(studentName);
+         const dept = String(X.dept || '-').trim();
+         const grade = String(X.grade || '-').trim();
+         const curCode = String(getCurrency(X) || '').trim();
+
+         const mm = buildMonthMatrix(X, admissionInfo);
+         const monthMatrix = mm.matrix;
+
+         const duesRows = buildPendingDues(monthMatrix, admissionInfo);
+
+         const totalDues = duesRows.reduce((sum, r) => Number.isFinite(r.due) ? sum + r.due : sum, 0);
+         const hasNumericTotal = duesRows.some(r => Number.isFinite(r.due));
+
+         const historyRows = (monthMatrix || []).filter(m => {
+           const st = String(m.status || '').trim();
+           const amt = parseFirstNumber(m.amount);
+           const fee = parseFirstNumber(m.fee);
+           if (st && st.toLowerCase() === 'not admitted') return true;
+           return !!st || amt > 0 || fee > 0;
+         });
+
+         const billTotals = sumFromMonthMatrix(monthMatrix);
+
+         const latestHistoryFee =
+           (mm?.history && mm.history.length)
+             ? parseFirstNumber(mm.history[mm.history.length - 1].fee)
+             : 0;
+
+         const currentMonthlyFee =
+           parseFirstNumber(
+             admissionInfo?.monthly_fee_current ||
+             admissionInfo?.monthlyFeeCurrent ||
+             X?.monthly_fee_current ||
+             X?.monthlyFeeCurrent ||
+             admissionInfo?.fees ||
+             admissionInfo?.fee ||
+             latestHistoryFee ||
+             0
+           ) || '-';
+
+         const regNoAccount = getRegistrationNumber(X);
+
+         const pendingTotal = hasNumericTotal ? totalDues : NaN;
+    %>
+
+      <div class="student-block <%= idx > 0 ? 'mt-3' : '' %>">
+        <div class="student-strip">
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <div class="fw-bold">
+              <span class="me-1">Student <%= idx + 1 %></span>
+              <% if (isCurrent) { %>
+                <span class="badge rounded-pill ms-1 current-pill">Current</span>
+              <% } %>
+            </div>
+
+            <span class="text-muted small">Admission ID: <b><%= X.id %></b></span>
+            <span class="dot-sep"></span>
+            <span class="text-muted small">Student: <b><%= studentName %></b></span>
+            <span class="dot-sep"></span>
+            <span class="text-muted small text-capitalize">Dept: <b><%= dept %></b></span>
+            <span class="dot-sep"></span>
+            <span class="text-muted small">Grade: <b><%= grade %></b></span>
+          </div>
+        </div>
+
+        <div class="row g-3 align-items-stretch">
+          <div class="col-lg-4">
+            <div class="card border-0 profile-card h-100">
+              <div class="card-body p-3">
+                <div class="d-flex flex-column align-items-center text-center pt-2">
+                  <div class="avatar-wrap">
+                    <div class="avatar-circle"><%= initials %></div>
+                  </div>
+
+                  <div class="mt-2 fw-bold fs-6"><%= studentName %></div>
+                  <div class="text-muted small"><%= grade %> - <%= dept ? (dept.charAt(0).toUpperCase() + dept.slice(1)) : '-' %></div>
+
+                  <div class="profile-divider my-3"></div>
+                </div>
+
+                <div class="text-uppercase tiny-title mb-2">Details</div>
+
+                <div class="details-list">
+                  <div class="drow"><span class="k">Name:</span> <span class="v"><%= studentName %></span></div>
+
+                  <div class="drow">
+                    <span class="k">Status:</span>
+                    <span class="v">
+                      <span class="chip chip-ok"><%= (curStatus || '-') %></span>
+                    </span>
+                  </div>
+
+                  <div class="drow"><span class="k">Admission Date:</span> <span class="v"><%= (admissionInfo.month || '-') %></span></div>
+                  <div class="drow"><span class="k">Role:</span> <span class="v">Student</span></div>
+
+                  <div class="drow"><span class="k">Contact:</span> <span class="v"><%= (X.phone || X.contactNumber || '-') %></span></div>
+
+                  <div class="drow mt-2">
+                    <span class="k">Fee Status:</span>
+                    <span class="v">
+                      <span class="chip"><%= (feeStatus || '-') %></span>
+                    </span>
+                  </div>
+
+                  <div class="drow">
+                    <span class="k">Current Fee:</span>
+                    <span class="v">
+                      <b><%= money(currentMonthlyFee) %></b>
+                      <span class="text-muted small ms-1">(<%= (curCode && curCode !== '-' ? curCode : '-') %>)</span>
+                    </span>
+                  </div>
+
+                  <div class="drow">
+                    <span class="k">Reg #:</span>
+                    <span class="v"><%= (regNoAccount || '-') %></span>
+                  </div>
+
+                  <div class="drow">
+                    <span class="k">Family #:</span>
+                    <span class="v"><%= (accounts.familyNumber || getFamilyNo(X) || '-') %></span>
+                  </div>
+
+                  <div class="drow">
+                    <span class="k">Total Received:</span>
+                    <span class="v">
+                      <b><%= (billTotals.hasRecv ? money(billTotals.recvTotal) : '-') %></b>
+                      <% if (curCode && curCode !== '-' && billTotals.hasRecv) { %>
+                        <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                      <% } %>
+                    </span>
+                  </div>
+
+                  <div class="drow">
+                    <span class="k">Pending Due:</span>
+                    <span class="v">
+                      <b><%= (Number.isFinite(pendingTotal) ? money(pendingTotal) : '-') %></b>
+                      <% if (curCode && curCode !== '-' && Number.isFinite(pendingTotal)) { %>
+                        <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                      <% } %>
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-8">
+            <div class="card border-0 right-panel h-100">
+              <div class="card-body p-3">
+
+                <div class="d-flex align-items-center justify-content-end mb-2">
+                  <button
+  type="button"
+  class="btn btn-outline-secondary btn-sm rounded-3 js-open-pending-challan"
+  data-admission-id="<%= X.id %>"
+  data-family-number="<%= familyNumber %>"
+  data-family-count="<%= familyList.length %>"
+  title="Pending months list + challan"
+>
+  <i class="bi bi-printer me-1"></i> Print Challan
+</button>
+                </div>
+
+                <div class="card border-0 inner-card mb-3">
+                  <div class="card-body p-3">
+                    <div class="table-responsive">
+                      <table class="table table-sm align-middle dues-table mb-2">
+                        <thead>
+                          <tr>
+                            <th style="width:18%">Fee Type</th>
+                            <th style="width:14%">Month</th>
+                            <th style="width:6%">M#</th>
+                            <th style="width:18%">Verification #</th>
+                            <th style="width:14%">Month Number</th>
+                            <th style="width:12%">Month Fee</th>
+                            <th style="width:9%">Received</th>
+                            <th style="width:9%">Balance</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <% if (!duesRows || duesRows.length === 0) { %>
+                            <tr>
+                              <td colspan="8" class="text-muted small">No dues found.</td>
+                            </tr>
+                          <% } else { %>
+                            <% duesRows.forEach(r => { %>
+                              <tr>
+                                <td>
+                                  <div class="d-flex align-items-center gap-2">
+                                    <span class="tiny-dot"></span>
+                                    <span>Monthly Fee</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span class="pill-light text-capitalize"><%= r.month %></span>
+                                </td>
+                                <td>
+                                  <span class="pill-mini"><%= r.monthNo %></span>
+                                </td>
+                                <td>
+                                  <span class="pill-mini mono"><%= (r.verifNo || '-') %></span>
+                                </td>
+                                <td>
+                                  <span class="pill-mini mono"><%= (r.monthSlipNo || '-') %></span>
+                                </td>
+                                <td>
+                                  <span class="pill-fee"><%= (r.feeVal !== '-' ? money(r.feeVal) : '-') %></span>
+                                  <% if (curCode && curCode !== '-' && r.feeVal !== '-') { %>
+                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                                  <% } %>
+                                </td>
+                                <td>
+                                  <span class="pill-recv"><%= money(r.amountVal) %></span>
+                                  <% if (curCode && curCode !== '-' && r.amountVal !== '-') { %>
+                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                                  <% } %>
+                                </td>
+                                <td>
+                                  <span class="pill-balance"><%= money(r.due) %></span>
+                                  <% if (curCode && curCode !== '-') { %>
+                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                                  <% } %>
+                                </td>
+                              </tr>
+                            <% }) %>
+                          <% } %>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center pt-1">
+                      <div class="text-muted small">Total Dues:</div>
+                      <div class="fw-bold">
+                        <%= (hasNumericTotal ? money(totalDues) : '-') %>
+                        <% if (curCode && curCode !== '-' && hasNumericTotal) { %>
+                          <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                        <% } %>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="sec-title mb-2">Fees History (Jan–Dec, Popup Style)</div>
+
+                <div class="card border-0 inner-card">
+                  <div class="card-body p-3">
+                    <% if (!historyRows || historyRows.length === 0) { %>
+                      <div class="text-muted small">No fee history found.</div>
+                    <% } else { %>
+
+                      <div class="dues-summary mb-2">
+                        <div class="sum-item">
+                          <div class="label">Total Fee (Billing)</div>
+                          <div class="val">
+                            <%= (billTotals.hasFee ? money(billTotals.feeTotal) : '-') %>
+                            <% if (curCode && curCode !== '-' && billTotals.hasFee) { %>
+                              <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                            <% } %>
+                          </div>
+                        </div>
+                        <div class="sum-item">
+                          <div class="label">Total Received (Billing)</div>
+                          <div class="val">
+                            <%= (billTotals.hasRecv ? money(billTotals.recvTotal) : '-') %>
+                            <% if (curCode && curCode !== '-' && billTotals.hasRecv) { %>
+                              <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                            <% } %>
+                          </div>
+                        </div>
+                        <div class="sum-item">
+                          <div class="label">Total Pending</div>
+                          <div class="val">
+                            <%= (hasNumericTotal ? money(totalDues) : '-') %>
+                            <% if (curCode && curCode !== '-' && hasNumericTotal) { %>
+                              <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                            <% } %>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="timeline">
+                        <% historyRows.slice().reverse().forEach((m, i, arr) => {
+                             const st = String(m?.status || '-');
+                             const stCls = billingStatusClass(st);
+
+                             const pendingRow = (duesRows || []).find(r => sameMonth(r.monthKey, m.key));
+                             const stLower = String(m?.status || '').toLowerCase().trim();
+
+                             let pendingVal = '-';
+                             if (pendingRow && Number.isFinite(pendingRow.due)) {
+                               pendingVal = pendingRow.due;
+                             } else if (stLower === 'partial payment') {
+                               const feeN = parseFirstNumber(m?.fee);
+                               const recvN = parseFirstNumber(m?.amount);
+                               const diff = Math.max(0, (feeN || 0) - (recvN || 0));
+                               pendingVal = diff > 0 ? diff : '-';
+                             }
+const amountNum = parseFirstNumber(m?.amount);
+const stLower2 = String(m?.status || '').toLowerCase().trim();
+const isNotAdmittedMonth = stLower2 === 'not admitted';
+
+// ✅ Fee challan sirf tab show ho jab month Not admitted na ho
+const canPrintFeeChallan = stLower2 !== 'not admitted';
+
+// ✅ Paid challan sirf paid statuses me ho aur Not admitted me na ho
+const canPrintPaid =
+  stLower2 !== 'not admitted' &&
+  amountNum > 0 &&
+  (stLower2 === 'full payment' || stLower2 === 'partial payment' || stLower2 === 'extra payment');
+                        %>
+                          <div class="t-item">
+                            <div class="t-dot"></div>
+                            <div class="t-line <%= (i === arr.length - 1 ? 'end' : '') %>"></div>
+
+                            <div class="t-content">
+                              <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <div class="fw-semibold">
+                                  <span class="me-2">Slip</span>
+                                  <span class="text-muted">#<%= (String(X.id || '-') + '-' + String(m.key).replace(/\s+/g,'') ) %></span>
+                                </div>
+
+                                <div class="d-flex align-items-center gap-2">
+                                  <% if (canPrintFeeChallan) { %>
+                                    <button
+                                      type="button"
+                                      class="btn btn-outline-secondary btn-sm rounded-3 js-print-month-challan"
+                                      data-admission-id="<%= X.id %>"
+                                      data-month-key="<%= m.key %>"
+                                      data-year="<%= CURRENT_YEAR %>"
+                                      title="Is month ka fee challan"
+                                    >
+                                      <i class="bi bi-download me-1"></i> Fee Challan
+                                    </button>
+                                  <% } %>
+
+                                  <% if (canPrintPaid) { %>
+                                    <button
+                                      type="button"
+                                      class="btn btn-outline-secondary btn-sm rounded-3 js-print-month-paid"
+                                      data-admission-id="<%= X.id %>"
+                                      data-month-key="<%= m.key %>"
+                                      data-year="<%= CURRENT_YEAR %>"
+                                      title="Is month ka paid challan (receipt)"
+                                    >
+                                      <i class="bi bi-receipt me-1"></i> Paid Challan
+                                    </button>
+                                  <% } %>
+
+                                  <div class="text-muted small">
+                                    <span class="badge rounded-pill px-3 py-2 bill-pill <%= stCls %>"><%= (st || '-') %></span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
+                              <div class="text-muted">
+                                  Bank Name: <span class="pill-light"><%= m.bank || '-' %></span>
+                              <span class="ms-2 pill-mini"><%= CURRENT_YEAR %></span>
+                             </div>
+                                <div class="text-muted">
+                                  Verification #: <span class="pill-mini mono"><%= (m.verification || '-') %></span>
+                                </div>
+                              </div>
+
+                              <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
+                                
+
+                                <div class="text-muted">
+                                 Fee: <b><%= (!isNotAdmittedMonth && m.feeShown !== '-' ? money(m.feeShown) : '-') %></b>
+                                  <% if (!isNotAdmittedMonth && curCode && curCode !== '-' && m.feeShown !== '-') { %>
+                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                                  <% } %>
+                                </div>
+
+                                <div class="text-muted">
+                                  Received: <b><%= money(m.amount || '-') %></b>
+                                  <% if (curCode && curCode !== '-' && m.amount) { %>
+                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                                  <% } %>
+                                </div>
+
+                                <div class="text-muted">
+                                  Pending: <b><%= money(pendingVal) %></b>
+                                  <% if (curCode && curCode !== '-' && pendingVal !== '-' ) { %>
+                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                                  <% } %>
+                                </div>
+                              </div>
+
+                            </div>
+                          </div>
+                        <% }) %>
+                      </div>
+                    <% } %>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    <% }) %>
+
+  <% } %>
+
+  <!-- (rest of your file unchanged) -->
+
+</div>
+
+<style>
+  /* (your existing styles unchanged) */
+  .admission-details-page{ position: relative; }
+
+  .admission-details-page{
+    background:
+      radial-gradient(1200px 320px at 10% 0%, rgba(124,58,237,.10), transparent 60%),
+      radial-gradient(900px 300px at 100% 10%, rgba(59,130,246,.10), transparent 55%),
+      linear-gradient(180deg, rgba(248,250,252,.95) 0%, rgba(255,255,255,1) 55%, rgba(248,250,252,.95) 100%);
+    border-radius: 18px;
+    padding: 12px 12px 14px 12px;
+  }
+
+  .page-title{
+    letter-spacing: .2px;
+    font-weight: 900;
+  }
+
+  .top-head{ margin-bottom: 10px !important; }
+
+  .student-strip{
+    background: rgba(255,255,255,.82);
+    border: 1px solid rgba(15,23,42,.08);
+    border-radius: 16px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 10px 18px rgba(2,8,23,.05);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
+    backdrop-filter: blur(6px);
+  }
+  .student-strip:hover{
+    transform: translateY(-1px);
+    background: rgba(255,255,255,.92);
+    border-color: rgba(124,58,237,.18);
+    box-shadow: 0 16px 28px rgba(2,8,23,.10);
+  }
+
+  .dot-sep{
+    width: 5px;
+    height: 5px;
+    border-radius: 99px;
+    background: rgba(15,23,42,.28);
+    display:inline-block;
+  }
+
+  .current-pill{
+    background: rgba(124,58,237,.12);
+    border: 1px solid rgba(124,58,237,.22);
+    color: rgba(124,58,237,.95);
+  }
+
+  .profile-card{
+    border-radius: 18px;
+    background: rgba(255,255,255,.88);
+    box-shadow: 0 16px 30px rgba(2,8,23,.10);
+    border: 1px solid rgba(15,23,42,.08);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    overflow: hidden;
+    backdrop-filter: blur(6px);
+  }
+  .profile-card:hover{
+    transform: translateY(-2px);
+    box-shadow: 0 20px 40px rgba(2,8,23,.14);
+    border-color: rgba(124,58,237,.18);
+  }
+
+  .avatar-wrap{
+    width: 98px;
+    height: 98px;
+    border-radius: 20px;
+    background: rgba(124,58,237,.10);
+    border: 1px solid rgba(124,58,237,.18);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow: 0 10px 18px rgba(124,58,237,.12);
+  }
+  .avatar-circle{
+    width: 58px;
+    height: 58px;
+    border-radius: 999px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight: 900;
+    letter-spacing: .6px;
+    color: rgba(124,58,237,.95);
+    background: rgba(255,255,255,.9);
+    border: 1px solid rgba(124,58,237,.20);
+  }
+
+  .profile-divider{
+    width: 100%;
+    height: 1px;
+    background: rgba(15,23,42,.10);
+  }
+
+  .tiny-title{
+    font-size: 11px;
+    letter-spacing: .8px;
+    color: rgba(15,23,42,.55);
+    font-weight: 800;
+  }
+
+  .details-list .drow{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px dashed rgba(15,23,42,.10);
+  }
+  .details-list .drow:last-child{ border-bottom: 0; }
+  .details-list .k{
+    color: rgba(15,23,42,.58);
+    font-weight: 700;
+    min-width: 120px;
+  }
+  .details-list .v{
+    color: rgba(15,23,42,.92);
+    font-weight: 600;
+    text-align: right;
+    flex: 1;
+  }
+
+  .chip{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: rgba(124,58,237,.10);
+    border: 1px solid rgba(124,58,237,.18);
+    color: rgba(124,58,237,.95);
+    font-weight: 800;
+    font-size: 12px;
+  }
+  .chip-ok{
+    background: rgba(34,197,94,.12);
+    border-color: rgba(34,197,94,.22);
+    color: rgba(22,101,52,.95);
+  }
+
+  .right-panel{
+    border-radius: 18px;
+    background: rgba(255,255,255,.88);
+    box-shadow: 0 16px 30px rgba(2,8,23,.10);
+    border: 1px solid rgba(15,23,42,.08);
+    backdrop-filter: blur(6px);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  }
+  .right-panel:hover{
+    transform: translateY(-2px);
+    box-shadow: 0 20px 40px rgba(2,8,23,.14);
+    border-color: rgba(124,58,237,.18);
+  }
+
+  .sec-title{
+    font-weight: 900;
+    letter-spacing: .2px;
+    color: rgba(15,23,42,.86);
+  }
+
+  .inner-card{
+    border-radius: 16px;
+    border: 1px solid rgba(15,23,42,.08);
+    background: rgba(248,250,252,.65);
+    box-shadow: 0 12px 22px rgba(2,8,23,.06);
+  }
+
+  .dues-summary{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .sum-item{
+    border-radius: 14px;
+    border: 1px solid rgba(15,23,42,.08);
+    background: rgba(255,255,255,.78);
+    box-shadow: 0 10px 18px rgba(2,8,23,.06);
+    padding: 10px 12px;
+  }
+  .sum-item .label{
+    font-size: 11px;
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    color: rgba(15,23,42,.55);
+    font-weight: 900;
+  }
+  .sum-item .val{
+    margin-top: 4px;
+    font-weight: 900;
+    color: rgba(15,23,42,.90);
+  }
+
+  .dues-table thead th{
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: rgba(15,23,42,.55);
+    font-weight: 900;
+    border-bottom: 1px solid rgba(15,23,42,.10);
+  }
+  .dues-table td{
+    padding-top: 10px;
+    padding-bottom: 10px;
+    border-color: rgba(15,23,42,.08);
+    vertical-align: middle;
+  }
+  .tiny-dot{
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(34,197,94,.80);
+    box-shadow: 0 10px 18px rgba(34,197,94,.18);
+  }
+  .pill-light{
+    display:inline-flex;
+    align-items:center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(124,58,237,.10);
+    border: 1px solid rgba(124,58,237,.18);
+    color: rgba(124,58,237,.95);
+    font-weight: 800;
+    font-size: 12px;
+  }
+  .pill-fee{
+    display:inline-flex;
+    align-items:center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(59,130,246,.10);
+    border: 1px solid rgba(59,130,246,.18);
+    color: rgba(29,78,216,.95);
+    font-weight: 900;
+    font-size: 12px;
+  }
+  .pill-recv{
+    display:inline-flex;
+    align-items:center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(34,197,94,.10);
+    border: 1px solid rgba(34,197,94,.18);
+    color: rgba(22,101,52,.95);
+    font-weight: 900;
+    font-size: 12px;
+  }
+  .pill-balance{
+    display:inline-flex;
+    align-items:center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(124,58,237,.12);
+    border: 1px solid rgba(124,58,237,.22);
+    color: rgba(124,58,237,.95);
+    font-weight: 900;
+    font-size: 12px;
+  }
+  .pill-mini{
+    display:inline-flex;
+    align-items:center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(15,23,42,.06);
+    border: 1px solid rgba(15,23,42,.10);
+    color: rgba(15,23,42,.82);
+    font-weight: 900;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+  .timeline{
+    position: relative;
+    padding-left: 16px;
+  }
+  .t-item{
+    position: relative;
+    display: flex;
+    gap: 14px;
+    padding: 10px 0;
+  }
+  .t-dot{
+    position: absolute;
+    left: 2px;
+    top: 18px;
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    background: rgba(6,182,212,.95);
+    box-shadow: 0 12px 22px rgba(6,182,212,.18);
+  }
+  .t-line{
+    position: absolute;
+    left: 7px;
+    top: 30px;
+    bottom: 0;
+    width: 2px;
+    background: rgba(15,23,42,.10);
+  }
+  .t-line.end{ display:none; }
+
+  .t-content{
+    width: 100%;
+    margin-left: 18px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgba(255,255,255,.82);
+    border: 1px solid rgba(15,23,42,.08);
+    box-shadow: 0 12px 22px rgba(2,8,23,.06);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  }
+  .t-content:hover{
+    transform: translateY(-1px);
+    box-shadow: 0 16px 30px rgba(2,8,23,.10);
+    border-color: rgba(124,58,237,.18);
+  }
+
+  .premium-card{
+    background:
+      radial-gradient(900px 220px at 0% 0%, rgba(220,38,38,.06), transparent 60%),
+      linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(255,255,255,1) 68%, rgba(248,250,252,.92) 100%);
+    border: 1px solid rgba(15,23,42,.08) !important;
+    box-shadow: 0 12px 22px rgba(2,8,23,.06) !important;
+    transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease;
+    overflow: hidden;
+    position: relative;
+  }
+  .premium-card:hover{
+    box-shadow: 0 18px 34px rgba(2,8,23,.12) !important;
+    border-color: rgba(220,38,38,.18) !important;
+    transform: translateY(-1px);
+  }
+
+  .section-title{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    letter-spacing: .2px;
+  }
+  .section-icon{
+    width: 32px;
+    height: 32px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border-radius: 11px;
+    background: rgba(220,38,38,.10);
+    border: 1px solid rgba(220,38,38,.18);
+    box-shadow: 0 8px 16px rgba(220,38,38,.12);
+  }
+  .section-icon i{ color: rgba(220,38,38,.95); font-size: 16px; }
+
+  .btn-premium-back{
+    color: rgba(15,23,42,.86) !important;
+    border: 1px solid rgba(15,23,42,.18) !important;
+    background: rgba(255,255,255,.92) !important;
+    box-shadow: 0 12px 22px rgba(2,8,23,.06);
+    transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease, color .15s ease;
+  }
+  .btn-premium-back:hover,
+  .btn-premium-back:focus{
+    color: rgba(15,23,42,.92) !important;
+    border-color: rgba(15,23,42,.28) !important;
+    background: #ffffff !important;
+    box-shadow: 0 18px 34px rgba(2,8,23,.12);
+    transform: translateY(-1px);
+  }
+
+  .billing-main{ position: relative; }
+
+  .billing-block{
+    border: 1px solid rgba(15,23,42,.08);
+    border-radius: 18px;
+    overflow: hidden;
+    background: rgba(255,255,255,.78);
+    box-shadow: 0 12px 22px rgba(2,8,23,.06);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    backdrop-filter: blur(6px);
+  }
+  .billing-block:hover{
+    transform: translateY(-1px);
+    box-shadow: 0 18px 34px rgba(2,8,23,.12);
+    border-color: rgba(220,38,38,.16);
+  }
+  .billing-current{
+    border-color: rgba(220,38,38,.18);
+    box-shadow: 0 18px 34px rgba(2,8,23,.12);
+  }
+
+  .billing-strip{
+    margin-bottom: 0;
+    border: 0;
+    border-bottom: 1px solid rgba(15,23,42,.08);
+    border-radius: 0;
+    background:
+      radial-gradient(900px 220px at 0% 0%, rgba(220,38,38,.06), transparent 60%),
+      rgba(15,23,42,.03);
+  }
+
+  .billing-table-wrap{
+    padding: 12px 12px 10px 12px;
+    background: rgba(248,250,252,.65);
+  }
+
+  .billing-table{
+    border-radius: 16px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 14px 24px rgba(2,8,23,.07);
+  }
+
+  .billing-table thead{
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .billing-table thead th{
+    letter-spacing: .2px;
+    font-weight: 800;
+    font-size: 12.5px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .billing-table tbody tr{
+    border-color: rgba(15,23,42,.08) !important;
+    transition: background .15s ease;
+  }
+  .billing-table tbody tr:nth-child(even){
+    background: rgba(248,250,252,.55);
+  }
+  .billing-table tbody tr:hover{
+    background: rgba(248,250,252,.95);
+  }
+
+  .billing-table td{
+    padding-top: 12px;
+    padding-bottom: 12px;
+    vertical-align: middle;
+  }
+
+  .amount-cell .val,
+  .fee-cell .val{
+    font-weight: 800;
+    color: rgba(15,23,42,.92);
+  }
+
+  .bill-pill{
+    border: 1px solid rgba(15,23,42,.10);
+    background:#f8fafc;
+    color:#0f172a;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .bill-pill:hover{
+    transform: translateY(-1px);
+    box-shadow: 0 12px 20px rgba(2,8,23,.08);
+  }
+
+  .bill-notadmitted{ background:#f1f5f9 !important; border-color:#cbd5e1 !important; color:#334155 !important; }
+  .bill-full      { background:#dcfce7 !important; border-color:#bbf7d0 !important; color:#166534 !important; }
+  .bill-partial   { background:#fffbeb !important; border-color:#fde68a !important; color:#92400e !important; }
+  .bill-extra     { background:#dbeafe !important; border-color:#bfdbfe !important; color:#1d4ed8 !important; }
+  .bill-none      { background:#fee2e2 !important; border-color:#fecaca !important; color:#991b1b !important; }
+
+  @media (max-width: 992px){
+    .dues-summary{ grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 576px){
+    .admission-details-page{ padding: 10px; border-radius: 16px; }
+    .billing-table td, .billing-table th{ white-space: nowrap; }
+    .details-list .k{ min-width: 92px; }
+    .dues-table td, .dues-table th{ white-space: nowrap; }
+  }
+</style>
+<!-- ✅ Pending Challan Modal (UPDATED) -->
+<div class="modal fade" id="pendingChallanModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header align-items-start">
+        <div>
+          <h5 class="modal-title mb-0">Pending Challans</h5>
+          <div class="text-muted small" id="pcmSub">Loading...</div>
+        </div>
+
+        <!-- ✅ NEW: Bulk buttons -->
+        <div class="ms-auto d-flex gap-2">
+          <button type="button" class="btn btn-outline-primary btn-sm" id="btnAllFeeChallans">
+            All Fee Challans
+          </button>
+
+          <button type="button" class="btn btn-outline-success btn-sm" id="btnAllPaidChallans">
+            All Paid Challans
+          </button>
+
+          <button type="button" class="btn-close ms-1" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+      </div>
+
+      <div class="modal-body">
+        <div id="pcmBody" class="text-muted small">Loading...</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  window.__ADMISSION_ID__ = <%- JSON.stringify(A?.id || "") %>;
+  window.__FAMILY_NUMBER__ = <%- JSON.stringify(familyNumber || "") %>;
+  window.__USER_ROLE__ = <%- JSON.stringify(String(user?.role || user?.agentType || '').toLowerCase()) %>;
+  window.__DETAILS_PAGE_URL__ = <%- JSON.stringify(
+    (role === 'admin')
+      ? ('/admin/admission/' + (A?.id || ''))
+      : ('/dashboard/super/admission/' + (A?.id || ''))
+  ) %>;
+ window.__ROUTES__ = {
+  pendingAdmission: "/api/pending/admission/",
+  pendingFamily: "/api/pending/family/",
+  monthChallan: "/dashboard/super/admission/",
+  monthPaid: "/dashboard/super/admission/",
+  admissionPaidBulk: "/dashboard/super/admission/",
+  familyChallan: "/dashboard/super/family/",
+  familyPaidBulk: "/dashboard/super/family/"
+};
+</script>
+<!-- ✅ NEW: challan download click handlers -->
+<script src="/js/admission-challan.js"></script>
+
+<%- include('partials/bootstrap-footer') %>

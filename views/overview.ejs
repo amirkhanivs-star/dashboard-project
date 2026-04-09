@@ -1,0 +1,1250 @@
+<%- include('partials/bootstrap-header', { user, pageTitle: pageTitle || 'Overview' }) %>
+<%- include('partials/flash') %>
+
+<style>
+  .overview-page {
+    padding: 1.25rem;
+    background:
+      radial-gradient(circle at top left, rgba(59,130,246,.10), transparent 26%),
+      radial-gradient(circle at top right, rgba(16,185,129,.08), transparent 24%),
+      linear-gradient(180deg, #f8fbff 0%, #f6f8fc 100%);
+    min-height: calc(100vh - 80px);
+  }
+
+  .overview-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 28px;
+    padding: 1rem 1.2rem;
+    background: linear-gradient(135deg, #000000 0%, #0a0a0a 55%, #111111 100%);
+    color: #fff;
+    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.16);
+  }
+
+  .overview-hero::after {
+    content: "";
+    position: absolute;
+    inset: auto -60px -60px auto;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.08);
+    filter: blur(8px);
+  }
+
+  .overview-hero h1 {
+    font-size: clamp(1.5rem, 2vw, 2.2rem);
+    font-weight: 800;
+    margin-bottom: .35rem;
+  }
+
+  .overview-hero p {
+    margin: 0;
+    color: rgba(255,255,255,.84);
+  }
+
+  .overview-chip-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .65rem;
+    margin-top: .7rem;
+  }
+
+  .overview-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .58rem .85rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.12);
+    font-size: .9rem;
+    color: #fff;
+  }
+
+  .panel-card {
+    border: 0;
+    border-radius: 24px;
+    background: rgba(255,255,255,.88);
+    box-shadow: 0 12px 35px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(10px);
+  }
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .section-title h4,
+  .section-title h5 {
+    margin: 0;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .section-sub {
+    color: #64748b;
+    font-size: .92rem;
+  }
+
+  .filter-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: .9rem;
+  }
+
+  .filter-grid .form-label {
+    font-size: .84rem;
+    font-weight: 700;
+    color: #475569;
+    margin-bottom: .35rem;
+  }
+
+  .filter-actions {
+    display: flex;
+    gap: .65rem;
+    align-items: end;
+    flex-wrap: wrap;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .summary-card {
+    position: relative;
+    overflow: hidden;
+    border: 0;
+    border-radius: 24px;
+    padding: 1rem;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    transition: transform .18s ease, box-shadow .18s ease;
+    min-height: 145px;
+  }
+
+  .summary-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
+  }
+
+  .summary-card .icon-wrap {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    margin-bottom: .8rem;
+    color: #0b5ed7;
+    background: rgba(11,94,215,.10);
+  }
+
+  .summary-card .label {
+    font-size: .84rem;
+    font-weight: 700;
+    color: #64748b;
+    margin-bottom: .3rem;
+  }
+
+  .summary-card .value {
+    font-size: 1.65rem;
+    line-height: 1.1;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .summary-card .hint {
+    margin-top: .45rem;
+    color: #94a3b8;
+    font-size: .82rem;
+  }
+
+  .mini-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .6rem;
+  }
+
+  .mini-stat {
+   border-radius: 14px;
+padding: .55rem .65rem;
+    background: linear-gradient(180deg, #fff, #f8fafc);
+    border: 1px solid #e2e8f0;
+  }
+
+  .mini-stat .title {
+    font-size: .72rem;
+    color: #64748b;
+    font-weight: 700;
+    margin-bottom: .3rem;
+  }
+
+  .mini-stat .num {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .table-premium thead th {
+    border-bottom: 1px solid #e2e8f0;
+    font-size: .82rem;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    color: #64748b;
+    font-weight: 800;
+    background: transparent;
+    white-space: nowrap;
+  }
+
+  .table-premium tbody td {
+    vertical-align: middle;
+    border-color: #eef2f7;
+  }
+
+  .soft-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: .36rem .7rem;
+    font-size: .78rem;
+    font-weight: 700;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .empty-state {
+    border-radius: 22px;
+    padding: 2rem 1rem;
+    background: linear-gradient(180deg, #fff, #f8fafc);
+    border: 1px dashed #cbd5e1;
+    text-align: center;
+    color: #64748b;
+  }
+
+  .chart-box {
+    position: relative;
+    min-height: 340px;
+  }
+
+ .chart-box.chart-box-sm {
+  min-height: 220px;
+}
+
+  .stat-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+  }
+
+  .stat-pill {
+    border-radius: 999px;
+    padding: .3rem .65rem;
+    font-size: .76rem;
+    font-weight: 700;
+    background: #f1f5f9;
+    color: #334155;
+  }
+
+  .muted-note {
+    font-size: .8rem;
+    color: #94a3b8;
+  }
+
+    .chart-toolbar {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .chart-tab {
+    border: 1px solid #dbeafe;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-radius: 999px;
+    padding: .45rem .85rem;
+    font-size: .78rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .chart-tab.active {
+    background: #1d4ed8;
+    color: #fff;
+    border-color: #1d4ed8;
+  }
+
+  .analytics-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.analytics-toggle-btn i {
+  font-size: 1rem;
+  transition: transform .25s ease;
+}
+
+.analytics-toggle-btn.is-collapsed i {
+  transform: rotate(180deg);
+}
+
+#analyticsChartsBody.is-hidden {
+  display: none;
+}
+
+  .table-search {
+    max-width: 260px;
+  }
+
+  .dept-chart-title {
+    font-size: .88rem;
+    color: #64748b;
+    font-weight: 700;
+    margin-bottom: .6rem;
+  }
+
+  .snapshot-mini-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .55rem;
+}
+
+.snapshot-mini-grid .mini-stat {
+  padding: .45rem .55rem;
+  border-radius: 12px;
+  min-height: auto;
+}
+
+.snapshot-mini-grid .mini-stat .title {
+  font-size: .68rem;
+  margin-bottom: .15rem;
+}
+
+.snapshot-mini-grid .mini-stat .num {
+  font-size: .95rem;
+  line-height: 1.05;
+}
+
+  @media (max-width: 1399px) {
+    .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .filter-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 1199px) {
+    .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mini-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 767px) {
+    .summary-grid,
+    .mini-grid,
+    .filter-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .overview-page {
+      padding: .85rem;
+    }
+
+    .overview-hero {
+      padding: 1rem;
+      border-radius: 22px;
+    }
+
+    .chart-box,
+    .chart-box.chart-box-sm {
+      min-height: 260px;
+    }
+  }
+</style>
+
+<%
+  const safeOverview = overviewData || {};
+  const summaryCards = Array.isArray(safeOverview.summaryCards) ? safeOverview.summaryCards : [];
+  const departmentStats = safeOverview.departmentStats || {};
+  const statusStats = Array.isArray(safeOverview.statusStats) ? safeOverview.statusStats : [];
+  const feeStats = Array.isArray(safeOverview.feeStats) ? safeOverview.feeStats : [];
+  const currencyStats = Array.isArray(safeOverview.currencyStats) ? safeOverview.currencyStats : [];
+  const recentAdmissions = Array.isArray(safeOverview.recentAdmissions) ? safeOverview.recentAdmissions : [];
+  const recentAdmissionsPageData = recentAdmissions;
+  const recentBillingChanges = Array.isArray(safeOverview.recentBillingChanges) ? safeOverview.recentBillingChanges : [];
+  const recentBillingPageData = recentBillingChanges;
+  const billingStats = safeOverview.billingStats || {};
+  const billingBreakdown = Array.isArray(billingStats.billingBreakdown) ? billingStats.billingBreakdown : [];
+  const pendingDueAdmissions = Array.isArray(billingStats.pendingDueAdmissions) ? billingStats.pendingDueAdmissions : [];
+  const pendingDuePageData = pendingDueAdmissions;
+  const extraPaymentAdmissions = Array.isArray(billingStats.extraPaymentAdmissions) ? billingStats.extraPaymentAdmissions : [];
+  const extraPaymentPageData = extraPaymentAdmissions;
+  const noPaymentAdmissions = Array.isArray(billingStats.noPaymentAdmissions) ? billingStats.noPaymentAdmissions : [];
+  const noPaymentPageData = noPaymentAdmissions;
+%>
+
+<div class="overview-page">
+<div class="overview-hero mb-4">
+  <div class="row g-4 align-items-center">
+  <div class="col-lg-8">
+      <div class="small text-uppercase fw-bold mb-2" style="letter-spacing:.08em;color:rgba(255,255,255,.72);">
+        Super Admin Intelligence Panel
+      </div>
+      <h1>Overview Dashboard</h1>
+      <p>
+        School, Tuition aur Quran ka combined executive-level overview yahan show hoga.
+        Is page par totals, charts, status insights aur billing analytics ek jagah par ayegi.
+      </p>
+
+          <div class="overview-chip-wrap">
+        <span class="overview-chip"><i class="bi bi-mortarboard-fill"></i> School</span>
+        <span class="overview-chip"><i class="bi bi-journal-bookmark-fill"></i> Tuition</span>
+        <span class="overview-chip"><i class="bi bi-book-half"></i> Quran</span>
+        <span class="overview-chip"><i class="bi bi-shield-lock-fill"></i> Super Admin Only</span>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="panel-card p-3 p-lg-4 h-100" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.10);box-shadow:none;">
+        <div class="section-title mb-2">
+          <div>
+            <h6 class="text-white mb-1" style="font-size:1rem;font-weight:800;">Department Snapshot</h6>
+            <div style="color:rgba(255,255,255,.72);font-size:.76rem;">School, Tuition, Quran quick view</div>
+          </div>
+        </div>
+
+        <div class="mini-grid snapshot-mini-grid">
+          <div class="mini-stat">
+            <div class="title">School</div>
+            <div class="num"><%= departmentStats.school?.total || 0 %></div>
+          </div>
+          <div class="mini-stat">
+            <div class="title">Tuition</div>
+            <div class="num"><%= departmentStats.tuition?.total || 0 %></div>
+          </div>
+          <div class="mini-stat">
+            <div class="title">Quran</div>
+            <div class="num"><%= departmentStats.quran?.total || 0 %></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+ 
+
+  
+
+ <div class="row g-4 mb-4">
+  <div class="col-12">
+      <div class="panel-card p-3 p-lg-4 h-100">
+       <div class="section-title d-flex align-items-center justify-content-between">
+  <div>
+    <button
+      type="button"
+      class="analytics-toggle-btn is-collapsed"
+      id="analyticsChartsToggle"
+      aria-expanded="false"
+      aria-controls="analyticsChartsBody"
+    >
+      <span>Analytics Charts</span>
+      <i class="bi bi-chevron-up" id="analyticsChartsToggleIcon"></i>
+    </button>
+    <div class="section-sub">Line, bar, pie aur doughnut charts</div>
+  </div>
+</div>
+
+        <div class="row g-4 is-hidden" id="analyticsChartsBody">
+          
+
+          <div class="col-lg-4">
+            <div class="panel-card p-3">
+              <div class="section-title mb-3">
+                <div>
+                  <h5>Department Comparison</h5>
+                  <div class="section-sub">School, Tuition, Quran comparison</div>
+                </div>
+              </div>
+              <div class="chart-box chart-box-sm">
+                <canvas id="departmentComparisonChart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-4">
+            <div class="panel-card p-2">
+              <div class="section-title mb-3">
+                <div>
+                  <h5>Status Distribution</h5>
+                  <div class="section-sub">Dynamic current statuses</div>
+                </div>
+              </div>
+              <div class="chart-box chart-box-sm">
+                <canvas id="statusDistributionChart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-4">
+            <div class="panel-card p-2">
+              <div class="section-title mb-3">
+                <div>
+                  <h5>Fee Distribution</h5>
+                  <div class="section-sub">Paid, unpaid, partial and more</div>
+                </div>
+              </div>
+              <div class="chart-box chart-box-sm">
+                <canvas id="feeDistributionChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel-card p-3 p-lg-4 mb-4">
+    <div class="section-title">
+      <div>
+        <h5>Department Summary</h5>
+        <div class="section-sub">Department-wise totals, statuses, fee health, billing health aur intake</div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-premium align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Department</th>
+            <th>Total</th>
+            <th>Statuses</th>
+            <th>Fee Statuses</th>
+            <th>Billing Statuses</th>
+            <th>Currencies</th>
+            <th>Yearly Intake</th>
+            <th>Monthly Intake</th>
+            <th>Daily Intake</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% ['school','tuition','quran'].forEach((deptKey) => {
+            const dept = departmentStats?.[deptKey] || {};
+          %>
+            <tr>
+              <td>
+                <span class="soft-badge"><%= deptKey.charAt(0).toUpperCase() + deptKey.slice(1) %></span>
+              </td>
+              <td><strong><%= dept.total || 0 %></strong></td>
+              <td><%= Object.keys(dept.currentStatus || {}).length %></td>
+              <td><%= Object.keys(dept.feeStatus || {}).length %></td>
+              <td><%= Object.keys(dept.billingStatus || {}).length %></td>
+              <td><%= Object.keys(dept.currency || {}).length %></td>
+              <td><%= Object.keys(dept.yearlyIntake || {}).length %></td>
+              <td><%= Object.keys(dept.monthlyIntake || {}).length %></td>
+              <td><%= Object.keys(dept.dailyIntake || {}).length %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-6">
+      <div class="panel-card p-3 p-lg-4 h-100">
+        <div class="section-title">
+          <div>
+            <h5>Status Summary</h5>
+            <div class="section-sub">Dynamic current statuses with department-wise count</div>
+          </div>
+        </div>
+
+        <% if (statusStats.length) { %>
+          <div class="table-responsive">
+            <table class="table table-premium align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Total</th>
+                  <th>School</th>
+                  <th>Tuition</th>
+                  <th>Quran</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% statusStats.forEach((item) => { %>
+                  <tr>
+                    <td>
+                      <span class="soft-badge" style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>">
+                        <%= item.label || item.name || 'Unknown' %>
+                      </span>
+                    </td>
+                    <td><strong><%= item.total || 0 %></strong></td>
+                    <td><%= item.school || 0 %></td>
+                    <td><%= item.tuition || 0 %></td>
+                    <td><%= item.quran || 0 %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %>
+          <div class="empty-state">No status analytics found</div>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="col-xl-6">
+      <div class="panel-card p-3 p-lg-4 h-100">
+        <div class="section-title">
+          <div>
+            <h5>Fee Summary</h5>
+            <div class="section-sub">Dynamic fee status breakdown with department-wise count</div>
+          </div>
+        </div>
+
+        <% if (feeStats.length) { %>
+          <div class="table-responsive">
+            <table class="table table-premium align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Fee Status</th>
+                  <th>Total</th>
+                  <th>School</th>
+                  <th>Tuition</th>
+                  <th>Quran</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% feeStats.forEach((item) => { %>
+                  <tr>
+                    <td>
+                      <span class="soft-badge" style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>">
+                        <%= item.label || item.name || 'Unknown' %>
+                      </span>
+                    </td>
+                    <td><strong><%= item.total || 0 %></strong></td>
+                    <td><%= item.school || 0 %></td>
+                    <td><%= item.tuition || 0 %></td>
+                    <td><%= item.quran || 0 %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %>
+          <div class="empty-state">No fee analytics found</div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-xl-6">
+      <div class="panel-card p-3 p-lg-4 h-100">
+        <div class="section-title">
+          <div>
+            <h5>Currency Summary</h5>
+            <div class="section-sub">Dynamic currencies with received, pending aur extra payment</div>
+          </div>
+        </div>
+
+        <% if (currencyStats.length) { %>
+          <div class="table-responsive">
+            <table class="table table-premium align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Currency</th>
+                  <th>Total Admissions</th>
+                  <th>Received</th>
+                  <th>Pending</th>
+                  <th>Extra</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% currencyStats.forEach((item) => { %>
+                  <tr>
+                    <td><span class="soft-badge"><%= item.currency || item.label || 'Unknown' %></span></td>
+                    <td><strong><%= item.total || 0 %></strong></td>
+                    <td><%= item.received || 0 %></td>
+                    <td><%= item.pending || 0 %></td>
+                    <td><%= item.extra || 0 %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %>
+          <div class="empty-state">No currency analytics found</div>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="col-xl-6">
+      <div class="panel-card p-3 p-lg-4 h-100">
+        <div class="section-title">
+          <div>
+            <h5>Billing Summary</h5>
+            <div class="section-sub">Billing health, invoice status aur dues insight</div>
+          </div>
+        </div>
+
+        <div class="mini-grid mb-4">
+          <div class="mini-stat">
+            <div class="title">Total Billed</div>
+            <div class="num"><%= billingStats.totalBilled || 0 %></div>
+          </div>
+          <div class="mini-stat">
+            <div class="title">Pending Dues</div>
+            <div class="num"><%= billingStats.totalPendingDues || 0 %></div>
+          </div>
+          <div class="mini-stat">
+            <div class="title">Extra Payment</div>
+            <div class="num"><%= billingStats.totalExtraPayments || 0 %></div>
+          </div>
+          <div class="mini-stat">
+            <div class="title">Received Amount</div>
+            <div class="num"><%= billingStats.totalReceivedAmount || 0 %></div>
+          </div>
+          <div class="mini-stat">
+            <div class="title">Fully Paid</div>
+            <div class="num"><%= billingStats.totalFullyPaidAdmissions || 0 %></div>
+          </div>
+          <div class="mini-stat">
+            <div class="title">Partial Paid</div>
+            <div class="num"><%= billingStats.totalPartiallyPaidAdmissions || 0 %></div>
+          </div>
+          <div class="mini-stat">
+            <div class="title">Unpaid</div>
+            <div class="num"><%= billingStats.totalUnpaidAdmissions || 0 %></div>
+          </div>
+          <div class="mini-stat">
+            <div class="title">No Payment</div>
+            <div class="num"><%= billingStats.totalNoPaymentAdmissions || 0 %></div>
+          </div>
+          <div class="mini-stat">
+            <div class="title">Billing Types</div>
+            <div class="num"><%= billingStats.invoiceStatusTotals || 0 %></div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-premium align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Billing Status</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% billingBreakdown.forEach((item) => { %>
+                <tr>
+                  <td>
+                    <span class="soft-badge" style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>">
+                      <%= item.label || 'Unknown' %>
+                    </span>
+                  </td>
+                  <td><strong><%= item.total || 0 %></strong></td>
+                </tr>
+              <% }) %>
+
+              <% if (!billingBreakdown.length) { %>
+                <tr>
+                  <td colspan="2" class="text-center text-muted py-4">No billing summary found</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <div class="panel-card p-3 p-lg-4 mb-4">
+    <div class="section-title">
+      <div>
+        <h5>Invoice & Report Status Summary</h5>
+        <div class="section-sub">Deliverability, paid invoice status aur timestamps overview</div>
+      </div>
+    </div>
+
+    <div class="mini-grid mb-4">
+      <div class="mini-stat">
+        <div class="title">Invoice Status Types</div>
+        <div class="num"><%= billingStats.invoiceStatusTotals || 0 %></div>
+      </div>
+      <div class="mini-stat">
+        <div class="title">Paid Invoice Status Types</div>
+        <div class="num"><%= billingStats.paidInvoiceStatusTotals || 0 %></div>
+      </div>
+      <div class="mini-stat">
+        <div class="title">Timestamped Updates</div>
+        <div class="num"><%= billingStats.invoiceTimestampTotals || 0 %></div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <div class="col-lg-6">
+        <div class="table-responsive">
+          <table class="table table-premium align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Invoice Status</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% (billingStats.invoiceStatusBreakdown || []).forEach((item) => { %>
+                <tr>
+                  <td><span class="soft-badge"><%= item.label || '-' %></span></td>
+                  <td><strong><%= item.total || 0 %></strong></td>
+                </tr>
+              <% }) %>
+
+              <% if (!(billingStats.invoiceStatusBreakdown || []).length) { %>
+                <tr>
+                  <td colspan="2" class="text-center text-muted py-4">No invoice status data found</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="col-lg-6">
+        <div class="table-responsive">
+          <table class="table table-premium align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Paid Invoice Status</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% (billingStats.paidInvoiceStatusBreakdown || []).forEach((item) => { %>
+                <tr>
+                  <td><span class="soft-badge"><%= item.label || '-' %></span></td>
+                  <td><strong><%= item.total || 0 %></strong></td>
+                </tr>
+              <% }) %>
+
+              <% if (!(billingStats.paidInvoiceStatusBreakdown || []).length) { %>
+                <tr>
+                  <td colspan="2" class="text-center text-muted py-4">No paid invoice status data found</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-xl-6">
+      <div class="panel-card p-3 p-lg-4 h-100">
+               <div class="section-title">
+          <div>
+            <h5>Recent Admissions</h5>
+            <div class="section-sub">Latest admissions</div>
+          </div>
+          <input type="text" class="form-control table-search" id="recentAdmissionsSearch" placeholder="Search admissions">
+        </div>
+        <% if (recentAdmissions.length) { %>
+          <div class="table-responsive">
+                        <table class="table table-premium align-middle mb-0" id="recentAdmissionsTable">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Department</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% recentAdmissionsPageData.forEach((item) => { %>
+                  <tr>
+                    <td><strong><%= item.studentName || item.student_name || '-' %></strong></td>
+                    <td><%= item.dept || '-' %></td>
+                    <td><span class="soft-badge"><%= item.status || '-' %></span></td>
+                    <td><%= item.createdAt || item.registration_date || '-' %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+            <% if (recentAdmissionsPagination && recentAdmissionsPagination.totalPages > 1) { %>
+  <div class="super-pagination-wrap pt-3">
+    <% for (let p = 1; p <= recentAdmissionsPagination.totalPages; p++) { %>
+      <a href="?recentAdmissionsPage=<%= p %>" 
+         class="btn btn-sm <%= p === recentAdmissionsPagination.page ? 'btn-danger' : 'btn-outline-secondary' %>">
+        <%= p %>
+      </a>
+    <% } %>
+  </div>
+<% } %>
+          </div>
+        <% } else { %>
+          <div class="empty-state">No recent admissions found</div>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="col-xl-6">
+      <div class="panel-card p-3 p-lg-4 h-100">
+              <div class="section-title">
+          <div>
+            <h5>Recent Billing Changes</h5>
+            <div class="section-sub">Latest billing updates</div>
+          </div>
+          <input type="text" class="form-control table-search" id="recentBillingSearch" placeholder="Search billing">
+        </div>
+
+        <% if (recentBillingChanges.length) { %>
+          <div class="table-responsive">
+                        <table class="table table-premium align-middle mb-0" id="recentBillingTable">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Month</th>
+                  <th>Status</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% recentBillingPageData.forEach((item) => { %>
+                  <tr>
+                    <td><strong><%= item.studentName || item.student_name || '-' %></strong></td>
+                    <td><%= item.month || '-' %></td>
+                    <td><span class="soft-badge"><%= item.status || '-' %></span></td>
+                    <td><%= item.updatedAt || '-' %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+            <% if (typeof pagination !== 'undefined' && pagination.totalPages > 1) { %>
+  <div class="super-pagination-wrap pt-3">
+    <% for (let p = 1; p <= pagination.totalPages; p++) { %>
+      <a href="?recentBillingPage=<%= p %>" 
+         class="btn btn-sm <%= p === pagination.page ? 'btn-danger' : 'btn-outline-secondary' %>">
+        <%= p %>
+      </a>
+    <% } %>
+  </div>
+<% } %>
+          </div>
+        <% } else { %>
+          <div class="empty-state">No recent billing changes found</div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mt-1">
+    <div class="col-xl-4">
+      <div class="panel-card p-3 p-lg-4 h-100">
+        <div class="section-title">
+          <div>
+            <h5>Pending Due Admissions</h5>
+            <div class="section-sub">Jin admissions par dues pending hain</div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-premium align-middle mb-0">
+            <thead>
+    <tr>
+    <th>Student</th>
+    <th>Dept</th>
+    <th>Amount</th>
+    <th>Month</th>
+    <th>Year</th>
+    <th>Entered</th>
+  </tr>
+</thead>
+<tbody>
+  <% pendingDuePageData.forEach((item) => { %>
+       <tr>
+      <td><strong><%= item.studentName || '-' %></strong></td>
+      <td><%= item.dept || '-' %></td>
+      <td><%= item.amount || 0 %></td>
+      <td><%= item.monthLabel || item.month || '-' %></td>
+      <td><%= item.billingYear || '-' %></td>
+      <td><%= item.enteredAt || '-' %></td>
+    </tr>
+  <% }) %>
+
+              <% if (!pendingDueAdmissions.length) { %>
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-4">No pending dues found</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+          <% if (typeof pendingDuePagination !== "undefined" && pendingDuePagination.totalPages > 1) { %>
+  <div class="super-pagination-wrap pt-3">
+    <% for (let p = 1; p <= pendingDuePagination.totalPages; p++) { %>
+      <a href="?pendingDuePage=<%= p %>" 
+         class="btn btn-sm <%= p === pendingDuePagination.page ? 'btn-danger' : 'btn-outline-secondary' %>">
+        <%= p %>
+      </a>
+    <% } %>
+  </div>
+<% } %>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="panel-card p-3 p-lg-4 h-100">
+        <div class="section-title">
+          <div>
+            <h5>Extra Payment Admissions</h5>
+            <div class="section-sub">Jahan extra payment receive hui</div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-premium align-middle mb-0">
+            <thead>
+    <tr>
+    <th>Student</th>
+    <th>Dept</th>
+    <th>Amount</th>
+    <th>Month</th>
+    <th>Year</th>
+    <th>Entered</th>
+  </tr>
+</thead>
+<tbody>
+  <% extraPaymentPageData.forEach((item) => { %>
+            <tr>
+      <td><strong><%= item.studentName || '-' %></strong></td>
+      <td><%= item.dept || '-' %></td>
+      <td><%= item.amount || 0 %></td>
+      <td><%= item.monthLabel || item.month || '-' %></td>
+      <td><%= item.billingYear || '-' %></td>
+      <td><%= item.enteredAt || '-' %></td>
+    </tr>
+  <% }) %>
+              <% if (!extraPaymentAdmissions.length) { %>
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-4">No extra payment found</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+          <% if (typeof extraPaymentPagination !== 'undefined' && extraPaymentPagination && extraPaymentPagination.totalPages > 1) { %>
+  <div class="super-pagination-wrap pt-3">
+    <% for (let p = 1; p <= extraPaymentPagination.totalPages; p++) { %>
+      <a href="?extraPaymentPage=<%= p %>" 
+         class="btn btn-sm <%= p === extraPaymentPagination.page ? 'btn-danger' : 'btn-outline-secondary' %>">
+        <%= p %>
+      </a>
+    <% } %>
+  </div>
+<% } %>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="panel-card p-3 p-lg-4 h-100">
+        <div class="section-title">
+          <div>
+            <h5>No Payment Admissions</h5>
+            <div class="section-sub">Jahan no payment status mila</div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-premium align-middle mb-0">
+           <thead>
+  <tr>
+    <th>Student</th>
+    <th>Dept</th>
+    <th>Amount</th>
+    <th>Month</th>
+    <th>Year</th>
+    <th>Entered</th>
+  </tr>
+</thead>
+<tbody>
+  <% noPaymentPageData.forEach((item) => { %>
+    <tr>
+      <td><strong><%= item.studentName || '-' %></strong></td>
+      <td><%= item.dept || '-' %></td>
+      <td><%= item.amount || 0 %></td>
+      <td><%= item.monthLabel || item.month || '-' %></td>
+      <td><%= item.billingYear || '-' %></td>
+      <td><%= item.enteredAt || '-' %></td>
+    </tr>
+  <% }) %>
+
+  <% if (!noPaymentAdmissions.length) { %>
+    <tr>
+      <td colspan="6" class="text-center text-muted py-4">No no-payment admissions found</td>
+    </tr>
+  <% } %>
+</tbody>
+          </table>
+          <% if (typeof noPaymentPagination !== 'undefined' && noPaymentPagination && noPaymentPagination.totalPages > 1) { %>
+  <div class="super-pagination-wrap pt-3">
+    <% for (let p = 1; p <= noPaymentPagination.totalPages; p++) { %>
+      <a href="?noPaymentPage=<%= p %>" 
+         class="btn btn-sm <%= p === noPaymentPagination.page ? 'btn-danger' : 'btn-outline-secondary' %>">
+        <%= p %>
+      </a>
+    <% } %>
+  </div>
+<% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const overviewCharts = <%- JSON.stringify(safeOverview.charts || {}) %>;
+
+  function buildColors(items, fallback) {
+    return (items || []).map((x, idx) => x.color || fallback[idx % fallback.length]);
+  }
+
+  function makeChart(id, type, labels, values, opts = {}) {
+    const el = document.getElementById(id);
+    if (!el || !labels || !labels.length) return;
+
+    const palette = [
+      "#2563eb", "#16a34a", "#f59e0b", "#ef4444", "#8b5cf6",
+      "#06b6d4", "#14b8a6", "#e11d48", "#334155", "#0ea5e9"
+    ];
+
+    const dataset = {
+      label: opts.label || "Overview",
+      data: values,
+      borderWidth: 2,
+      fill: !!opts.fill,
+      tension: .35
+    };
+
+    if (type === "pie" || type === "doughnut") {
+      dataset.backgroundColor = opts.backgroundColor || palette;
+      dataset.borderColor = "#ffffff";
+    } else if (type === "bar") {
+      dataset.backgroundColor = opts.backgroundColor || "rgba(37,99,235,.75)";
+      dataset.borderColor = opts.borderColor || "#2563eb";
+    } else {
+      dataset.backgroundColor = opts.backgroundColor || "rgba(37,99,235,.12)";
+      dataset.borderColor = opts.borderColor || "#2563eb";
+      dataset.pointBackgroundColor = opts.borderColor || "#2563eb";
+    }
+
+    new Chart(el, {
+      type,
+      data: {
+        labels,
+        datasets: [dataset]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: opts.legend !== false
+          }
+        },
+        scales: opts.scales === false ? {} : {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              precision: 0
+            }
+          }
+        }
+      }
+    });
+  }
+
+ const analyticsToggleBtn = document.getElementById("analyticsChartsToggle");
+  const analyticsChartsBody = document.getElementById("analyticsChartsBody");
+  const analyticsToggleIcon = document.getElementById("analyticsChartsToggleIcon");
+
+  if (analyticsToggleBtn && analyticsChartsBody) {
+    analyticsToggleBtn.addEventListener("click", () => {
+      const isHidden = analyticsChartsBody.classList.toggle("is-hidden");
+      analyticsToggleBtn.classList.toggle("is-collapsed", isHidden);
+      analyticsToggleBtn.setAttribute("aria-expanded", String(!isHidden));
+    });
+  }
+
+  const deptComparison = overviewCharts.departmentComparison || {};
+  makeChart(
+    "departmentComparisonChart",
+    "bar",
+    Object.keys(deptComparison).map(x => x.charAt(0).toUpperCase() + x.slice(1)),
+    Object.values(deptComparison),
+    {
+      label: "Department Comparison",
+      backgroundColor: "rgba(22,163,74,.70)",
+      borderColor: "#16a34a"
+    }
+  );
+
+  const statusDist = overviewCharts.statusDistribution || [];
+  makeChart(
+    "statusDistributionChart",
+    "doughnut",
+    statusDist.map(x => x.label),
+    statusDist.map(x => x.value),
+    {
+      label: "Status Distribution",
+      scales: false,
+      backgroundColor: buildColors(statusDist, ["#2563eb","#16a34a","#f59e0b","#ef4444","#8b5cf6","#06b6d4"])
+    }
+  );
+
+  const feeDist = overviewCharts.feeDistribution || [];
+  makeChart(
+    "feeDistributionChart",
+    "pie",
+    feeDist.map(x => x.label),
+    feeDist.map(x => x.value),
+    {
+      label: "Fee Distribution",
+      scales: false,
+      backgroundColor: buildColors(feeDist, ["#0ea5e9","#16a34a","#f59e0b","#ef4444","#8b5cf6","#14b8a6"])
+    }
+  );
+
+  function wireTableSearch(inputId, tableId) {
+    const input = document.getElementById(inputId);
+    const table = document.getElementById(tableId);
+    if (!input || !table) return;
+
+    input.addEventListener("input", () => {
+      const q = String(input.value || "").toLowerCase().trim();
+      table.querySelectorAll("tbody tr").forEach((tr) => {
+        const text = tr.innerText.toLowerCase();
+        tr.style.display = text.includes(q) ? "" : "none";
+      });
+    });
+  }
+
+  wireTableSearch("recentAdmissionsSearch", "recentAdmissionsTable");
+  wireTableSearch("recentBillingSearch", "recentBillingTable");
+</script>
+
+<%- include('partials/bootstrap-footer') %>

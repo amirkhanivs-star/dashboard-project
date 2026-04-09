@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Login - IVS Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
+    <link rel="stylesheet" href="/css/custom.css" />
+  </head>
+  <body class="min-h-screen bg-slate-100">
+    <div class="flex flex-col min-h-screen">
+      <!-- Top Bar -->
+      <header class="bg-sky-900 text-white shadow-md">
+        <div class="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center text-sky-900 font-bold">
+              IVS
+            </div>
+            <div>
+              <h1 class="text-lg font-semibold">IQRA Virtual School</h1>
+              <p class="text-xs opacity-80">Central Dashboard</p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Content -->
+      <main class="flex-1">
+        <div class="max-w-6xl mx-auto px-4 py-6">
+          <div class="flex items-center justify-center">
+            <div class="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
+              <h2 class="text-2xl font-semibold text-sky-900 text-center mb-1">
+                IVS Dashboard Login
+              </h2>
+              <p class="text-xs text-center text-slate-500 mb-6">
+                Use the demo accounts (super, admins, agents) for testing.
+              </p>
+
+              <% if (error) { %>
+                <p class="mb-4 text-sm text-red-600 text-center"><%= error %></p>
+              <% } %>
+
+              <form method="POST" action="/login" class="space-y-4">
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1">Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    required
+                    class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1">Password</label>
+                  <input
+                    type="password"
+                    name="password"
+                    required
+                    class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  class="w-full py-2 rounded-lg bg-sky-900 text-white text-sm font-semibold hover:bg-sky-800 transition"
+                >
+                  Login
+                </button>
+              </form>
+
+              <div class="mt-6 text-xs text-slate-500">
+                <p class="font-semibold mb-1">Demo users:</p>
+                <ul class="space-y-1">
+                  <li>Super Admin: <span class="font-mono">super@ivs.com / 123456</span></li>
+                  <li>Quran Admin: <span class="font-mono">qadmin@ivs.com / 123456</span></li>
+                  <li>Q Accounts: <span class="font-mono">q-accounts@ivs.com / 123456</span></li>
+                  <li>Q Admission: <span class="font-mono">q-admission@ivs.com / 123456</span></li>
+                  <li>Q Management: <span class="font-mono">q-management@ivs.com / 123456</span></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Footer -->
+      <footer class="bg-sky-900 text-slate-100 text-xs text-center py-3 mt-6">
+        © <%= new Date().getFullYear() %> IQRA Virtual School · Internal Dashboard
+      </footer>
+    </div>
+  </body>
+</html>

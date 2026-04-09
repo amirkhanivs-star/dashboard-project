@@ -1,0 +1,593 @@
+<%- include('partials/bootstrap-header', { user, pageTitle: 'System Activity History' }) %>
+
+<%
+  const f = (typeof filters !== 'undefined' && filters) ? filters : {};
+  const meta = (typeof filterMeta !== 'undefined' && filterMeta) ? filterMeta : { depts: [], roles: [], events: [] };
+
+  const logsSafe = Array.isArray(logs) ? logs : [];
+
+  // Quick stats
+  const totalCount = logsSafe.length;
+  const createCount = logsSafe.filter(l => String(l.eventType || '').toLowerCase().includes('create') || String(l.eventType || '').toLowerCase().includes('created')).length;
+  const updateCount = logsSafe.filter(l => String(l.eventType || '').toLowerCase().includes('update') || String(l.eventType || '').toLowerCase().includes('updated')).length;
+  const deleteCount = logsSafe.filter(l => String(l.eventType || '').toLowerCase().includes('delete') || String(l.eventType || '').toLowerCase().includes('deleted')).length;
+
+  function niceDate(rawDate) {
+    if (!rawDate) return '-';
+    try {
+      return new Date(rawDate).toLocaleString('en-GB', {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return rawDate;
+    }
+  }
+
+  // ✅ Role colors (as you asked)
+  // Super Admin = RED (dashboard red)
+  // Admin = GREEN
+  // Agent = YELLOW
+  // Sub Agent = BLUE
+  function roleBadgeClass(roleRaw) {
+    const r = String(roleRaw || '').toLowerCase();
+    if (r === 'super_admin' || r === 'superadmin') return 'role-super';
+    if (r === 'admin') return 'role-admin';
+    if (r === 'agent') return 'role-agent';
+    if (r === 'sub_agent' || r === 'subagent') return 'role-sub';
+    return 'role-neutral';
+  }
+
+  function roleLabel(roleRaw) {
+    const v = String(roleRaw || '-');
+    return v.replace(/_/g, ' ');
+  }
+
+  // Event badge colors
+  function eventBadgeClass(eventRaw) {
+    const e = String(eventRaw || '').toLowerCase();
+    if (!e) return 'evt-neutral';
+    if (e.includes('create') || e.includes('created')) return 'evt-create';
+    if (e.includes('delete') || e.includes('deleted')) return 'evt-delete';
+    if (e.includes('update') || e.includes('updated')) return 'evt-update';
+    if (e.includes('upload')) return 'evt-upload';
+    if (e.includes('billing') || e.includes('payment') || e.includes('invoice')) return 'evt-billing';
+    if (e.includes('whatsapp') || e.includes('message')) return 'evt-wa';
+    return 'evt-neutral';
+  }
+
+  function eventLabel(eventRaw) {
+    return String(eventRaw || '-').replace(/_/g, ' ');
+  }
+
+  function parseDetails(detailsStr) {
+    let parsed = null;
+    try { parsed = JSON.parse(detailsStr); } catch (e) {}
+    return parsed;
+  }
+
+  function buildSummaryFromDetails(parsed) {
+    const root = parsed && (parsed.details || parsed);
+    const before = root && root.before ? root.before : null;
+    const after = root && root.after ? root.after : null;
+    const admissionId = root && (root.admissionId || root.admission_id || root.admission) ? (root.admissionId || root.admission_id || root.admission) : null;
+
+    let changedFields = [];
+    if (before && after) {
+      try {
+        Object.keys(before).forEach(function(k) {
+          const b = before[k];
+          const a = after[k];
+          if (JSON.stringify(b) !== JSON.stringify(a)) changedFields.push(k);
+        });
+        Object.keys(after).forEach(function(k) {
+          if (typeof before[k] === 'undefined' && changedFields.indexOf(k) === -1) changedFields.push(k);
+        });
+      } catch (e) {}
+    }
+
+    return { before, after, admissionId, changedFields };
+  }
+%>
+
+<style>
+  html, body { overflow-x: hidden; }
+  .hist-shell{ padding: 14px 14px 22px; }
+
+  /* HERO */
+  .hist-hero{
+    border-radius: 18px;
+    border: 1px solid rgba(148,163,184,.35);
+    background:
+      radial-gradient(1100px 340px at 12% 12%, rgba(56,189,248,.16), transparent 55%),
+      radial-gradient(900px 300px at 88% 20%, rgba(99,102,241,.14), transparent 55%),
+      linear-gradient(135deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96));
+    padding: 16px;
+    box-shadow: 0 10px 28px rgba(2,8,23,.06);
+  }
+
+  .hist-chip{
+    border-radius: 999px;
+    border: 1px solid rgba(15,23,42,.10);
+    background: rgba(248,250,252,.95);
+    color: rgba(15,23,42,.72);
+    font-weight: 700;
+    padding: 6px 10px;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size: 12px;
+  }
+
+  .hist-chip strong{ color: rgba(15,23,42,.88); }
+
+  /* FILTER CARD */
+  .hist-filters{
+    border-radius: 18px;
+    border: 1px solid rgba(148,163,184,.35);
+    background:
+      radial-gradient(900px 240px at 10% 0%, rgba(34,197,94,.10), transparent 55%),
+      radial-gradient(900px 240px at 90% 0%, rgba(59,130,246,.10), transparent 55%),
+      #ffffff;
+    box-shadow: 0 10px 20px rgba(2,8,23,.06);
+  }
+
+  .hist-input, .hist-select{
+    border-radius: 12px !important;
+    border: 1px solid rgba(15,23,42,.14) !important;
+    background: rgba(248,250,252,.92) !important;
+  }
+  .hist-input:focus, .hist-select:focus{
+    border-color: rgba(59,130,246,.75) !important;
+    box-shadow: 0 0 0 4px rgba(59,130,246,.16) !important;
+    background: #fff !important;
+  }
+
+  /* Apply/Reset (fixed look & behavior) */
+  .btn-pill{ border-radius: 999px !important; padding: 8px 14px !important; }
+  .btn-apply{
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    border: 0 !important;
+    color: #fff !important;
+  }
+  .btn-apply:hover{ filter: brightness(.97); }
+  .btn-reset{
+    border: 1px solid rgba(15,23,42,.18) !important;
+    background: #fff !important;
+  }
+
+  /* TABLE CARD */
+  .hist-card{
+    border-radius: 18px;
+    border: 1px solid rgba(15,23,42,.08);
+    box-shadow: 0 10px 18px rgba(2,8,23,.06);
+    overflow: hidden;
+    background:#fff;
+  }
+  .hist-card .card-header{
+    background:#fff;
+    border-bottom: 1px solid rgba(15,23,42,.08);
+  }
+
+  .xsmall{ font-size: 12px; }
+  .nowrap{ white-space: nowrap; }
+
+  /* Role badges (your colors) */
+  .role-badge{
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 800;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    border: 1px solid rgba(15,23,42,.10);
+  }
+  .role-super{ background: rgba(220,38,38,.12); color: #b91c1c; border-color: rgba(220,38,38,.25); } /* RED */
+  .role-admin{ background: rgba(34,197,94,.12); color: #15803d; border-color: rgba(34,197,94,.25); }   /* GREEN */
+  .role-agent{ background: rgba(245,158,11,.16); color: #92400e; border-color: rgba(245,158,11,.30); }  /* YELLOW */
+  .role-sub{ background: rgba(59,130,246,.12); color: #1d4ed8; border-color: rgba(59,130,246,.25); }    /* BLUE */
+  .role-neutral{ background: rgba(107,114,128,.12); color: #374151; border-color: rgba(107,114,128,.22); }
+
+  /* Event badges */
+  .evt-badge{
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 800;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    border: 1px solid rgba(15,23,42,.10);
+  }
+  .evt-create{ background: rgba(34,197,94,.12); color: #15803d; border-color: rgba(34,197,94,.25); }
+  .evt-update{ background: rgba(245,158,11,.16); color: #92400e; border-color: rgba(245,158,11,.30); }
+  .evt-delete{ background: rgba(220,38,38,.12); color: #b91c1c; border-color: rgba(220,38,38,.25); }
+  .evt-upload{ background: rgba(59,130,246,.12); color: #1d4ed8; border-color: rgba(59,130,246,.25); }
+  .evt-billing{ background: rgba(124,58,237,.12); color: #6d28d9; border-color: rgba(124,58,237,.25); }
+  .evt-wa{ background: rgba(14,165,233,.12); color: #0369a1; border-color: rgba(14,165,233,.25); }
+  .evt-neutral{ background: rgba(107,114,128,.12); color: #374151; border-color: rgba(107,114,128,.22); }
+
+  /* Summary pills */
+  .field-pill{
+    border: 1px solid rgba(15,23,42,.10);
+    background: rgba(248,250,252,.95);
+    color: rgba(15,23,42,.78);
+    border-radius: 999px;
+    font-size: 12px;
+    padding: 4px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 6px;
+    margin-top: 6px;
+  }
+
+  /* Sticky header */
+  .table thead th{
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8fafc !important;
+  }
+
+  .row-soft{ background: rgba(248,250,252,.55); }
+
+  /* Details button */
+  .details-btn{
+    border-radius: 999px !important;
+    padding: 7px 12px !important;
+    border: 1px solid rgba(37,99,235,.30) !important;
+    background: rgba(37,99,235,.06) !important;
+    color: #1d4ed8 !important;
+    font-weight: 700;
+  }
+  .details-btn:hover{ background: rgba(37,99,235,.10) !important; }
+
+  /* Modal JSON */
+  pre.jsonbox{
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 65vh;
+    overflow: auto;
+    border-radius: 14px;
+    border: 1px solid rgba(15,23,42,.10);
+    background: rgba(248,250,252,.95);
+    padding: 12px;
+    margin: 0;
+    font-size: 12px;
+  }
+
+  /* Make filters super easy */
+  .help-line{
+    color: rgba(15,23,42,.55);
+    font-size: 12px;
+    margin-top: 10px;
+  }
+</style>
+
+<div class="container-fluid hist-shell">
+
+  <!-- HERO -->
+  <div class="hist-hero mb-3">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+          <span class="hist-chip">
+            <i class="bi bi-clock-history"></i> System Activity History
+          </span>
+
+          <span class="hist-chip">
+            <i class="bi bi-list-ul"></i> Results: <strong><%= totalCount %></strong>
+          </span>
+
+          <span class="hist-chip">
+            <i class="bi bi-plus-circle"></i> Create: <strong><%= createCount %></strong>
+          </span>
+
+          <span class="hist-chip">
+            <i class="bi bi-pencil-square"></i> Update: <strong><%= updateCount %></strong>
+          </span>
+
+          <span class="hist-chip">
+            <i class="bi bi-trash3"></i> Delete: <strong><%= deleteCount %></strong>
+          </span>
+
+          <span class="hist-chip">
+            <i class="bi bi-info-circle"></i> Max: <strong>200</strong>
+          </span>
+        </div>
+
+        <h4 class="mb-1 fw-bold">System Activity History</h4>
+        <div class="text-muted small">
+          Simple view: <strong>Who</strong> did <strong>what</strong>, <strong>when</strong>, and <strong>on which record</strong>.
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="/dashboard" class="btn btn-sm btn-outline-secondary btn-pill">
+          <i class="bi bi-grid-1x2 me-1"></i> Back to Dashboard
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILTERS -->
+  <form method="get" class="card hist-filters mb-3">
+    <div class="card-body py-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Department</label>
+          <select name="dept" class="form-select form-select-sm hist-select">
+            <option value="">All</option>
+            <% (meta.depts || []).forEach(function (d) { %>
+              <option value="<%= d %>" <%= (f.dept === d ? 'selected' : '') %>>
+                <%= d.charAt(0).toUpperCase() + d.slice(1) %>
+              </option>
+            <% }) %>
+          </select>
+        </div>
+
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Actor Role</label>
+          <select name="role" class="form-select form-select-sm hist-select">
+            <option value="">All</option>
+            <% (meta.roles || []).forEach(function (r) { %>
+              <option value="<%= r %>" <%= (f.role === r ? 'selected' : '') %>>
+                <%= r.replace(/_/g, ' ') %>
+              </option>
+            <% }) %>
+          </select>
+        </div>
+
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Event Type</label>
+          <select name="eventType" class="form-select form-select-sm hist-select">
+            <option value="">All</option>
+            <% (meta.events || []).forEach(function (e) { %>
+              <option value="<%= e %>" <%= (f.eventType === e ? 'selected' : '') %>>
+                <%= e %>
+              </option>
+            <% }) %>
+          </select>
+        </div>
+
+        <div class="col-6 col-md-4">
+          <label class="form-label small mb-1">Search</label>
+          <input
+            type="text"
+            name="q"
+            value="<%= f.q || '' %>"
+            class="form-control form-control-sm hist-input"
+            placeholder="Type: admission id, student, actor, event..."
+          />
+        </div>
+
+        <div class="col-6 col-md-1">
+          <label class="form-label small mb-1">From</label>
+          <input type="date" name="from" value="<%= f.from || '' %>" class="form-control form-control-sm hist-input" />
+        </div>
+
+        <div class="col-6 col-md-1">
+          <label class="form-label small mb-1">To</label>
+          <input type="date" name="to" value="<%= f.to || '' %>" class="form-control form-control-sm hist-input" />
+        </div>
+
+        <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+          <button type="submit" class="btn btn-sm btn-apply btn-pill">
+            <i class="bi bi-funnel me-1"></i> Apply
+          </button>
+
+          <a href="/dashboard/super/history" class="btn btn-sm btn-reset btn-pill">
+            <i class="bi bi-arrow-counterclockwise me-1"></i> Reset
+          </a>
+        </div>
+
+        <div class="col-12 help-line">
+          Tip: Filters optional hain. Sirf search me “Aamir”, “Admission 47”, “billing”, “file”, etc likhen aur Apply.
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <!-- TABLE -->
+  <div class="card hist-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="fw-semibold">Activity Timeline</div>
+      <span class="text-muted small">Most recent on top</span>
+    </div>
+
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:170px;">Date &amp; Time</th>
+              <th style="min-width:200px;">Who</th>
+              <th style="min-width:120px;">Dept</th>
+              <th style="min-width:190px;">What</th>
+              <th style="min-width:220px;">Target</th>
+              <th style="min-width:420px;">Quick Summary</th>
+              <th class="text-end" style="min-width:120px;">Details</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <% if (!logsSafe || logsSafe.length === 0) { %>
+              <tr>
+                <td colspan="7" class="text-center text-muted small py-4">
+                  No activity recorded yet.
+                </td>
+              </tr>
+            <% } %>
+
+            <% logsSafe.forEach(function(log, idx) { %>
+              <%
+                const rawDate = log.createdAt || log.created_at;
+                const dt = niceDate(rawDate);
+
+                const actorName = log.actorName || '-';
+                const actorRoleRaw = log.actorRole || '-';
+                const dept = log.dept || log.actorDept || '-';
+                const eventRaw = log.eventType || '';
+                const targetName = log.targetUserName || log.targetAdmissionName || log.target || '-';
+                const targetId = log.targetUserId || log.targetAdmissionId || log.targetId || '';
+
+                const parsed = log.details ? parseDetails(log.details) : null;
+                const sum = parsed ? buildSummaryFromDetails(parsed) : { before:null, after:null, admissionId:null, changedFields:[] };
+
+                const fields = (sum.changedFields || []).slice(0, 6);
+
+                const modalId = 'histDetailsModal';
+                const jsonPretty = parsed ? JSON.stringify(parsed, null, 2) : (log.details || '');
+                const safeJson = String(jsonPretty).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              %>
+
+              <tr class="<%= (idx % 2 === 0) ? 'row-soft' : '' %>">
+                <td class="nowrap">
+                  <div class="fw-semibold small"><%= dt %></div>
+                  <div class="text-muted xsmall">Log ID: <%= log.id %></div>
+                </td>
+
+                <td>
+                  <div class="fw-semibold small"><%= actorName %></div>
+                  <span class="role-badge <%= roleBadgeClass(actorRoleRaw) %> text-capitalize mt-1">
+                    <i class="bi bi-person-badge"></i> <%= roleLabel(actorRoleRaw) %>
+                  </span>
+                </td>
+
+                <td>
+                  <span class="badge bg-light text-muted border text-capitalize">
+                    <%= dept %>
+                  </span>
+                </td>
+
+                <td>
+                  <span class="evt-badge <%= eventBadgeClass(eventRaw) %> text-capitalize">
+                    <i class="bi bi-activity"></i> <%= eventLabel(eventRaw) %>
+                  </span>
+                </td>
+
+                <td>
+                  <div class="small fw-semibold"><%= targetName %></div>
+                  <% if (targetId) { %>
+                    <div class="text-muted xsmall">ID: <%= targetId %></div>
+                  <% } %>
+                </td>
+
+                <td style="max-width:560px;">
+                  <div class="small">
+                    <% if (sum.admissionId) { %>
+                      <span class="field-pill">
+                        <i class="bi bi-hash"></i> Admission #<%= sum.admissionId %>
+                      </span>
+                    <% } %>
+
+                    <% if (fields && fields.length > 0) { %>
+                      <% fields.forEach(function(field) { %>
+                        <span class="field-pill text-capitalize">
+                          <i class="bi bi-dot"></i>
+                          <%= String(field).replace(/([A-Z])/g, ' $1').replace(/_/g,' ') %>
+                        </span>
+                      <% }) %>
+
+                      <% if ((sum.changedFields || []).length > 6) { %>
+                        <span class="field-pill text-muted">
+                          +<%= (sum.changedFields || []).length - 6 %> more
+                        </span>
+                      <% } %>
+                    <% } else { %>
+                      <span class="text-muted xsmall">Change details recorded.</span>
+                    <% } %>
+                  </div>
+                </td>
+
+                <td class="text-end">
+                  <% if (log.details) { %>
+                    <button
+                      type="button"
+                      class="btn btn-sm details-btn"
+                      data-bs-toggle="modal"
+                      data-bs-target="#<%= modalId %>"
+                      data-logid="<%= log.id %>"
+                      data-actor="<%= String(actorName).replace(/"/g,'&quot;') %>"
+                      data-event="<%= String(eventLabel(eventRaw)).replace(/"/g,'&quot;') %>"
+                      data-date="<%= String(dt).replace(/"/g,'&quot;') %>"
+                      data-json="<%= safeJson.replace(/"/g,'&quot;') %>"
+                    >
+                      <i class="bi bi-braces me-1"></i> View
+                    </button>
+                  <% } else { %>
+                    <span class="text-muted xsmall">—</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- MODAL -->
+<div class="modal fade" id="histDetailsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content" style="border-radius:18px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(180deg,#0f172a,#111827); color:#fff;">
+        <div>
+          <div class="fw-semibold">Activity Details</div>
+          <div class="xsmall text-white-50" id="histModalMeta">—</div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <pre class="jsonbox" id="histModalJson">—</pre>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-pill px-3" data-bs-dismiss="modal">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const modal = document.getElementById('histDetailsModal');
+    if (!modal) return;
+
+    const metaEl = document.getElementById('histModalMeta');
+    const jsonEl = document.getElementById('histModalJson');
+
+    modal.addEventListener('show.bs.modal', function (event) {
+      const btn = event.relatedTarget;
+      if (!btn) return;
+
+      const id = btn.getAttribute('data-logid') || '';
+      const actor = btn.getAttribute('data-actor') || '';
+      const ev = btn.getAttribute('data-event') || '';
+      const dt = btn.getAttribute('data-date') || '';
+      const json = btn.getAttribute('data-json') || '';
+
+      if (metaEl) metaEl.textContent = `Log ID: ${id}  |  ${dt}  |  ${actor}  |  ${ev}`;
+      if (jsonEl) jsonEl.textContent = decodeHtml(json);
+    });
+
+    function decodeHtml(str) {
+      if (!str) return '';
+      const txt = document.createElement('textarea');
+      txt.innerHTML = str;
+      return txt.value;
+    }
+  })();
+</script>
+
+<%- include('partials/bootstrap-footer') %>

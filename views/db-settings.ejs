@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title><%= pageTitle || 'DB Settings - IQRA Virtual School' %></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Bootstrap 5.3 + Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/custom.css">
+
+  <style>
+    :root{
+      --ivs-sidebar-w: 260px;
+      --ivs-topbar-h: 64px;
+
+      --ivs-theme: #b30000;
+      --ivs-theme-dark: #7f0000;
+      --ivs-theme-soft: rgba(179, 0, 0, 0.12);
+
+      --ivs-sidebar-bg: rgba(30, 30, 46, 0.94);
+      --ivs-sidebar-border: rgba(255,255,255,0.08);
+      --ivs-hover-bg: rgba(255,255,255,0.07);
+      --ivs-active-bg: rgba(255,255,255,0.13);
+
+      --ivs-text: rgba(255,255,255,0.92);
+      --ivs-text-muted: rgba(255,255,255,0.60);
+      --ivs-glow: 0 8px 32px rgba(0,0,0,0.25);
+
+      --ivs-page-bg:
+        radial-gradient(circle at top right, rgba(179,0,0,0.06), transparent 24%),
+        radial-gradient(circle at bottom left, rgba(0,0,0,0.05), transparent 18%),
+        #f5f6fb;
+
+      --card-border: rgba(17,24,39,0.07);
+      --card-shadow: 0 14px 40px rgba(15,23,42,0.08);
+      --card-radius: 22px;
+    }
+
+    html, body { height:100%; }
+    body{
+      background: var(--ivs-page-bg);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    /* =========================
+       SIDEBAR
+    ========================= */
+    .ivs-sidebar{
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: var(--ivs-sidebar-w);
+      background: var(--ivs-sidebar-bg);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-right: 1px solid var(--ivs-sidebar-border);
+      box-shadow: var(--ivs-glow);
+      color: var(--ivs-text);
+      overflow-y: auto;
+      overflow-x: hidden;
+      z-index: 1050;
+      transition: transform .28s cubic-bezier(.4,0,.2,1);
+    }
+
+    body.sidebar-collapsed .ivs-sidebar{
+      transform: translateX(-100%);
+    }
+
+    .ivs-sidebar-header{
+      padding: .90rem .95rem;
+      border-bottom: 1px solid var(--ivs-sidebar-border);
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+
+    .sidebar-logo-pill{
+      width:34px;
+      height:34px;
+      border-radius:10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:800;
+      font-size:1.02rem;
+      color:#fff;
+      background: linear-gradient(135deg, var(--ivs-theme), #880000);
+      flex-shrink:0;
+    }
+
+    .sidebar-user-block{
+      padding: .85rem .95rem .55rem;
+      border-bottom: 1px solid var(--ivs-sidebar-border);
+    }
+
+    .sidebar-user-block .user-name{
+      font-size:.98rem;
+      font-weight:700;
+      color:#fff;
+      margin-bottom:2px;
+      line-height:1.15;
+    }
+
+    .sidebar-user-role{
+      font-size:.80rem;
+      font-weight:600;
+      color:#fff;
+      opacity:.92;
+      line-height:1.15;
+    }
+
+    .sidebar-section-label{
+      padding:.70rem .95rem .35rem;
+      font-size:.64rem;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.8px;
+      color: var(--ivs-text-muted);
+      opacity:.95;
+    }
+
+    .sidebar-nav a{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:.50rem .85rem;
+      margin:2px 10px;
+      border-radius:9px;
+      color: var(--ivs-text);
+      text-decoration:none;
+      font-size:.82rem;
+      white-space:nowrap;
+      transition: all .2s ease;
+    }
+
+    .sidebar-nav a i{
+      font-size:.88rem;
+      line-height:1;
+    }
+
+    .sidebar-nav a:hover{
+      background: var(--ivs-hover-bg);
+      color:#fff;
+    }
+
+    .sidebar-nav a.active{
+      background: var(--ivs-active-bg);
+      color:#fff;
+      border-left:3px solid var(--ivs-theme);
+      margin-left:7px;
+      border-top-left-radius:8px;
+      border-bottom-left-radius:8px;
+    }
+
+    .sidebar-footer{
+      padding:.90rem .95rem;
+      border-top:1px solid var(--ivs-sidebar-border);
+      margin-top:14px;
+    }
+
+    .logout-btn{
+      width:100%;
+      min-height:56px;
+      border:none;
+      outline:none;
+      border-radius:999px;
+      background: var(--ivs-theme);
+      color:#fff !important;
+      font-weight:800;
+      font-size:1.08rem;
+      letter-spacing:.5px;
+      text-transform:uppercase;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.24);
+      transition: all .22s ease;
+      text-decoration:none !important;
+    }
+
+    .logout-btn i{
+      color:#fff !important;
+      font-size:1.35rem;
+      line-height:1;
+    }
+
+    .logout-btn:hover{
+      transform: translateY(-1px);
+      color:#fff !important;
+      box-shadow: 0 10px 18px rgba(0,0,0,0.28);
+      opacity:.96;
+    }
+
+    /* =========================
+       MAIN + TOPBAR
+    ========================= */
+    .ivs-main{
+      margin-left: var(--ivs-sidebar-w);
+      min-height: 100vh;
+      background: transparent;
+      transition: margin-left .28s cubic-bezier(.4,0,.2,1);
+    }
+
+    body.sidebar-collapsed .ivs-main{
+      margin-left: 0 !important;
+    }
+
+    .ivs-topbar{
+      position: fixed;
+      top: 0;
+      left: var(--ivs-sidebar-w);
+      right: 0;
+      height: var(--ivs-topbar-h);
+      z-index: 1040;
+      background: linear-gradient(135deg, var(--ivs-theme), var(--ivs-theme-dark));
+      box-shadow: 0 2px 14px rgba(0,0,0,0.12);
+      transition: left .28s cubic-bezier(.4,0,.2,1);
+    }
+
+    body.sidebar-collapsed .ivs-topbar{
+      left: 0 !important;
+    }
+
+    .ivs-content{
+      padding-top: calc(var(--ivs-topbar-h) + 18px);
+      min-height: 100vh;
+      background: transparent;
+    }
+
+    .ivs-content .container-fluid{
+      background: transparent !important;
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+
+    .ivs-sidebar-toggle{
+      color:#fff !important;
+      background: rgba(255,255,255,0.10) !important;
+      border: 1px solid rgba(255,255,255,0.18) !important;
+      padding: 2px 6px !important;
+      line-height: 1 !important;
+      border-radius: 8px;
+      min-width: auto !important;
+      min-height: auto !important;
+    }
+
+    .ivs-sidebar-toggle i{
+      color:#fff !important;
+      font-size: 16px !important;
+      line-height: 1 !important;
+    }
+
+    .ivs-sidebar-toggle:hover{
+      background: rgba(255,255,255,0.16) !important;
+    }
+
+    .topbar-title{
+      font-weight: 800;
+      font-size: 1.15rem;
+      color: #fff;
+    }
+
+    /* =========================
+       PAGE
+    ========================= */
+    .hero-card{
+      background: linear-gradient(135deg, rgba(255,255,255,0.96), rgba(255,255,255,0.90));
+      border: 1px solid rgba(255,255,255,0.75);
+      border-radius: 28px;
+      box-shadow: 0 24px 60px rgba(15,23,42,0.10);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero-card::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        radial-gradient(circle at top right, rgba(179,0,0,0.10), transparent 26%),
+        linear-gradient(135deg, rgba(179,0,0,0.04), transparent 45%);
+      pointer-events:none;
+    }
+
+    .hero-body{
+      position:relative;
+      z-index:1;
+      padding: 1.5rem;
+    }
+
+    .hero-badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      background: rgba(179,0,0,0.08);
+      color: var(--ivs-theme);
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: .82rem;
+    }
+
+    .hero-title{
+      font-size: clamp(1.55rem, 2.8vw, 2.35rem);
+      font-weight: 800;
+      color: #0f172a;
+      margin-top: 14px;
+      margin-bottom: 10px;
+      line-height: 1.15;
+    }
+
+    .hero-subtitle{
+      color: #475569;
+      font-size: .98rem;
+      max-width: 820px;
+      margin-bottom: 0;
+    }
+
+    .stat-card,
+    .panel-card{
+      background: rgba(255,255,255,0.88);
+      border: 1px solid var(--card-border);
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .stat-card{
+      padding: 1rem 1.1rem;
+      height: 100%;
+    }
+
+    .stat-icon{
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background: var(--ivs-theme-soft);
+      color: var(--ivs-theme);
+      font-size: 1.25rem;
+      flex-shrink:0;
+    }
+
+    .stat-label{
+      font-size: .82rem;
+      color: #64748b;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+
+    .stat-value{
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.1;
+      margin-top: 6px;
+    }
+
+    .panel-card{
+      padding: 1.25rem;
+      height: 100%;
+    }
+
+    .panel-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+      margin-bottom: 1rem;
+    }
+
+    .panel-title{
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #0f172a;
+      margin:0;
+    }
+
+    .panel-subtitle{
+      margin: 4px 0 0;
+      color: #64748b;
+      font-size: .88rem;
+    }
+
+    .panel-chip{
+      display:inline-flex;
+      align-items:center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 7px 12px;
+      background: rgba(15,23,42,0.05);
+      font-size: .78rem;
+      font-weight: 700;
+      color: #334155;
+      white-space: nowrap;
+    }
+
+    .premium-btn{
+      border: none;
+      border-radius: 16px;
+      padding: 14px 18px;
+      font-weight: 800;
+      transition: all .2s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .premium-btn-primary{
+      background: linear-gradient(135deg, var(--ivs-theme), var(--ivs-theme-dark));
+      color: #fff;
+      box-shadow: 0 12px 24px rgba(179,0,0,0.22);
+    }
+
+    .premium-btn-primary:hover{
+      color:#fff;
+      transform: translateY(-1px);
+      box-shadow: 0 14px 28px rgba(179,0,0,0.26);
+    }
+
+    .premium-btn-outline{
+      background: #fff;
+      color: #0f172a;
+      border: 1px solid rgba(15,23,42,0.10);
+    }
+
+    .premium-btn-outline:hover{
+      color:#0f172a;
+      background: #f8fafc;
+      transform: translateY(-1px);
+    }
+
+    .drop-zone{
+      border: 2px dashed rgba(179,0,0,0.24);
+      background: linear-gradient(180deg, rgba(179,0,0,0.04), rgba(255,255,255,0.88));
+      border-radius: 22px;
+      padding: 1.4rem;
+      text-align: center;
+      transition: all .2s ease;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.dragover{
+      border-color: var(--ivs-theme);
+      background: linear-gradient(180deg, rgba(179,0,0,0.07), rgba(255,255,255,0.96));
+      box-shadow: inset 0 0 0 1px rgba(179,0,0,0.05);
+    }
+
+    .drop-zone input[type="file"]{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      opacity:0;
+      cursor:pointer;
+    }
+
+    .drop-zone-icon{
+      width: 72px;
+      height: 72px;
+      border-radius: 22px;
+      margin: 0 auto 14px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background: rgba(179,0,0,0.10);
+      color: var(--ivs-theme);
+      font-size: 2rem;
+    }
+
+    .drop-zone-title{
+      font-size: 1.02rem;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+
+    .drop-zone-text{
+      color: #64748b;
+      font-size: .92rem;
+      margin-bottom: 0;
+    }
+
+    .selected-file{
+      display:none;
+      margin-top: 14px;
+      background: rgba(15,23,42,0.05);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: .92rem;
+      color: #334155;
+      font-weight: 600;
+      word-break: break-all;
+    }
+
+    .mini-rule{
+      display:flex;
+      align-items:flex-start;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px dashed rgba(15,23,42,0.08);
+    }
+
+    .mini-rule:last-child{
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .mini-rule-icon{
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      background: rgba(15,23,42,0.05);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:#334155;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+
+    .mini-rule h6{
+      margin: 0 0 5px;
+      font-size: .95rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .mini-rule p{
+      margin: 0;
+      font-size: .88rem;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    .feature-list{
+      display:grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .feature-item{
+      background: rgba(15,23,42,0.03);
+      border: 1px solid rgba(15,23,42,0.05);
+      border-radius: 16px;
+      padding: 14px;
+      display:flex;
+      gap: 10px;
+      align-items:flex-start;
+    }
+
+    .feature-item i{
+      color: var(--ivs-theme);
+      font-size: 1rem;
+      margin-top: 1px;
+    }
+
+    .feature-item strong{
+      display:block;
+      color:#0f172a;
+      font-size:.92rem;
+      margin-bottom:2px;
+    }
+
+    .feature-item span{
+      color:#64748b;
+      font-size:.84rem;
+      line-height:1.45;
+    }
+
+    .alert-premium{
+      border: none;
+      border-radius: 18px;
+      padding: 14px 16px;
+      box-shadow: 0 10px 30px rgba(15,23,42,0.06);
+    }
+
+    @media (max-width: 992px){
+      .ivs-sidebar{
+        transform: translateX(-100%);
+      }
+
+      body.sidebar-collapsed .ivs-sidebar{
+        transform: translateX(0);
+      }
+
+      .ivs-main{ margin-left: 0 !important; }
+      .ivs-topbar{ left: 0 !important; }
+
+      .feature-list{
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<%
+  const u = user || {};
+  const role = (u.role || '').toString();
+  const dept = (u.dept || '').toString();
+
+  const cap = (txt) => txt ? txt.charAt(0).toUpperCase() + txt.slice(1) : '';
+  const deptTitle  = cap(dept);
+
+  let headerRole = '';
+  if (role === 'super_admin') headerRole = 'Super Admin';
+  else if (role === 'admin') headerRole = deptTitle ? `${deptTitle} Admin` : 'Admin';
+  else headerRole = cap(role || 'User');
+
+  const flashData = typeof flash !== 'undefined' ? flash : null;
+%>
+
+<body class="layout-dashboard">
+  <script>
+    try{
+      if (localStorage.getItem("ivs_sidebar_collapsed") === "1") {
+        document.body.classList.add("sidebar-collapsed");
+      }
+    }catch(e){}
+  </script>
+
+  <!-- SIDEBAR -->
+  <aside class="ivs-sidebar" id="ivsSidebar">
+    <div class="ivs-sidebar-header">
+      <div class="sidebar-logo-pill">IVS</div>
+      <div>
+        <div class="fw-bold" style="font-size:0.95rem; line-height:1.1;">IQRA Virtual School</div>
+        <small class="opacity-75" style="font-size:.72rem;">Central Dashboard</small>
+      </div>
+    </div>
+
+    <div class="sidebar-user-block text-center">
+      <div class="user-name"><%= u.name || 'Super Admin' %></div>
+      <div class="sidebar-user-role"><%= headerRole %></div>
+    </div>
+
+    <nav class="sidebar-nav mt-2">
+      <div class="sidebar-section-label">MAIN</div>
+
+      <a href="/dashboard">
+        <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
+      </a>
+
+      <a href="/dashboard/super/users">
+        <i class="bi bi-people"></i> <span>Users</span>
+      </a>
+
+      <a href="/dashboard/super/history">
+        <i class="bi bi-clock-history"></i> <span>History</span>
+      </a>
+
+      <a href="/dashboard/super/files">
+        <i class="bi bi-folder2-open"></i> <span>View Files</span>
+      </a>
+
+      <div class="sidebar-section-label mt-3">DEPARTMENTS</div>
+
+      <a href="/dashboard/overview">
+        <i class="bi bi-bar-chart-line"></i> <span>Overview</span>
+      </a>
+
+      <a href="/dashboard/super/quran">
+        <i class="bi bi-moon-stars"></i> <span>Quran</span>
+      </a>
+
+      <a href="/dashboard/super/tuition">
+        <i class="bi bi-journal-text"></i> <span>Tuition</span>
+      </a>
+
+      <a href="/dashboard/super/school">
+        <i class="bi bi-building"></i> <span>School</span>
+      </a>
+
+      <div class="sidebar-section-label mt-3">DB SETTING</div>
+      <a href="/db-settings" class="active">
+        <i class="bi bi-database-gear"></i> <span>Database Settings</span>
+      </a>
+
+      <div class="sidebar-section-label mt-3">FORMS</div>
+      <a href="https://ivs-admission-form.onrender.com" target="_blank" rel="noopener noreferrer">
+        <i class="bi bi-ui-checks-grid"></i> <span>School Admission Form</span>
+      </a>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-section-label mb-2" style="padding:0; margin:0 0 8px 0;">Sign Out</div>
+        <a href="/logout" class="logout-btn d-flex align-items-center justify-content-center gap-2">
+          <i class="bi bi-arrow-left"></i>
+          <span>Logout</span>
+        </a>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="ivs-main d-flex flex-column">
+    <nav class="ivs-topbar navbar">
+      <div class="container-fluid px-3">
+        <div class="d-flex align-items-center gap-3">
+          <button class="ivs-sidebar-toggle" id="sidebarToggleBtn" title="Toggle Sidebar" type="button">
+            <i class="bi bi-list"></i>
+          </button>
+          <span class="topbar-title"><%= pageTitle || 'DB Settings' %></span>
+        </div>
+      </div>
+    </nav>
+
+    <div class="ivs-content flex-grow-1">
+      <div class="container-fluid pt-2 pb-4">
+        <div class="hero-card mb-4">
+          <div class="hero-body">
+            <span class="hero-badge">
+              <i class="bi bi-shield-lock-fill"></i>
+              Super Admin Only
+            </span>
+
+            <h1 class="hero-title">Database Backup & Import Control Center</h1>
+            <p class="hero-subtitle">
+              Yahan se aap admissions database ka CSV backup download kar sakte hain aur CSV import bhi kar sakte hain.
+              Import ke waqt system duplicate rows ko skip karega taake same record dobara save na ho.
+            </p>
+          </div>
+        </div>
+
+        <% if (flashData) { %>
+          <div class="alert alert-<%= flashData.type === 'danger' ? 'danger' : (flashData.type || 'info') %> alert-premium mb-4">
+            <div class="d-flex align-items-start gap-3">
+              <i class="bi <%= flashData.type === 'success' ? 'bi-check-circle-fill' : flashData.type === 'danger' ? 'bi-exclamation-triangle-fill' : 'bi-info-circle-fill' %>" style="font-size:1.2rem;"></i>
+              <div>
+                <div class="fw-bold mb-1"><%= flashData.title || 'Notice' %></div>
+                <div><%= flashData.message || '' %></div>
+              </div>
+            </div>
+          </div>
+        <% } %>
+
+        <div class="row g-3 mb-4">
+          <div class="col-md-6 col-xl-3">
+            <div class="stat-card">
+              <div class="d-flex align-items-center gap-3">
+                <div class="stat-icon"><i class="bi bi-download"></i></div>
+                <div>
+                  <div class="stat-label">Backup Mode</div>
+                  <div class="stat-value">CSV Export</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6 col-xl-3">
+            <div class="stat-card">
+              <div class="d-flex align-items-center gap-3">
+                <div class="stat-icon"><i class="bi bi-upload"></i></div>
+                <div>
+                  <div class="stat-label">Import Mode</div>
+                  <div class="stat-value">CSV Upload</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6 col-xl-3">
+            <div class="stat-card">
+              <div class="d-flex align-items-center gap-3">
+                <div class="stat-icon"><i class="bi bi-copy"></i></div>
+                <div>
+                  <div class="stat-label">Duplicate Safety</div>
+                  <div class="stat-value">Auto Skip</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6 col-xl-3">
+            <div class="stat-card">
+              <div class="d-flex align-items-center gap-3">
+                <div class="stat-icon"><i class="bi bi-person-lock"></i></div>
+                <div>
+                  <div class="stat-label">Access Level</div>
+                  <div class="stat-value">Super Admin</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-4">
+          <!-- EXPORT -->
+          <div class="col-xl-6">
+            <div class="panel-card h-100">
+              <div class="panel-header">
+                <div>
+                  <h3 class="panel-title">Export Admissions Backup</h3>
+                  <p class="panel-subtitle">Current admissions data ko CSV file me download karein.</p>
+                </div>
+                <span class="panel-chip">
+                  <i class="bi bi-file-earmark-spreadsheet"></i>
+                  CSV Backup
+                </span>
+              </div>
+
+              <div class="feature-list mb-4">
+                <div class="feature-item">
+                  <i class="bi bi-check2-circle"></i>
+                  <div>
+                    <strong>Fast Export</strong>
+                    <span>One click me admissions table ka CSV backup download.</span>
+                  </div>
+                </div>
+
+                <div class="feature-item">
+                  <i class="bi bi-grid-3x3-gap"></i>
+                  <div>
+                    <strong>Structured Data</strong>
+                    <span>Columns same structure me export hongi taake import asaan rahe.</span>
+                  </div>
+                </div>
+
+                <div class="feature-item">
+                  <i class="bi bi-cloud-arrow-down"></i>
+                  <div>
+                    <strong>Offline Backup</strong>
+                    <span>File ko local system, Drive, ya Sheets workflow ke liye use kar sakte hain.</span>
+                  </div>
+                </div>
+
+                <div class="feature-item">
+                  <i class="bi bi-shield-check"></i>
+                  <div>
+                    <strong>Admin Safe</strong>
+                    <span>Ye section sirf super admin access se available hai.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="d-grid gap-2">
+                <a href="/db-settings/export/admissions" class="premium-btn premium-btn-primary w-100">
+                  <i class="bi bi-download"></i>
+                  Download Admissions CSV Backup
+                </a>
+                <a href="/samples/admissions-sample-import.csv" class="premium-btn premium-btn-outline w-100 mt-2">
+  <i class="bi bi-file-earmark-arrow-down"></i>
+  Download Sample CSV
+</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- IMPORT -->
+          <div class="col-xl-6">
+            <div class="panel-card h-100">
+              <div class="panel-header">
+                <div>
+                  <h3 class="panel-title">Import Admissions CSV</h3>
+                  <p class="panel-subtitle">CSV upload karein aur new rows ko database me save karein.</p>
+                </div>
+                <span class="panel-chip">
+                  <i class="bi bi-database-add"></i>
+                  Smart Import
+                </span>
+              </div>
+
+              <form action="/db-settings/import/admissions" method="POST" enctype="multipart/form-data" id="csvImportForm">
+                <label class="drop-zone" id="dropZone">
+                  <input type="file" name="csvFile" id="csvFileInput" accept=".csv" required>
+                  <div class="drop-zone-icon">
+                    <i class="bi bi-cloud-arrow-up-fill"></i>
+                  </div>
+                  <div class="drop-zone-title">Drop CSV file here or click to browse</div>
+                  <p class="drop-zone-text">
+                    Sirf <strong>.csv</strong> file upload karein. Duplicate rows automatically skip hongi.
+                  </p>
+                  <div class="selected-file" id="selectedFileName"></div>
+                </label>
+
+                <div class="d-grid gap-2 mt-4">
+                  <button type="submit" class="premium-btn premium-btn-primary w-100">
+                    <i class="bi bi-upload"></i>
+                    Import Admissions CSV
+                  </button>
+                </div>
+              </form>
+
+              <div class="mt-4">
+                <div class="mini-rule">
+                  <div class="mini-rule-icon"><i class="bi bi-1-circle"></i></div>
+                  <div>
+                    <h6>Upload clean CSV</h6>
+                    <p>Best result ke liye wahi CSV upload karein jo export system se nikli ho ya same column structure follow karti ho.</p>
+                  </div>
+                </div>
+
+                <div class="mini-rule">
+                  <div class="mini-rule-icon"><i class="bi bi-2-circle"></i></div>
+                  <div>
+                    <h6>Duplicate auto skip</h6>
+                    <p>System pehle registration number check karega. Agar woh na ho to student data fingerprint se duplicate identify karega.</p>
+                  </div>
+                </div>
+
+                <div class="mini-rule">
+                  <div class="mini-rule-icon"><i class="bi bi-3-circle"></i></div>
+                  <div>
+                    <h6>Safe insert only</h6>
+                    <p>Jo row pehle se database me mojood hogi woh dubara insert nahi hogi. Sirf new valid records save honge.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RULES -->
+          <div class="col-xl-7">
+            <div class="panel-card h-100">
+              <div class="panel-header">
+                <div>
+                  <h3 class="panel-title">Import Rules & Duplicate Logic</h3>
+                  <p class="panel-subtitle">System kis base par duplicate rows skip karega.</p>
+                </div>
+                <span class="panel-chip">
+                  <i class="bi bi-diagram-3"></i>
+                  Validation Rules
+                </span>
+              </div>
+
+              <div class="mini-rule">
+                <div class="mini-rule-icon"><i class="bi bi-hash"></i></div>
+                <div>
+                  <h6>Primary duplicate check</h6>
+                  <p>
+                    Sab se pehle <strong>accounts_registration_number</strong> check hota hai. Agar same registration number mil jaye
+                    to row duplicate samajh kar skip ho jati hai.
+                  </p>
+                </div>
+              </div>
+
+              <div class="mini-rule">
+                <div class="mini-rule-icon"><i class="bi bi-person-vcard"></i></div>
+                <div>
+                  <h6>Fallback duplicate check</h6>
+                  <p>
+                    Agar registration number empty ho, to system <strong>dept, student_name, father_name, grade, tuition_grade, phone, registration_date</strong>
+                    ka combination use karta hai.
+                  </p>
+                </div>
+              </div>
+
+              <div class="mini-rule">
+                <div class="mini-rule-icon"><i class="bi bi-exclamation-octagon"></i></div>
+                <div>
+                  <h6>Minimum requirement</h6>
+                  <p>
+                    Import row me kam az kam <strong>student_name</strong> hona chahiye. Khali ya invalid rows skip ho sakti hain.
+                  </p>
+                </div>
+              </div>
+
+              <div class="mini-rule">
+                <div class="mini-rule-icon"><i class="bi bi-stars"></i></div>
+                <div>
+                  <h6>Best workflow</h6>
+                  <p>
+                    Pehle backup export karein, phir usi structure par edit karke dobara import karein. Is se column mismatch ka risk kam ho jata hai.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- QUICK NOTES -->
+          <div class="col-xl-5">
+            <div class="panel-card h-100">
+              <div class="panel-header">
+                <div>
+                  <h3 class="panel-title">Quick Notes</h3>
+                  <p class="panel-subtitle">Recommended admin workflow.</p>
+                </div>
+                <span class="panel-chip">
+                  <i class="bi bi-lightbulb"></i>
+                  Best Practice
+                </span>
+              </div>
+
+              <div class="feature-list">
+                <div class="feature-item">
+                  <i class="bi bi-folder-symlink"></i>
+                  <div>
+                    <strong>Backup First</strong>
+                    <span>Import se pehle existing CSV backup download kar lena better hai.</span>
+                  </div>
+                </div>
+
+                <div class="feature-item">
+                  <i class="bi bi-pencil-square"></i>
+                  <div>
+                    <strong>Edit Carefully</strong>
+                    <span>CSV columns ka name ya order bina zarurat na badlein.</span>
+                  </div>
+                </div>
+
+                <div class="feature-item">
+                  <i class="bi bi-file-earmark-check"></i>
+                  <div>
+                    <strong>Use Valid Data</strong>
+                    <span>Khali ya broken rows import report me skip ho sakti hain.</span>
+                  </div>
+                </div>
+
+                <div class="feature-item">
+                  <i class="bi bi-bar-chart-steps"></i>
+                  <div>
+                    <strong>Start with Admissions</strong>
+                    <span>Pehle admissions table stable karein, phir baqi tables add karein.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-4 d-grid gap-2">
+                <a href="/dashboard" class="premium-btn premium-btn-outline w-100">
+                  <i class="bi bi-arrow-left-circle"></i>
+                  Back to Dashboard
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // sidebar toggle
+    (function () {
+      const btn = document.getElementById("sidebarToggleBtn");
+      if (!btn) return;
+
+      btn.addEventListener("click", function () {
+        document.body.classList.toggle("sidebar-collapsed");
+        try {
+          localStorage.setItem(
+            "ivs_sidebar_collapsed",
+            document.body.classList.contains("sidebar-collapsed") ? "1" : "0"
+          );
+        } catch (e) {}
+      });
+    })();
+
+    // file input UI
+    (function () {
+      const input = document.getElementById("csvFileInput");
+      const dropZone = document.getElementById("dropZone");
+      const fileNameBox = document.getElementById("selectedFileName");
+
+      if (!input || !dropZone || !fileNameBox) return;
+
+      function showFileName(file) {
+        if (!file) {
+          fileNameBox.style.display = "none";
+          fileNameBox.textContent = "";
+          return;
+        }
+
+        fileNameBox.style.display = "block";
+        fileNameBox.innerHTML = '<i class="bi bi-file-earmark-spreadsheet me-2"></i>' + file.name;
+      }
+
+      input.addEventListener("change", function () {
+        const file = this.files && this.files[0] ? this.files[0] : null;
+        showFileName(file);
+      });
+
+      ["dragenter", "dragover"].forEach(evt => {
+        dropZone.addEventListener(evt, function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.add("dragover");
+        });
+      });
+
+      ["dragleave", "drop"].forEach(evt => {
+        dropZone.addEventListener(evt, function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.remove("dragover");
+        });
+      });
+
+      dropZone.addEventListener("drop", function (e) {
+        const files = e.dataTransfer.files;
+        if (!files || !files.length) return;
+
+        input.files = files;
+        showFileName(files[0]);
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,521 @@
+<%- include('partials/bootstrap-header', { user, pageTitle: (user.role === 'agent' ? 'Create Sub Agents' : 'Create Agents / Sub Agents') }) %>
+
+<%
+  const isAdmin = user.role === 'admin';
+  const isAgent = user.role === 'agent';
+
+  const cap = (txt) => txt ? txt.charAt(0).toUpperCase() + txt.slice(1) : '';
+  const deptLabel = cap(user.dept || 'Department');
+
+  const currentAgentType = user.agentType || 'accounts';
+
+  const agentTypeOptions = [
+    { value: 'accounts',  label: 'Accounts'  },
+    { value: 'admission', label: 'Admission' },
+    { value: 'management',label: 'Management' }
+  ];
+
+ const currentAgentTypeLabel = (() => {
+  if (currentAgentType === 'accounts') return 'Accounts';
+  if (currentAgentType === 'admission') return 'Admission';
+  if (currentAgentType === 'management') return 'Management';
+  return cap(currentAgentType);
+})();
+
+const createdRoleLabel = isAdmin ? 'Agent / Sub Agent' : 'Sub Agent';
+
+  const usersListPath = isAdmin ? '/dashboard/admin/users' : '/dashboard/agent/users';
+  const themeTextClass = isAdmin ? 'text-success' : 'text-warning';
+const themeBtnClass = isAdmin ? 'btn-success' : 'btn-warning';
+const themeIconClass = isAdmin ? 'text-success' : 'text-warning';
+const roleBadgeClass = isAdmin ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-dark';
+
+ const roleDeptHelpText = isAdmin
+  ? 'Department is fixed by Super Admin. You can choose role and pipeline / agent type.'
+  : 'Department, role, and pipeline / agent type are fixed for Agent and cannot be changed here.';
+
+  const deptFieldHelpText = isAdmin
+  ? 'Users can be created only within the assigned department.'
+  : 'You can create users only within your assigned department.';
+
+const roleFieldHelpText = isAdmin
+  ? 'Admin can create Agent or Sub Agent.'
+  : 'Agent can create only Sub Agent.';
+
+const agentTypeFieldHelpText = isAdmin
+  ? 'You can choose pipeline / agent type.'
+  : 'Pipeline / agent type is fixed for Agent.';
+
+  const step1Class = isAdmin
+  ? 'bg-success text-white'
+  : 'bg-warning text-dark';
+
+const step2Class = 'bg-danger-subtle text-danger';
+
+const step3Class = isAdmin
+  ? 'bg-warning-subtle text-warning'
+  : 'bg-success-subtle text-success';
+
+const step4Class = 'subagent-step-badge';
+
+  // ✅ Use normalized perms coming from server (res.locals.perms OR explicit perms)
+  const parentPermRaw = (typeof perms !== 'undefined' && perms) ? perms : (user.permissions || {});
+
+  // ✅ who can create users (same as your server route)
+  const canCreateUsers = (user.role === "admin" || user.role === "agent");
+
+  // ✅ IMPORTANT FIX:
+  // Admin ko apni allowed permissions me se choose karne do (checkboxes visible)
+  // Agent ko manual choose nahi karna (agent ke liye auto inherit via hidden inputs)
+  const canEditPerms = (isAdmin || isAgent);
+
+
+  // helper: read bool with legacy support (default false)
+  const boolPerm = (raw, key, defVal, legacyKey) => {
+    if (typeof raw?.[key] !== 'undefined') return !!raw[key];
+    if (legacyKey && typeof raw?.[legacyKey] !== 'undefined') return !!raw[legacyKey];
+    return !!defVal;
+  };
+
+  // ✅ Parent allowed columns (default false)
+ const parentColsAllowed = {
+  colStatus: boolPerm(parentPermRaw, 'colStatus', false),
+  colFeeStatus: boolPerm(parentPermRaw, 'colFeeStatus', false),
+
+  colDept: boolPerm(parentPermRaw, 'colDept', false),
+  colStudentName: boolPerm(parentPermRaw, 'colStudentName', false),
+  colFatherName: boolPerm(parentPermRaw, 'colFatherName', false),
+  colFatherEmail: boolPerm(parentPermRaw, 'colFatherEmail', false),
+  colGrade: boolPerm(parentPermRaw, 'colGrade', false),
+  colTuitionGrade: boolPerm(parentPermRaw, 'colTuitionGrade', false),
+
+  colPhone: boolPerm(parentPermRaw, 'colPhone', false, 'showPhone'),
+  colProcessedBy: boolPerm(parentPermRaw, 'colProcessedBy', false),
+  colPaymentStatus: boolPerm(parentPermRaw, 'colPaymentStatus', false, 'showPaymentStatus'),
+  colPaidUpto: boolPerm(parentPermRaw, 'colPaidUpto', false, 'showPaidUpto'),
+  colVerificationNumber: boolPerm(parentPermRaw, 'colVerificationNumber', false, 'showVerificationNumber'),
+  colRegistrationNumber: boolPerm(parentPermRaw, 'colRegistrationNumber', false, 'showRegistrationNumber'),
+
+  colFamilyNumber: boolPerm(parentPermRaw, 'colFamilyNumber', false),
+  colRegistrationFee: boolPerm(parentPermRaw, 'colRegistrationFee', false),
+  colFees: boolPerm(parentPermRaw, 'colFees', false),
+  colCurrency: boolPerm(parentPermRaw, 'colCurrency', false),
+  colMonth: boolPerm(parentPermRaw, 'colMonth', false),
+  colTotalFees: boolPerm(parentPermRaw, 'colTotalFees', false),
+  colPendingDues: boolPerm(parentPermRaw, 'colPendingDues', false),
+colReceivedPayment: boolPerm(parentPermRaw, 'colReceivedPayment', false),
+colInvoiceStatus: boolPerm(parentPermRaw, 'colInvoiceStatus', false),
+colInvoiceStatusTimestamp: boolPerm(parentPermRaw, 'colInvoiceStatusTimestamp', false),
+colPaidInvoiceStatus: boolPerm(parentPermRaw, 'colPaidInvoiceStatus', false),
+colPaidInvoiceStatusTimestamp: boolPerm(parentPermRaw, 'colPaidInvoiceStatusTimestamp', false),
+colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
+};
+  // ✅ Parent allowed buttons (default false)
+  const parentBtnsAllowed = {
+  btnEditRow: boolPerm(parentPermRaw, 'btnEditRow', false),
+  btnDetails: boolPerm(parentPermRaw, 'btnDetails', false),
+  btnUpdateRow: boolPerm(parentPermRaw, 'btnUpdateRow', false),
+  btnPdf: boolPerm(parentPermRaw, 'btnPdf', false),
+  btnBilling: boolPerm(parentPermRaw, 'btnBilling', false),
+  btnWhatsApp: boolPerm(parentPermRaw, 'btnWhatsApp', false),
+  btnUpload: boolPerm(parentPermRaw, 'btnUpload', false),
+  btnFiles: boolPerm(parentPermRaw, 'btnFiles', false),
+  canDeleteFiles: boolPerm(parentPermRaw, 'canDeleteFiles', false)
+};
+
+ const ALL_COLS = [
+  { name: 'colStatus',             label: 'Current Status' },
+  { name: 'colFeeStatus',          label: 'Fee Status' },
+  { name: 'colDept',               label: 'Dept' },
+  { name: 'colStudentName',        label: 'Student' },
+  { name: 'colFatherName',         label: 'Father' },
+  { name: 'colFatherEmail',        label: 'Father Email' },
+  { name: 'colGrade',              label: 'Grade' },
+  { name: 'colTuitionGrade',       label: 'Grade Section' },
+  { name: 'colPhone',              label: 'Phone Number' },
+  { name: 'colProcessedBy',        label: 'Processed By' },
+  { name: 'colPaymentStatus',      label: 'Payment Status' },
+  { name: 'colPaidUpto',           label: 'Paid Upto' },
+  { name: 'colVerificationNumber', label: 'Verif #' },
+  { name: 'colRegistrationNumber', label: 'Reg #' },
+  { name: 'colFamilyNumber',       label: 'Family Num #' },
+  { name: 'colRegistrationFee',    label: 'Registration Fee' },
+  { name: 'colFees',               label: 'Fees' },
+  { name: 'colCurrency',           label: 'Currency' },
+  { name: 'colMonth',              label: 'Month' },
+  { name: 'colTotalFees',          label: 'Total Fees' },
+  { name: 'colPendingDues',        label: 'Pending Dues' },
+{ name: 'colReceivedPayment',    label: 'Received Payment' },
+{ name: 'colInvoiceStatus',      label: 'Invoice Status' },
+{ name: 'colInvoiceStatusTimestamp', label: 'Invoice Status Timestamp' },
+{ name: 'colPaidInvoiceStatus',  label: 'Paid Invoice Status' },
+{ name: 'colPaidInvoiceStatusTimestamp', label: 'Paid Invoice Status Timestamp' },
+{ name: 'colActionButtons',      label: 'Action Buttons' }
+];
+
+ const ALL_BTNS = [
+  { name: 'btnEditRow',     label: 'Show Edit button' },
+  { name: 'btnDetails',     label: 'Show View Details button' },
+  { name: 'btnUpdateRow',   label: 'Show Update/Save button' },
+  { name: 'btnPdf',         label: 'Show PDF button' },
+  { name: 'btnBilling',     label: 'Show Billing button' },
+  { name: 'btnWhatsApp',    label: 'Show WhatsApp button' },
+  { name: 'btnUpload',      label: 'Show Upload button' },
+  { name: 'btnFiles',       label: 'Show Files button' },
+  { name: 'canDeleteFiles', label: 'Can Delete Files' }
+];
+%>
+
+<style>
+  .subagent-step-badge{
+    background: rgba(59, 130, 246, 0.14) !important;
+    color: #1d4ed8 !important;
+    border: 1px solid rgba(59, 130, 246, 0.30) !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.10);
+  }
+</style>
+
+<div class="container-fluid py-4">
+
+  <a href="<%= usersListPath %>" class="small <%= themeTextClass %> text-decoration-none mb-3 d-inline-flex align-items-center fw-semibold">
+     <i class="bi bi-arrow-left me-1"></i> Back to Users
+  </a>
+
+  <div class="card border-0 shadow-sm rounded-4 mb-3">
+    <div class="card-body py-3 d-flex flex-wrap align-items-center gap-3">
+      <span class="badge rounded-pill bg-light text-muted border d-flex align-items-center">
+        <i class="bi bi-magic me-2 <%= themeIconClass %>"></i>
+        User Creation Wizard
+      </span>
+
+      <div class="d-flex flex-wrap gap-3 small">
+        <div class="d-flex align-items-center gap-2">
+         <span class="d-inline-flex align-items-center justify-content-center rounded-circle <%= step1Class %>"
+      style="width:22px;height:22px;font-size:.75rem;">1</span>
+          <span>Basic info</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+         <span class="d-inline-flex align-items-center justify-content-center rounded-circle <%= step2Class %>"
+      style="width:22px;height:22px;font-size:.75rem;">2</span>
+          <span>Role &amp; department</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+         <span class="d-inline-flex align-items-center justify-content-center rounded-circle <%= step3Class %>"
+      style="width:22px;height:22px;font-size:.75rem;">3</span>
+          <span>Columns</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+         <span class="d-inline-flex align-items-center justify-content-center rounded-circle <%= step4Class %>"
+      style="width:22px;height:22px;font-size:.75rem;">4</span>
+          <span>Buttons &amp; Permissions</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-3">
+      <div class="card shadow-sm h-100 border-0 rounded-4">
+        <div class="card-body small">
+          <h6 class="mb-3 d-flex align-items-center">
+            <i class="bi bi-compass me-2 <%= themeIconClass %>"></i>
+            User Creation Wizard
+          </h6>
+
+          <p class="text-muted mb-3">
+         From here, you can create Users for the School department.
+            <strong><%= createdRoleLabel %></strong> 
+          </p>
+
+          <ol class="ps-3 mb-0">
+            <li class="mb-1">Set basic information.</li>
+            <li class="mb-1">Only admin can choose role & type.</li>
+            <li class="mb-1">Select allowed columns.</li>
+            <li class="mb-1">Select allowed buttons/panels.</li>
+          </ol>
+
+          <hr>
+
+          <div class="mb-2">
+            <div class="text-muted">Logged in as</div>
+            <span class="badge rounded-pill <%= roleBadgeClass %> text-capitalize">
+              <%= user.role %>
+            </span>
+          </div>
+
+          <div class="text-muted">
+            Rule: You can only assign permissions that you already have.
+          </div>
+
+          <% if (!canCreateUsers) { %>
+            <hr>
+            <div class="alert alert-warning py-2 small mb-0">
+              You don’t have permission to create users.
+            </div>
+          <% } %>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-9">
+      <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-header border-0 bg-white bg-opacity-75">
+          <h5 class="mb-0 d-flex align-items-center">
+            <i class="bi bi-person-plus me-2 <%= themeIconClass %>"></i>
+            Create <%= createdRoleLabel %> (Dept: <span class="text-capitalize"><%= user.dept || 'N/A' %></span>)
+          </h5>
+          <small class="text-muted">
+             Keep a strong password. The users & you cannot change it later, Only Super Admin can change it.
+          </small>
+        </div>
+
+        <div class="card-body">
+
+          <% if (error) { %>
+            <div class="alert alert-danger py-2 small"><%= error %></div>
+          <% } %>
+
+          <form method="POST" action="/dashboard/admin/agents">
+
+            <div class="row g-3">
+              <div class="col-12">
+                <h6 class="mb-1">1. Basic information</h6>
+                <p class="text-muted small mb-2">Set name, email, and password.</p>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Name</label>
+                <input type="text" name="name" class="form-control"
+                       placeholder=""
+                       <%= canCreateUsers ? 'required' : 'disabled' %>>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Email</label>
+                <input type="email" name="email" class="form-control"
+                       placeholder="name@ivs.com"
+                       <%= canCreateUsers ? 'required' : 'disabled' %>>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Password</label>
+                <input type="text" name="password" class="form-control"
+                       placeholder=""
+                       <%= canCreateUsers ? 'required' : 'disabled' %>>
+              </div>
+
+              <div class="col-12 mt-3">
+                <h6 class="mb-1">2. Role &amp; Department</h6>
+               <p class="text-muted small mb-2">
+                <%= roleDeptHelpText %>
+               </p>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Department (Fixed)</label>
+                <input type="text" class="form-control bg-light"
+                       value="<%= deptLabel %>" disabled>
+                <input type="hidden" name="dept" value="<%= user.dept || '' %>">
+                 <small class="text-muted d-block"><%= deptFieldHelpText %></small>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Role</label>
+
+                <% if (isAdmin) { %>
+                  <select name="newRole" class="form-select" <%= canCreateUsers ? 'required' : 'disabled' %>>
+                    <option value="agent">Agent</option>
+                    <option value="sub_agent">Sub Agent</option>
+                  </select>
+                <% } else { %>
+                  <input type="text" class="form-control bg-light" value="Sub Agent" disabled>
+                  <input type="hidden" name="newRole" value="sub_agent">
+                <% } %>
+
+                <small class="text-muted d-block">
+                <%= roleFieldHelpText %>
+                </small>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small">Pipeline / Agent Type</label>
+
+                <% if (isAdmin) { %>
+                  <select name="agentType" class="form-select" <%= canCreateUsers ? 'required' : 'disabled' %>>
+                    <% agentTypeOptions.forEach(function(opt){ %>
+                      <option value="<%= opt.value %>"><%= opt.label %></option>
+                    <% }) %>
+                  </select>
+                <% } else { %>
+                  <input type="text" class="form-control bg-light"
+                         value="<%= currentAgentTypeLabel %>" disabled>
+                  <input type="hidden" name="agentType" value="<%= currentAgentType %>">
+                <% } %>
+
+                 <small class="text-muted d-block">
+                  <%= agentTypeFieldHelpText %>
+                 </small>
+              </div>
+
+              <div class="col-12 mt-3">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                  <span class="small text-muted">Quick:</span>
+                  <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btnSelectAll">
+                    Select all
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btnSelectNone">
+                    Select none
+                  </button>
+                  <span class="small text-muted ms-2">
+                    (Applies only to visible permissions)
+                  </span>
+                </div>
+              </div>
+
+              <div class="col-12 mt-3">
+                <h6 class="mb-1">3. Columns &  Buttons  Permissions</h6>
+                <p class="text-muted small mb-2">
+                  Only allowed options will be visible here.
+                </p>
+
+                <div class="accordion" id="permAccordion">
+
+                  <div class="accordion-item border-0 shadow-sm rounded-4 mb-2">
+                    <h2 class="accordion-header" id="headingCols">
+                      <button class="accordion-button rounded-4" type="button"
+                              data-bs-toggle="collapse" data-bs-target="#collapseCols"
+                              aria-expanded="true" aria-controls="collapseCols">
+                        <i class="bi bi-table me-2 <%= themeIconClass %>"></i>
+                        Admissions pipeline columns
+                      </button>
+                    </h2>
+
+                    <div id="collapseCols" class="accordion-collapse collapse show"
+                         aria-labelledby="headingCols" data-bs-parent="#permAccordion">
+                      <div class="accordion-body">
+
+
+
+                        <div class="row g-2">
+                          <% ALL_COLS.forEach(function(c){
+                               const parentAllowed = !!parentColsAllowed[c.name];
+                          %>
+
+                            <% if (parentAllowed && canEditPerms) { %>
+                              <div class="col-md-4">
+                                <input type="hidden" name="<%= c.name %>" value="">
+                                <div class="form-check small">
+                                  <input class="form-check-input col-toggle" type="checkbox"
+                                         id="<%= c.name %>" name="<%= c.name %>" value="on"
+                                         checked <%= canCreateUsers ? '' : 'disabled' %>>
+                                  <label class="form-check-label" for="<%= c.name %>"><%= c.label %></label>
+                                </div>
+                              </div>
+                            <% } else { %>
+                              <!-- ✅ auto inherit -->
+                              <input type="hidden" name="<%= c.name %>" value="<%= parentAllowed ? 'on' : '' %>">
+                            <% } %>
+
+                          <% }) %>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="accordion-item border-0 shadow-sm rounded-4">
+                    <h2 class="accordion-header" id="headingBtns">
+                      <button class="accordion-button collapsed rounded-4" type="button"
+                              data-bs-toggle="collapse" data-bs-target="#collapseBtns"
+                              aria-expanded="false" aria-controls="collapseBtns">
+                        <i class="bi bi-hand-index-thumb me-2 <%= themeIconClass %>"></i>
+                        Buttons
+                      </button>
+                    </h2>
+
+                    <div id="collapseBtns" class="accordion-collapse collapse"
+                         aria-labelledby="headingBtns" data-bs-parent="#permAccordion">
+                      <div class="accordion-body">
+
+                        <% if (!canEditPerms) { %>
+                          <div class="alert alert-light border small mb-2">
+                            Agent ke liye buttons/panels auto-inherit honge. Admin hi manually choose kar sakta hai.
+                          </div>
+                        <% } %>
+
+                        <div class="row g-2">
+                          <% ALL_BTNS.forEach(function(b){
+                               const parentAllowed = !!parentBtnsAllowed[b.name];
+                          %>
+
+                            <% if (parentAllowed && canEditPerms) { %>
+                              <div class="col-md-4">
+                                <input type="hidden" name="<%= b.name %>" value="">
+                                <div class="form-check small">
+                                  <input class="form-check-input perm-toggle" type="checkbox"
+                                         id="<%= b.name %>" name="<%= b.name %>" value="on"
+                                         checked <%= canCreateUsers ? '' : 'disabled' %>>
+                                  <label class="form-check-label" for="<%= b.name %>"><%= b.label %></label>
+                                </div>
+                              </div>
+                            <% } else { %>
+                              <!-- ✅ auto inherit -->
+                              <input type="hidden" name="<%= b.name %>" value="<%= parentAllowed ? 'on' : '' %>">
+                            <% } %>
+
+                          <% }) %>
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+            <hr>
+
+            <div class="d-flex justify-content-between">
+             <a href="<%= usersListPath %>" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                 Cancel
+             </a>
+
+              <% if (canCreateUsers) { %>
+                <button type="submit" class="btn <%= themeBtnClass %> rounded-pill px-4">
+                  <i class="bi bi-save me-1"></i>
+                  Save User
+                </button>
+              <% } else { %>
+                <button type="button" class="btn btn-primary rounded-pill px-4" disabled>
+                  <i class="bi bi-save me-1"></i>
+                  Save User
+                </button>
+              <% } %>
+            </div>
+
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const btnSelectAll = document.getElementById("btnSelectAll");
+    const btnSelectNone = document.getElementById("btnSelectNone");
+
+    function toggleAll(on) {
+      document.querySelectorAll(".perm-toggle, .col-toggle").forEach((cb) => {
+        if (cb.disabled) return;
+        cb.checked = !!on;
+      });
+    }
+
+    if (btnSelectAll) btnSelectAll.addEventListener("click", () => toggleAll(true));
+    if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));
+  })();
+</script>
+
+<%- include('partials/bootstrap-footer') %>
