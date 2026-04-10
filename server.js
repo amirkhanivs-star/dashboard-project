@@ -4426,6 +4426,205 @@ app.post("/api/bulk-challan/send-whatsapp", requireLogin, requireSendWhatsApp, a
   }
 });
 
+function getBaseUrl(req) {
+  return (
+    process.env.APP_BASE_URL ||
+    process.env.BASE_URL ||
+    process.env.PUBLIC_BASE_URL ||
+    `${req.protocol}://${req.get("host")}/`
+  ).replace(/\/+$/, "/");
+}
+
+async function generateMonthlyChallanForApi({ req, admissionId, monthKey, billingYear, labelPrefix = "API Invoice" }) {
+  const full = dbGetAdmissionDetailsById(admissionId, billingYear);
+  if (!full) {
+    throw new Error(`Admission details not found for id ${admissionId}`);
+  }
+
+  const billArr = Array.isArray(full?.billing) ? full.billing : [];
+  const monthRow = billArr.find(
+    (b) => String(b?.month || "").toLowerCase().trim() === String(monthKey || "").toLowerCase().trim()
+  );
+
+  const monthStatus = String(monthRow?.status || "").trim().toLowerCase();
+
+  if (monthStatus === "not admitted") {
+    return {
+      skipped: true,
+      reason: "not_admitted_month",
+      month: monthKey,
+      year: billingYear,
+    };
+  }
+
+  const bannerPath = path.join(__dirname, "public", "img", "ivs-banner.jpg");
+
+  const fullWithHistory = attachPreviousSixMonthsToFull(full, monthKey);
+
+  const pdfBuffer = await makeMonthlyChallanPdf({
+    full: fullWithHistory,
+    monthKey,
+    year: billingYear,
+    bannerPath,
+  });
+
+  if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
+    throw new Error(`Invalid PDF buffer for admission ${admissionId} month ${monthKey}`);
+  }
+
+  const head = pdfBuffer.subarray(0, 5).toString("utf8");
+  if (head !== "%PDF-") {
+    throw new Error(`Generated file is not a valid PDF for admission ${admissionId} month ${monthKey}`);
+  }
+
+  const { year, month } = getYearMonthParts(new Date());
+  const challanDir = path.join(uploadsDir, "challans", year, month);
+  if (!fs.existsSync(challanDir)) fs.mkdirSync(challanDir, { recursive: true });
+
+  const filename = `api-invoice-${admissionId}-${monthKey}-${Date.now()}.pdf`;
+  const absPath = path.join(challanDir, filename);
+
+  fs.writeFileSync(absPath, pdfBuffer);
+
+  const relStored = toPosix(path.relative(uploadsDir, absPath));
+  const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+
+  const info = db.prepare(`
+    INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    admissionId,
+    `${labelPrefix} (${monthKey})`,
+    relStored,
+    fileUrl,
+    "application/pdf",
+    pdfBuffer.length || 0
+  );
+
+  return {
+    skipped: false,
+    uploadId: info.lastInsertRowid,
+    month: monthKey,
+    year: billingYear,
+    fileUrl,
+    storedName: relStored,
+    mimeType: "application/pdf",
+    size: pdfBuffer.length || 0,
+  };
+}
+
+app.post("/api/invoices/create", checkApiKey, async (req, res) => {
+  try {
+    const {
+      monthKey,
+      year,
+      familyNumber,
+      registrationNumber,
+    } = req.body || {};
+
+    const cleanMonthKey = String(monthKey || "").trim().toLowerCase();
+    const billingYear = Number(year);
+
+    const cleanFamilyNumber = String(familyNumber || "").trim();
+    const cleanRegistrationNumber = String(registrationNumber || "").trim();
+
+    if (!BILLING_MONTH_KEYS.includes(cleanMonthKey)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid monthKey",
+      });
+    }
+
+    if (!cleanMonthKey || !billingYear) {
+      return res.status(400).json({
+        success: false,
+        message: "monthKey and year are required",
+      });
+    }
+
+    if (!cleanFamilyNumber && !cleanRegistrationNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "familyNumber or registrationNumber is required",
+      });
+    }
+
+    let rows = [];
+    let mode = "";
+
+    if (cleanFamilyNumber) {
+      mode = "family";
+      rows = db.prepare(`
+        SELECT *
+        FROM admissions
+        WHERE TRIM(COALESCE(accounts_family_number, '')) = TRIM(?)
+        ORDER BY id DESC
+      `).all(cleanFamilyNumber);
+    } else {
+      mode = "registration";
+      rows = db.prepare(`
+        SELECT *
+        FROM admissions
+        WHERE TRIM(COALESCE(accounts_registration_number, '')) = TRIM(?)
+        ORDER BY id DESC
+      `).all(cleanRegistrationNumber);
+    }
+
+    if (!rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No matching admission found",
+      });
+    }
+
+    const invoices = [];
+
+    for (const row of rows) {
+      try {
+        const file = await generateMonthlyChallanForApi({
+          req,
+          admissionId: row.id,
+          monthKey: cleanMonthKey,
+          billingYear,
+        });
+
+        invoices.push({
+          admissionId: row.id,
+          studentName: row.student_name || "",
+          fatherName: row.father_name || "",
+          grade: row.grade || "",
+          registrationNumber: row.accounts_registration_number || "",
+          familyNumber: row.accounts_family_number || "",
+          ...file,
+        });
+      } catch (err) {
+        invoices.push({
+          admissionId: row.id,
+          studentName: row.student_name || "",
+          registrationNumber: row.accounts_registration_number || "",
+          familyNumber: row.accounts_family_number || "",
+          error: String(err?.message || err),
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      mode,
+      monthKey: cleanMonthKey,
+      year: billingYear,
+      count: invoices.length,
+      invoices,
+    });
+  } catch (err) {
+    console.error("POST /api/invoices/create error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Invoice creation failed",
+    });
+  }
+});
+
 app.post("/api/admissions/update-row", checkApiKey, (req, res) => {
   try {
     const {
