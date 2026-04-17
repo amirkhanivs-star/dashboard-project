@@ -4659,101 +4659,7 @@ async function generateMonthlyPaidReceiptForApi({
   };
 }
 
-async function generateMonthlyPaidReceiptForApi({
-  req,
-  admissionId,
-  monthKey,
-  billingYear,
-  labelPrefix = "API Paid Invoice",
-}) {
-  const full = dbGetAdmissionDetailsById(admissionId, billingYear);
-  if (!full) {
-    throw new Error(`Admission details not found for id ${admissionId}`);
-  }
 
-  const billArr = Array.isArray(full?.billing) ? full.billing : [];
-  const monthRow = billArr.find(
-    (b) =>
-      String(b?.month || "").toLowerCase().trim() ===
-      String(monthKey || "").toLowerCase().trim()
-  );
-
-  if (!monthRow) {
-    throw new Error(`No billing record found for month ${monthKey}`);
-  }
-
-  const monthStatus = String(monthRow?.status || "").trim().toLowerCase();
-  if (monthStatus === "not admitted") {
-    return {
-      skipped: true,
-      reason: "not_admitted_month",
-      month: monthKey,
-      year: billingYear,
-    };
-  }
-
-  const amt = Number(monthRow?.amount || 0);
-  if (!amt || amt <= 0) {
-    return {
-      skipped: true,
-      reason: "no_paid_amount",
-      month: monthKey,
-      year: billingYear,
-    };
-  }
-
-  const bannerPath = path.join(__dirname, "public", "img", "ivs-banner.jpg");
-
-  const pdfBuffer = await makeMonthlyPaidReceiptPdf({
-    full,
-    monthKey,
-    bannerPath,
-  });
-
-  if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
-    throw new Error(`Invalid PDF buffer for paid invoice ${admissionId} month ${monthKey}`);
-  }
-
-  const head = pdfBuffer.subarray(0, 5).toString("utf8");
-  if (head !== "%PDF-") {
-    throw new Error(`Generated file is not a valid PDF for paid invoice ${admissionId} month ${monthKey}`);
-  }
-
-  const { year, month } = getYearMonthParts(new Date());
-  const challanDir = path.join(uploadsDir, "challans", year, month);
-  if (!fs.existsSync(challanDir)) fs.mkdirSync(challanDir, { recursive: true });
-
-  const filename = `api-paid-invoice-${admissionId}-${monthKey}-${Date.now()}.pdf`;
-  const absPath = path.join(challanDir, filename);
-
-  fs.writeFileSync(absPath, pdfBuffer);
-
-  const relStored = toPosix(path.relative(uploadsDir, absPath));
-  const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
-
-  const info = db.prepare(`
-    INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
-    admissionId,
-    `${labelPrefix} (${monthKey})`,
-    relStored,
-    fileUrl,
-    "application/pdf",
-    pdfBuffer.length || 0
-  );
-
-  return {
-    skipped: false,
-    uploadId: info.lastInsertRowid,
-    month: monthKey,
-    year: billingYear,
-    fileUrl,
-    storedName: relStored,
-    mimeType: "application/pdf",
-    size: pdfBuffer.length || 0,
-  };
-}
 
 app.post("/api/invoices/create", checkApiKey, async (req, res) => {
   try {
@@ -4914,7 +4820,8 @@ app.post("/api/paid-invoices/create", checkApiKey, async (req, res) => {
         SELECT *
         FROM admissions
         WHERE TRIM(COALESCE(accounts_family_number, '')) = TRIM(?)
-        ORDER BY id DESC
+  AND COALESCE(is_deleted, 0) = 0
+ORDER BY id DESC
       `).all(cleanFamilyNumber);
     } else {
       mode = "registration";
@@ -4922,7 +4829,8 @@ app.post("/api/paid-invoices/create", checkApiKey, async (req, res) => {
         SELECT *
         FROM admissions
         WHERE TRIM(COALESCE(accounts_registration_number, '')) = TRIM(?)
-        ORDER BY id DESC
+  AND COALESCE(is_deleted, 0) = 0
+ORDER BY id DESC
       `).all(cleanRegistrationNumber);
     }
 
