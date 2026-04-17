@@ -557,7 +557,8 @@
         return false;
       };
 
-      const isBtnOn = (key) => !!p[key];
+            const isBtnOn = (key) => !!p[key];
+      const canDeleteAdmissions = !!p.canDeleteAdmissions;
 
       const enabledCols = ALL_COLS.reduce((acc, c) => acc + (isColOn(c.key, c.legacy) ? 1 : 0), 0);
       const totalCols = ALL_COLS.length;
@@ -646,6 +647,10 @@
 
                 <span class="badge rounded-pill <%= isBtnOn('btnFiles') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
                   <i class="bi bi-folder2-open me-1"></i>Files
+                </span>
+
+                                <span class="badge rounded-pill <%= canDeleteAdmissions ? 'bg-danger-subtle text-danger' : 'bg-light text-muted border' %>">
+                  <i class="bi bi-trash3 me-1"></i>Delete Admissions
                 </span>
               </div>
 

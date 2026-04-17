@@ -54,7 +54,8 @@ const BTN_LABELS = {
   btnWhatsApp: "Show WhatsApp Button",
   btnUpload: "Show Upload Button",
   btnFiles: "Show Files Button",
-  canDeleteFiles: "Can Delete Files"
+  canDeleteFiles: "Can Delete Files",
+  canDeleteAdmissions: "Can Delete Admissions"
 };
 
   const COL_KEYS = Object.keys(COL_LABELS).filter(k => isAllowed(k));
@@ -232,7 +233,7 @@ const roleBadgeClass =
 
 <div class="mb-2">
   <h6 class="mb-1">2. Columns & Buttons Permissions</h6>
-  <p class="text-muted small mb-2">Turn columns and buttons on or off.</p>
+    <p class="text-muted small mb-2">Turn columns, buttons, and special permissions on or off.</p>
 </div>
 
             <div class="accordion" id="permAccordion">

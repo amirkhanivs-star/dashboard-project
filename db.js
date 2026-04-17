@@ -54,6 +54,7 @@ const PERMISSION_KEYS = [
   "btnDetails",
 
   "canDeleteFiles",
+  "canDeleteAdmissions",
 ];
 
 const LEGACY_MAP = {
@@ -194,7 +195,12 @@ db.exec(`
     december TEXT,
 
     whatsapp TEXT,
-    pdf_path TEXT,
+       pdf_path TEXT,
+
+    is_deleted INTEGER DEFAULT 0,
+    deleted_at TEXT,
+    deleted_by TEXT,
+    deleted_by_id INTEGER,
 
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
@@ -362,6 +368,10 @@ ensureColumn("admissions", "monthly_fee_current", "REAL");
 ensureColumn("admissions", "has_extra_fee", "INTEGER");
 ensureColumn("admissions", "whatsapp", "TEXT");
 ensureColumn("admissions", "pdf_path", "TEXT");
+ensureColumn("admissions", "is_deleted", "INTEGER DEFAULT 0");
+ensureColumn("admissions", "deleted_at", "TEXT");
+ensureColumn("admissions", "deleted_by", "TEXT");
+ensureColumn("admissions", "deleted_by_id", "INTEGER");
 try {
   db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_admissions_unique_reg_no
@@ -671,8 +681,13 @@ try {
         monthly_fee_current REAL,
         has_extra_fee INTEGER,
 
-        whatsapp TEXT,
+               whatsapp TEXT,
         pdf_path TEXT,
+
+        is_deleted INTEGER DEFAULT 0,
+        deleted_at TEXT,
+        deleted_by TEXT,
+        deleted_by_id INTEGER,
 
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
@@ -692,7 +707,8 @@ try {
         admission_paid_invoice_status, admission_paid_invoice_status_timestamp,
         january, february, march, april, may, june, july, august, september, october, november, december,
         billing_json, monthly_fee_current, has_extra_fee,
-        whatsapp, pdf_path,
+                whatsapp, pdf_path,
+        is_deleted, deleted_at, deleted_by, deleted_by_id,
         created_at
       )
       SELECT
@@ -711,7 +727,8 @@ try {
         admission_paid_invoice_status, admission_paid_invoice_status_timestamp,
         january, february, march, april, may, june, july, august, september, october, november, december,
         billing_json, monthly_fee_current, has_extra_fee,
-        whatsapp, pdf_path,
+               whatsapp, pdf_path,
+        COALESCE(is_deleted, 0), deleted_at, deleted_by, deleted_by_id,
         created_at
       FROM admissions;
     `);
@@ -1115,7 +1132,12 @@ export function saveAdmissionBillingMonthByYear({
 }
 
 export function dbGetAdmissionDetailsById(id, billingYear = new Date().getFullYear()) {
-  const row = db.prepare(`SELECT * FROM admissions WHERE id = ?`).get(id);
+  const row = db.prepare(`
+  SELECT *
+  FROM admissions
+  WHERE id = ?
+    AND COALESCE(is_deleted, 0) = 0
+`).get(id);
   if (!row) return null;
 
   let billingArr = getAdmissionBillingByYear(id, billingYear);

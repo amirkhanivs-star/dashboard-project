@@ -291,12 +291,13 @@ function findExistingAdmissionForImport(row) {
 
   // 1) strongest duplicate rule
   if (regNo) {
-    const byReg = db.prepare(`
-      SELECT id
-      FROM admissions
-      WHERE TRIM(COALESCE(accounts_registration_number, '')) = TRIM(?)
-      LIMIT 1
-    `).get(regNo);
+   const byReg = db.prepare(`
+  SELECT id
+  FROM admissions
+  WHERE COALESCE(is_deleted, 0) = 0
+    AND TRIM(COALESCE(accounts_registration_number, '')) = TRIM(?)
+  LIMIT 1
+`).get(regNo);
 
     if (byReg) return byReg;
   }
@@ -304,25 +305,26 @@ function findExistingAdmissionForImport(row) {
   // 2) fallback duplicate rule
   if (student && father && (grade || tuitionGrade || phone)) {
     const byFingerprint = db.prepare(`
-      SELECT id
-      FROM admissions
-      WHERE TRIM(COALESCE(dept, '')) = TRIM(?)
-        AND TRIM(COALESCE(student_name, '')) = TRIM(?)
-        AND TRIM(COALESCE(father_name, '')) = TRIM(?)
-        AND TRIM(COALESCE(grade, '')) = TRIM(?)
-        AND TRIM(COALESCE(tuition_grade, '')) = TRIM(?)
-        AND TRIM(COALESCE(phone, '')) = TRIM(?)
-        AND TRIM(COALESCE(registration_date, '')) = TRIM(?)
-      LIMIT 1
-    `).get(
-      dept,
-      student,
-      father,
-      grade,
-      tuitionGrade,
-      phone,
-      regDate
-    );
+  SELECT id
+  FROM admissions
+  WHERE COALESCE(is_deleted, 0) = 0
+    AND TRIM(COALESCE(dept, '')) = TRIM(?)
+    AND TRIM(COALESCE(student_name, '')) = TRIM(?)
+    AND TRIM(COALESCE(father_name, '')) = TRIM(?)
+    AND TRIM(COALESCE(grade, '')) = TRIM(?)
+    AND TRIM(COALESCE(tuition_grade, '')) = TRIM(?)
+    AND TRIM(COALESCE(phone, '')) = TRIM(?)
+    AND TRIM(COALESCE(registration_date, '')) = TRIM(?)
+  LIMIT 1
+`).get(
+  dept,
+  student,
+  father,
+  grade,
+  tuitionGrade,
+  phone,
+  regDate
+);
 
     if (byFingerprint) return byFingerprint;
   }
@@ -542,6 +544,7 @@ const requireOpenBilling = requirePerm("btnBilling");
 const requireSaveBilling = requirePerm("btnBilling");
 const requireSendWhatsApp = requirePerm("btnWhatsApp");
 const requireDeleteFiles = requirePerm("canDeleteFiles");
+const requireDeleteAdmissions = requirePerm("canDeleteAdmissions");
 
 
 
@@ -662,10 +665,14 @@ function fetchAdmissionsForUser(user) {
   const dept = user?.dept || null;
   if (!dept) return [];
 
-  const billingYear = new Date().getFullYear();
-
   const rows = db
-    .prepare("SELECT * FROM admissions WHERE dept = ? ORDER BY id DESC")
+    .prepare(`
+      SELECT *
+      FROM admissions
+      WHERE dept = ?
+        AND COALESCE(is_deleted, 0) = 0
+      ORDER BY id DESC
+    `)
     .all(dept);
 
   return rows.map((row) => {
@@ -777,6 +784,34 @@ function getBankOptions() {
   }
 }
 
+function getActiveAdmissionWhereClause(alias = "") {
+  const prefix = alias ? `${alias}.` : "";
+  return `COALESCE(${prefix}is_deleted, 0) = 0`;
+}
+
+function getActiveAdmissionById(id) {
+  return db.prepare(`
+    SELECT *
+    FROM admissions
+    WHERE id = ?
+      AND COALESCE(is_deleted, 0) = 0
+  `).get(id);
+}
+
+function getDeleteAdmissionAccess(user, row) {
+  if (!user || !row) return false;
+  if (user.role === "super_admin") return true;
+
+  const perms = getPerm(user);
+  if (!perms?.canDeleteAdmissions) return false;
+  if (!user.dept) return false;
+
+  const rowDept = String(row.dept || "").trim().toLowerCase();
+  const userDept = String(user.dept || "").trim().toLowerCase();
+
+  return rowDept && userDept && rowDept === userDept;
+}
+
 
 function checkDuplicateRegistrationNumber(registrationNumber, currentId = null) {
   const cleanRegistrationNumber = String(registrationNumber || "").trim();
@@ -789,6 +824,7 @@ function checkDuplicateRegistrationNumber(registrationNumber, currentId = null) 
       SELECT id, student_name
       FROM admissions
       WHERE TRIM(accounts_registration_number) = TRIM(?)
+        AND COALESCE(is_deleted, 0) = 0
         AND id != ?
       LIMIT 1
     `).get(cleanRegistrationNumber, currentId);
@@ -798,10 +834,10 @@ function checkDuplicateRegistrationNumber(registrationNumber, currentId = null) 
     SELECT id, student_name
     FROM admissions
     WHERE TRIM(accounts_registration_number) = TRIM(?)
+      AND COALESCE(is_deleted, 0) = 0
     LIMIT 1
   `).get(cleanRegistrationNumber);
 }
-
 /* ========== ADMISSIONS HELPERS (DB -> pipeline object) ========== */
 function mapAdmissionRow(row) {
   if (!row) return null;
@@ -849,8 +885,19 @@ function mapAdmissionRow(row) {
 
 function fetchAdmissionsForDept(dept) {
   const rows = dept
-    ? db.prepare("SELECT * FROM admissions WHERE dept = ? ORDER BY id DESC").all(dept)
-    : db.prepare("SELECT * FROM admissions ORDER BY id DESC").all();
+    ? db.prepare(`
+        SELECT *
+        FROM admissions
+        WHERE dept = ?
+          AND COALESCE(is_deleted, 0) = 0
+        ORDER BY id DESC
+      `).all(dept)
+    : db.prepare(`
+        SELECT *
+        FROM admissions
+        WHERE COALESCE(is_deleted, 0) = 0
+        ORDER BY id DESC
+      `).all();
 
   return rows.map((row) => {
     const mapped = mapAdmissionRow(row);
@@ -872,23 +919,45 @@ function fetchAdmissionsPage({ dept = null, page = 1, limit = 200, perms = null 
 
   if (dept) {
     const totalRow = db
-      .prepare("SELECT COUNT(*) AS total FROM admissions WHERE dept = ?")
+      .prepare(`
+        SELECT COUNT(*) AS total
+        FROM admissions
+        WHERE dept = ?
+          AND COALESCE(is_deleted, 0) = 0
+      `)
       .get(dept);
 
     totalRecords = Number(totalRow?.total || 0);
 
     rows = db
-      .prepare("SELECT * FROM admissions WHERE dept = ? ORDER BY id DESC LIMIT ? OFFSET ?")
+      .prepare(`
+        SELECT *
+        FROM admissions
+        WHERE dept = ?
+          AND COALESCE(is_deleted, 0) = 0
+        ORDER BY id DESC
+        LIMIT ? OFFSET ?
+      `)
       .all(dept, safeLimit, offset);
   } else {
     const totalRow = db
-      .prepare("SELECT COUNT(*) AS total FROM admissions")
+      .prepare(`
+        SELECT COUNT(*) AS total
+        FROM admissions
+        WHERE COALESCE(is_deleted, 0) = 0
+      `)
       .get();
 
     totalRecords = Number(totalRow?.total || 0);
 
     rows = db
-      .prepare("SELECT * FROM admissions ORDER BY id DESC LIMIT ? OFFSET ?")
+      .prepare(`
+        SELECT *
+        FROM admissions
+        WHERE COALESCE(is_deleted, 0) = 0
+        ORDER BY id DESC
+        LIMIT ? OFFSET ?
+      `)
       .all(safeLimit, offset);
   }
 
@@ -931,7 +1000,12 @@ function buildOverviewData(filters = {}) {
     currency: String(filters.currency || "all").trim(),
   };
 
-  const rows = db.prepare("SELECT * FROM admissions ORDER BY id DESC").all();
+  const rows = db.prepare(`
+  SELECT *
+  FROM admissions
+  WHERE COALESCE(is_deleted, 0) = 0
+  ORDER BY id DESC
+`).all();
   console.log("OVERVIEW raw admissions:", rows.length);
 console.log("OVERVIEW filters:", safeFilters);
 
@@ -2107,8 +2181,11 @@ function getBulkChallanMatchingAdmissions({ user, className, section }) {
     rows = db.prepare(`
       SELECT *
       FROM admissions
-      WHERE TRIM(COALESCE(grade, '')) = TRIM(?)
-         OR TRIM(COALESCE(tuition_grade, '')) = TRIM(?)
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND (
+          TRIM(COALESCE(grade, '')) = TRIM(?)
+          OR TRIM(COALESCE(tuition_grade, '')) = TRIM(?)
+        )
       ORDER BY id DESC
     `).all(cleanClass, cleanClass);
   } else {
@@ -2116,6 +2193,7 @@ function getBulkChallanMatchingAdmissions({ user, className, section }) {
       SELECT *
       FROM admissions
       WHERE dept = ?
+        AND COALESCE(is_deleted, 0) = 0
         AND (
           TRIM(COALESCE(grade, '')) = TRIM(?)
           OR TRIM(COALESCE(tuition_grade, '')) = TRIM(?)
@@ -2225,7 +2303,7 @@ app.get("/api/billing/:id", requireLogin, requireOpenBilling, (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid id" });
     }
 
-    const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+    const row = getActiveAdmissionById(id);
     if (!row) {
       return res.status(404).json({ success: false, message: "Admission not found" });
     }
@@ -2312,7 +2390,7 @@ app.post("/api/billing/:id", requireLogin, requireSaveBilling, async (req, res) 
       return res.status(400).json({ success: false, message: "Invalid id" });
     }
 
-    const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+    const row = getActiveAdmissionById(id);
     const billingYear = getBillingYearFromReq(req);
     if (!row) {
       return res.status(404).json({ success: false, message: "Admission not found" });
@@ -2636,6 +2714,7 @@ if (familyNumber) {
       SELECT *
       FROM admissions
       WHERE accounts_family_number = ?
+        AND COALESCE(is_deleted, 0) = 0
       ORDER BY id DESC
     `).all(familyNumber);
   } else {
@@ -2644,6 +2723,7 @@ if (familyNumber) {
       FROM admissions
       WHERE accounts_family_number = ?
         AND dept = ?
+        AND COALESCE(is_deleted, 0) = 0
       ORDER BY id DESC
     `).all(familyNumber, user?.dept || "");
   }
@@ -2765,7 +2845,7 @@ function handleSuperFullUpdate(req, res) {
   }
 
   const id = parseInt(req.params.id, 10);
-  const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+  const row = getActiveAdmissionById(id);
 
   if (!row) {
     return res.status(404).send("Not found");
@@ -3151,7 +3231,7 @@ app.get("/admissions/:id/pdf", requireLogin, async (req, res) => {
     const perms = getPerm(user);
 
     const id = parseInt(req.params.id, 10);
-    const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+    const row = getActiveAdmissionById(id);
     if (!row) return res.status(404).send("Admission not found");
 
     // ✅ non-super: dept check + permission check
@@ -3211,12 +3291,25 @@ function getAccessibleFamilyRows(user, familyNumber) {
 
   if (user?.role === "super_admin") {
     return db
-      .prepare("SELECT * FROM admissions WHERE accounts_family_number = ? ORDER BY id DESC")
+      .prepare(`
+        SELECT *
+        FROM admissions
+        WHERE accounts_family_number = ?
+          AND COALESCE(is_deleted, 0) = 0
+        ORDER BY id DESC
+      `)
       .all(familyNumber);
   }
 
   return db
-    .prepare("SELECT * FROM admissions WHERE accounts_family_number = ? AND dept = ? ORDER BY id DESC")
+    .prepare(`
+      SELECT *
+      FROM admissions
+      WHERE accounts_family_number = ?
+        AND dept = ?
+        AND COALESCE(is_deleted, 0) = 0
+      ORDER BY id DESC
+    `)
     .all(familyNumber, user.dept || "");
 }
 
@@ -3225,15 +3318,27 @@ function getAccessibleFamilyIds(user, familyNumber) {
 
   if (user?.role === "super_admin") {
     return db
-      .prepare("SELECT id FROM admissions WHERE accounts_family_number = ? ORDER BY id DESC")
+      .prepare(`
+        SELECT id
+        FROM admissions
+        WHERE accounts_family_number = ?
+          AND COALESCE(is_deleted, 0) = 0
+        ORDER BY id DESC
+      `)
       .all(familyNumber);
   }
 
   return db
-    .prepare("SELECT id FROM admissions WHERE accounts_family_number = ? AND dept = ? ORDER BY id DESC")
+    .prepare(`
+      SELECT id
+      FROM admissions
+      WHERE accounts_family_number = ?
+        AND dept = ?
+        AND COALESCE(is_deleted, 0) = 0
+      ORDER BY id DESC
+    `)
     .all(familyNumber, user.dept || "");
 }
-
 // =====================================================
 // ✅ COMMON VIEW DETAILS PAGE
 // supports super_admin + any user having btnDetails permission
@@ -3251,7 +3356,7 @@ function renderSharedAdmissionDetails(req, res, viewName = "admission-details") 
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).send("Invalid id");
 
-    const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+    const row = getActiveAdmissionById(id);
     if (!row) return res.status(404).send("Admission not found");
 
     if (!ensureAdmissionRouteAccess(user, perms, row)) {
@@ -3272,7 +3377,7 @@ function renderSharedAdmissionDetails(req, res, viewName = "admission-details") 
 
     const admissions = admissionsFull.map((full) => {
       const safe = maskAdmissionMapped(full, perms);
-      const rrow = db.prepare("SELECT * FROM admissions WHERE id=?").get(full.id);
+      const rrow = getActiveAdmissionById(full.id);
       if (rrow) attachComputedMonthFees(rrow, safe, billingYear);
       return safe;
     });
@@ -3333,8 +3438,8 @@ app.get("/dashboard/super/admission/:id/challan/:monthKey", requireLogin, async 
 
     if (!id) return res.status(400).send("Invalid id");
     if (!monthKey) return res.status(400).send("Invalid month");
-
-    const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+    
+    const row = getActiveAdmissionById(id);
     if (!row) return res.status(404).send("Admission not found");
 
     if (!ensureAdmissionRouteAccess(user, perms, row)) {
@@ -3427,7 +3532,7 @@ app.get("/dashboard/super/admission/:id/challan/bulk", requireLogin, async (req,
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).send("Invalid id");
 
-    const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+    const row = getActiveAdmissionById(id);
     if (!row) return res.status(404).send("Admission not found");
 
     if (!ensureAdmissionRouteAccess(user, perms, row)) {
@@ -3513,7 +3618,7 @@ app.get("/dashboard/super/admission/:id/paid/bulk", requireLogin, async (req, re
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).send("Invalid id");
 
-    const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+    const row = getActiveAdmissionById(id);
     if (!row) return res.status(404).send("Admission not found");
 
     if (!ensureAdmissionRouteAccess(user, perms, row)) {
@@ -3589,7 +3694,7 @@ app.get("/dashboard/super/admission/:id/paid/:monthKey", requireLogin, async (re
     if (!id) return res.status(400).send("Invalid id");
     if (!monthKey) return res.status(400).send("Invalid month");
 
-    const rowBase = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+    const rowBase = getActiveAdmissionById(id);
     if (!rowBase) return res.status(404).send("Admission not found");
 
     if (!ensureAdmissionRouteAccess(user, perms, rowBase)) {
@@ -3990,7 +4095,7 @@ app.get("/api/pending/admission/:id", requireLogin, (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ success: false, message: "Invalid id" });
 
-    const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+    const row = getActiveAdmissionById(id);
     if (!row) return res.status(404).json({ success: false, message: "Admission not found" });
 
     if (!ensureAdmissionRouteAccess(user, perms, row)) {
@@ -4028,7 +4133,7 @@ app.get("/api/admissions/:id", requireLogin, (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ success: false, message: "Invalid id" });
 
-    const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+    const row = getActiveAdmissionById(id);
     if (!row) return res.status(404).json({ success: false, message: "Admission not found" });
 
     if (!ensureAdmissionRouteAccess(user, perms, row)) {
@@ -4075,13 +4180,25 @@ app.get("/api/admissions", requireLogin, (req, res) => {
     let rows = [];
 
     if (user?.role === "super_admin") {
-      rows = db.prepare("SELECT * FROM admissions ORDER BY id DESC").all();
+      rows = db.prepare(`
+        SELECT *
+        FROM admissions
+        WHERE COALESCE(is_deleted, 0) = 0
+        ORDER BY id DESC
+      `).all();
       return res.json(rows);
     }
 
     if (!user?.dept) return res.json([]);
+
     rows = db
-      .prepare("SELECT * FROM admissions WHERE dept = ? ORDER BY id DESC")
+      .prepare(`
+        SELECT *
+        FROM admissions
+        WHERE dept = ?
+          AND COALESCE(is_deleted, 0) = 0
+        ORDER BY id DESC
+      `)
       .all(user.dept);
 
     const masked = rows.map((r) => maskAdmissionDbRow(r, perms));
@@ -4100,10 +4217,21 @@ app.get("/api/admissions/external", checkApiKey, (req, res) => {
     let rows;
     if (dept) {
       rows = db
-        .prepare("SELECT * FROM admissions WHERE dept = ? ORDER BY id DESC")
+        .prepare(`
+          SELECT *
+          FROM admissions
+          WHERE dept = ?
+            AND COALESCE(is_deleted, 0) = 0
+          ORDER BY id DESC
+        `)
         .all(dept);
     } else {
-      rows = db.prepare("SELECT * FROM admissions ORDER BY id DESC").all();
+      rows = db.prepare(`
+        SELECT *
+        FROM admissions
+        WHERE COALESCE(is_deleted, 0) = 0
+        ORDER BY id DESC
+      `).all();
     }
 
     const data = rows.map(mapAdmissionRow);
@@ -4134,7 +4262,7 @@ app.post("/api/admissions/invoice-status", checkApiKey, (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid admissionId" });
     }
 
-    const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+    const row = getActiveAdmissionById(id);
     if (!row) {
       return res.status(404).json({ success: false, message: "Admission not found" });
     }
@@ -4435,7 +4563,13 @@ function getBaseUrl(req) {
   ).replace(/\/+$/, "/");
 }
 
-async function generateMonthlyChallanForApi({ req, admissionId, monthKey, billingYear, labelPrefix = "API Invoice" }) {
+async function generateMonthlyPaidReceiptForApi({
+  req,
+  admissionId,
+  monthKey,
+  billingYear,
+  labelPrefix = "API Paid Invoice",
+}) {
   const full = dbGetAdmissionDetailsById(admissionId, billingYear);
   if (!full) {
     throw new Error(`Admission details not found for id ${admissionId}`);
@@ -4443,11 +4577,16 @@ async function generateMonthlyChallanForApi({ req, admissionId, monthKey, billin
 
   const billArr = Array.isArray(full?.billing) ? full.billing : [];
   const monthRow = billArr.find(
-    (b) => String(b?.month || "").toLowerCase().trim() === String(monthKey || "").toLowerCase().trim()
+    (b) =>
+      String(b?.month || "").toLowerCase().trim() ===
+      String(monthKey || "").toLowerCase().trim()
   );
 
-  const monthStatus = String(monthRow?.status || "").trim().toLowerCase();
+  if (!monthRow) {
+    throw new Error(`No billing record found for month ${monthKey}`);
+  }
 
+  const monthStatus = String(monthRow?.status || "").trim().toLowerCase();
   if (monthStatus === "not admitted") {
     return {
       skipped: true,
@@ -4457,31 +4596,38 @@ async function generateMonthlyChallanForApi({ req, admissionId, monthKey, billin
     };
   }
 
+  const amt = Number(monthRow?.amount || 0);
+  if (!amt || amt <= 0) {
+    return {
+      skipped: true,
+      reason: "no_paid_amount",
+      month: monthKey,
+      year: billingYear,
+    };
+  }
+
   const bannerPath = path.join(__dirname, "public", "img", "ivs-banner.jpg");
 
-  const fullWithHistory = attachPreviousSixMonthsToFull(full, monthKey);
-
-  const pdfBuffer = await makeMonthlyChallanPdf({
-    full: fullWithHistory,
+  const pdfBuffer = await makeMonthlyPaidReceiptPdf({
+    full,
     monthKey,
-    year: billingYear,
     bannerPath,
   });
 
   if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
-    throw new Error(`Invalid PDF buffer for admission ${admissionId} month ${monthKey}`);
+    throw new Error(`Invalid PDF buffer for paid invoice ${admissionId} month ${monthKey}`);
   }
 
   const head = pdfBuffer.subarray(0, 5).toString("utf8");
   if (head !== "%PDF-") {
-    throw new Error(`Generated file is not a valid PDF for admission ${admissionId} month ${monthKey}`);
+    throw new Error(`Generated file is not a valid PDF for paid invoice ${admissionId} month ${monthKey}`);
   }
 
   const { year, month } = getYearMonthParts(new Date());
   const challanDir = path.join(uploadsDir, "challans", year, month);
   if (!fs.existsSync(challanDir)) fs.mkdirSync(challanDir, { recursive: true });
 
-  const filename = `api-invoice-${admissionId}-${monthKey}-${Date.now()}.pdf`;
+  const filename = `api-paid-invoice-${admissionId}-${monthKey}-${Date.now()}.pdf`;
   const absPath = path.join(challanDir, filename);
 
   fs.writeFileSync(absPath, pdfBuffer);
@@ -4651,18 +4797,20 @@ app.post("/api/invoices/create", checkApiKey, async (req, res) => {
     if (cleanFamilyNumber) {
       mode = "family";
       rows = db.prepare(`
-        SELECT *
-        FROM admissions
-        WHERE TRIM(COALESCE(accounts_family_number, '')) = TRIM(?)
-        ORDER BY id DESC
+       SELECT *
+FROM admissions
+WHERE TRIM(COALESCE(accounts_family_number, '')) = TRIM(?)
+  AND COALESCE(is_deleted, 0) = 0
+ORDER BY id DESC
       `).all(cleanFamilyNumber);
     } else {
       mode = "registration";
       rows = db.prepare(`
-        SELECT *
-        FROM admissions
-        WHERE TRIM(COALESCE(accounts_registration_number, '')) = TRIM(?)
-        ORDER BY id DESC
+       SELECT *
+FROM admissions
+WHERE TRIM(COALESCE(accounts_registration_number, '')) = TRIM(?)
+  AND COALESCE(is_deleted, 0) = 0
+ORDER BY id DESC
       `).all(cleanRegistrationNumber);
     }
 
@@ -4913,7 +5061,7 @@ app.post("/api/admissions/update-row", checkApiKey, (req, res) => {
     }
 
     const row = db
-      .prepare(`SELECT * FROM admissions WHERE ${matchCol} = ? LIMIT 1`)
+      .prepare(`SELECT * FROM admissions WHERE ${matchCol} = ? AND COALESCE(is_deleted, 0) = 0 LIMIT 1`)
       .get(matchVal);
 
     if (!row) {
@@ -4976,7 +5124,153 @@ app.post("/api/admissions/update-row", checkApiKey, (req, res) => {
   }
 });
 
+app.delete("/api/admissions/:id", requireLogin, requireDeleteAdmissions, (req, res) => {
+  try {
+    const user = req.session.user;
+    const id = parseInt(req.params.id, 10);
 
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Invalid admission id" });
+    }
+
+    const row = getActiveAdmissionById(id);
+    if (!row) {
+      return res.status(404).json({ success: false, message: "Admission not found" });
+    }
+
+    if (!getDeleteAdmissionAccess(user, row)) {
+      return res.status(403).json({ success: false, message: "Not allowed" });
+    }
+
+    const now = new Date().toISOString();
+    const actorName = String(user?.name || "").trim();
+    const actorId = Number(user?.id || 0) || null;
+
+    db.prepare(`
+      UPDATE admissions
+      SET is_deleted = 1,
+          deleted_at = ?,
+          deleted_by = ?,
+          deleted_by_id = ?
+      WHERE id = ?
+        AND COALESCE(is_deleted, 0) = 0
+    `).run(now, actorName, actorId, id);
+
+    logAudit("admission_deleted", user, {
+      dept: row.dept || "",
+      details: {
+        admissionId: row.id,
+        studentName: row.student_name || "",
+        fatherName: row.father_name || "",
+        registrationNumber: row.accounts_registration_number || "",
+        familyNumber: row.accounts_family_number || "",
+        mode: "single",
+      },
+    });
+
+    emitAdmissionChanged(req, {
+      type: "admission_deleted",
+      admissionId: row.id,
+      dept: row.dept || "",
+      mode: "single",
+    });
+
+    return res.json({
+      success: true,
+      message: "Admission deleted successfully",
+      deletedId: row.id,
+    });
+  } catch (err) {
+    console.error("DELETE /api/admissions/:id error:", err);
+    return res.status(500).json({ success: false, message: "Delete failed" });
+  }
+});
+
+app.post("/api/admissions/bulk-delete", requireLogin, requireDeleteAdmissions, (req, res) => {
+  try {
+    const user = req.session.user;
+    const idsRaw = Array.isArray(req.body?.ids) ? req.body.ids : [];
+
+    const ids = [...new Set(
+      idsRaw
+        .map((x) => parseInt(x, 10))
+        .filter((x) => Number.isInteger(x) && x > 0)
+    )];
+
+    if (!ids.length) {
+      return res.status(400).json({ success: false, message: "No admissions selected" });
+    }
+
+    const placeholders = ids.map(() => "?").join(", ");
+    const rows = db.prepare(`
+      SELECT *
+      FROM admissions
+      WHERE id IN (${placeholders})
+        AND COALESCE(is_deleted, 0) = 0
+      ORDER BY id DESC
+    `).all(...ids);
+
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: "No active admissions found" });
+    }
+
+    const allowedRows = rows.filter((row) => getDeleteAdmissionAccess(user, row));
+
+    if (!allowedRows.length) {
+      return res.status(403).json({ success: false, message: "Not allowed" });
+    }
+
+    const now = new Date().toISOString();
+    const actorName = String(user?.name || "").trim();
+    const actorId = Number(user?.id || 0) || null;
+
+    const deleteTxn = db.transaction((items) => {
+      const stmt = db.prepare(`
+        UPDATE admissions
+        SET is_deleted = 1,
+            deleted_at = ?,
+            deleted_by = ?,
+            deleted_by_id = ?
+        WHERE id = ?
+          AND COALESCE(is_deleted, 0) = 0
+      `);
+
+      for (const item of items) {
+        stmt.run(now, actorName, actorId, item.id);
+      }
+    });
+
+    deleteTxn(allowedRows);
+
+    logAudit("admission_bulk_deleted", user, {
+      dept: user?.dept || null,
+      details: {
+        mode: "bulk",
+        totalRequested: ids.length,
+        totalDeleted: allowedRows.length,
+        admissionIds: allowedRows.map((x) => x.id),
+      },
+    });
+
+    emitAdmissionChanged(req, {
+      type: "admission_deleted",
+      mode: "bulk",
+      deletedIds: allowedRows.map((x) => x.id),
+      count: allowedRows.length,
+      dept: user?.dept || null,
+    });
+
+    return res.json({
+      success: true,
+      message: "Admissions deleted successfully",
+      totalDeleted: allowedRows.length,
+      deletedIds: allowedRows.map((x) => x.id),
+    });
+  } catch (err) {
+    console.error("POST /api/admissions/bulk-delete error:", err);
+    return res.status(500).json({ success: false, message: "Bulk delete failed" });
+  }
+});
 
 /* ✅ WhatsApp Options APIs
    - GET: allow super_admin OR canSendWhatsApp
@@ -5718,7 +6012,7 @@ app.post("/api/whatsapp/send", requireLogin, requireSendWhatsApp, async (req, re
       return res.status(400).json({ success: false, message: "Invalid admissionId" });
     }
 
-    const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+    const row = getActiveAdmissionById(id);
     if (!row) {
       return res.status(404).json({ success: false, message: "Admission not found" });
     }
@@ -5847,7 +6141,12 @@ app.get("/db-settings/export/admissions", requireLogin, requireSuperAdmin, (req,
       return res.status(500).send("Admissions table columns not found");
     }
 
-    const rows = db.prepare(`SELECT * FROM admissions ORDER BY id ASC`).all();
+    const rows = db.prepare(`
+  SELECT *
+  FROM admissions
+  WHERE COALESCE(is_deleted, 0) = 0
+  ORDER BY id ASC
+`).all();
     const csv = rowsToCsv(rows, columns);
 
     const fileName = `admissions-backup-${Date.now()}.csv`;
@@ -5916,26 +6215,65 @@ app.post(
               continue;
             }
 
-            const duplicate = findExistingAdmissionForImport(cleanRow);
-            if (duplicate) {
-              skipped++;
-              continue;
-            }
+            const regNo = String(cleanRow.accounts_registration_number || "").trim();
 
-            const cols = Object.keys(cleanRow).filter((k) => allowedColumns.includes(k));
-            if (!cols.length) {
-              skipped++;
-              continue;
-            }
+let deletedMatch = null;
+if (regNo) {
+  deletedMatch = db.prepare(`
+    SELECT id
+    FROM admissions
+    WHERE TRIM(COALESCE(accounts_registration_number, '')) = TRIM(?)
+      AND COALESCE(is_deleted, 0) = 1
+    LIMIT 1
+  `).get(regNo);
+}
 
-            const placeholders = cols.map((c) => `@${c}`).join(", ");
-            const sql = `
-              INSERT INTO admissions (${cols.join(", ")})
-              VALUES (${placeholders})
-            `;
+if (deletedMatch) {
+  const cols = Object.keys(cleanRow).filter((k) => allowedColumns.includes(k));
+  if (!cols.length) {
+    skipped++;
+    continue;
+  }
 
-            db.prepare(sql).run(cleanRow);
-            inserted++;
+  const setClause = cols.map((c) => `${c} = @${c}`).join(", ");
+
+  db.prepare(`
+    UPDATE admissions
+    SET ${setClause},
+        is_deleted = 0,
+        deleted_at = NULL,
+        deleted_by = NULL,
+        deleted_by_id = NULL
+    WHERE id = @id
+  `).run({
+    id: deletedMatch.id,
+    ...cleanRow,
+  });
+
+  inserted++;
+  continue;
+}
+
+const duplicate = findExistingAdmissionForImport(cleanRow);
+if (duplicate) {
+  skipped++;
+  continue;
+}
+
+const cols = Object.keys(cleanRow).filter((k) => allowedColumns.includes(k));
+if (!cols.length) {
+  skipped++;
+  continue;
+}
+
+const placeholders = cols.map((c) => `@${c}`).join(", ");
+const sql = `
+  INSERT INTO admissions (${cols.join(", ")})
+  VALUES (${placeholders})
+`;
+
+db.prepare(sql).run(cleanRow);
+inserted++;
           } catch (rowErr) {
             failed++;
             console.error("CSV row import error:", rowErr.message);
@@ -7355,7 +7693,8 @@ colPaidInvoiceStatusTimestamp: isOn(req.body.colPaidInvoiceStatusTimestamp),
   btnUpload: isOn(req.body.btnUpload || req.body.canUploadFiles),
   btnFiles: isOn(req.body.btnFiles),
 
-  canDeleteFiles: isOn(req.body.canDeleteFiles),
+canDeleteFiles: isOn(req.body.canDeleteFiles),
+canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
 };
 
 
@@ -7521,8 +7860,8 @@ colPaidInvoiceStatusTimestamp: isOn(req.body.colPaidInvoiceStatusTimestamp),
 
   btnFiles: isOn(req.body.btnFiles),
 
-  // Optional
-  canDeleteFiles: isOn(req.body.canDeleteFiles),
+canDeleteFiles: isOn(req.body.canDeleteFiles),
+canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
 };
 
 

@@ -111,7 +111,7 @@ colPaidInvoiceStatusTimestamp: boolPerm(parentPermRaw, 'colPaidInvoiceStatusTime
 colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
 };
   // ✅ Parent allowed buttons (default false)
-  const parentBtnsAllowed = {
+   const parentBtnsAllowed = {
   btnEditRow: boolPerm(parentPermRaw, 'btnEditRow', false),
   btnDetails: boolPerm(parentPermRaw, 'btnDetails', false),
   btnUpdateRow: boolPerm(parentPermRaw, 'btnUpdateRow', false),
@@ -120,7 +120,8 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
   btnWhatsApp: boolPerm(parentPermRaw, 'btnWhatsApp', false),
   btnUpload: boolPerm(parentPermRaw, 'btnUpload', false),
   btnFiles: boolPerm(parentPermRaw, 'btnFiles', false),
-  canDeleteFiles: boolPerm(parentPermRaw, 'canDeleteFiles', false)
+  canDeleteFiles: boolPerm(parentPermRaw, 'canDeleteFiles', false),
+  canDeleteAdmissions: boolPerm(parentPermRaw, 'canDeleteAdmissions', false)
 };
 
  const ALL_COLS = [
@@ -153,7 +154,7 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
 { name: 'colActionButtons',      label: 'Action Buttons' }
 ];
 
- const ALL_BTNS = [
+  const ALL_BTNS = [
   { name: 'btnEditRow',     label: 'Show Edit button' },
   { name: 'btnDetails',     label: 'Show View Details button' },
   { name: 'btnUpdateRow',   label: 'Show Update/Save button' },
@@ -162,7 +163,8 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
   { name: 'btnWhatsApp',    label: 'Show WhatsApp button' },
   { name: 'btnUpload',      label: 'Show Upload button' },
   { name: 'btnFiles',       label: 'Show Files button' },
-  { name: 'canDeleteFiles', label: 'Can Delete Files' }
+  { name: 'canDeleteFiles', label: 'Can Delete Files' },
+  { name: 'canDeleteAdmissions', label: 'Can Delete Admissions' }
 ];
 %>
 

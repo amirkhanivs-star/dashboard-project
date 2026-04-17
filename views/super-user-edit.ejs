@@ -203,7 +203,7 @@ const roleBadgeClass =
                 <h6 class="mb-1">3. Columns & Buttons Permissions</h6>
                 
                 <p class="text-muted small mb-1">
-                  Turn columns and buttons on or off.
+                                    Turn columns, buttons, and special permissions on or off.
                 </p>
 
                 <div class="accordion" id="permAccordion">
@@ -453,6 +453,12 @@ const roleBadgeClass =
                             <input type="hidden" name="canDeleteFiles" value="">
                             <input class="form-check-input perm-toggle" type="checkbox" id="canDeleteFiles" name="canDeleteFiles" value="on" <%= (p.canDeleteFiles ?? false) ? 'checked' : '' %>>
                             <label class="form-check-label" for="canDeleteFiles">Can Delete Files</label>
+                          </div></div>
+
+                                                    <div class="col-md-4"><div class="form-check small">
+                            <input type="hidden" name="canDeleteAdmissions" value="">
+                            <input class="form-check-input perm-toggle" type="checkbox" id="canDeleteAdmissions" name="canDeleteAdmissions" value="on" <%= (p.canDeleteAdmissions ?? false) ? 'checked' : '' %>>
+                            <label class="form-check-label" for="canDeleteAdmissions">Can Delete Admissions</label>
                           </div></div>
 
                           <div class="col-md-4"><div class="form-check small">

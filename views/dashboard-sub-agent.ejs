@@ -302,7 +302,7 @@ actionButtons: canCol('actionButtons')
 },
 
       // ✅ action column itself controlled
-    btn: {
+        btn: {
       details: canBtn('details'),
       pdf: canBtn('pdf'),
       update: canBtn('update'),
@@ -310,6 +310,7 @@ actionButtons: canCol('actionButtons')
       billing: canBtn('billing'),
       upload: canBtn('upload'),
       files: canBtn('files'),
+      deleteAdmission: _hasKey('canDeleteAdmissions'),
     },
    edit: {
   dept: false,
@@ -334,11 +335,16 @@ actionButtons: canCol('actionButtons')
   };
 
   // ✅ Action column shows only if column permission is ON and at least one button allowed
- const showActions =
+ const canDeleteAdmissions = !!P.btn.deleteAdmission;
+
+const showActions =
   P.col.actionButtons &&
-  (P.btn.details || P.btn.pdf || P.btn.update || P.btn.whatsapp || P.btn.billing || P.btn.upload || P.btn.files);
+  (P.btn.details || P.btn.pdf || P.btn.update || P.btn.whatsapp || P.btn.billing || P.btn.upload || P.btn.files || canDeleteAdmissions);
+
+const showBulkDeleteBar = canDeleteAdmissions;
+
 const baseCols = Object.keys(P.col).filter(k => k !== 'actionButtons' && P.col[k]).length;
-const visibleColCount = baseCols + (showActions ? 1 : 0);
+const visibleColCount = baseCols + (showActions ? 1 : 0) + (canDeleteAdmissions ? 1 : 0);
 const DEFAULT_CURRENT_STATUS_OPTIONS =
   (typeof statusOptionsCurrent !== 'undefined' && Array.isArray(statusOptionsCurrent) && statusOptionsCurrent.length)
     ? statusOptionsCurrent.map(opt => ({
@@ -571,22 +577,48 @@ const DEFAULT_FEE_STATUS_OPTIONS =
       </span>
     </div>
 
-        <div class="px-3 pt-3 pb-2 border-top bulk-challan-toolbar-wrap">
-      <div class="d-flex justify-content-end">
+                <div class="px-3 pt-3 pb-2 border-top bulk-challan-toolbar-wrap">
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <% if (showBulkDeleteBar) { %>
+      <div id="bulkDeleteToolbar" class="d-none d-flex align-items-center gap-2">
+        <span class="small text-muted">
+          <span id="bulkDeleteCount">0</span> selected
+        </span>
+
         <button
           type="button"
-          class="btn rounded-pill px-4 bulk-challan-open-btn"
-          id="openBulkChallanBtn">
-          <i class="bi bi-whatsapp me-2"></i>Send Bulk Challan
+          class="btn btn-outline-danger rounded-pill px-3"
+          id="bulkDeleteBtn">
+          <i class="bi bi-trash3 me-1"></i> Delete Selected
         </button>
       </div>
+    <% } %>
+
+    <div class="ms-auto d-flex justify-content-end">
+      <button
+        type="button"
+        class="btn rounded-pill px-4 bulk-challan-open-btn"
+        id="openBulkChallanBtn">
+        <i class="bi bi-whatsapp me-2"></i>Send Bulk Challan
+      </button>
     </div>
+  </div>
+</div>
 
     <div class="card-body p-0">
       <div class="table-responsive pipeline-scroll">
         <table id="adminAdmissionsTable" class="table table-sm mb-0 align-middle pipeline-table">
-          <thead class="table-dark">
+                    <thead class="table-dark">
             <tr>
+              <% if (canDeleteAdmissions) { %>
+                <th class="text-center col-select" data-col="select">
+                  <input
+                    type="checkbox"
+                    id="selectAllAdmissions"
+                    class="form-check-input bulk-select-all"
+                    title="Select All">
+                </th>
+              <% } %>
               <% if (P.col.status) { %><th data-col="status">Current Status</th><% } %>
               <% if (P.col.feeStatus) { %><th data-col="feeStatus">Fee Status</th><% } %>
               <% if (P.col.dept) { %><th data-col="dept">Dept</th><% } %>
@@ -621,7 +653,10 @@ const DEFAULT_FEE_STATUS_OPTIONS =
             </tr>
 
             <!-- Filter row -->
-            <tr class="bg-secondary-subtle admin-filter-row">
+                        <tr class="bg-secondary-subtle admin-filter-row">
+             <% if (canDeleteAdmissions) { %>
+               <th class="col-select" data-col="select"></th>
+             <% } %>
              <% if (P.col.status) { %>
   <th data-col="status">
     <select id="filter-status" class="form-select form-select-sm status-select" data-filter-col="status">
@@ -864,7 +899,16 @@ const invoiceStatusTimestampVal = (a.admission && a.admission.invoiceStatusTimes
 const paidInvoiceStatusVal = (a.admission && a.admission.paidInvoiceStatus) || '';
 const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceStatusTimestamp) || '';
             %>
-              <tr class="admin-row">
+                            <tr class="admin-row" data-admission-id="<%= a.id %>" data-student-name="<%= a.studentName || a.student || '' %>">
+                <% if (canDeleteAdmissions) { %>
+                  <td class="text-center col-select" data-col="select">
+                    <input
+                      type="checkbox"
+                      class="form-check-input admission-row-checkbox"
+                      value="<%= a.id %>"
+                      data-student-name="<%= a.studentName || a.student || '' %>">
+                  </td>
+                <% } %>
                 <% if (!formPlaced) { %>
                   <form id="<%= fid %>" action="/pipeline/update/<%= a.id %>" method="POST" class="d-none"></form>
                   <% formPlaced = true; %>
@@ -1256,7 +1300,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
                         </button>
                       <% } %>
 
-                      <% if (P.btn.files) { %>
+                                            <% if (P.btn.files) { %>
                         <a href="/files?admission_id=<%= a.id %>"
                            class="action-circle action-files"
                            title="View Files" aria-label="View Files">
@@ -1264,6 +1308,16 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
                         </a>
                       <% } %>
 
+                      <% if (canDeleteAdmissions) { %>
+                        <button type="button"
+                                class="action-circle action-delete btn-delete-admission"
+                                data-admission-id="<%= a.id %>"
+                                data-student-name="<%= a.studentName || a.student || '' %>"
+                                title="Delete Admission"
+                                aria-label="Delete Admission">
+                          <i class="bi bi-trash3"></i>
+                        </button>
+                      <% } %>
                     </div>
                   </td>
                 <% } %>
@@ -1445,14 +1499,27 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     min-width: 170px;
   }
 
+    #adminAdmissionsTable th[data-col="select"],
+  #adminAdmissionsTable td[data-col="select"] {
+    min-width: 64px;
+    width: 64px;
+  }
+
   #adminAdmissionsTable th[data-col="dept"],
   #adminAdmissionsTable td[data-col="dept"] {
     min-width: 120px;
   }
 
-  #adminAdmissionsTable th.col-actions,
+    #adminAdmissionsTable th.col-actions,
   #adminAdmissionsTable td.col-actions {
-    min-width: 260px;
+    min-width: 320px;
+  }
+
+  #adminAdmissionsTable th.col-select,
+  #adminAdmissionsTable td.col-select {
+    min-width: 64px;
+    width: 64px;
+    text-align: center;
   }
 
   #adminAdmissionsTable .form-control,
@@ -1747,8 +1814,13 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     color: #111827;
   }
 
-  .action-files {
+    .action-files {
     background: linear-gradient(135deg, #0ea5e9, #0284c7);
+    color: #fff;
+  }
+
+  .action-delete {
+    background: linear-gradient(135deg, #ef4444, #b91c1c);
     color: #fff;
   }
 
@@ -2314,11 +2386,19 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   background: linear-gradient(180deg, #3b82f6, #1d4ed8) !important;
   color: #fff !important;
 }
-/* ✅ Sticky FIRST two columns (Current Status + Fee Status) */
+/* ✅ Sticky FIRST three columns (Select + Current Status + Fee Status) */
+#adminAdmissionsTable th[data-col="select"],
+#adminAdmissionsTable td[data-col="select"]{
+  position: sticky;
+  left: 0;
+  z-index: 7;
+  background: #fff;
+}
+
 #adminAdmissionsTable th[data-col="status"],
 #adminAdmissionsTable td[data-col="status"]{
   position: sticky;
-  left: 0;
+  left: 64px;
   z-index: 6;
   background: #fff;
 }
@@ -2326,7 +2406,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 #adminAdmissionsTable th[data-col="feeStatus"],
 #adminAdmissionsTable td[data-col="feeStatus"]{
   position: sticky;
-  left: 170px; /* status column width */
+  left: 234px;
   z-index: 6;
   background: #fff;
 }
@@ -3649,7 +3729,12 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
         <button type="button" class="btn btn-light rounded-pill px-4" id="confirmModalCancel" data-bs-dismiss="modal">
           Cancel
         </button>
-        <button type="button" class="btn btn-danger rounded-pill px-4" id="confirmModalOk">
+                <button
+          type="button"
+          class="btn btn-danger rounded-pill px-4"
+          id="confirmModalOk"
+          data-mode=""
+          data-admission-id="">
           Delete
         </button>
       </div>
@@ -5285,6 +5370,200 @@ if (editBillingStatusSaveBtn) {
 </script>
 
 <%- include('partials/bootstrap-footer') %>
+
+<script>
+  (function () {
+    const canDeleteAdmissions = <%- JSON.stringify(!!canDeleteAdmissions) %>;
+    if (!canDeleteAdmissions) return;
+
+    const selectAllEl = document.getElementById('selectAllAdmissions');
+    const bulkDeleteToolbar = document.getElementById('bulkDeleteToolbar');
+    const bulkDeleteCount = document.getElementById('bulkDeleteCount');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+
+    const confirmModalEl = document.getElementById('confirmModal');
+    const confirmModalTitle = document.getElementById('confirmModalTitle');
+    const confirmModalBody = document.getElementById('confirmModalBody');
+    const confirmModalOk = document.getElementById('confirmModalOk');
+
+    if (!confirmModalEl || !confirmModalOk) return;
+
+    const confirmModal =
+      typeof bootstrap !== 'undefined'
+        ? bootstrap.Modal.getOrCreateInstance(confirmModalEl)
+        : null;
+
+    function getRowCheckboxes() {
+      return Array.from(document.querySelectorAll('.admission-row-checkbox'));
+    }
+
+    function getSelectedCheckboxes() {
+      return getRowCheckboxes().filter(cb => cb.checked);
+    }
+
+    function getSelectedIds() {
+      return getSelectedCheckboxes().map(cb => Number(cb.value)).filter(Boolean);
+    }
+
+    function updateBulkToolbar() {
+      const selected = getSelectedCheckboxes();
+      const count = selected.length;
+
+      if (bulkDeleteCount) bulkDeleteCount.textContent = String(count);
+      if (bulkDeleteToolbar) bulkDeleteToolbar.classList.toggle('d-none', count === 0);
+
+      if (selectAllEl) {
+        const all = getRowCheckboxes();
+        selectAllEl.checked = !!all.length && count === all.length;
+        selectAllEl.indeterminate = count > 0 && count < all.length;
+      }
+    }
+
+    function showPopup(type, title, message) {
+      if (typeof window.showUploadFlash === 'function') {
+        window.showUploadFlash(type, title, message);
+      } else {
+        alert(message || title || 'Notification');
+      }
+    }
+
+    function openSingleDeleteModal(id, studentName) {
+      confirmModalTitle.textContent = 'Delete Admission';
+      confirmModalBody.textContent =
+        `Are you sure you want to delete ${studentName || 'this admission'}? This action cannot be undone.`;
+
+      confirmModalOk.dataset.mode = 'single';
+      confirmModalOk.dataset.admissionId = String(id || '');
+
+      if (confirmModal) confirmModal.show();
+    }
+
+    function openBulkDeleteModal(ids) {
+      confirmModalTitle.textContent = 'Delete Selected Admissions';
+      confirmModalBody.textContent =
+        `You are about to delete ${ids.length} selected admission(s). This action cannot be undone.`;
+
+      confirmModalOk.dataset.mode = 'bulk';
+      confirmModalOk.dataset.admissionId = '';
+
+      if (confirmModal) confirmModal.show();
+    }
+
+    async function deleteSingle(id) {
+      const res = await fetch(`/api/admissions/${id}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' }
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.message || 'Delete failed');
+      return data;
+    }
+
+    async function deleteBulk(ids) {
+      const res = await fetch('/api/admissions/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify({ ids })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.message || 'Bulk delete failed');
+      return data;
+    }
+
+    document.addEventListener('change', function (e) {
+      if (e.target.matches('.admission-row-checkbox')) {
+        updateBulkToolbar();
+      }
+
+      if (e.target === selectAllEl) {
+        const checked = !!selectAllEl.checked;
+        getRowCheckboxes().forEach(cb => {
+          cb.checked = checked;
+        });
+        updateBulkToolbar();
+      }
+    });
+
+    document.addEventListener('click', function (e) {
+      const rowDeleteBtn = e.target.closest('.btn-delete-admission');
+      if (rowDeleteBtn) {
+        const id = Number(rowDeleteBtn.getAttribute('data-admission-id') || 0);
+        const studentName = String(rowDeleteBtn.getAttribute('data-student-name') || '').trim();
+        if (!id) return;
+
+        openSingleDeleteModal(id, studentName);
+        return;
+      }
+
+      const bulkDeleteTrigger = e.target.closest('#bulkDeleteBtn');
+      if (bulkDeleteBtn && bulkDeleteTrigger) {
+        const ids = getSelectedIds();
+        if (!ids.length) {
+          showPopup('error', 'No Selection', 'Please select at least one admission.');
+          return;
+        }
+
+        openBulkDeleteModal(ids);
+        return;
+      }
+
+      if (e.target === confirmModalOk) {
+        const mode = String(confirmModalOk.dataset.mode || '').trim();
+
+        (async function () {
+          try {
+            confirmModalOk.disabled = true;
+
+            if (mode === 'single') {
+              const id = Number(confirmModalOk.dataset.admissionId || 0);
+              if (!id) throw new Error('Invalid admission id');
+
+              await deleteSingle(id);
+              if (confirmModal) confirmModal.hide();
+
+              showPopup('success', 'Deleted', 'Admission deleted successfully.');
+
+              if (typeof window.saveViewportState === 'function') {
+                window.saveViewportState();
+              }
+
+              setTimeout(() => window.location.reload(), 500);
+              return;
+            }
+
+            if (mode === 'bulk') {
+              const ids = getSelectedIds();
+              if (!ids.length) throw new Error('No admissions selected');
+
+              await deleteBulk(ids);
+              if (confirmModal) confirmModal.hide();
+
+              showPopup('success', 'Deleted', 'Selected admissions deleted successfully.');
+
+              if (typeof window.saveViewportState === 'function') {
+                window.saveViewportState();
+              }
+
+              setTimeout(() => window.location.reload(), 500);
+              return;
+            }
+          } catch (err) {
+            showPopup('error', 'Delete Failed', err.message || 'Delete failed');
+          } finally {
+            confirmModalOk.disabled = false;
+          }
+        })();
+      }
+    });
+
+    updateBulkToolbar();
+  })();
+</script>
 
 <script>
   (function () {
