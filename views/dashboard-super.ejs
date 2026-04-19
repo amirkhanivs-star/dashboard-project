@@ -391,59 +391,6 @@
     </div>
   </div>
 
-  <!-- QUICK LINKS -->
-  <div class="row g-3 mb-4">
-    <div class="col-md-4">
-      <div class="card border-0 shadow-sm super-quick-link">
-        <div class="card-body d-flex align-items-center">
-          <div class="quick-icon q-quran">
-            <i class="bi bi-moon-stars"></i>
-          </div>
-          <div class="flex-grow-1">
-            <div class="fw-semibold">Quran</div>
-            <small class="text-muted">Quran Admissions · Accounts · Management</small>
-          </div>
-          <a href="/dashboard/super/quran" class="btn btn-sm btn-outline-primary rounded-pill px-3">
-            Open
-          </a>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-md-4">
-      <div class="card border-0 shadow-sm super-quick-link">
-        <div class="card-body d-flex align-items-center">
-          <div class="quick-icon q-tuition">
-            <i class="bi bi-journal-text"></i>
-          </div>
-          <div class="flex-grow-1">
-            <div class="fw-semibold">Tuition</div>
-            <small class="text-muted">Tuition leads &amp; admissions</small>
-          </div>
-          <a href="/dashboard/super/tuition" class="btn btn-sm btn-outline-info rounded-pill px-3">
-            Open
-          </a>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-md-4">
-      <div class="card border-0 shadow-sm super-quick-link">
-        <div class="card-body d-flex align-items-center">
-          <div class="quick-icon q-school">
-            <i class="bi bi-building"></i>
-          </div>
-          <div class="flex-grow-1">
-            <div class="fw-semibold">School</div>
-            <small class="text-muted">School department full pipeline</small>
-          </div>
-          <a href="/dashboard/super/school" class="btn btn-sm btn-outline-warning rounded-pill px-3">
-            Open
-          </a>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- ADMISSIONS TABLE -->
   <div class="card shadow-sm super-table-card">
@@ -462,7 +409,7 @@
     </div>
 
        <div class="px-3 pt-3 pb-2 border-top bulk-challan-toolbar-wrap">
-  <div class="d-flex flex-wrap align-items-center gap-2">
+  <div class="d-flex flex-wrap align-items-center gap-2 super-toolbar-row">
     <% if (showBulkDeleteBar) { %>
       <div id="bulkDeleteToolbar" class="d-none d-flex align-items-center gap-2">
         <span class="small text-muted">
@@ -477,6 +424,25 @@
         </button>
       </div>
     <% } %>
+
+        <div class="super-search-toolbar">
+      <span class="super-search-toolbar-icon">
+        <i class="bi bi-search"></i>
+      </span>
+
+      <input
+        type="text"
+        id="superSearchToolbarInput"
+        class="super-search-toolbar-input"
+        placeholder="Search admissions...">
+
+      <button
+        type="button"
+        class="super-search-toolbar-badge"
+        id="openSearchModalBtn">
+        <span id="superSearchCriterionBadge">General</span>
+      </button>
+    </div>
 
     <div class="ms-auto d-flex justify-content-end">
       <button
@@ -538,208 +504,7 @@
               <% } %>
             </tr>
 
-            <!-- Filter row -->
-            <tr class="bg-secondary-subtle super-filter-row">
-              <% if (canDeleteAdmissions) { %>
-                <th class="col-select" data-col="select"></th>
-              <% } %>
-
-              <% if (P.col.status) { %>
-                <th data-col="status">
-              <select id="filter-status" class="form-select form-select-sm status-select" data-filter-col="status">
-  <option value="">All</option>
-  <% DEFAULT_CURRENT_STATUS_OPTIONS.forEach(opt => { %>
-    <option value="<%= opt.value %>"><%= opt.value %></option>
-  <% }) %>
-</select>
-                </th>
-              <% } %>
-
-              <% if (P.col.feeStatus) { %>
-                <th data-col="feeStatus">
-              <select id="filter-fee-status" class="form-select form-select-sm fee-select" data-filter-col="feeStatus">
-  <option value="">All</option>
-  <% DEFAULT_FEE_STATUS_OPTIONS.forEach(opt => { %>
-    <option value="<%= opt.value %>"><%= opt.value %></option>
-  <% }) %>
-</select>
-                </th>
-              <% } %>
-
-              <% if (P.col.dept) { %>
-                <th data-col="dept">
-                  <select id="filter-dept" class="form-select form-select-sm" data-filter-col="dept">
-                    <option value="">All</option>
-                    <option value="quran">Quran</option>
-                    <option value="tuition">Tuition</option>
-                    <option value="school">School</option>
-                  </select>
-                </th>
-              <% } %>
-
-              <% if (P.col.student) { %>
-                <th data-col="student">
-                  <input id="filter-student" type="text" class="form-control form-control-sm" placeholder="Student" data-filter-col="student">
-                </th>
-              <% } %>
-
-              <% if (P.col.father) { %>
-                <th data-col="father">
-                  <input id="filter-father" type="text" class="form-control form-control-sm" placeholder="Father" data-filter-col="father">
-                </th>
-              <% } %>
-
-              <% if (P.col.grade) { %>
-                <th data-col="grade">
-                  <input id="filter-grade" type="text" class="form-control form-control-sm" placeholder="Grade" data-filter-col="grade">
-                </th>
-              <% } %>
-
-              <% if (P.col.tuitionGrade) { %>
-                <th data-col="tuitionGrade">
-                  <input id="filter-tuition-grade" type="text" class="form-control form-control-sm" placeholder="Grade Section" data-filter-col="tuitionGrade">
-                </th>
-              <% } %>
-              
-               <% if (P.col.fatherEmail) { %>
-                <th data-col="fatherEmail">
-                  <input id="filter-father-email" type="text" class="form-control form-control-sm" placeholder="Email Address" data-filter-col="fatherEmail">
-                </th>
-               <% } %>
-
-              <% if (P.col.phone) { %>
-                <th data-col="phone">
-                  <input id="filter-phone" type="text" class="form-control form-control-sm" placeholder="Phone" data-filter-col="phone">
-                </th>
-              <% } %>
-              <% if (P.col.processedBy) { %>
-                <th data-col="processedBy">
-                  <input id="filter-processed-by" type="text" class="form-control form-control-sm" placeholder="Processed by" data-filter-col="processedBy">
-                </th>
-              <% } %>
-              <% if (P.col.paymentStatus) { %>
-                <th data-col="paymentStatus">
-                  <select id="filter-payment-status" class="form-select form-select-sm" data-filter-col="paymentStatus">
-                    <option value="">All</option>
-                    <option value="Paid">Paid</option>
-                    <option value="Partial">Partial</option>
-                    <option value="Unpaid">Unpaid</option>
-                  </select>
-                </th>
-              <% } %>
-
-              <% if (P.col.paidUpto) { %>
-                <th data-col="paidUpto">
-                  <input id="filter-paid-upto" type="text" class="form-control form-control-sm" placeholder="Paid upto" data-filter-col="paidUpto">
-                </th>
-              <% } %>
-
-              <% if (P.col.verif) { %>
-                <th data-col="verificationNumber">
-                  <input id="filter-verif" type="text" class="form-control form-control-sm" placeholder="Verif #" data-filter-col="verificationNumber">
-                </th>
-              <% } %>
-
-              <% if (P.col.reg) { %>
-                <th data-col="registrationNumber">
-                  <input id="filter-reg" type="text" class="form-control form-control-sm" placeholder="Reg #" data-filter-col="registrationNumber">
-                </th>
-              <% } %>
-
-              <% if (P.col.family) { %>
-                <th data-col="familyNumber">
-                  <input id="filter-family" type="text" class="form-control form-control-sm" placeholder="Family #" data-filter-col="familyNumber">
-                </th>
-              <% } %>
-
-             <% if (P.col.registrationFee) { %>
-                 <th data-col="registrationFee">
-                  <input id="filter-registration-fee" type="text" class="form-control form-control-sm" placeholder="Registration fee" data-filter-col="registrationFee">
-                     </th>
-                  <% } %>
-
-              <% if (P.col.fees) { %>
-                <th data-col="fees">
-                  <input id="filter-fees" type="text" class="form-control form-control-sm" placeholder="Fees" data-filter-col="fees">
-                </th>
-              <% } %>
-              <% if (P.col.currency) { %>
-              <th data-col="currency">
-              <select id="filter-currency" class="form-select form-select-sm js-currency-filter" data-filter-col="currency">
-                <option value="">All</option>
-               <% DEFAULT_CURRENCY_OPTIONS.forEach(opt => { %>
-               <option value="<%= opt.value %>"><%= opt.value %></option>
-               <% }) %>
-               </select>
-               </th>
-              <% } %>
-              <% if (P.col.month) { %>
-                <th data-col="month">
-              <%
-  const currentYearForFilter = new Date().getFullYear();
-  const yearsF = [];
-  for (let y = currentYearForFilter + 2; y >= currentYearForFilter - 5; y--) {
-    yearsF.push(String(y));
-  }
-  const monthsF = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-%>
-<select id="filter-month" class="form-select form-select-sm" data-filter-col="month">
-  <option value="">All</option>
-  <% yearsF.forEach(y => { %>
-    <% monthsF.forEach(m => { const v = `${m} ${y}`; %>
-      <option value="<%= v %>"><%= v %></option>
-    <% }) %>
-  <% }) %>
-</select>
-                </th>
-              <% } %>
-
-              <% if (P.col.totalFees) { %>
-                <th data-col="totalFees">
-                  <input id="filter-total-fees" type="text" class="form-control form-control-sm" placeholder="Total fees" data-filter-col="totalFees">
-                </th>
-              <% } %>
-
-              <% if (P.col.pendingDues) { %>
-                <th data-col="pendingDues">
-                  <input id="filter-pending-dues" type="text" class="form-control form-control-sm" placeholder="Pending dues" data-filter-col="pendingDues">
-                </th>
-              <% } %>
-
-              <% if (P.col.receivedPayment) { %>
-                <th data-col="receivedPayment">
-                  <input id="filter-received" type="text" class="form-control form-control-sm" placeholder="Received" data-filter-col="receivedPayment">
-                </th>
-              <% } %>
-
-              <% if (P.col.invoiceStatus) { %>
-  <th data-col="invoiceStatus">
-    <input id="filter-invoice-status" type="text" class="form-control form-control-sm" placeholder="Invoice status" data-filter-col="invoiceStatus">
-  </th>
-<% } %>
-
-<% if (P.col.invoiceStatusTimestamp) { %>
-  <th data-col="invoiceStatusTimestamp">
-    <input id="filter-invoice-status-ts" type="text" class="form-control form-control-sm" placeholder="Invoice timestamp" data-filter-col="invoiceStatusTimestamp">
-  </th>
-<% } %>
-
-<% if (P.col.paidInvoiceStatus) { %>
-  <th data-col="paidInvoiceStatus">
-    <input id="filter-paid-invoice-status" type="text" class="form-control form-control-sm" placeholder="Paid invoice status" data-filter-col="paidInvoiceStatus">
-  </th>
-<% } %>
-
-<% if (P.col.paidInvoiceStatusTimestamp) { %>
-  <th data-col="paidInvoiceStatusTimestamp">
-    <input id="filter-paid-invoice-status-ts" type="text" class="form-control form-control-sm" placeholder="Paid invoice timestamp" data-filter-col="paidInvoiceStatusTimestamp">
-  </th>
-<% } %>
-
-              <% if (showActions) { %>
-                <th class="col-actions" data-col="actions"></th>
-              <% } %>
-            </tr>
+          
           </thead>
 
           <tbody>
@@ -1581,15 +1346,6 @@
     white-space: nowrap;
   }
 
-  .super-filter-row th{
-    position: sticky;
-    top: 44px; /* header height approx */
-    z-index: 2;
-    background: rgba(248,250,252,.98) !important;
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid rgba(15,23,42,.06);
-    padding: 10px 10px;
-  }
 
   #superAdmissionsTable tbody tr.super-row{
     background: #fff;
@@ -1669,9 +1425,6 @@
     min-width: 110px;
   }
 
-  #superAdmissionsTable #filter-dept{
-    min-width: 110px;
-  }
 
   /* ✅ Billing dropdown status colors */
   #billingModal .bill-status{
@@ -1832,25 +1585,12 @@
   background: linear-gradient(180deg, #111827, #0b1220);
 }
 
-/* Filter row bg (light) */
-#superAdmissionsTable thead tr.super-filter-row th[data-col="status"],
-#superAdmissionsTable thead tr.super-filter-row th[data-col="feeStatus"]{
-  z-index: 7;
-  background: rgba(248,250,252,.98) !important;
-}
 
 /* Optional: add a subtle divider after Fee Status */
 #superAdmissionsTable th[data-col="feeStatus"],
 #superAdmissionsTable td[data-col="feeStatus"]{
   border-right: 1px solid rgba(15,23,42,.10);
 }
-  /* filter row last cell sticky (optional) */
-  #superAdmissionsTable thead tr.super-filter-row th.col-actions{
-    position: sticky;
-    right: 0;
-    z-index: 7;
-    background: rgba(248,250,252,.98) !important;
-  }
 
   /* =========================
      ✅ NEW: Status + Fee Status colored dropdowns (dot + bg)
@@ -2589,6 +2329,164 @@
     width: 100%;
   }
 }
+
+.super-toolbar-row{
+  gap: 12px;
+}
+
+.super-search-toolbar{
+  min-width: 330px;
+  max-width: 420px;
+  height: 46px;
+  padding: 0 10px 0 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(239,68,68,.18);
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(254,242,242,.98));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 10px 22px rgba(239,68,68,.10);
+}
+
+.super-search-toolbar-icon{
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(239,68,68,.10);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #dc2626;
+  flex: 0 0 28px;
+}
+
+.super-search-toolbar-input{
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #374151;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.super-search-toolbar-input::placeholder{
+  color: #6b7280;
+}
+
+.super-search-toolbar-badge{
+  flex: 0 0 auto;
+  border: 0;
+  outline: none;
+  background: linear-gradient(135deg, #ef4444, #f87171);
+  color: #fff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.super-search-toolbar-badge:hover{
+  filter: brightness(1.02);
+}
+
+.super-search-modal{
+  border-radius: 24px !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.99), rgba(254,242,242,.98));
+  box-shadow: 0 24px 70px rgba(127,29,29,.16);
+}
+
+#superSearchModal .modal-dialog{
+  max-width: 620px;
+}
+
+.super-search-modal .modal-header{
+  padding: 20px 20px 8px 20px;
+}
+
+.super-search-modal .modal-body{
+  padding: 0 20px 14px 20px;
+}
+
+.super-search-modal .modal-footer{
+  padding: 0 20px 18px 20px;
+}
+
+.super-search-criteria-wrap{
+  border: 1px solid rgba(239,68,68,.10);
+  border-radius: 18px;
+  background: rgba(255,255,255,.88);
+  overflow: hidden;
+}
+
+.super-search-criteria-title{
+  padding: 14px 16px 10px 16px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #7f1d1d;
+  border-bottom: 1px solid rgba(239,68,68,.08);
+}
+
+.super-search-criteria-group{
+  max-height: 430px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.super-search-criteria-group::-webkit-scrollbar{
+  width: 8px;
+}
+
+.super-search-criteria-group::-webkit-scrollbar-thumb{
+  background: rgba(239,68,68,.28);
+  border-radius: 999px;
+}
+
+.super-search-criteria-group::-webkit-scrollbar-track{
+  background: transparent;
+}
+
+.super-search-criteria-group-title{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: linear-gradient(135deg, #ef4444, #f87171);
+  color: #fff;
+  font-weight: 700;
+  padding: 10px 16px;
+  font-size: 15px;
+}
+
+.super-search-option{
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 9px 16px;
+  color: #4b5563;
+  font-size: 15px;
+  transition: all .14s ease;
+}
+
+.super-search-option:hover{
+  background: rgba(254,226,226,.8);
+  color: #b91c1c;
+}
+
+.super-search-option.active{
+  background: rgba(239,68,68,.12);
+  color: #dc2626;
+  font-weight: 700;
+}
+
+@media (max-width: 991.98px){
+  .super-search-toolbar{
+    min-width: 100%;
+    width: 100%;
+  }
+}
 </style>
 
 <div id="upload-flash-overlay"
@@ -2628,6 +2526,63 @@
       <div class="row-saving-spinner mx-auto mb-3"></div>
       <h5 class="mb-1">Refreshing</h5>
       <p class="text-muted small mb-0" id="row-saving-text">Updating row...</p>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ Super Search Modal -->
+<div class="modal fade" id="superSearchModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg rounded-4 super-search-modal">
+      <div class="modal-header border-0 pb-2">
+        <div>
+          <h4 class="modal-title mb-1">Search Admissions</h4>
+          <div class="small text-muted">Select search criteria and find matching admissions.</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body pt-0">
+
+        <div class="super-search-criteria-wrap">
+          <div class="super-search-criteria-title">Choose Search Criteria</div>
+
+          <div class="super-search-criteria-group">
+            <div class="super-search-criteria-group-title">General</div>
+            <button type="button" class="super-search-option" data-search-key="registrationNumber" data-search-label="Reg #">Reg #</button>
+            <button type="button" class="super-search-option" data-search-key="student" data-search-label="Student">Name</button>
+            <button type="button" class="super-search-option" data-search-key="father" data-search-label="Father">Father Name</button>
+            <button type="button" class="super-search-option" data-search-key="familyNumber" data-search-label="Family #">Family Code</button>
+            <button type="button" class="super-search-option" data-search-key="phone" data-search-label="Phone">Contact</button>
+            <button type="button" class="super-search-option" data-search-key="fatherEmail" data-search-label="Email">Email</button>
+            <button type="button" class="super-search-option" data-search-key="grade" data-search-label="Grade">Grade</button>
+            <button type="button" class="super-search-option" data-search-key="tuitionGrade" data-search-label="Grade Section">Section</button>
+            <button type="button" class="super-search-option" data-search-key="dept" data-search-label="Dept">Department</button>
+            <button type="button" class="super-search-option" data-search-key="status" data-search-label="Current Status">Current Status</button>
+            <button type="button" class="super-search-option" data-search-key="feeStatus" data-search-label="Fee Status">Fee Status</button>
+            <button type="button" class="super-search-option" data-search-key="processedBy" data-search-label="Processed By">Processed By</button>
+            <button type="button" class="super-search-option" data-search-key="paymentStatus" data-search-label="Payment Status">Payment Status</button>
+            <button type="button" class="super-search-option" data-search-key="paidUpto" data-search-label="Paid Upto">Paid Upto</button>
+            <button type="button" class="super-search-option" data-search-key="verificationNumber" data-search-label="Verif #">Verif #</button>
+            <button type="button" class="super-search-option" data-search-key="registrationFee" data-search-label="Registration Fee">Registration Fee</button>
+            <button type="button" class="super-search-option" data-search-key="fees" data-search-label="Monthly Fees">Monthly Fees</button>
+            <button type="button" class="super-search-option" data-search-key="currency" data-search-label="Currency">Currency</button>
+            <button type="button" class="super-search-option" data-search-key="month" data-search-label="Month/Year">Month/Year</button>
+            <button type="button" class="super-search-option" data-search-key="totalFees" data-search-label="Total Fees">Total Fees</button>
+            <button type="button" class="super-search-option" data-search-key="pendingDues" data-search-label="Pending Dues">Pending Dues</button>
+            <button type="button" class="super-search-option" data-search-key="receivedPayment" data-search-label="Received Payment">Received Payment</button>
+            <button type="button" class="super-search-option" data-search-key="invoiceStatus" data-search-label="Invoice Status">Invoice Status</button>
+            <button type="button" class="super-search-option" data-search-key="invoiceStatusTimestamp" data-search-label="Invoice Status Timestamp">Invoice Status Timestamp</button>
+            <button type="button" class="super-search-option" data-search-key="paidInvoiceStatus" data-search-label="Paid Invoice Status">Paid Invoice Status</button>
+            <button type="button" class="super-search-option" data-search-key="paidInvoiceStatusTimestamp" data-search-label="Paid Invoice Status Timestamp">Paid Invoice Status Timestamp</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer border-0 pt-2">
+        <button type="button" class="btn btn-light rounded-pill px-4" id="clearSuperSearchBtn">Clear Search</button>
+        <button type="button" class="btn btn-danger rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+      </div>
     </div>
   </div>
 </div>
@@ -3721,56 +3676,6 @@
 
 <script>
   (function () {
-    const table = document.getElementById('superAdmissionsTable');
-    if (!table) return;
-
-    // ✅ Dynamic filters based on visible columns
-    const filters = {};
-    document.querySelectorAll('[data-filter-col]').forEach(el => {
-      const key = el.getAttribute('data-filter-col');
-      if (!key) return;
-      filters[key] = el;
-    });
-
-    function cellValueByCol(row, colKey) {
-      const cell = row.querySelector(`td[data-col="${colKey}"]`);
-      if (!cell) return '';
-      const el = cell.querySelector('input, select');
-      if (el) return (el.value || '').toLowerCase().trim();
-      return (cell.textContent || '').toLowerCase().trim();
-    }
-
-    function applyFilters() {
-      const rows = table.querySelectorAll('tbody tr.super-row');
-
-      rows.forEach(row => {
-        let ok = true;
-
-        Object.keys(filters).forEach(colKey => {
-          if (!ok) return;
-
-          const f = filters[colKey];
-          const filterVal = (f.value || '').toLowerCase().trim();
-          if (!filterVal) return;
-
-          const cellVal = cellValueByCol(row, colKey);
-          if (!cellVal.includes(filterVal)) ok = false;
-        });
-
-        row.style.display = ok ? '' : 'none';
-      });
-    }
-
-    Object.values(filters).forEach(input => {
-      if (!input) return;
-      input.addEventListener('input', applyFilters);
-      if (input.tagName === 'SELECT') {
-        input.addEventListener('change', applyFilters);
-      }
-    });
-  })();
-
-  (function () {
     const overlay = document.getElementById('upload-flash-overlay');
     const iconWrap = document.getElementById('upload-flash-icon-wrap');
     const titleEl  = document.getElementById('upload-flash-title');
@@ -3847,19 +3752,19 @@
     }
 
     function applyDynamicColors() {
-      const currentItems = getCachedOptions('current');
-      const feeItems = getCachedOptions('fee');
+  const currentItems = getCachedOptions('current');
+  const feeItems = getCachedOptions('fee');
 
-      document.querySelectorAll('.js-status-select, #filter-status').forEach(sel => {
-        if ((sel.value || '') === '__add_new_status__') return;
-        setSelectVisual(sel, findColor(currentItems, sel.value));
-      });
+  document.querySelectorAll('.js-status-select').forEach(sel => {
+    if ((sel.value || '') === '__add_new_status__') return;
+    setSelectVisual(sel, findColor(currentItems, sel.value));
+  });
 
-      document.querySelectorAll('.js-fee-select, #filter-fee-status').forEach(sel => {
-        if ((sel.value || '') === '__add_new_fee_status__') return;
-        setSelectVisual(sel, findColor(feeItems, sel.value));
-      });
-    }
+  document.querySelectorAll('.js-fee-select').forEach(sel => {
+    if ((sel.value || '') === '__add_new_fee_status__') return;
+    setSelectVisual(sel, findColor(feeItems, sel.value));
+  });
+}
 
     window.applyDynamicDropdownColors = applyDynamicColors;
 
@@ -3880,7 +3785,7 @@
 
    function init() {
   document.addEventListener('change', function (e) {
-    if (e.target.matches('.js-status-select, #filter-status, .js-fee-select, #filter-fee-status')) {
+    if (e.target.matches('.js-status-select, .js-fee-select')) {
       applyDynamicColors();
     }
 
@@ -4070,44 +3975,25 @@ document.addEventListener('click', function (e) {
     }
 
     function refreshDropdowns() {
-      const currentItems = window.STATUS_OPTION_CACHE.current || [];
-      const feeItems = window.STATUS_OPTION_CACHE.fee || [];
+  const currentItems = window.STATUS_OPTION_CACHE.current || [];
+  const feeItems = window.STATUS_OPTION_CACHE.fee || [];
 
-      const filterStatus = document.getElementById('filter-status');
-      const filterFeeStatus = document.getElementById('filter-fee-status');
+  document.querySelectorAll('.js-status-select').forEach(sel => {
+    const selected = sel.getAttribute('data-prev-value') || sel.value || 'New Admission';
+    rebuildSelect(sel, currentItems, selected, false, '__add_new_status__');
+    sel.value = selected;
+  });
 
-     rebuildSelect(
-  filterStatus,
-  currentItems,
-  filterStatus?.value,
-  true,
-  ''
-);
+  document.querySelectorAll('.js-fee-select').forEach(sel => {
+    const selected = sel.getAttribute('data-prev-value') || sel.value || 'New Admission';
+    rebuildSelect(sel, feeItems, selected, false, '__add_new_fee_status__');
+    sel.value = selected;
+  });
 
-     rebuildSelect(
-  filterFeeStatus,
-  feeItems,
-  filterFeeStatus?.value,
-  true,
-  ''
-);
-
-      document.querySelectorAll('.js-status-select').forEach(sel => {
-        const selected = sel.getAttribute('data-prev-value') || sel.value || 'New Admission';
-        rebuildSelect(sel, currentItems, selected, false, '__add_new_status__');
-        sel.value = selected;
-      });
-
-      document.querySelectorAll('.js-fee-select').forEach(sel => {
-        const selected = sel.getAttribute('data-prev-value') || sel.value || 'New Admission';
-        rebuildSelect(sel, feeItems, selected, false, '__add_new_fee_status__');
-        sel.value = selected;
-      });
-
-      if (window.applyDynamicDropdownColors) {
-        window.applyDynamicDropdownColors();
-      }
-    }
+  if (window.applyDynamicDropdownColors) {
+    window.applyDynamicDropdownColors();
+  }
+}
 
     async function loadAllOptions() {
       await Promise.all([
@@ -4160,22 +4046,6 @@ document.addEventListener('click', function (e) {
           return;
         }
         el.setAttribute('data-prev-value', el.value || '');
-      }
-
-      if (el.matches('#filter-status')) {
-        if (el.value === '__add_new_status__') {
-          el.value = '';
-          openModal('current', el);
-          return;
-        }
-      }
-
-      if (el.matches('#filter-fee-status')) {
-        if (el.value === '__add_new_fee_status__') {
-          el.value = '';
-          openModal('fee', el);
-          return;
-        }
       }
     });
 
@@ -4815,20 +4685,16 @@ socket.on("user:updated", function (payload) {
   }
 
   function refreshCurrencyDropdowns() {
-    const items = Array.isArray(window.CURRENCY_OPTION_CACHE)
-      ? window.CURRENCY_OPTION_CACHE
-      : [];
+  const items = Array.isArray(window.CURRENCY_OPTION_CACHE)
+    ? window.CURRENCY_OPTION_CACHE
+    : [];
 
-    const filterCurrency = document.getElementById('filter-currency');
-    rebuildCurrencySelect(filterCurrency, items, filterCurrency?.value || '', true, false);
-
-    document.querySelectorAll('.js-currency-select').forEach(sel => {
-      const selected = sel.getAttribute('data-prev-value') || sel.value || '';
-      rebuildCurrencySelect(sel, items, selected, false, true);
-      sel.value = selected || '';
-    });
-  }
-
+  document.querySelectorAll('.js-currency-select').forEach(sel => {
+    const selected = sel.getAttribute('data-prev-value') || sel.value || '';
+    rebuildCurrencySelect(sel, items, selected, false, true);
+    sel.value = selected || '';
+  });
+}
   async function loadCurrencyOptionsAndRefresh() {
     await fetchCurrencyOptions();
     renderCurrencyList();
@@ -5656,5 +5522,114 @@ document.addEventListener("click", function (e) {
       }
     });
    });
+  })();
+</script>
+
+<script>
+  (function () {
+    document.addEventListener('DOMContentLoaded', function () {
+      const table = document.getElementById('superAdmissionsTable');
+      const modalEl = document.getElementById('superSearchModal');
+      const openBtn = document.getElementById('openSearchModalBtn');
+      const inputEl = document.getElementById('superSearchToolbarInput');
+      const clearBtn = document.getElementById('clearSuperSearchBtn');
+      const triggerBadge = document.getElementById('superSearchCriterionBadge');
+
+      if (!table || !modalEl || !openBtn || !inputEl || typeof bootstrap === 'undefined') return;
+
+      const searchModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      const optionButtons = Array.from(document.querySelectorAll('.super-search-option'));
+
+      let activeSearchKey = 'general';
+      let activeSearchLabel = 'General';
+
+      function getCellValue(row, colKey) {
+        const cell = row.querySelector(`td[data-col="${colKey}"]`);
+        if (!cell) return '';
+
+        const field = cell.querySelector('input, select, textarea');
+        if (field) return String(field.value || '').toLowerCase().trim();
+
+        return String(cell.textContent || '').toLowerCase().trim();
+      }
+
+      function getGeneralRowText(row) {
+        const cells = Array.from(row.querySelectorAll('td'));
+        return cells.map(td => {
+          const field = td.querySelector('input, select, textarea');
+          return field ? String(field.value || '') : String(td.textContent || '');
+        }).join(' ').toLowerCase().trim();
+      }
+
+      function applySearch() {
+        const keyword = String(inputEl.value || '').toLowerCase().trim();
+        const rows = table.querySelectorAll('tbody tr.super-row');
+
+        rows.forEach(row => {
+          if (!keyword) {
+            row.style.display = '';
+            return;
+          }
+
+          let matched = false;
+
+          if (activeSearchKey === 'general') {
+            matched = getGeneralRowText(row).includes(keyword);
+          } else {
+            matched = getCellValue(row, activeSearchKey).includes(keyword);
+          }
+
+          row.style.display = matched ? '' : 'none';
+        });
+      }
+
+      function updateCriterionUI(label) {
+        activeSearchLabel = label || 'General';
+        if (triggerBadge) triggerBadge.textContent = activeSearchLabel;
+      }
+
+      optionButtons.forEach(btn => {
+        btn.addEventListener('click', function () {
+          optionButtons.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+
+          activeSearchKey = btn.getAttribute('data-search-key') || 'general';
+          const label = btn.getAttribute('data-search-label') || 'General';
+
+          updateCriterionUI(label);
+          applySearch();
+          searchModal.hide();
+          inputEl.focus();
+        });
+      });
+
+      openBtn.addEventListener('click', function () {
+        searchModal.show();
+      });
+
+      inputEl.addEventListener('input', function () {
+        applySearch();
+      });
+
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+          inputEl.value = '';
+          activeSearchKey = 'general';
+          activeSearchLabel = 'General';
+
+          optionButtons.forEach(b => b.classList.remove('active'));
+          const generalBtn = document.querySelector('.super-search-option[data-search-key="general"]');
+          if (generalBtn) generalBtn.classList.add('active');
+
+          updateCriterionUI('General');
+          applySearch();
+          searchModal.hide();
+          inputEl.focus();
+        });
+      }
+
+      updateCriterionUI('General');
+      applySearch();
+    });
   })();
 </script>

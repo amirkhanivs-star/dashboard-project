@@ -557,7 +557,7 @@ const hasAnyUi = visibleColCount > 0;
       </div>
 
             <div class="px-3 pt-3 pb-2 border-top bulk-challan-toolbar-wrap">
-  <div class="d-flex flex-wrap align-items-center gap-2">
+  <div class="d-flex flex-wrap align-items-center gap-2 agent-toolbar-row">
     <% if (showBulkDeleteBar) { %>
       <div id="bulkDeleteToolbar" class="d-none d-flex align-items-center gap-2">
         <span class="small text-muted">
@@ -572,6 +572,25 @@ const hasAnyUi = visibleColCount > 0;
         </button>
       </div>
     <% } %>
+
+    <div class="agent-search-toolbar">
+      <span class="agent-search-toolbar-icon">
+        <i class="bi bi-search"></i>
+      </span>
+
+      <input
+        type="text"
+        id="agentSearchToolbarInput"
+        class="agent-search-toolbar-input"
+        placeholder="Search admissions...">
+
+      <button
+        type="button"
+        class="agent-search-toolbar-badge"
+        id="openAgentSearchModalBtn">
+        <span id="agentSearchCriterionBadge">General</span>
+      </button>
+    </div>
 
     <div class="ms-auto d-flex justify-content-end">
       <button
@@ -631,202 +650,6 @@ const hasAnyUi = visibleColCount > 0;
   <% } %>
 </tr>
 
-              <!-- Filter row -->
-                         <tr class="bg-secondary-subtle agent-filter-row">
-  <% if (canDeleteAdmissions) { %>
-    <th class="col-select" data-col="select"></th>
-  <% } %>
-  <% if (P.col.status) { %>
-    <th data-col="status">
-      <select id="filter-status" class="form-select form-select-sm status-select" data-filter-col="status">
-        <option value="">All</option>
-        <% DEFAULT_CURRENT_STATUS_OPTIONS.forEach(opt => { %>
-          <option value="<%= opt.value %>"><%= opt.value %></option>
-        <% }) %>
-      </select>
-    </th>
-  <% } %>
-
-  <% if (P.col.feeStatus) { %>
-    <th data-col="feeStatus">
-      <select id="filter-fee-status" class="form-select form-select-sm fee-select" data-filter-col="feeStatus">
-        <option value="">All</option>
-        <% DEFAULT_FEE_STATUS_OPTIONS.forEach(opt => { %>
-          <option value="<%= opt.value %>"><%= opt.value %></option>
-        <% }) %>
-      </select>
-    </th>
-  <% } %>
-
-  <% if (P.col.dept) { %><th data-col="dept"></th><% } %>
-
-  <% if (P.col.student) { %>
-    <th data-col="student">
-      <input type="text" class="form-control form-control-sm" placeholder="Student" data-filter-col="student">
-    </th>
-  <% } %>
-
-  <% if (P.col.father) { %>
-    <th data-col="father">
-      <input type="text" class="form-control form-control-sm" placeholder="Father" data-filter-col="father">
-    </th>
-  <% } %>
-
-  <% if (P.col.fatherEmail) { %>
-    <th data-col="fatherEmail">
-      <input type="text" class="form-control form-control-sm" placeholder="Email Address" data-filter-col="fatherEmail">
-    </th>
-  <% } %>
-
-  <% if (P.col.grade) { %>
-    <th data-col="grade">
-      <input type="text" class="form-control form-control-sm" placeholder="Grade" data-filter-col="grade">
-    </th>
-  <% } %>
-
-  <% if (P.col.tuitionGrade) { %>
-    <th data-col="tuitionGrade">
-      <input type="text" class="form-control form-control-sm" placeholder="Grade Section" data-filter-col="tuitionGrade">
-    </th>
-  <% } %>
-
-  <% if (P.col.phone) { %>
-    <th data-col="phone">
-      <input type="text" class="form-control form-control-sm" placeholder="Phone" data-filter-col="phone">
-    </th>
-  <% } %>
-
-  <% if (P.col.processedBy) { %>
-    <th data-col="processedBy">
-      <input type="text" class="form-control form-control-sm" placeholder="Processed by" data-filter-col="processedBy">
-    </th>
-  <% } %>
-
-  <% if (P.col.paymentStatus) { %>
-    <th data-col="paymentStatus">
-      <select class="form-select form-select-sm" data-filter-col="paymentStatus">
-        <option value="">All</option>
-        <option value="Paid">Paid</option>
-        <option value="Partial">Partial</option>
-        <option value="Unpaid">Unpaid</option>
-      </select>
-    </th>
-  <% } %>
-
-  <% if (P.col.paidUpto) { %>
-    <th data-col="paidUpto">
-      <input type="text" class="form-control form-control-sm" placeholder="Paid upto" data-filter-col="paidUpto">
-    </th>
-  <% } %>
-
-  <% if (P.col.verif) { %>
-    <th data-col="verificationNumber">
-      <input type="text" class="form-control form-control-sm" placeholder="Verif #" data-filter-col="verificationNumber">
-    </th>
-  <% } %>
-
-  <% if (P.col.reg) { %>
-    <th data-col="registrationNumber">
-      <input type="text" class="form-control form-control-sm" placeholder="Reg #" data-filter-col="registrationNumber">
-    </th>
-  <% } %>
-
-  <% if (P.col.family) { %>
-    <th data-col="familyNumber">
-      <input type="text" class="form-control form-control-sm" placeholder="Family #" data-filter-col="familyNumber">
-    </th>
-  <% } %>
-
-  <% if (P.col.registrationFee) { %>
-    <th data-col="registrationFee">
-      <input type="text" class="form-control form-control-sm" placeholder="Registration fee" data-filter-col="registrationFee">
-    </th>
-  <% } %>
-
-  <% if (P.col.fees) { %>
-    <th data-col="fees">
-      <input type="text" class="form-control form-control-sm" placeholder="Fees" data-filter-col="fees">
-    </th>
-  <% } %>
-
-  <% if (P.col.currency) { %>
-    <th data-col="currency">
-      <select id="filter-currency" class="form-select form-select-sm js-currency-filter" data-filter-col="currency">
-        <option value="">All</option>
-        <% DEFAULT_CURRENCY_OPTIONS.forEach(opt => { %>
-          <option value="<%= opt.value %>"><%= opt.value %></option>
-        <% }) %>
-      </select>
-    </th>
-  <% } %>
-
-  <% if (P.col.month) { %>
-    <th data-col="month">
-     <%
-  const nowYFilter = new Date().getFullYear();
-  const yearsFilter = [];
-  for (let y = nowYFilter + 2; y >= nowYFilter - 5; y--) {
-    yearsFilter.push(String(y));
-  }
-  const monthsFilter = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-%>
-<select id="filter-month" class="form-select form-select-sm" data-filter-col="month">
-  <option value="">All</option>
-  <% yearsFilter.forEach(y => { %>
-    <% monthsFilter.forEach(m => { const v = `${m} ${y}`; %>
-      <option value="<%= v %>"><%= v %></option>
-    <% }) %>
-  <% }) %>
-</select>
-    </th>
-  <% } %>
-
-  <% if (P.col.totalFees) { %>
-    <th data-col="totalFees">
-      <input type="text" class="form-control form-control-sm" placeholder="Total fees" data-filter-col="totalFees">
-    </th>
-  <% } %>
-
-  <% if (P.col.pendingDues) { %>
-    <th data-col="pendingDues">
-      <input type="text" class="form-control form-control-sm" placeholder="Pending dues" data-filter-col="pendingDues">
-    </th>
-  <% } %>
-
-  <% if (P.col.receivedPayment) { %>
-    <th data-col="receivedPayment">
-      <input type="text" class="form-control form-control-sm" placeholder="Received" data-filter-col="receivedPayment">
-    </th>
-  <% } %>
-
-  <% if (P.col.invoiceStatus) { %>
-  <th data-col="invoiceStatus">
-    <input type="text" class="form-control form-control-sm" placeholder="Invoice status" data-filter-col="invoiceStatus">
-  </th>
-<% } %>
-
-<% if (P.col.invoiceStatusTimestamp) { %>
-  <th data-col="invoiceStatusTimestamp">
-    <input type="text" class="form-control form-control-sm" placeholder="Invoice timestamp" data-filter-col="invoiceStatusTimestamp">
-  </th>
-<% } %>
-
-<% if (P.col.paidInvoiceStatus) { %>
-  <th data-col="paidInvoiceStatus">
-    <input type="text" class="form-control form-control-sm" placeholder="Paid invoice status" data-filter-col="paidInvoiceStatus">
-  </th>
-<% } %>
-
-<% if (P.col.paidInvoiceStatusTimestamp) { %>
-  <th data-col="paidInvoiceStatusTimestamp">
-    <input type="text" class="form-control form-control-sm" placeholder="Paid invoice timestamp" data-filter-col="paidInvoiceStatusTimestamp">
-  </th>
-<% } %>
-
-  <% if (showActions) { %>
-    <th class="col-actions" data-col="actions"></th>
-  <% } %>
-</tr>
             </thead>
 
             <tbody>
@@ -1590,15 +1413,6 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   letter-spacing: .2px;
 }
 
-  .agent-filter-row th {
-    position: sticky;
-    top: 44px;
-    z-index: 2;
-    background: rgba(248,250,252,.98) !important;
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid rgba(15,23,42,.06);
-    padding: 10px;
-  }
 
   #agentAccountsTable tbody tr.agent-row {
     background: #fff;
@@ -1666,12 +1480,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   background: linear-gradient(180deg, #f59e0b, #d97706);
 }
 
-/* Filter row */
-#agentAccountsTable thead tr.agent-filter-row th[data-col="status"],
-#agentAccountsTable thead tr.agent-filter-row th[data-col="feeStatus"]{
-  z-index: 7;
-  background: rgba(248,250,252,.98) !important;
-}
+
 
 /* Body cells border */
 #agentAccountsTable th[data-col="feeStatus"],
@@ -1699,12 +1508,6 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     border-left: 1px solid rgba(15,23,42,.10);
   }
 
-  #agentAccountsTable thead tr.agent-filter-row th.col-actions {
-    position: sticky;
-    right: 0;
-    z-index: 7;
-    background: rgba(248,250,252,.98) !important;
-  }
 
   .action-btns {
     gap: 8px;
@@ -2565,6 +2368,163 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     width: 100%;
   }
 }
+.agent-toolbar-row{
+  gap: 12px;
+}
+
+.agent-search-toolbar{
+  min-width: 330px;
+  max-width: 420px;
+  height: 46px;
+  padding: 0 10px 0 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(245,158,11,.18);
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,251,235,.98));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 10px 22px rgba(245,158,11,.10);
+}
+
+.agent-search-toolbar-icon{
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(245,158,11,.12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #d97706;
+  flex: 0 0 28px;
+}
+
+.agent-search-toolbar-input{
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #374151;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.agent-search-toolbar-input::placeholder{
+  color: #6b7280;
+}
+
+.agent-search-toolbar-badge{
+  flex: 0 0 auto;
+  border: 0;
+  outline: none;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.agent-search-toolbar-badge:hover{
+  filter: brightness(1.02);
+}
+
+.agent-search-modal{
+  border-radius: 24px !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.99), rgba(255,251,235,.98));
+  box-shadow: 0 24px 70px rgba(146,64,14,.16);
+}
+
+#agentSearchModal .modal-dialog{
+  max-width: 620px;
+}
+
+.agent-search-modal .modal-header{
+  padding: 20px 20px 8px 20px;
+}
+
+.agent-search-modal .modal-body{
+  padding: 0 20px 14px 20px;
+}
+
+.agent-search-modal .modal-footer{
+  padding: 0 20px 18px 20px;
+}
+
+.agent-search-criteria-wrap{
+  border: 1px solid rgba(245,158,11,.10);
+  border-radius: 18px;
+  background: rgba(255,255,255,.88);
+  overflow: hidden;
+}
+
+.agent-search-criteria-title{
+  padding: 14px 16px 10px 16px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #92400e;
+  border-bottom: 1px solid rgba(245,158,11,.08);
+}
+
+.agent-search-criteria-group{
+  max-height: 430px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.agent-search-criteria-group::-webkit-scrollbar{
+  width: 8px;
+}
+
+.agent-search-criteria-group::-webkit-scrollbar-thumb{
+  background: rgba(245,158,11,.28);
+  border-radius: 999px;
+}
+
+.agent-search-criteria-group::-webkit-scrollbar-track{
+  background: transparent;
+}
+
+.agent-search-criteria-group-title{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  font-weight: 700;
+  padding: 10px 16px;
+  font-size: 15px;
+}
+
+.agent-search-option{
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 9px 16px;
+  color: #4b5563;
+  font-size: 15px;
+  transition: all .14s ease;
+}
+
+.agent-search-option:hover{
+  background: rgba(254,243,199,.8);
+  color: #92400e;
+}
+
+.agent-search-option.active{
+  background: rgba(245,158,11,.12);
+  color: #d97706;
+  font-weight: 700;
+}
+
+@media (max-width: 991.98px){
+  .agent-search-toolbar{
+    min-width: 100%;
+    width: 100%;
+  }
+}
 </style>
 
 <!-- ✅ Upload Flash Overlay -->
@@ -2601,6 +2561,63 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
       <div class="row-saving-spinner mx-auto mb-3"></div>
       <h5 class="mb-1">Refreshing</h5>
       <p class="text-muted small mb-0" id="row-saving-text">Updating row...</p>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ Agent Search Modal -->
+<div class="modal fade" id="agentSearchModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg rounded-4 agent-search-modal">
+      <div class="modal-header border-0 pb-2">
+        <div>
+          <h4 class="modal-title mb-1">Search Admissions</h4>
+          <div class="small text-muted">Select search criteria and find matching admissions.</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body pt-0">
+        <div class="agent-search-criteria-wrap">
+          <div class="agent-search-criteria-title">Choose Search Criteria</div>
+
+          <div class="agent-search-criteria-group">
+            <div class="agent-search-criteria-group-title">General</div>
+
+            <button type="button" class="agent-search-option" data-search-key="registrationNumber" data-search-label="Reg #">Reg #</button>
+            <button type="button" class="agent-search-option" data-search-key="student" data-search-label="Student">Name</button>
+            <button type="button" class="agent-search-option" data-search-key="father" data-search-label="Father">Father Name</button>
+            <button type="button" class="agent-search-option" data-search-key="familyNumber" data-search-label="Family #">Family Code</button>
+            <button type="button" class="agent-search-option" data-search-key="phone" data-search-label="Phone">Contact</button>
+            <button type="button" class="agent-search-option" data-search-key="fatherEmail" data-search-label="Email">Email</button>
+            <button type="button" class="agent-search-option" data-search-key="grade" data-search-label="Grade">Grade</button>
+            <button type="button" class="agent-search-option" data-search-key="tuitionGrade" data-search-label="Grade Section">Section</button>
+            <button type="button" class="agent-search-option" data-search-key="dept" data-search-label="Dept">Department</button>
+            <button type="button" class="agent-search-option" data-search-key="status" data-search-label="Current Status">Current Status</button>
+            <button type="button" class="agent-search-option" data-search-key="feeStatus" data-search-label="Fee Status">Fee Status</button>
+            <button type="button" class="agent-search-option" data-search-key="processedBy" data-search-label="Processed By">Processed By</button>
+            <button type="button" class="agent-search-option" data-search-key="paymentStatus" data-search-label="Payment Status">Payment Status</button>
+            <button type="button" class="agent-search-option" data-search-key="paidUpto" data-search-label="Paid Upto">Paid Upto</button>
+            <button type="button" class="agent-search-option" data-search-key="verificationNumber" data-search-label="Verif #">Verif #</button>
+            <button type="button" class="agent-search-option" data-search-key="registrationFee" data-search-label="Registration Fee">Registration Fee</button>
+            <button type="button" class="agent-search-option" data-search-key="fees" data-search-label="Monthly Fees">Monthly Fees</button>
+            <button type="button" class="agent-search-option" data-search-key="currency" data-search-label="Currency">Currency</button>
+            <button type="button" class="agent-search-option" data-search-key="month" data-search-label="Month/Year">Month/Year</button>
+            <button type="button" class="agent-search-option" data-search-key="totalFees" data-search-label="Total Fees">Total Fees</button>
+            <button type="button" class="agent-search-option" data-search-key="pendingDues" data-search-label="Pending Dues">Pending Dues</button>
+            <button type="button" class="agent-search-option" data-search-key="receivedPayment" data-search-label="Received Payment">Received Payment</button>
+            <button type="button" class="agent-search-option" data-search-key="invoiceStatus" data-search-label="Invoice Status">Invoice Status</button>
+            <button type="button" class="agent-search-option" data-search-key="invoiceStatusTimestamp" data-search-label="Invoice Status Timestamp">Invoice Status Timestamp</button>
+            <button type="button" class="agent-search-option" data-search-key="paidInvoiceStatus" data-search-label="Paid Invoice Status">Paid Invoice Status</button>
+            <button type="button" class="agent-search-option" data-search-key="paidInvoiceStatusTimestamp" data-search-label="Paid Invoice Status Timestamp">Paid Invoice Status Timestamp</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer border-0 pt-2">
+        <button type="button" class="btn btn-light rounded-pill px-4" id="clearAgentSearchBtn">Clear Search</button>
+        <button type="button" class="btn btn-warning rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+      </div>
     </div>
   </div>
 </div>
@@ -3683,52 +3700,6 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 
 
 <script>
-  // Filters
-  (function () {
-    const table = document.getElementById('agentAccountsTable');
-    if (!table) return;
-
-    const filters = {};
-    document.querySelectorAll('[data-filter-col]').forEach(el => {
-      const key = el.getAttribute('data-filter-col');
-      if (!key) return;
-      filters[key] = el;
-    });
-
-    function cellValueByCol(row, colKey) {
-      const cell = row.querySelector(`td[data-col="${colKey}"]`);
-      if (!cell) return '';
-      const el = cell.querySelector('input, select');
-      if (el) return (el.value || '').toLowerCase().trim();
-      return (cell.textContent || '').toLowerCase().trim();
-    }
-
-    function applyFilters() {
-      const rows = table.querySelectorAll('tbody tr.agent-row');
-      rows.forEach(row => {
-        let ok = true;
-
-        Object.keys(filters).forEach(colKey => {
-          if (!ok) return;
-
-          const f = filters[colKey];
-          const filterVal = (f.value || '').toLowerCase().trim();
-          if (!filterVal) return;
-
-          const cellVal = cellValueByCol(row, colKey);
-          if (!cellVal.includes(filterVal)) ok = false;
-        });
-
-        row.style.display = ok ? '' : 'none';
-      });
-    }
-
-    Object.values(filters).forEach(input => {
-      if (!input) return;
-      input.addEventListener('input', applyFilters);
-      if (input.tagName === 'SELECT') input.addEventListener('change', applyFilters);
-    });
-  })();
 
   // Upload flash overlay helper
   (function () {
@@ -3826,12 +3797,6 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
         applyFeeClass(s);
         s.addEventListener('change', function(){ applyFeeClass(s); });
       });
-
-      const fs = document.getElementById('filter-status');
-      if (fs) { applyStatusClass(fs); fs.addEventListener('change', () => applyStatusClass(fs)); }
-
-      const ffee = document.getElementById('filter-fee-status');
-      if (ffee) { applyFeeClass(ffee); ffee.addEventListener('change', () => applyFeeClass(ffee)); }
     }
 
     if (document.readyState === 'loading') {
@@ -3911,16 +3876,16 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     return found ? found.color : '#64748b';
   }
 
-  function applyDynamicColors() {
+    function applyDynamicColors() {
     const currentItems = getCachedOptions('current');
     const feeItems = getCachedOptions('fee');
 
-    document.querySelectorAll('.js-status-select, #filter-status').forEach(sel => {
+    document.querySelectorAll('.js-status-select').forEach(sel => {
       if ((sel.value || '') === '__add_new_status__') return;
       setSelectVisual(sel, findColor(currentItems, sel.value));
     });
 
-    document.querySelectorAll('.js-fee-select, #filter-fee-status').forEach(sel => {
+    document.querySelectorAll('.js-fee-select').forEach(sel => {
       if ((sel.value || '') === '__add_new_fee_status__') return;
       setSelectVisual(sel, findColor(feeItems, sel.value));
     });
@@ -3943,9 +3908,9 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 
   window.applyDynamicBillingColors = applyDynamicBillingColors;
 
-  function init() {
+    function init() {
     document.addEventListener('change', function (e) {
-      if (e.target.matches('.js-status-select, #filter-status, .js-fee-select, #filter-fee-status')) {
+      if (e.target.matches('.js-status-select, .js-fee-select')) {
         applyDynamicColors();
       }
       if (e.target.matches('.bill-status')) {
@@ -4103,15 +4068,9 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     `).join('');
   }
 
-  function refreshDropdowns() {
+    function refreshDropdowns() {
     const currentItems = window.STATUS_OPTION_CACHE.current || [];
     const feeItems = window.STATUS_OPTION_CACHE.fee || [];
-
-    const filterStatus = document.getElementById('filter-status');
-    const filterFeeStatus = document.getElementById('filter-fee-status');
-
-    rebuildSelect(filterStatus, currentItems, filterStatus?.value, true, '');
-    rebuildSelect(filterFeeStatus, feeItems, filterFeeStatus?.value, true, '');
 
     document.querySelectorAll('.js-status-select').forEach(sel => {
       const selected = sel.getAttribute('data-prev-value') || sel.value || 'New Admission';
@@ -4165,14 +4124,6 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
         return;
       }
       el.setAttribute('data-prev-value', el.value || '');
-    }
-
-    if (el.matches('#filter-status')) {
-      if (el.value === '__add_new_status__') { el.value = ''; openModal('current', el); return; }
-    }
-
-    if (el.matches('#filter-fee-status')) {
-      if (el.value === '__add_new_fee_status__') { el.value = ''; openModal('fee', el); return; }
     }
   });
 
@@ -4315,10 +4266,8 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     selectEl.innerHTML = html;
   }
 
-  function refreshCurrencyDropdowns() {
+    function refreshCurrencyDropdowns() {
     const items = window.CURRENCY_OPTION_CACHE || [];
-    const filterSel = document.getElementById('filter-currency');
-    rebuildCurrencySelect(filterSel, items, filterSel?.value || '', true, false);
     document.querySelectorAll('.js-currency-select').forEach(sel => {
       const selected = sel.getAttribute('data-prev-value') || sel.value || '';
       rebuildCurrencySelect(sel, items, selected, false, true);
@@ -5368,6 +5317,111 @@ editingBillingStatusOldValue = String(nameEl.textContent || '').trim();
           setLoading(sendBtn, false, '', normalHtml);
         }
       });
+    });
+  })();
+</script>
+<script>
+  (function () {
+    document.addEventListener('DOMContentLoaded', function () {
+      const table = document.getElementById('agentAccountsTable');
+      const modalEl = document.getElementById('agentSearchModal');
+      const openBtn = document.getElementById('openAgentSearchModalBtn');
+      const inputEl = document.getElementById('agentSearchToolbarInput');
+      const clearBtn = document.getElementById('clearAgentSearchBtn');
+      const triggerBadge = document.getElementById('agentSearchCriterionBadge');
+
+      if (!table || !modalEl || !openBtn || !inputEl || typeof bootstrap === 'undefined') return;
+
+      const searchModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      const optionButtons = Array.from(document.querySelectorAll('.agent-search-option'));
+
+      let activeSearchKey = 'general';
+      let activeSearchLabel = 'General';
+
+      function getCellValue(row, colKey) {
+        const cell = row.querySelector(`td[data-col="${colKey}"]`);
+        if (!cell) return '';
+
+        const field = cell.querySelector('input, select, textarea');
+        if (field) return String(field.value || '').toLowerCase().trim();
+
+        return String(cell.textContent || '').toLowerCase().trim();
+      }
+
+      function getGeneralRowText(row) {
+        const cells = Array.from(row.querySelectorAll('td'));
+        return cells.map(td => {
+          const field = td.querySelector('input, select, textarea');
+          return field ? String(field.value || '') : String(td.textContent || '');
+        }).join(' ').toLowerCase().trim();
+      }
+
+      function applySearch() {
+        const keyword = String(inputEl.value || '').toLowerCase().trim();
+        const rows = table.querySelectorAll('tbody tr.agent-row');
+
+        rows.forEach(row => {
+          if (!keyword) {
+            row.style.display = '';
+            return;
+          }
+
+          let matched = false;
+
+          if (activeSearchKey === 'general') {
+            matched = getGeneralRowText(row).includes(keyword);
+          } else {
+            matched = getCellValue(row, activeSearchKey).includes(keyword);
+          }
+
+          row.style.display = matched ? '' : 'none';
+        });
+      }
+
+      function updateCriterionUI(label) {
+        activeSearchLabel = label || 'General';
+        if (triggerBadge) triggerBadge.textContent = activeSearchLabel;
+      }
+
+      optionButtons.forEach(btn => {
+        btn.addEventListener('click', function () {
+          optionButtons.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+
+          activeSearchKey = btn.getAttribute('data-search-key') || 'general';
+          const label = btn.getAttribute('data-search-label') || 'General';
+
+          updateCriterionUI(label);
+          applySearch();
+          searchModal.hide();
+          inputEl.focus();
+        });
+      });
+
+      openBtn.addEventListener('click', function () {
+        searchModal.show();
+      });
+
+      inputEl.addEventListener('input', function () {
+        applySearch();
+      });
+
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+          inputEl.value = '';
+          activeSearchKey = 'general';
+          activeSearchLabel = 'General';
+
+          optionButtons.forEach(b => b.classList.remove('active'));
+          updateCriterionUI('General');
+          applySearch();
+          searchModal.hide();
+          inputEl.focus();
+        });
+      }
+
+      updateCriterionUI('General');
+      applySearch();
     });
   })();
 </script>
