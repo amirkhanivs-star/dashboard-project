@@ -539,11 +539,6 @@ const hasAnyUi = visibleColCount > 0;
     </div>
   <% } else { %>
 
-   <div class="alert small mb-3 agent-info-alert">
-      <strong>Admissions for <%= deptTitle %>:</strong>
-      You can update allowed fields directly from this table.
-    </div>
-
     <!-- TABLE -->
     <div class="card shadow-sm agent-table-card">
       <div class="card-header d-flex justify-content-between align-items-center">
@@ -1383,12 +1378,6 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     color: #92400e;
   }
 
- .agent-info-alert {
-  border-radius: 16px;
-  border: 1px solid rgba(245,158,11,.18);
-  background: linear-gradient(135deg, rgba(245,158,11,.10), rgba(245,158,11,.03)) !important;
-  color: #0f172a !important;
-}
 
   .agent-table-card {
     border-radius: 18px;
