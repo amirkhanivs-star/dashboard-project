@@ -10,3 +10,8 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 Thumbs.db
+data/*.db
+data/*.db-shm
+data/*.db-wal
+uploads/pdfs/
+uploads/challans/
