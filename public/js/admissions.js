@@ -1161,35 +1161,6 @@ const bankInputs = {
   december: document.getElementById("bill_bank_december"),
 };
 
-const extraTypeInputs = {
-  january: document.getElementById("bill_extra_type_january"),
-  february: document.getElementById("bill_extra_type_february"),
-  march: document.getElementById("bill_extra_type_march"),
-  april: document.getElementById("bill_extra_type_april"),
-  may: document.getElementById("bill_extra_type_may"),
-  june: document.getElementById("bill_extra_type_june"),
-  july: document.getElementById("bill_extra_type_july"),
-  august: document.getElementById("bill_extra_type_august"),
-  september: document.getElementById("bill_extra_type_september"),
-  october: document.getElementById("bill_extra_type_october"),
-  november: document.getElementById("bill_extra_type_november"),
-  december: document.getElementById("bill_extra_type_december"),
-};
-
-const extraTypeWraps = {
-  january: document.getElementById("bill_extra_type_wrap_january"),
-  february: document.getElementById("bill_extra_type_wrap_february"),
-  march: document.getElementById("bill_extra_type_wrap_march"),
-  april: document.getElementById("bill_extra_type_wrap_april"),
-  may: document.getElementById("bill_extra_type_wrap_may"),
-  june: document.getElementById("bill_extra_type_wrap_june"),
-  july: document.getElementById("bill_extra_type_wrap_july"),
-  august: document.getElementById("bill_extra_type_wrap_august"),
-  september: document.getElementById("bill_extra_type_wrap_september"),
-  october: document.getElementById("bill_extra_type_wrap_october"),
-  november: document.getElementById("bill_extra_type_wrap_november"),
-  december: document.getElementById("bill_extra_type_wrap_december"),
-};
 
   function setFeeLabelsFromCalc(calc) {
     const perMonth =
@@ -1228,8 +1199,6 @@ const extraTypeWraps = {
   for (const k of Object.keys(inputs)) if (!inputs[k]) return;
   for (const k of Object.keys(verifInputs)) if (!verifInputs[k]) return;
   for (const k of Object.keys(bankInputs)) if (!bankInputs[k]) return;
-  for (const k of Object.keys(extraTypeInputs)) if (!extraTypeInputs[k]) return;
-for (const k of Object.keys(extraTypeWraps)) if (!extraTypeWraps[k]) return;
 
 
   const statusSelects = {};
@@ -1239,41 +1208,23 @@ for (const k of Object.keys(extraTypeWraps)) if (!extraTypeWraps[k]) return;
 
   function applyStatusClass(sel) {
     if (!sel) return;
-    sel.classList.remove("status-notadmitted", "status-nopayment", "status-partial", "status-full", "status-extra");
+    sel.classList.remove("status-notadmitted", "status-nopayment", "status-partial", "status-full");
 
     const v = (sel.value || "").trim();
     if (v === "Not admitted") sel.classList.add("status-notadmitted");
     else if (v === "No payment") sel.classList.add("status-nopayment");
     else if (v === "Partial payment") sel.classList.add("status-partial");
     else if (v === "Full payment") sel.classList.add("status-full");
-    else if (v === "Extra payment") sel.classList.add("status-extra");
   }
 
   function toggleFeeBox(month) {
-    const sel = statusSelects[month];
-    const wrap = document.getElementById(`bill_fee_wrap_${month}`);
-    if (!sel || !wrap) return;
-
-    const v = (sel.value || "").trim();
-    if (v === "Extra payment") wrap.classList.remove("d-none");
-    else wrap.classList.add("d-none");
-  }
-
-  function toggleExtraTypeBox(month) {
   const sel = statusSelects[month];
-  const wrap = extraTypeWraps[month];
-  const input = extraTypeInputs[month];
-  if (!sel || !wrap || !input) return;
+  const wrap = document.getElementById(`bill_fee_wrap_${month}`);
+  if (!sel || !wrap) return;
 
-  const v = (sel.value || "").trim();
-
-  if (v === "Extra payment") {
-    wrap.classList.remove("d-none");
-  } else {
-    wrap.classList.add("d-none");
-    input.value = "";
-  }
+  wrap.classList.add("d-none");
 }
+
 
  Object.keys(inputs).forEach((m) => {
   const sel = statusSelects[m];
@@ -1281,7 +1232,6 @@ for (const k of Object.keys(extraTypeWraps)) if (!extraTypeWraps[k]) return;
   sel.addEventListener("change", () => {
     applyStatusClass(sel);
     toggleFeeBox(m);
-    toggleExtraTypeBox(m);
   });
 });
 
@@ -1290,7 +1240,6 @@ for (const k of Object.keys(extraTypeWraps)) if (!extraTypeWraps[k]) return;
     Object.keys(feeInputs).forEach((k) => feeInputs[k] && (feeInputs[k].value = ""));
     Object.keys(verifInputs).forEach((k) => verifInputs[k] && (verifInputs[k].value = ""));
     Object.keys(bankInputs).forEach((k) => bankInputs[k] && (bankInputs[k].value = ""));
-    Object.keys(extraTypeInputs).forEach((k) => extraTypeInputs[k] && (extraTypeInputs[k].value = ""));
 
     Object.keys(statusSelects).forEach((k) => {
       if (statusSelects[k]) {
@@ -1299,8 +1248,6 @@ for (const k of Object.keys(extraTypeWraps)) if (!extraTypeWraps[k]) return;
 
         const wrap = document.getElementById(`bill_fee_wrap_${k}`);
         if (wrap) wrap.classList.add("d-none");
-        const extraWrap = extraTypeWraps[k];
-if (extraWrap) extraWrap.classList.add("d-none");
       }
     });
 
@@ -1361,10 +1308,6 @@ const res = await fetch(`/api/billing/${admissionId}?year=${billingYear}`);
         if (bankInputs[k]) {
         bankInputs[k].value = (entry.bank || entry.number || "").toString();
         }
-        if (extraTypeInputs[k]) {
-  extraTypeInputs[k].value = (entry.extraPaymentType || "").toString();
-}
-toggleExtraTypeBox(k);
        });
       setTimeout(() => {
   if (window.applyDynamicBillingColors) {
@@ -1397,20 +1340,17 @@ function getLatestChangedVerificationForColumn(nextBilling) {
       normalizeBillValue(beforeItem.bank) ||
       normalizeBillValue(beforeItem.bankName) ||
       normalizeBillValue(beforeItem.number);
-    const beforeExtraType = normalizeBillValue(beforeItem.extraPaymentType);
 
     const afterStatus = normalizeBillValue(afterItem.status);
     const afterAmount = normalizeBillValue(afterItem.amount);
     const afterVerification = normalizeBillValue(afterItem.verification);
     const afterBank = normalizeBillValue(afterItem.bank);
-    const afterExtraType = normalizeBillValue(afterItem.extraPaymentType);
 
     const changed =
       beforeStatus !== afterStatus ||
       beforeAmount !== afterAmount ||
       beforeVerification !== afterVerification ||
-      beforeBank !== afterBank ||
-      beforeExtraType !== afterExtraType;
+      beforeBank !== afterBank ;
 
     if (changed) {
       latestChangedMonthKey = k;
@@ -1476,22 +1416,8 @@ function updateCurrentRowVerificationCell(value) {
 
 for (const k of Object.keys(inputs)) {
   const statusVal = (statusSelects[k]?.value || "").trim();
-  const extraTypeVal = (extraTypeInputs[k]?.value || "").trim();
 
- if (statusVal === "Extra payment" && !extraTypeVal) {
-  if (window.showUploadFlash) {
-    window.showUploadFlash(
-      "danger",
-      "Missing extra payment type",
-      `Type of extra payment is required for ${k}.`
-    );
-  } else {
-    alert(`Type of extra payment is required for ${k}`);
-  }
-
-  billSaveBtn.disabled = false;
-  return;
-}
+ 
 
   billing[k] = {
     status: statusVal,
@@ -1499,7 +1425,6 @@ for (const k of Object.keys(inputs)) {
     feeOverride: (feeInputs[k]?.value || "").trim(),
     verification: (verifInputs[k]?.value || "").trim(),
     bank: (bankInputs[k]?.value || "").trim(),
-    extraPaymentType: extraTypeVal,
   };
 }
 
@@ -1564,12 +1489,11 @@ if (inst) inst.hide();
 
   // remove old classes
   selectEl.classList.remove(
-    "status-notadmitted",
-    "status-nopayment",
-    "status-partial",
-    "status-full",
-    "status-extra"
-  );
+  "status-notadmitted",
+  "status-nopayment",
+  "status-partial",
+  "status-full"
+);
 
   const v = (selectEl.value || "").toLowerCase().trim();
 
@@ -1577,7 +1501,6 @@ if (inst) inst.hide();
   else if (v === "no payment") selectEl.classList.add("status-nopayment");
   else if (v === "partial payment") selectEl.classList.add("status-partial");
   else if (v === "full payment") selectEl.classList.add("status-full");
-  else if (v === "extra payment") selectEl.classList.add("status-extra");
 }
 
 function refreshAllBillStatus() {

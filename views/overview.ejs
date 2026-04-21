@@ -388,8 +388,6 @@ padding: .55rem .65rem;
   const billingBreakdown = Array.isArray(billingStats.billingBreakdown) ? billingStats.billingBreakdown : [];
   const pendingDueAdmissions = Array.isArray(billingStats.pendingDueAdmissions) ? billingStats.pendingDueAdmissions : [];
   const pendingDuePageData = pendingDueAdmissions;
-  const extraPaymentAdmissions = Array.isArray(billingStats.extraPaymentAdmissions) ? billingStats.extraPaymentAdmissions : [];
-  const extraPaymentPageData = extraPaymentAdmissions;
   const noPaymentAdmissions = Array.isArray(billingStats.noPaymentAdmissions) ? billingStats.noPaymentAdmissions : [];
   const noPaymentPageData = noPaymentAdmissions;
 %>
@@ -657,7 +655,7 @@ padding: .55rem .65rem;
         <div class="section-title">
           <div>
             <h5>Currency Summary</h5>
-            <div class="section-sub">Dynamic currencies with received, pending aur extra payment</div>
+            <div class="section-sub">Dynamic currencies with received and pending amounts</div>
           </div>
         </div>
 
@@ -670,7 +668,6 @@ padding: .55rem .65rem;
                   <th>Total Admissions</th>
                   <th>Received</th>
                   <th>Pending</th>
-                  <th>Extra</th>
                 </tr>
               </thead>
               <tbody>
@@ -680,7 +677,6 @@ padding: .55rem .65rem;
                     <td><strong><%= item.total || 0 %></strong></td>
                     <td><%= item.received || 0 %></td>
                     <td><%= item.pending || 0 %></td>
-                    <td><%= item.extra || 0 %></td>
                   </tr>
                 <% }) %>
               </tbody>
@@ -709,10 +705,6 @@ padding: .55rem .65rem;
           <div class="mini-stat">
             <div class="title">Pending Dues</div>
             <div class="num"><%= billingStats.totalPendingDues || 0 %></div>
-          </div>
-          <div class="mini-stat">
-            <div class="title">Extra Payment</div>
-            <div class="num"><%= billingStats.totalExtraPayments || 0 %></div>
           </div>
           <div class="mini-stat">
             <div class="title">Received Amount</div>
@@ -952,7 +944,7 @@ padding: .55rem .65rem;
   </div>
 
   <div class="row g-4 mt-1">
-    <div class="col-xl-4">
+    <div class="col-xl-6">
       <div class="panel-card p-3 p-lg-4 h-100">
         <div class="section-title">
           <div>
@@ -1006,60 +998,8 @@ padding: .55rem .65rem;
       </div>
     </div>
 
-    <div class="col-xl-4">
-      <div class="panel-card p-3 p-lg-4 h-100">
-        <div class="section-title">
-          <div>
-            <h5>Extra Payment Admissions</h5>
-            <div class="section-sub">Jahan extra payment receive hui</div>
-          </div>
-        </div>
 
-        <div class="table-responsive">
-          <table class="table table-premium align-middle mb-0">
-            <thead>
-    <tr>
-    <th>Student</th>
-    <th>Dept</th>
-    <th>Amount</th>
-    <th>Month</th>
-    <th>Year</th>
-    <th>Entered</th>
-  </tr>
-</thead>
-<tbody>
-  <% extraPaymentPageData.forEach((item) => { %>
-            <tr>
-      <td><strong><%= item.studentName || '-' %></strong></td>
-      <td><%= item.dept || '-' %></td>
-      <td><%= item.amount || 0 %></td>
-      <td><%= item.monthLabel || item.month || '-' %></td>
-      <td><%= item.billingYear || '-' %></td>
-      <td><%= item.enteredAt || '-' %></td>
-    </tr>
-  <% }) %>
-              <% if (!extraPaymentAdmissions.length) { %>
-                <tr>
-                  <td colspan="6" class="text-center text-muted py-4">No extra payment found</td>
-                </tr>
-              <% } %>
-            </tbody>
-          </table>
-          <% if (typeof extraPaymentPagination !== 'undefined' && extraPaymentPagination && extraPaymentPagination.totalPages > 1) { %>
-  <div class="super-pagination-wrap pt-3">
-    <% for (let p = 1; p <= extraPaymentPagination.totalPages; p++) { %>
-      <a href="?extraPaymentPage=<%= p %>" 
-         class="btn btn-sm <%= p === extraPaymentPagination.page ? 'btn-danger' : 'btn-outline-secondary' %>">
-        <%= p %>
-      </a>
-    <% } %>
-  </div>
-<% } %>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-xl-4">
+    <div class="col-xl-6">
       <div class="panel-card p-3 p-lg-4 h-100">
         <div class="section-title">
           <div>

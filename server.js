@@ -1091,7 +1091,6 @@ console.log("OVERVIEW filters:", safeFilters);
         feeOverride: String(item.fee || item.feeAmount || ""),
         verification: String(item.verificationNumber || ""),
         bank: String(item.bank || item.bankName || ""),
-        extraPaymentType: String(item.extraPaymentType || ""),
         updatedAt: item.updated_at || item.updatedAt || item.created_at || item.createdAt || "",
       };
     }
@@ -1213,7 +1212,6 @@ console.log("OVERVIEW filters:", safeFilters);
   let totalNoPaymentStudents = 0;
 
   let totalPendingDues = 0;
-  let totalExtraPayments = 0;
   let totalBillingRecords = 0;
 
   let totalAdmissionsCurrentYear = 0;
@@ -1228,7 +1226,6 @@ console.log("OVERVIEW filters:", safeFilters);
     let invoiceTimestampTotals = 0;
 
   const pendingDueAdmissions = [];
-  const extraPaymentAdmissions = [];
   const noPaymentAdmissions = [];
   const recentBillingChanges = [];
   const recentAdmissions = [];
@@ -1289,7 +1286,7 @@ const totalPages = Math.ceil(recentAdmissions.length / limit);
     totalReceivedAmount += receivedAmount;
 
     const { billingYear, billingArr, billingJson } = getBillingSnapshot(row);
-        const invoiceStatusValue = normalizeText(row.admission_invoice_status || "");
+    const invoiceStatusValue = normalizeText(row.admission_invoice_status || "");
     const paidInvoiceStatusValue = normalizeText(row.admission_paid_invoice_status || "");
     const invoiceStatusTimestamp = normalizeText(row.admission_invoice_status_timestamp || "");
     const paidInvoiceStatusTimestamp = normalizeText(row.admission_paid_invoice_status_timestamp || "");
@@ -1323,7 +1320,6 @@ const totalPages = Math.ceil(recentAdmissions.length / limit);
     let rowHasPartialPayment = false;
     let rowHasNoPayment = false;
     let rowHasUnpaid = false;
-    let rowExtraAmount = 0;
 
     for (const item of billingArr) {
       const st = normalizeText(item.status || "");
@@ -1347,19 +1343,12 @@ const totalPages = Math.ceil(recentAdmissions.length / limit);
       if (stLower.includes("partial payment")) rowHasPartialPayment = true;
       if (stLower.includes("no payment")) rowHasNoPayment = true;
       if (stLower.includes("unpaid")) rowHasUnpaid = true;
-
-      if (stLower.includes("extra payment")) {
-        const extra = amount > 0 ? amount : 0;
-        rowExtraAmount += extra;
-      }
     }
 
     if (rowHasFullPayment) totalFullyPaidAdmissions += 1;
     if (rowHasPartialPayment) totalPartiallyPaidAdmissions += 1;
     if (rowHasUnpaid) totalUnpaidAdmissions += 1;
     if (rowHasNoPayment) totalNoPaymentAdmissions += 1;
-
-    totalExtraPayments += rowExtraAmount;
 
       if (pendingDues > 0) {
       const latestPendingMonth =
@@ -1375,25 +1364,6 @@ const totalPages = Math.ceil(recentAdmissions.length / limit);
         amount: pendingDues,
         month: latestPendingMonth?.month || "",
         monthLabel: prettyMonth(latestPendingMonth?.month || ""),
-        billingYear,
-        enteredAt: registrationDate || "",
-      });
-    }
-
-       if (rowExtraAmount > 0) {
-      const latestExtraMonth =
-        billingArr.find((x) => {
-          const s = normalizeText(x.status || "").toLowerCase();
-          return s.includes("extra payment");
-        }) || null;
-
-      extraPaymentAdmissions.push({
-        id: row.id,
-        studentName: row.student_name || "",
-        dept: row.dept || "",
-        amount: rowExtraAmount,
-        month: latestExtraMonth?.month || "",
-        monthLabel: prettyMonth(latestExtraMonth?.month || ""),
         billingYear,
         enteredAt: registrationDate || "",
       });
@@ -1474,12 +1444,10 @@ const totalPages = Math.ceil(recentAdmissions.length / limit);
       total: 0,
       received: 0,
       pending: 0,
-      extra: 0,
     };
     existingCurrency.total += 1;
     existingCurrency.received += receivedAmount;
     existingCurrency.pending += pendingDues;
-    existingCurrency.extra += rowExtraAmount;
     currencyStatsMap.set(currency, existingCurrency);
 
     chartAdmissionsTrendYearly[yyyy] = (chartAdmissionsTrendYearly[yyyy] || 0) + 1;
@@ -1553,7 +1521,7 @@ const totalPages = Math.ceil(recentAdmissions.length / limit);
         total: 0,
         received: 0,
         pending: 0,
-        extra: 0,
+      
       });
     }
   }
@@ -1565,7 +1533,6 @@ const totalPages = Math.ceil(recentAdmissions.length / limit);
         total: 0,
         received: 0,
         pending: 0,
-        extra: 0,
       });
     }
   }
@@ -1583,7 +1550,6 @@ const totalPages = Math.ceil(recentAdmissions.length / limit);
     { label: "Total Partial Fee Students", value: totalPartialFeeStudents, icon: "bi bi-pie-chart-fill", hint: "Fee status based" },
     { label: "Total No Payment Students", value: totalNoPaymentStudents, icon: "bi bi-exclamation-octagon-fill", hint: "Fee status based" },
     { label: "Total Pending Dues", value: totalPendingDues, icon: "bi bi-cash-stack", hint: "Billing due amount" },
-    { label: "Total Extra Payments", value: totalExtraPayments, icon: "bi bi-graph-up-arrow", hint: "Billing extra amount" },
     { label: "Total Billing Records", value: totalBillingRecords, icon: "bi bi-receipt-cutoff", hint: "Billing month rows" },
     { label: "Current Year Admissions", value: totalAdmissionsCurrentYear, icon: "bi bi-calendar2-check-fill", hint: String(currentYearNum) },
     { label: "Previous Year Admissions", value: totalAdmissionsPreviousYear, icon: "bi bi-calendar2-minus-fill", hint: String(previousYearNum) },
@@ -1615,7 +1581,6 @@ const totalPages = Math.ceil(recentAdmissions.length / limit);
       totalNoPaymentAdmissions,
       totalPendingDues,
       totalReceivedAmount,
-      totalExtraPayments,
       recentAdmissionsPageData,
 currentPage: page,
 totalPages,
@@ -1625,7 +1590,6 @@ totalPages,
       invoiceStatusBreakdown: Array.from(invoiceStatusMap.values()).sort((a, b) => b.total - a.total),
       paidInvoiceStatusBreakdown: Array.from(paidInvoiceStatusMap.values()).sort((a, b) => b.total - a.total),
       pendingDueAdmissions,
-      extraPaymentAdmissions,
       noPaymentAdmissions,
       billingBreakdown: Array.from(billingSummaryMap.values()).sort((a, b) => b.total - a.total),
     },
@@ -1782,7 +1746,6 @@ function attachComputedMonthFees(row, targetObj, billingYear = new Date().getFul
       feeOverride: String(item.fee || ""),
       verification: String(item.verificationNumber || ""),
       bank: String(item.bank || ""),
-      extraPaymentType: String(item.extraPaymentType || ""),
     };
   }
 
@@ -1983,8 +1946,7 @@ function toMonthString(entry) {
 
   if (
     status === "Partial payment" ||
-    status === "Full payment" ||
-    status === "Extra payment"
+    status === "Full payment" 
   ) {
     return amt > 0 ? `${status} | ${amt}` : status;
   }
@@ -2005,7 +1967,6 @@ function buildPendingRowsFromRow(row, billingYear = new Date().getFullYear()) {
       feeOverride: String(item.fee || ""),
       verification: String(item.verificationNumber || ""),
       bank: String(item.bank || ""),
-      extraPaymentType: String(item.extraPaymentType || ""),
     };
   }
 
@@ -2060,7 +2021,6 @@ function getPaidMonthsFromRow(row, billingYear = new Date().getFullYear()) {
       feeOverride: String(item.fee || ""),
       verification: String(item.verificationNumber || ""),
       bank: String(item.bank || ""),
-      extraPaymentType: String(item.extraPaymentType || ""),
     };
   }
 
@@ -2074,8 +2034,7 @@ function getPaidMonthsFromRow(row, billingYear = new Date().getFullYear()) {
     const isPaid =
       amt > 0 ||
       st === "full payment" ||
-      st === "partial payment" ||
-      st === "extra payment";
+      st === "partial payment";
 
     if (!isPaid) continue;
 
@@ -2219,9 +2178,465 @@ function isBillingMonthAlreadyUpdated(row, monthKey, billingYear = new Date().ge
   const amount = parseFirstNumber(target?.amountReceived || target?.amount || "");
   const verification = String(target?.verificationNumber || "").trim();
   const bank = String(target?.bank || target?.bankName || "").trim();
-  const extraPaymentType = String(target?.extraPaymentType || "").trim();
+  
 
-  return !!(status || amount > 0 || verification || bank || extraPaymentType);
+  return !!(status || amount > 0 || verification || bank);
+}
+
+function buildReceivableRowsFromRow(row, billingYear = new Date().getFullYear()) {
+  const billingArr = getAdmissionBillingByYear(row.id, billingYear);
+
+  const billingJson = {};
+  for (const item of billingArr) {
+    billingJson[item.month] = {
+      status: item.status || "",
+      amount: String(item.amount || item.amountReceived || ""),
+      feeOverride: String(item.fee || item.feeAmount || ""),
+      verification: String(item.verificationNumber || ""),
+      bank: String(item.bank || item.bankName || ""),
+      paymentDate: String(item.paymentDate || item.paidOn || ""),
+    };
+  }
+
+  const oldFeeSnapshot =
+    parseFirstNumber(row?.monthly_fee_current || 0) ||
+    parseFirstNumber(row?.admission_fees || 0) ||
+    inferMonthlyFee(row, billingJson) ||
+    0;
+
+  let feeHistory = ensureInitialFeeHistory(row, getFeeHistory(row), oldFeeSnapshot);
+  const baseFee = baseFeeFromHistoryOrRow(row, feeHistory, oldFeeSnapshot);
+
+  const paidUptoKey = normalizeMonthKey(
+    computePaidUptoFromBillingJson(billingJson) || row?.accounts_paid_upto || ""
+  );
+
+  const paidUptoIdx = monthIndex(paidUptoKey);
+  const rows = [];
+
+  for (const m of BILLING_MONTHS) {
+    const e = billingJson?.[m.key] || {};
+    const st = String(e.status || "").trim();
+    const stLower = st.toLowerCase();
+
+    if (stLower === "not admitted") continue;
+
+    const monthIdx = monthIndex(m.key);
+
+    // Agar paid upto maujood hai to us se pehle ke bilkul blank months skip kar do
+    if (paidUptoIdx !== -1 && monthIdx < paidUptoIdx) {
+      const oldAmt = parseFirstNumber(e.amount || "");
+      const hasOldActivity =
+        !!st ||
+        oldAmt > 0 ||
+        String(e.verification || "").trim() ||
+        String(e.bank || "").trim();
+
+      if (!hasOldActivity) continue;
+    }
+
+    const amt = parseFirstNumber(e.amount || "");
+    const feeOverride = parseFirstNumber(e.feeOverride || "");
+    const fee = feeOverride > 0 ? feeOverride : (feeForMonth(feeHistory, baseFee, m.key) || 0);
+    const due = Math.max(0, fee - amt);
+
+    if (due <= 0) continue;
+
+    rows.push({
+      monthKey: m.key,
+      monthLabel: m.label,
+      status: st || "",
+      fee: fee || 0,
+      received: amt || 0,
+      due: due || 0,
+      verification: String(e.verification || "").trim(),
+      bank: String(e.bank || "").trim(),
+      year: billingYear,
+    });
+  }
+
+  return rows;
+}
+
+function buildFeeCollectionRowsForAdmission(row, billingYear = new Date().getFullYear()) {
+  const receivableRows = buildReceivableRowsFromRow(row, billingYear) || [];
+
+  return receivableRows
+    .map((r) => ({
+      admissionId: row.id,
+      studentName: row.student_name || "",
+      familyNumber: String(row.accounts_family_number || "").trim(),
+      registrationNumber: String(row.accounts_registration_number || "").trim(),
+      dept: row.dept || "",
+      grade: row.grade || "",
+      currency: row.currency_code || "",
+      monthKey: String(r.monthKey || "").trim().toLowerCase(),
+      monthLabel: r.monthLabel || "",
+      status: r.status || "",
+      fee: Number(r.fee || 0),
+      received: Number(r.received || 0),
+      due: Number(r.due || 0),
+      verification: String(r.verification || "").trim(),
+      bank: String(r.bank || "").trim(),
+      year: Number(r.year || billingYear),
+    }))
+    .filter((x) => x.due > 0);
+}
+
+function buildFeeCollectionRowsForFamily(rows, billingYear = new Date().getFullYear()) {
+  const all = [];
+
+  for (const row of rows || []) {
+    const one = buildFeeCollectionRowsForAdmission(row, billingYear);
+    all.push(...one);
+  }
+
+  all.sort((a, b) => {
+    if (a.year !== b.year) return a.year - b.year;
+    return monthIndex(a.monthKey) - monthIndex(b.monthKey);
+  });
+
+  return all;
+}
+
+function summarizeFeeCollectionRows(
+  admissionRows = [],
+  billingYear = new Date().getFullYear(),
+  uptoMonthKey = currentMonthKey()
+) {
+  let totalFee = 0;
+  let totalReceived = 0;
+  let totalDues = 0; // current month + previous pending
+  let totalFullPendingDues = 0; // all pending dues, including future receivable months
+
+  const uptoIdx = monthIndex(uptoMonthKey);
+
+  for (const row of admissionRows || []) {
+    if (!row) continue;
+
+    const billingJson = getBillingJsonByAdmissionId(row.id, billingYear);
+
+    const oldFeeSnapshot =
+      parseFirstNumber(row?.monthly_fee_current || 0) ||
+      parseFirstNumber(row?.admission_fees || 0) ||
+      inferMonthlyFee(row, billingJson) ||
+      0;
+
+    let feeHistory = ensureInitialFeeHistory(row, getFeeHistory(row), oldFeeSnapshot);
+    const baseFee = baseFeeFromHistoryOrRow(row, feeHistory, oldFeeSnapshot);
+
+    for (const m of BILLING_MONTHS) {
+      const e = billingJson?.[m.key] || {};
+      const st = String(e.status || "").trim().toLowerCase();
+
+      if (st === "not admitted") continue;
+
+      const received = parseFirstNumber(e.amount || "");
+      const feeOverride = parseFirstNumber(e.feeOverride || "");
+      const fee = feeOverride > 0 ? feeOverride : (feeForMonth(feeHistory, baseFee, m.key) || 0);
+      const due = Math.max(0, fee - received);
+
+      totalFee += fee;
+      totalReceived += received;
+      totalFullPendingDues += due;
+
+      const rowIdx = monthIndex(m.key);
+      if (uptoIdx === -1 || rowIdx === -1 || rowIdx <= uptoIdx) {
+        totalDues += due;
+      }
+    }
+  }
+
+  return {
+    totalFee,
+    totalReceived,
+    totalDues,
+    totalFullPendingDues,
+    totalFeeForSession: totalFee,
+    totalDuesUptoCurrentMonth: totalDues,
+    currentMonthKey: uptoMonthKey,
+  };
+}
+
+
+function getBillingJsonByAdmissionId(admissionId, billingYear = new Date().getFullYear()) {
+  const billingArr = getAdmissionBillingByYear(admissionId, billingYear);
+  const billingJson = {};
+
+  for (const item of billingArr) {
+    billingJson[item.month] = {
+      status: item.status || "",
+      amount: String(item.amount || item.amountReceived || ""),
+      feeOverride: String(item.fee || item.feeAmount || ""),
+      verification: String(item.verificationNumber || ""),
+      bank: String(item.bank || item.bankName || ""),
+      paymentDate: String(item.paymentDate || item.paidOn || ""),
+    };
+  }
+
+  return billingJson;
+}
+
+function markSelectedMonthsNotAdmitted({
+  row,
+  billingYear,
+  selectedMonths = [],
+}) {
+  const billingJson = getBillingJsonByAdmissionId(row.id, billingYear);
+  const touchedMonths = [];
+
+  for (const item of selectedMonths) {
+    const monthKey = String(item?.monthKey || "").trim().toLowerCase();
+    if (!BILLING_MONTH_KEYS.includes(monthKey)) continue;
+
+    billingJson[monthKey] = {
+      status: "Not admitted",
+      amount: "",
+      feeOverride: "",
+      verification: "",
+      bank: "",
+      paymentDate: "",
+    };
+
+    touchedMonths.push({
+      monthKey,
+      status: "Not admitted",
+    });
+  }
+
+  const oldFeeSnapshot =
+    parseFirstNumber(row?.monthly_fee_current || 0) ||
+    parseFirstNumber(row?.admission_fees || 0) ||
+    inferMonthlyFee(row, billingJson) ||
+    0;
+
+  let feeHistory = ensureInitialFeeHistory(row, getFeeHistory(row), oldFeeSnapshot);
+  const baseFee = baseFeeFromHistoryOrRow(row, feeHistory, oldFeeSnapshot);
+
+  for (const m of BILLING_MONTHS) {
+    const item = billingJson[m.key] || {};
+    saveAdmissionBillingMonthByYear({
+      admissionId: row.id,
+      billingYear,
+      monthKey: m.key,
+      status: String(item.status || ""),
+      amountReceived: String(item.amount || ""),
+      feeAmount: String(item.feeOverride || ""),
+      verificationNumber: String(item.verification || ""),
+      bankName: String(item.bank || ""),
+      paymentDate: String(item.paymentDate || ""),
+    });
+  }
+
+  const dues = calcPendingDues(baseFee, billingJson, feeHistory);
+  const paidUpto = computePaidUptoFromBillingJson(billingJson);
+  const receivedPayment = computeReceivedPaymentFromBillingJson(billingJson);
+
+ const latestTouchedMonthKey = touchedMonths.length
+  ? touchedMonths[touchedMonths.length - 1].monthKey
+  : "";
+
+const latestVerificationForColumn =
+  latestTouchedMonthKey && billingJson[latestTouchedMonthKey]
+    ? String(billingJson[latestTouchedMonthKey].verification || "").trim()
+    : "";
+
+db.prepare(`
+  UPDATE admissions
+  SET billing_json = @billing_json,
+      fee_history = @fee_history,
+      monthly_fee_current = @monthly_fee_current,
+      accounts_paid_upto = @accounts_paid_upto,
+      accounts_verification_number = @accounts_verification_number,
+      admission_total_fees = @admission_total_fees,
+      admission_pending_dues = @admission_pending_dues,
+      admission_total_paid = @admission_total_paid
+  WHERE id = @id
+`).run({
+  id: row.id,
+  billing_json: JSON.stringify(billingJson),
+  fee_history: JSON.stringify(feeHistory),
+  monthly_fee_current: dues.currentFee || baseFee || 0,
+  accounts_paid_upto: paidUpto || "",
+  accounts_verification_number: latestVerificationForColumn,
+  admission_total_fees: String(dues.expected || 0),
+  admission_pending_dues: String(dues.pending || 0),
+  admission_total_paid: String(receivedPayment || 0),
+});
+
+  return {
+    success: true,
+    touchedMonths,
+    billingJson,
+    paidUpto,
+    receivedPayment,
+  };
+}
+
+function applyFeeCollectionToBilling({
+  row,
+  billingYear,
+  receiveAmount,
+  verificationNumber,
+  collectionAccount,
+  receivingDate,
+  note,
+  actorUser,
+}) {
+  let remaining = Number(receiveAmount || 0);
+
+  if (!row || remaining <= 0) {
+    return {
+      success: false,
+      message: "Invalid row or amount",
+      appliedAmount: 0,
+      remainingAmount: remaining,
+      touchedMonths: [],
+    };
+  }
+
+  const billingJson = getBillingJsonByAdmissionId(row.id, billingYear);
+
+  const oldFeeSnapshot =
+    parseFirstNumber(row?.monthly_fee_current || 0) ||
+    parseFirstNumber(row?.admission_fees || 0) ||
+    inferMonthlyFee(row, billingJson) ||
+    0;
+
+  let feeHistory = ensureInitialFeeHistory(row, getFeeHistory(row), oldFeeSnapshot);
+  const baseFee = baseFeeFromHistoryOrRow(row, feeHistory, oldFeeSnapshot);
+
+  const receivableRows = buildReceivableRowsFromRow(row, billingYear)
+  .sort((a, b) => monthIndex(a.monthKey) - monthIndex(b.monthKey));
+
+const touchedMonths = [];
+
+for (const p of receivableRows) {
+    if (remaining <= 0) break;
+
+    const monthKey = String(p.monthKey || "").trim().toLowerCase();
+    const current = billingJson[monthKey] || {
+      status: "",
+      amount: "",
+      feeOverride: "",
+      verification: "",
+      bank: "",
+      paymentDate: "",
+    };
+
+    const currentReceived = parseFirstNumber(current.amount || 0);
+    const feeOverride =
+      parseFirstNumber(current.feeOverride || 0) ||
+      feeForMonth(feeHistory, baseFee, monthKey) ||
+      0;
+
+    const currentDue = Math.max(0, feeOverride - currentReceived);
+    if (currentDue <= 0) continue;
+
+    const used = Math.min(remaining, currentDue);
+    const newReceived = currentReceived + used;
+    const balance = Math.max(0, feeOverride - newReceived);
+
+    current.amount = String(newReceived);
+    current.feeOverride = String(feeOverride);
+    current.verification = String(verificationNumber || "").trim();
+    current.bank = String(collectionAccount || "").trim();
+    current.paymentDate = String(receivingDate || "").trim();
+
+    if (balance <= 0) current.status = "Full payment";
+    else current.status = "Partial payment";
+
+    billingJson[monthKey] = current;
+
+    touchedMonths.push({
+      monthKey,
+      fee: feeOverride,
+      previousReceived: currentReceived,
+      used,
+      newReceived,
+      balance,
+      status: current.status,
+    });
+
+    remaining -= used;
+  }
+
+  for (const m of BILLING_MONTHS) {
+    const item = billingJson[m.key] || {};
+    saveAdmissionBillingMonthByYear({
+      admissionId: row.id,
+      billingYear,
+      monthKey: m.key,
+      status: String(item.status || ""),
+      amountReceived: String(item.amount || ""),
+      feeAmount: String(item.feeOverride || ""),
+      verificationNumber: String(item.verification || ""),
+      bankName: String(item.bank || ""),
+      paymentDate: String(item.paymentDate || ""),
+    });
+  }
+
+  const dues = calcPendingDues(baseFee, billingJson, feeHistory);
+  const paidUpto = computePaidUptoFromBillingJson(billingJson);
+  const receivedPayment = computeReceivedPaymentFromBillingJson(billingJson);
+
+  const latestTouched = touchedMonths.length ? touchedMonths[touchedMonths.length - 1] : null;
+  const latestVerificationForColumn =
+    latestTouched
+      ? String(billingJson[latestTouched.monthKey]?.verification || "").trim()
+      : String(row.accounts_verification_number || "").trim();
+
+  db.prepare(`
+    UPDATE admissions
+    SET billing_json = @billing_json,
+        fee_history = @fee_history,
+        monthly_fee_current = @monthly_fee_current,
+        
+        accounts_paid_upto = @accounts_paid_upto,
+        accounts_verification_number = @accounts_verification_number,
+        admission_total_fees = @admission_total_fees,
+        admission_pending_dues = @admission_pending_dues,
+        admission_total_paid = @admission_total_paid
+    WHERE id = @id
+  `).run({
+    id: row.id,
+    billing_json: JSON.stringify(billingJson),
+    fee_history: JSON.stringify(feeHistory),
+    monthly_fee_current: dues.currentFee || baseFee || 0,
+    
+    accounts_paid_upto: paidUpto || "",
+    accounts_verification_number: latestVerificationForColumn,
+    admission_total_fees: String(dues.expected || 0),
+    admission_pending_dues: String(dues.pending || 0),
+    admission_total_paid: String(receivedPayment || 0),
+  });
+
+  logAudit("fee_collection_received", actorUser, {
+    dept: row.dept || "",
+    details: {
+      admissionId: row.id,
+      studentName: row.student_name || "",
+      billingYear,
+      collectionAccount,
+      receivingDate,
+      note: String(note || "").trim(),
+      receiveAmount: Number(receiveAmount || 0),
+      appliedAmount: Number(receiveAmount || 0) - remaining,
+      remainingAmount: remaining,
+      touchedMonths,
+    },
+  });
+
+  return {
+    success: true,
+    billingJson,
+    calc: { baseFee, ...dues },
+    paidUpto,
+    receivedPayment,
+    appliedAmount: Number(receiveAmount || 0) - remaining,
+    remainingAmount: remaining,
+    touchedMonths,
+  };
 }
 
 function buildBulkWhatsappPayload({ req, user, rows, className, section, monthKey, year, feeType }) {
@@ -2326,7 +2741,6 @@ for (const item of billingArr) {
     feeOverride: String(item.fee || ""),
     verification: String(item.verificationNumber || ""),
     bank: String(item.bank || ""),
-    extraPaymentType: String(item.extraPaymentType || ""),
   };
 }
 
@@ -2413,7 +2827,6 @@ for (const item of beforeBillingArr) {
     feeOverride: String(item.fee || ""),
     verification: String(item.verificationNumber || ""),
     bank: String(item.bank || ""),
-    extraPaymentType: String(item.extraPaymentType || ""),
   };
 }
 
@@ -2502,12 +2915,6 @@ for (const item of beforeBillingArr) {
   }
         const amt = parseFirstNumber(v.amount || "");
         const hasNowActivity = (st && st !== "") || (amt > 0);
-        if (st === "Extra payment" && !String(v.extraPaymentType || "").trim()) {
-  return res.status(400).json({
-    success: false,
-    message: `Type of extra payment required for ${m.label}`
-  });
-}
 
         let feeOverride = "";
 
@@ -2529,7 +2936,7 @@ for (const item of beforeBillingArr) {
         feeOverride,
         verification: String(v.verification || "").trim(),
         bank: String(v.bank || "").trim(),
-        extraPaymentType: String(v.extraPaymentType || "").trim(),
+        
       };
       } else {
         const raw = String(v || "").trim();
@@ -2582,7 +2989,6 @@ for (const item of beforeBillingArr) {
        feeOverride,
        verification: "",
        bank: "",
-       extraPaymentType: "",
        };
       }
     }
@@ -2597,20 +3003,17 @@ for (const m of BILLING_MONTHS) {
   const beforeAmount = String(beforeItem.amount || "").trim();
   const beforeVerification = String(beforeItem.verification || "").trim();
   const beforeBank = String(beforeItem.bank || "").trim();
-  const beforeExtraType = String(beforeItem.extraPaymentType || "").trim();
 
   const afterStatus = String(afterItem.status || "").trim();
   const afterAmount = String(afterItem.amount || "").trim();
   const afterVerification = String(afterItem.verification || "").trim();
   const afterBank = String(afterItem.bank || "").trim();
-  const afterExtraType = String(afterItem.extraPaymentType || "").trim();
 
   const changed =
     beforeStatus !== afterStatus ||
     beforeAmount !== afterAmount ||
     beforeVerification !== afterVerification ||
-    beforeBank !== afterBank ||
-    beforeExtraType !== afterExtraType;
+    beforeBank !== afterBank ;
 
   if (changed) {
     latestChangedMonthKey = m.key;
@@ -2643,7 +3046,6 @@ const latestVerificationForColumn = latestChangedMonthKey
     feeAmount: String(item.feeOverride || ""),
     verificationNumber: String(item.verification || ""),
     bankName: String(item.bank || ""),
-    extraPaymentType: String(item.extraPaymentType || ""),
     paymentDate: "",
   });
 }
@@ -2666,7 +3068,6 @@ const latestVerificationForColumn = latestChangedMonthKey
              billing_json = @billing_json,
              fee_history = @fee_history,
              monthly_fee_current = @monthly_fee_current,
-             has_extra_fee = @has_extra_fee,
 
              accounts_paid_upto = @accounts_paid_upto,
              accounts_verification_number = @accounts_verification_number,
@@ -2682,7 +3083,6 @@ const latestVerificationForColumn = latestChangedMonthKey
       fee_history: JSON.stringify(feeHistoryAfter),
 
       monthly_fee_current: dues.currentFee || baseFee || 0,
-      has_extra_fee: dues.hasExtraFee ? 1 : 0,
 
       accounts_paid_upto: paidUpto || "",
       admission_total_fees: String(dues.expected || 0),
@@ -2804,7 +3204,6 @@ function getPreviousSixMonthsRecord(full, selectedMonthKey) {
       due: Number(found?.due || 0),
       verification: String(found?.verificationNumber || found?.verification || "").trim(),
       bank: String(found?.bank || found?.bankName || "").trim(),
-      extraPaymentType: String(found?.extraPaymentType || "").trim(),
     };
   });
 }
@@ -3012,7 +3411,6 @@ const dues = calcPendingDues(baseFee, billingJson, feeHistory);
          admission_month = @admission_month,
          fee_history = @fee_history,
          monthly_fee_current = @monthly_fee_current,
-         has_extra_fee = @has_extra_fee,
          admission_total_fees = @admission_total_fees,
          admission_pending_dues = @admission_pending_dues
      WHERE id = @id
@@ -3020,7 +3418,6 @@ const dues = calcPendingDues(baseFee, billingJson, feeHistory);
     id,
     ...updated,
     monthly_fee_current: incomingFeeNumber > 0 ? incomingFeeNumber : (dues.currentFee || baseFee || 0),
-    has_extra_fee: dues.hasExtraFee ? 1 : 0,
   });
 
   const afterRow = { ...row, ...updated };
@@ -3403,10 +3800,90 @@ function renderSharedAdmissionDetails(req, res, viewName = "admission-details") 
   }
 }
 
+function renderFeeCollectionPage(req, res) {
+  try {
+    const user = req.session.user;
+    const perms = getPerm(user);
+
+    if (!canUseDetailsFeature(user, perms)) {
+      return res.status(403).send("Not allowed");
+    }
+
+    const admissionId = parseInt(req.query.admissionId, 10);
+    const familyNumber = String(req.query.familyNumber || "").trim();
+    const billingYear = getBillingYearFromReq(req);
+
+    let rows = [];
+    let mode = "single";
+    let primaryRow = null;
+
+    if (admissionId) {
+      const row = getActiveAdmissionById(admissionId);
+      if (!row) return res.status(404).send("Admission not found");
+
+      if (!ensureAdmissionRouteAccess(user, perms, row)) {
+        return res.status(403).send("Not allowed");
+      }
+
+      primaryRow = row;
+
+      if (familyNumber) {
+        rows = getAccessibleFamilyRows(user, familyNumber);
+        if (rows.length) mode = "family";
+        else rows = [row];
+      } else {
+        rows = [row];
+      }
+    } else if (familyNumber) {
+      rows = getAccessibleFamilyRows(user, familyNumber);
+      if (!rows.length) return res.status(404).send("No family admissions found");
+      primaryRow = rows[0];
+      mode = "family";
+    } else {
+      return res.status(400).send("admissionId or familyNumber required");
+    }
+
+    const feeRows =
+      mode === "family"
+        ? buildFeeCollectionRowsForFamily(rows, billingYear)
+        : buildFeeCollectionRowsForAdmission(primaryRow, billingYear);
+
+    const summary = summarizeFeeCollectionRows(rows, billingYear, currentMonthKey());
+
+    return res.render("fee-collection", {
+      user,
+      perms,
+      pageTitle: "Fee Collection",
+      billingYear,
+      mode,
+      admissionId: primaryRow?.id || "",
+      familyNumber: familyNumber || String(primaryRow?.accounts_family_number || "").trim(),
+      rows,
+      feeRows,
+      summary,
+      bankOptions: getBankOptions(),
+    });
+  } catch (err) {
+    console.error("renderFeeCollectionPage error:", err);
+    return res.status(500).send("Server error");
+  }
+}
+
+app.get("/dashboard/super/fee-collection", requireLogin, (req, res) => {
+  return renderFeeCollectionPage(req, res);
+});
+
+app.get("/admin/fee-collection", requireLogin, (req, res) => {
+  return renderFeeCollectionPage(req, res);
+});
+
 // =====================================================
 // ✅ VIEW DETAILS ROUTES
 // keep both URLs working
 // =====================================================
+
+
+
 app.get("/dashboard/super/admission/:id", requireLogin, (req, res) => {
   return renderSharedAdmissionDetails(req, res, "admission-details");
 });
@@ -4115,6 +4592,238 @@ app.get("/api/pending/admission/:id", requireLogin, (req, res) => {
   } catch (err) {
     console.error("GET /api/pending/admission/:id error:", err);
     return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+
+app.post("/api/fee-collection/receive", requireLogin, requireSaveBilling, (req, res) => {
+  try {
+    const user = req.session.user;
+    const perms = getPerm(user);
+
+    if (!canUseDetailsFeature(user, perms)) {
+      return res.status(403).json({ success: false, message: "Not allowed" });
+    }
+
+    const {
+  admissionId,
+  familyNumber,
+  receivingAmount,
+  verificationNumber,
+  collectionAccount,
+  receivingDate,
+  note,
+  year,
+  selectedNotAdmittedMonths,
+} = req.body || {};
+
+    const billingYear = Number(year) || new Date().getFullYear();
+    const amount = Number(receivingAmount || 0);
+    const cleanFamilyNumber = String(familyNumber || "").trim();
+    const cleanVerificationNumber = String(verificationNumber || "").trim();
+    const cleanCollectionAccount = String(collectionAccount || "").trim();
+    const cleanReceivingDate = String(receivingDate || "").trim();
+    const cleanNote = String(note || "").trim();
+    const cleanSelectedNotAdmittedMonths = Array.isArray(selectedNotAdmittedMonths)
+  ? selectedNotAdmittedMonths
+      .map((x) => ({
+        admissionId: Number(x?.admissionId || 0),
+        monthKey: String(x?.monthKey || "").trim().toLowerCase(),
+      }))
+      .filter((x) => x.admissionId > 0 && BILLING_MONTH_KEYS.includes(x.monthKey))
+  : [];
+
+    if (amount <= 0 && !cleanSelectedNotAdmittedMonths.length) {
+  return res.status(400).json({
+    success: false,
+    message: "Receiving amount must be greater than zero or select month(s) for Not admitted",
+  });
+}
+
+if (amount > 0 && !cleanVerificationNumber) {
+  return res.status(400).json({
+    success: false,
+    message: "Verification number is required",
+  });
+}
+
+if (amount > 0 && !cleanCollectionAccount) {
+  return res.status(400).json({
+    success: false,
+    message: "Collection account is required",
+  });
+}
+   if (amount > 0) {
+  const allowedBank = db
+    .prepare("SELECT id FROM bank_options WHERE label = ?")
+    .get(cleanCollectionAccount);
+
+  if (!allowedBank) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid collection account selected",
+    });
+  }
+}
+
+    let targetRows = [];
+    let mode = "single";
+
+    if (cleanFamilyNumber) {
+      targetRows = getAccessibleFamilyRows(user, cleanFamilyNumber);
+      if (!targetRows.length) {
+        return res.status(404).json({
+          success: false,
+          message: "No family admissions found",
+        });
+      }
+      mode = "family";
+    } else {
+      const id = parseInt(admissionId, 10);
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: "admissionId or familyNumber required",
+        });
+      }
+
+      const row = getActiveAdmissionById(id);
+      if (!row) {
+        return res.status(404).json({
+          success: false,
+          message: "Admission not found",
+        });
+      }
+
+      if (!ensureAdmissionRouteAccess(user, perms, row)) {
+        return res.status(403).json({
+          success: false,
+          message: "Not allowed",
+        });
+      }
+
+      targetRows = [row];
+    }
+
+    const allPendingRows =
+      mode === "family"
+        ? buildFeeCollectionRowsForFamily(targetRows, billingYear)
+        : buildFeeCollectionRowsForAdmission(targetRows[0], billingYear);
+
+if (!allPendingRows.length && !cleanSelectedNotAdmittedMonths.length) {
+  return res.status(400).json({
+    success: false,
+    message: "No pending dues found",
+  });
+}
+
+    let remaining = amount;
+    const applied = [];
+
+    const rowsInOrder = [...targetRows].sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
+
+    for (const row of rowsInOrder) {
+  const selectedForThisRow = cleanSelectedNotAdmittedMonths.filter(
+    (x) => Number(x.admissionId) === Number(row.id)
+  );
+
+  if (selectedForThisRow.length) {
+    markSelectedMonthsNotAdmitted({
+      row,
+      billingYear,
+      selectedMonths: selectedForThisRow,
+    });
+  }
+
+  if (remaining <= 0) {
+    applied.push({
+      admissionId: row.id,
+      studentName: row.student_name || "",
+      usedAmount: 0,
+      remainingAmount: remaining,
+      touchedMonths: selectedForThisRow.map((x) => ({
+        monthKey: x.monthKey,
+        status: "Not admitted",
+      })),
+      paidUpto: "",
+      receivedPayment: 0,
+    });
+
+    emitAdmissionChanged(req, {
+      type: "fee_collection_received",
+      admissionId: row.id,
+      dept: row.dept || "",
+    });
+
+    continue;
+  }
+
+  const result = applyFeeCollectionToBilling({
+    row,
+    billingYear,
+    receiveAmount: remaining,
+    verificationNumber: cleanVerificationNumber,
+    collectionAccount: cleanCollectionAccount,
+    receivingDate: cleanReceivingDate,
+    note: cleanNote,
+    actorUser: user,
+  });
+
+      const used = Number(result.appliedAmount || 0);
+      remaining = Number(result.remainingAmount || 0);
+
+applied.push({
+  admissionId: row.id,
+  studentName: row.student_name || "",
+  usedAmount: used,
+  remainingAmount: remaining,
+  touchedMonths: [
+    ...selectedForThisRow.map((x) => ({
+      monthKey: x.monthKey,
+      status: "Not admitted",
+    })),
+    ...(result.touchedMonths || []),
+  ],
+  paidUpto: result.paidUpto || "",
+  receivedPayment: result.receivedPayment || 0,
+});
+
+      emitAdmissionChanged(req, {
+        type: "fee_collection_received",
+        admissionId: row.id,
+        dept: row.dept || "",
+      });
+    }
+
+    const refreshedRows =
+      mode === "family"
+        ? getAccessibleFamilyRows(user, cleanFamilyNumber)
+        : [getActiveAdmissionById(parseInt(admissionId, 10))].filter(Boolean);
+
+    const refreshedFeeRows =
+      mode === "family"
+        ? buildFeeCollectionRowsForFamily(refreshedRows, billingYear)
+        : buildFeeCollectionRowsForAdmission(refreshedRows[0], billingYear);
+
+    const summary = summarizeFeeCollectionRows(refreshedRows, billingYear, currentMonthKey());
+
+    return res.json({
+      success: true,
+      message: "Fee received successfully",
+      mode,
+      billingYear,
+      totalInputAmount: amount,
+      unallocatedAmount: remaining,
+      applied,
+      feeRows: refreshedFeeRows,
+      summary,
+    });
+  } catch (err) {
+    console.error("POST /api/fee-collection/receive error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Fee collection failed",
+    });
   }
 });
 
@@ -8224,7 +8933,6 @@ const dues = calcPendingDues(baseFee, billingJson, feeHistory);
       : (row.accounts_registration_number || ""),
       fee_history: JSON.stringify(feeHistory),
       monthly_fee_current: incomingFeeNumber > 0 ? incomingFeeNumber : (dues.currentFee || baseFee || 0),
-      has_extra_fee: dues.hasExtraFee ? 1 : 0,
       admission_total_fees: String(dues.expected || 0),
       admission_pending_dues: String(dues.pending || 0),
   };
@@ -8250,7 +8958,6 @@ const dues = calcPendingDues(baseFee, billingJson, feeHistory);
          admission_month = @admission_month,
          fee_history = @fee_history,
          monthly_fee_current = @monthly_fee_current,
-         has_extra_fee = @has_extra_fee,
          admission_total_fees = @admission_total_fees,
          admission_pending_dues = @admission_pending_dues
          WHERE id = @id
@@ -8362,7 +9069,7 @@ const dues = calcPendingDues(baseFee, billingJson, feeHistory);
     admission_month: perms.colMonth ? (month ?? row.admission_month) : row.admission_month,
     fee_history: JSON.stringify(feeHistory),
     monthly_fee_current: incomingFeeNumber > 0 ? incomingFeeNumber : (dues.currentFee || baseFee || 0),
-    has_extra_fee: dues.hasExtraFee ? 1 : 0,
+    
     admission_total_fees: String(dues.expected || 0),
    admission_pending_dues: String(dues.pending || 0),
   };
@@ -8389,7 +9096,7 @@ const dues = calcPendingDues(baseFee, billingJson, feeHistory);
            admission_month=@admission_month,
            fee_history=@fee_history,
            monthly_fee_current=@monthly_fee_current,
-           has_extra_fee=@has_extra_fee,
+           
            admission_total_fees=@admission_total_fees,
            admission_pending_dues=@admission_pending_dues
      WHERE id=@id

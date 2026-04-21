@@ -20,7 +20,6 @@ export const BILLING_STATUS_LIST = [
   "No payment",
   "Partial payment",
   "Full payment",
-  "Extra payment",
 ];
 
 const monthIndex = (() => {
@@ -156,7 +155,7 @@ function feeForMonthKey(history, monthKey, fallbackFee) {
 
 /**
  * Returns:
- * { expected, pending, paid, currentFee, hasExtraFee, perMonth }
+ * { expected, pending, paid, currentFee, perMonth }
  */
 export function calcPendingDues(baseFee, billingJson, feeHistory = []) {
   const history = normalizeFeeHistory(feeHistory, baseFee);
@@ -196,7 +195,6 @@ export function calcPendingDues(baseFee, billingJson, feeHistory = []) {
     const isPaidMonth =
       status === "Partial payment" ||
       status === "Full payment" ||
-      status === "Extra payment" ||
       (!status && amountNum > 0);
 
     if (isPaidMonth && amountNum > 0) {
@@ -212,7 +210,6 @@ export function calcPendingDues(baseFee, billingJson, feeHistory = []) {
     };
   }
 
-  const hasExtraFee = paid > expected;
   const pending = Math.max(expected - paid, 0);
 
   const currentMonthKey = getCurrentMonthKey();
@@ -223,7 +220,6 @@ export function calcPendingDues(baseFee, billingJson, feeHistory = []) {
     paid,
     pending,
     currentFee,
-    hasExtraFee,
     perMonth,
   };
 }

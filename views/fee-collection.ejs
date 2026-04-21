@@ -1,0 +1,643 @@
+<%- include('partials/bootstrap-header', { user, pageTitle: pageTitle || 'Fee Collection' }) %>
+<%- include('partials/flash') %>
+
+<%
+  const U = user || {};
+  const role = String(U?.role || U?.agentType || '').toLowerCase();
+
+  const backUrl =
+    role === 'admin'
+      ? `/admin/admission/${admissionId || ''}`
+      : `/dashboard/super/admission/${admissionId || ''}`;
+
+  const feeRowsSafe = Array.isArray(feeRows) ? feeRows : [];
+  const rowsSafe = Array.isArray(rows) ? rows : [];
+  const bankOptionsSafe = Array.isArray(bankOptions) ? bankOptions : [];
+  const summarySafe = summary || {};
+
+  const fmt = (v) => {
+    const n = Number(v || 0);
+    if (!Number.isFinite(n)) return '-';
+    return String(n);
+  };
+
+  const familyLabel = familyNumber || '-';
+  const currentYear = Number(billingYear || new Date().getFullYear());
+%>
+
+<div class="container-fluid py-3 fee-collection-page">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 top-head">
+    <div>
+      <h4 class="mb-0 page-title">Fee Collection</h4>
+      <div class="text-muted small mt-1">
+        Mode: <b class="text-capitalize"><%= mode || 'single' %></b>
+        <span class="mx-2">|</span>
+        Billing Year: <b><%= currentYear %></b>
+        <span class="mx-2">|</span>
+        Family #: <b><%= familyLabel %></b>
+      </div>
+    </div>
+
+    <a href="<%= backUrl %>" class="btn rounded-pill btn-premium-back btn-sm">
+      <i class="bi bi-arrow-left"></i> Back to Details
+    </a>
+  </div>
+
+  <div class="row g-3 align-items-stretch">
+    <div class="col-lg-8">
+      <div class="card border-0 main-card h-100">
+        <div class="card-body p-3">
+
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div class="sec-title">Pending Months & Dues</div>
+            <div class="text-muted small">
+              Total Rows: <b id="fcTotalRows"><%= feeRowsSafe.length %></b>
+            </div>
+          </div>
+
+          <div class="summary-grid mb-3">
+            <div class="sum-item">
+              <div class="label">Total Fee for the Session</div>
+              <div class="val" id="fcSummaryTotalFee"><%= fmt(summarySafe.totalFee) %></div>
+            </div>
+            <div class="sum-item">
+              <div class="label">Total Received</div>
+              <div class="val" id="fcSummaryTotalReceived"><%= fmt(summarySafe.totalReceived) %></div>
+            </div>
+            <div class="sum-item">
+              <div class="label">Total Fee for the Session</div>
+              <div class="val" id="fcSummaryTotalDues"><%= fmt(summarySafe.totalFullPendingDues) %></div>
+            </div>
+          </div>
+
+          <div class="card border-0 inner-card">
+            <div class="card-body p-3">
+              <div class="table-responsive">
+                <table class="table table-sm align-middle due-table mb-0" id="fcDueTable">
+                  <thead>
+                    <tr>
+  <th style="width:8%">#</th>
+  <th style="width:8%">Select</th>
+  <th style="width:16%">Student</th>
+  <th style="width:12%">Dept</th>
+  <th style="width:12%">Grade</th>
+  <th style="width:12%">Month</th>
+  <th style="width:12%">Status</th>
+  <th style="width:10%">Fee</th>
+  <th style="width:10%">Received</th>
+  <th style="width:10%">Due</th>
+</tr>
+                  </thead>
+                  <tbody id="fcDueTableBody">
+                    <% if (!feeRowsSafe.length) { %>
+                      <tr>
+                        <td colspan="10" class="text-muted small">No pending dues found.</td>
+                      </tr>
+                    <% } else { %>
+                      <% feeRowsSafe.forEach((r, idx) => { %>
+                        <tr>
+  <td>
+    <span class="pill-mini"><%= idx + 1 %></span>
+  </td>
+  <td>
+    <div class="form-check m-0 d-flex justify-content-center">
+      <input
+        class="form-check-input fc-not-admitted-check"
+        type="checkbox"
+        value="<%= `${r.admissionId}:${r.monthKey}` %>"
+        data-admission-id="<%= r.admissionId %>"
+        data-month-key="<%= r.monthKey %>"
+        title="Mark this month as Not admitted"
+      >
+    </div>
+  </td>
+  <td>
+    <div class="fw-semibold"><%= r.studentName || '-' %></div>
+    <div class="text-muted tiny"><%= r.registrationNumber || '-' %></div>
+  </td>
+                          <td>
+                            <span class="pill-light text-capitalize"><%= r.dept || '-' %></span>
+                          </td>
+                          <td><%= r.grade || '-' %></td>
+                          <td>
+                            <span class="pill-month"><%= r.monthLabel || r.monthKey || '-' %></span>
+                          </td>
+                          <td>
+                            <span class="status-chip"><%= r.status || '-' %></span>
+                          </td>
+                          <td><span class="num fee-num"><%= fmt(r.fee) %></span></td>
+                          <td><span class="num recv-num"><%= fmt(r.received) %></span></td>
+                          <td><span class="num due-num"><%= fmt(r.due) %></span></td>
+                        </tr>
+                      <% }) %>
+                    <% } %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <% if (rowsSafe.length) { %>
+            <div class="card border-0 inner-card mt-3">
+              <div class="card-body p-3">
+                <div class="sec-title mb-2">Admissions in This Collection</div>
+                <div class="d-flex flex-wrap gap-2">
+                  <% rowsSafe.forEach((r) => { %>
+                    <span class="admission-pill">
+                      <b><%= r.student_name || '-' %></b>
+                      <span class="text-muted">(#<%= r.id %>)</span>
+                    </span>
+                  <% }) %>
+                </div>
+              </div>
+            </div>
+          <% } %>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card border-0 side-card h-100">
+        <div class="card-body p-3">
+
+          <div class="sec-title mb-3">Receive Payment</div>
+
+          <form id="feeCollectionForm">
+            <input type="hidden" name="admissionId" value="<%= admissionId || '' %>">
+            <input type="hidden" name="familyNumber" value="<%= familyNumber || '' %>">
+            <input type="hidden" name="year" value="<%= currentYear %>">
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Total Dues</label>
+              <div class="read-box" id="fcTotalDuesBox"><%= fmt(summarySafe.totalDues) %></div>
+            </div>
+
+            <div class="mb-3">
+              <label for="receivingAmount" class="form-label fw-semibold">Receiving Amount</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                class="form-control premium-input"
+               id="receivingAmount"
+name="receivingAmount"
+placeholder="Enter received amount"
+              >
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Remaining Balance After This Receive</label>
+              <div class="read-box" id="fcRemainingBalance"><%= fmt(summarySafe.totalDues) %></div>
+            </div>
+
+            
+                <div class="mb-3">
+  <label for="verificationNumber" class="form-label fw-semibold">Verification Number</label>
+  <input
+    type="text"
+    class="form-control premium-input"
+id="verificationNumber"
+name="verificationNumber"
+placeholder="Enter verification number"
+  >
+</div>
+
+<div class="mb-3">
+  <label for="collectionAccount" class="form-label fw-semibold">Collection Account</label>
+  <select class="form-select premium-input" id="collectionAccount" name="collectionAccount">
+    <option value="">Select account</option>
+    <% bankOptionsSafe.forEach((b) => { %>
+      <option value="<%= b.label %>"><%= b.label %></option>
+    <% }) %>
+  </select>
+</div>
+
+            <div class="mb-3">
+              <label for="receivingDate" class="form-label fw-semibold">Receiving Date</label>
+              <input
+                type="date"
+                class="form-control premium-input"
+                id="receivingDate"
+                name="receivingDate"
+                value="<%= new Date().toISOString().slice(0, 10) %>"
+                required
+              >
+            </div>
+
+            <div class="mb-3">
+              <label for="note" class="form-label fw-semibold">Note</label>
+              <textarea
+                class="form-control premium-input"
+                id="note"
+                name="note"
+                rows="4"
+                placeholder="Optional note"
+              ></textarea>
+            </div>
+
+            <div class="d-grid">
+              <button type="submit" class="btn btn-receive rounded-3" id="receiveBtn">
+                <i class="bi bi-cash-coin me-1"></i> Receive
+              </button>
+            </div>
+          </form>
+
+          <div id="fcMsg" class="mt-3"></div>
+
+          <div class="card border-0 result-card mt-3 d-none" id="fcResultCard">
+            <div class="card-body p-3">
+              <div class="sec-title mb-2">Last Receive Result</div>
+              <div id="fcResultBody" class="small text-muted"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .fee-collection-page{
+    background:
+      radial-gradient(1200px 320px at 10% 0%, rgba(124,58,237,.10), transparent 60%),
+      radial-gradient(900px 300px at 100% 10%, rgba(59,130,246,.10), transparent 55%),
+      linear-gradient(180deg, rgba(248,250,252,.95) 0%, rgba(255,255,255,1) 55%, rgba(248,250,252,.95) 100%);
+    border-radius: 18px;
+    padding: 12px 12px 14px 12px;
+  }
+
+  .page-title{
+    letter-spacing: .2px;
+    font-weight: 900;
+  }
+
+  .top-head{ margin-bottom: 10px !important; }
+
+  .main-card,
+  .side-card{
+    border-radius: 18px;
+    background: rgba(255,255,255,.88);
+    box-shadow: 0 16px 30px rgba(2,8,23,.10);
+    border: 1px solid rgba(15,23,42,.08);
+    backdrop-filter: blur(6px);
+  }
+
+  .inner-card,
+  .result-card{
+    border-radius: 16px;
+    border: 1px solid rgba(15,23,42,.08);
+    background: rgba(248,250,252,.65);
+    box-shadow: 0 12px 22px rgba(2,8,23,.06);
+  }
+
+  .sec-title{
+    font-weight: 900;
+    letter-spacing: .2px;
+    color: rgba(15,23,42,.86);
+  }
+
+  .summary-grid{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .sum-item{
+    border-radius: 14px;
+    border: 1px solid rgba(15,23,42,.08);
+    background: rgba(255,255,255,.78);
+    box-shadow: 0 10px 18px rgba(2,8,23,.06);
+    padding: 10px 12px;
+  }
+
+  .sum-item .label{
+    font-size: 11px;
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    color: rgba(15,23,42,.55);
+    font-weight: 900;
+  }
+
+  .sum-item .val{
+    margin-top: 4px;
+    font-weight: 900;
+    color: rgba(15,23,42,.90);
+  }
+
+  .due-table thead th{
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: rgba(15,23,42,.55);
+    font-weight: 900;
+    border-bottom: 1px solid rgba(15,23,42,.10);
+  }
+
+  .due-table td{
+    padding-top: 10px;
+    padding-bottom: 10px;
+    border-color: rgba(15,23,42,.08);
+    vertical-align: middle;
+  }
+
+  .pill-mini,
+  .pill-light,
+  .pill-month,
+  .status-chip,
+  .admission-pill{
+    display:inline-flex;
+    align-items:center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .pill-mini{
+    background: rgba(15,23,42,.06);
+    border: 1px solid rgba(15,23,42,.10);
+    color: rgba(15,23,42,.82);
+  }
+
+  .pill-light{
+    background: rgba(124,58,237,.10);
+    border: 1px solid rgba(124,58,237,.18);
+    color: rgba(124,58,237,.95);
+  }
+
+  .pill-month{
+    background: rgba(59,130,246,.10);
+    border: 1px solid rgba(59,130,246,.18);
+    color: rgba(29,78,216,.95);
+  }
+
+  .status-chip{
+    background: rgba(245,158,11,.10);
+    border: 1px solid rgba(245,158,11,.18);
+    color: rgba(146,64,14,.95);
+  }
+
+  .admission-pill{
+    background: rgba(255,255,255,.90);
+    border: 1px solid rgba(15,23,42,.10);
+    color: rgba(15,23,42,.88);
+    box-shadow: 0 8px 18px rgba(2,8,23,.06);
+  }
+
+  .num{
+    font-weight: 900;
+  }
+  .fee-num{ color: rgba(29,78,216,.95); }
+  .recv-num{ color: rgba(22,101,52,.95); }
+  .due-num{ color: rgba(124,58,237,.95); }
+
+  .premium-input{
+    border-radius: 12px;
+    border: 1px solid rgba(15,23,42,.12);
+    background: rgba(255,255,255,.94);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.45);
+  }
+
+  .premium-input:focus{
+    border-color: rgba(124,58,237,.35);
+    box-shadow: 0 0 0 .2rem rgba(124,58,237,.12);
+  }
+
+  .read-box{
+    min-height: 44px;
+    display:flex;
+    align-items:center;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(15,23,42,.10);
+    background: rgba(248,250,252,.9);
+    font-weight: 900;
+    color: rgba(15,23,42,.88);
+  }
+
+  .btn-receive{
+    color: #fff !important;
+    border: 1px solid rgba(124,58,237,.24) !important;
+    background: linear-gradient(135deg, rgba(124,58,237,.96), rgba(99,102,241,.96)) !important;
+    box-shadow: 0 12px 22px rgba(124,58,237,.18);
+    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+    font-weight: 800;
+    padding: 10px 14px;
+  }
+
+  .btn-receive:hover,
+  .btn-receive:focus{
+    color: #fff !important;
+    transform: translateY(-1px);
+    box-shadow: 0 18px 34px rgba(124,58,237,.24);
+    filter: brightness(1.03);
+  }
+
+  .btn-premium-back{
+    color: rgba(15,23,42,.86) !important;
+    border: 1px solid rgba(15,23,42,.18) !important;
+    background: rgba(255,255,255,.92) !important;
+    box-shadow: 0 12px 22px rgba(2,8,23,.06);
+    transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease, color .15s ease;
+  }
+
+  .btn-premium-back:hover,
+  .btn-premium-back:focus{
+    color: rgba(15,23,42,.92) !important;
+    border-color: rgba(15,23,42,.28) !important;
+    background: #ffffff !important;
+    box-shadow: 0 18px 34px rgba(2,8,23,.12);
+    transform: translateY(-1px);
+  }
+
+  .tiny{
+    font-size: 11px;
+  }
+
+  @media (max-width: 992px){
+    .summary-grid{
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 576px){
+    .fee-collection-page{
+      padding: 10px;
+      border-radius: 16px;
+    }
+
+    .due-table td,
+    .due-table th{
+      white-space: nowrap;
+    }
+  }
+</style>
+
+<script>
+  (() => {
+    const form = document.getElementById('feeCollectionForm');
+    const amountInput = document.getElementById('receivingAmount');
+    const totalDuesBox = document.getElementById('fcTotalDuesBox');
+    const remainingBox = document.getElementById('fcRemainingBalance');
+    const msgBox = document.getElementById('fcMsg');
+    const receiveBtn = document.getElementById('receiveBtn');
+    const resultCard = document.getElementById('fcResultCard');
+    const resultBody = document.getElementById('fcResultBody');
+    const tableBody = document.getElementById('fcDueTableBody');
+    const totalRowsEl = document.getElementById('fcTotalRows');
+    const summaryFeeEl = document.getElementById('fcSummaryTotalFee');
+    const summaryRecvEl = document.getElementById('fcSummaryTotalReceived');
+    const summaryDueEl = document.getElementById('fcSummaryTotalDues');
+
+    const fmt = (v) => {
+      const n = Number(v || 0);
+      return Number.isFinite(n) ? String(n) : '-';
+    };
+
+    const getTotalDues = () => Number((summaryDueEl?.textContent || '0').trim() || 0);
+
+    function updateRemainingPreview() {
+      const totalDues = getTotalDues();
+      const entered = Number(amountInput?.value || 0);
+      const remaining = Math.max(0, totalDues - (Number.isFinite(entered) ? entered : 0));
+      remainingBox.textContent = fmt(remaining);
+    }
+
+    amountInput?.addEventListener('input', updateRemainingPreview);
+    updateRemainingPreview();
+
+    function renderRows(rows = []) {
+      if (!tableBody) return;
+
+      if (!rows.length) {
+tableBody.innerHTML = `
+  <tr>
+    <td colspan="10" class="text-muted small">No pending dues found.</td>
+  </tr>
+`;
+        if (totalRowsEl) totalRowsEl.textContent = '0';
+        return;
+      }
+
+      tableBody.innerHTML = rows.map((r, idx) => `
+  <tr>
+    <td><span class="pill-mini">${idx + 1}</span></td>
+    <td>
+      <div class="form-check m-0 d-flex justify-content-center">
+        <input
+          class="form-check-input fc-not-admitted-check"
+          type="checkbox"
+          value="${r.admissionId}:${r.monthKey}"
+          data-admission-id="${r.admissionId}"
+          data-month-key="${r.monthKey}"
+          title="Mark this month as Not admitted"
+        >
+      </div>
+    </td>
+    <td>
+      <div class="fw-semibold">${r.studentName || '-'}</div>
+      <div class="text-muted tiny">${r.registrationNumber || '-'}</div>
+    </td>
+          <td><span class="pill-light text-capitalize">${r.dept || '-'}</span></td>
+          <td>${r.grade || '-'}</td>
+          <td><span class="pill-month">${r.monthLabel || r.monthKey || '-'}</span></td>
+          <td><span class="status-chip">${r.status || '-'}</span></td>
+          <td><span class="num fee-num">${fmt(r.fee)}</span></td>
+          <td><span class="num recv-num">${fmt(r.received)}</span></td>
+          <td><span class="num due-num">${fmt(r.due)}</span></td>
+        </tr>
+      `).join('');
+
+      if (totalRowsEl) totalRowsEl.textContent = String(rows.length);
+    }
+
+    function setSummary(summary = {}) {
+  if (summaryFeeEl) summaryFeeEl.textContent = fmt(summary.totalFee);
+  if (summaryRecvEl) summaryRecvEl.textContent = fmt(summary.totalReceived);
+
+  // top third card = full pending dues
+  if (summaryDueEl) summaryDueEl.textContent = fmt(summary.totalFullPendingDues);
+
+  // right side Total Dues = current month + previous pending only
+  if (totalDuesBox) totalDuesBox.textContent = fmt(summary.totalDues);
+
+  updateRemainingPreview();
+}
+
+    function showMsg(type, text) {
+      if (!msgBox) return;
+      const cls = type === 'success' ? 'alert-success' : 'alert-danger';
+      msgBox.innerHTML = `<div class="alert ${cls} py-2 px-3 mb-0">${text}</div>`;
+    }
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      msgBox.innerHTML = '';
+      receiveBtn.disabled = true;
+      receiveBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Processing...';
+
+      try {
+        const fd = new FormData(form);
+        const payload = Object.fromEntries(fd.entries());
+        const selectedNotAdmittedMonths = Array.from(
+  document.querySelectorAll('.fc-not-admitted-check:checked')
+).map((el) => ({
+  admissionId: Number(el.getAttribute('data-admission-id') || 0),
+  monthKey: String(el.getAttribute('data-month-key') || '').trim().toLowerCase(),
+}));
+
+payload.selectedNotAdmittedMonths = selectedNotAdmittedMonths;
+
+        const resp = await fetch('/api/fee-collection/receive', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok || !data?.success) {
+          throw new Error(data?.message || 'Fee collection failed');
+        }
+
+        showMsg('success', data.message || 'Fee received successfully');
+
+        renderRows(Array.isArray(data.feeRows) ? data.feeRows : []);
+        setSummary(data.summary || {});
+
+        if (resultCard && resultBody) {
+          const applied = Array.isArray(data.applied) ? data.applied : [];
+          resultBody.innerHTML = applied.length
+            ? applied.map(a => `
+                <div class="mb-2">
+                  <div><b>${a.studentName || '-'}</b> (#${a.admissionId || '-'})</div>
+                  <div>Used Amount: <b>${fmt(a.usedAmount)}</b></div>
+                  <div>Paid Upto: <b>${a.paidUpto || '-'}</b></div>
+                  <div>Updated Months: <b>${(a.touchedMonths || []).map(x => x.monthKey).join(', ') || '-'}</b></div>
+                </div>
+              `).join('')
+            : '<div>No rows updated.</div>';
+
+          resultCard.classList.remove('d-none');
+        }
+
+        form.reset();
+        const dateInput = document.getElementById('receivingDate');
+        if (dateInput) dateInput.value = new Date().toISOString().slice(0, 10);
+        updateRemainingPreview();
+      } catch (err) {
+        showMsg('error', err.message || 'Fee collection failed');
+      } finally {
+        receiveBtn.disabled = false;
+        receiveBtn.innerHTML = '<i class="bi bi-cash-coin me-1"></i> Receive';
+      }
+    });
+  })();
+</script>
+
+<%- include('partials/bootstrap-footer') %>

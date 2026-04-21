@@ -195,8 +195,8 @@ export default async function makeFamilyChallanPdf({
       old.totalAmount += itemAmount;
 
       if (itemStatus && !old.statuses.includes(itemStatus)) {
-        old.statuses.push(itemStatus);
-      }
+  old.statuses.push(itemStatus);
+}
 
       familyMonthStripMap.set(mk, old);
     }

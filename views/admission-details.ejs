@@ -26,7 +26,6 @@
     if (v === 'not admitted')   return 'bill-notadmitted';
     if (v === 'full payment')   return 'bill-full';
     if (v === 'partial payment')return 'bill-partial';
-    if (v === 'extra payment')  return 'bill-extra';
     if (v === 'no payment')     return 'bill-none';
     return '';
   }
@@ -192,7 +191,6 @@
     "No payment",
     "Partial payment",
     "Full payment",
-    "Extra payment",
   ];
 
   const parseFirstNumber = (val) => {
@@ -566,6 +564,10 @@ if (!user?.role && agentType) {
   const famCurrency = String(getCurrency(A) || '').trim() || '-';
 
   const CURRENT_YEAR = new Date().getFullYear();
+    const feeCollectionBaseUrl =
+    (role === 'admin')
+      ? '/admin/fee-collection'
+      : '/dashboard/super/fee-collection';
 %>
 
 <div class="container-fluid py-2 admission-details-page"
@@ -796,18 +798,26 @@ if (!user?.role && agentType) {
             <div class="card border-0 right-panel h-100">
               <div class="card-body p-3">
 
-                <div class="d-flex align-items-center justify-content-end mb-2">
-                  <button
-  type="button"
-  class="btn btn-outline-secondary btn-sm rounded-3 js-open-pending-challan"
-  data-admission-id="<%= X.id %>"
-  data-family-number="<%= familyNumber %>"
-  data-family-count="<%= familyList.length %>"
-  title="Pending months list + challan"
->
-  <i class="bi bi-printer me-1"></i> Print Challan
-</button>
-                </div>
+                <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
+  <a
+    href="<%= feeCollectionBaseUrl %>?admissionId=<%= X.id %>&familyNumber=<%= encodeURIComponent(familyNumber || '') %>"
+    class="btn btn-fee-collection btn-sm rounded-3"
+    title="Open Fee Collection"
+  >
+    <i class="bi bi-cash-coin me-1"></i> Fee Collection
+  </a>
+
+  <button
+    type="button"
+    class="btn btn-outline-secondary btn-sm rounded-3 js-open-pending-challan"
+    data-admission-id="<%= X.id %>"
+    data-family-number="<%= familyNumber %>"
+    data-family-count="<%= familyList.length %>"
+    title="Pending months list + challan"
+  >
+    <i class="bi bi-printer me-1"></i> Print Challan
+  </button>
+</div>
 
                 <div class="card border-0 inner-card mb-3">
                   <div class="card-body p-3">
@@ -954,7 +964,7 @@ const canPrintFeeChallan = stLower2 !== 'not admitted';
 const canPrintPaid =
   stLower2 !== 'not admitted' &&
   amountNum > 0 &&
-  (stLower2 === 'full payment' || stLower2 === 'partial payment' || stLower2 === 'extra payment');
+  (stLower2 === 'full payment' || stLower2 === 'partial payment');
                         %>
                           <div class="t-item">
                             <div class="t-dot"></div>
@@ -1412,6 +1422,22 @@ const canPrintPaid =
     box-shadow: 0 8px 16px rgba(220,38,38,.12);
   }
   .section-icon i{ color: rgba(220,38,38,.95); font-size: 16px; }
+    .btn-fee-collection{
+    color: #fff !important;
+    border: 1px solid rgba(124,58,237,.24) !important;
+    background: linear-gradient(135deg, rgba(124,58,237,.96), rgba(99,102,241,.96)) !important;
+    box-shadow: 0 12px 22px rgba(124,58,237,.18);
+    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+    font-weight: 700;
+  }
+
+  .btn-fee-collection:hover,
+  .btn-fee-collection:focus{
+    color: #fff !important;
+    transform: translateY(-1px);
+    box-shadow: 0 18px 34px rgba(124,58,237,.24);
+    filter: brightness(1.03);
+  }
 
   .btn-premium-back{
     color: rgba(15,23,42,.86) !important;
@@ -1523,7 +1549,6 @@ const canPrintPaid =
   .bill-notadmitted{ background:#f1f5f9 !important; border-color:#cbd5e1 !important; color:#334155 !important; }
   .bill-full      { background:#dcfce7 !important; border-color:#bbf7d0 !important; color:#166534 !important; }
   .bill-partial   { background:#fffbeb !important; border-color:#fde68a !important; color:#92400e !important; }
-  .bill-extra     { background:#dbeafe !important; border-color:#bfdbfe !important; color:#1d4ed8 !important; }
   .bill-none      { background:#fee2e2 !important; border-color:#fecaca !important; color:#991b1b !important; }
 
   @media (max-width: 992px){
@@ -1583,7 +1608,8 @@ const canPrintPaid =
   monthPaid: "/dashboard/super/admission/",
   admissionPaidBulk: "/dashboard/super/admission/",
   familyChallan: "/dashboard/super/family/",
-  familyPaidBulk: "/dashboard/super/family/"
+  familyPaidBulk: "/dashboard/super/family/",
+  feeCollectionPage: <%- JSON.stringify(feeCollectionBaseUrl) %>
 };
 </script>
 <!-- ✅ NEW: challan download click handlers -->

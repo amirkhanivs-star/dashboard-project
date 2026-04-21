@@ -485,7 +485,6 @@ ensureColumn("admission_billing_yearly", "fee_amount", "TEXT");
 ensureColumn("admission_billing_yearly", "payment_date", "TEXT");
 ensureColumn("admission_billing_yearly", "verification_number", "TEXT");
 ensureColumn("admission_billing_yearly", "bank_name", "TEXT");
-ensureColumn("admission_billing_yearly", "extra_payment_type", "TEXT");
 ensureColumn("admission_billing_yearly", "created_at", "TEXT");
 ensureColumn("admission_billing_yearly", "updated_at", "TEXT");
 
@@ -831,7 +830,6 @@ try {
     ins.run("No payment", "No payment", "#ef4444", 0);
     ins.run("Partial payment", "Partial payment", "#f59e0b", 0);
     ins.run("Full payment", "Full payment", "#22c55e", 0);
-    ins.run("Extra payment", "Extra payment", "#2563eb", 0);
   });
 
   seed();
@@ -1075,7 +1073,6 @@ export function getAdmissionBillingByYear(admissionId, billingYear) {
       date: x.payment_date || "",
       verificationNumber: x.verification_number || "",
       bank: x.bank_name || "",
-      extraPaymentType: x.extra_payment_type || "",
       year: billingYear,
     };
   });
@@ -1090,7 +1087,6 @@ export function saveAdmissionBillingMonthByYear({
   paymentDate,
   verificationNumber,
   bankName,
-  extraPaymentType,
 }) {
   return db.prepare(`
     INSERT INTO admission_billing_yearly (
@@ -1103,7 +1099,6 @@ export function saveAdmissionBillingMonthByYear({
       payment_date,
       verification_number,
       bank_name,
-      extra_payment_type,
       updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(admission_id, billing_year, month_key)
@@ -1114,7 +1109,6 @@ export function saveAdmissionBillingMonthByYear({
       payment_date = excluded.payment_date,
       verification_number = excluded.verification_number,
       bank_name = excluded.bank_name,
-      extra_payment_type = excluded.extra_payment_type,
       updated_at = CURRENT_TIMESTAMP
   `).run(
     admissionId,
@@ -1126,7 +1120,6 @@ export function saveAdmissionBillingMonthByYear({
     paymentDate || "",
     verificationNumber || "",
     bankName || "",
-    extraPaymentType || ""
 
   );
 }
@@ -1163,7 +1156,6 @@ export function dbGetAdmissionDetailsById(id, billingYear = new Date().getFullYe
   date: "",
   verificationNumber: "",
   bank: "",
-  extraPaymentType: "",
   year: billingYear,
 }));
     }

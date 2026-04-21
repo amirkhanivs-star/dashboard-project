@@ -50,15 +50,14 @@ function statusTextForReceipt(statusRaw, received, fee) {
 
   if (st === "full payment") return "Full payment";
   if (st === "partial payment") return "Partial payment";
-  if (st === "extra payment") return "Extra payment";
   if (st === "paid") return "Paid";
 
   if (r <= 0) return "No payment";
   if (f > 0) {
-    if (r === f) return "Full payment";
-    if (r < f) return "Partial payment";
-    if (r > f) return "Extra payment";
-  }
+  if (r === f) return "Full payment";
+  if (r < f) return "Partial payment";
+  if (r > f) return "Paid";
+}
   return "Paid";
 }
 

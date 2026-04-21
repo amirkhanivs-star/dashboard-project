@@ -263,15 +263,14 @@ const monthStrip = sixMonthsHistory.map((item) => {
 
   let amountText = "";
   if (statusRaw) {
-    if (
-      statusRaw.toLowerCase() === "partial payment" ||
-      statusRaw.toLowerCase() === "full payment" ||
-      statusRaw.toLowerCase() === "extra payment"
-    ) {
-      amountText = amount > 0 ? `${currency} ${amount}` : statusRaw;
-    } else {
-      amountText = statusRaw;
-    }
+   if (
+  statusRaw.toLowerCase() === "partial payment" ||
+  statusRaw.toLowerCase() === "full payment"
+) {
+  amountText = amount > 0 ? `${currency} ${amount}` : statusRaw;
+} else {
+  amountText = statusRaw;
+}
   } else {
     amountText = "";
   }
