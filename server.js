@@ -838,6 +838,31 @@ function checkDuplicateRegistrationNumber(registrationNumber, currentId = null) 
     LIMIT 1
   `).get(cleanRegistrationNumber);
 }
+
+function findDuplicateAdmissionFromForm(row) {
+  return db.prepare(`
+    SELECT id, student_name
+    FROM admissions
+    WHERE COALESCE(is_deleted, 0) = 0
+      AND TRIM(COALESCE(dept, '')) = TRIM(@dept)
+      AND TRIM(COALESCE(student_name, '')) = TRIM(@student_name)
+      AND TRIM(COALESCE(father_name, '')) = TRIM(@father_name)
+      AND TRIM(COALESCE(grade, '')) = TRIM(@grade)
+      AND TRIM(COALESCE(dob, '')) = TRIM(@dob)
+      AND TRIM(COALESCE(guardian_whatsapp, '')) = TRIM(@guardian_whatsapp)
+      AND TRIM(COALESCE(registration_date, '')) = TRIM(@registration_date)
+    LIMIT 1
+  `).get({
+    dept: String(row.dept || "").trim(),
+    student_name: String(row.student_name || "").trim(),
+    father_name: String(row.father_name || "").trim(),
+    grade: String(row.grade || "").trim(),
+    dob: String(row.dob || "").trim(),
+    guardian_whatsapp: String(row.guardian_whatsapp || "").trim(),
+    registration_date: String(row.registration_date || "").trim(),
+  });
+}
+
 /* ========== ADMISSIONS HELPERS (DB -> pipeline object) ========== */
 function mapAdmissionRow(row) {
   if (!row) return null;
@@ -3518,14 +3543,14 @@ app.post("/api/admissions", checkApiKey, async (req, res) => {
     };
 
     const rows = children.map((child) => ({
-      ...base,
-      student_name: child.student_name || "",
-      gender: child.gender || "",
-      dob: child.dob || "",
-      grade: child.grade || "",
-    }));
+  ...base,
+  student_name: child.student_name || "",
+  gender: child.gender || "",
+  dob: child.dob || "",
+  grade: child.grade || "",
+}));
 
-    const stmt = db.prepare(`
+const stmt = db.prepare(`
   INSERT INTO admissions
   (dept,
    status, feeStatus,
@@ -3538,49 +3563,60 @@ app.post("/api/admissions", checkApiKey, async (req, res) => {
     @dept,
     @status, @feeStatus,
     @student_name, @gender, @dob, @grade,
-    @father_name, @guardian_whatsapp, @religion,  @father_email, @father_occupation, @nationality,
+    @father_name, @guardian_whatsapp, @religion, @father_email, @father_occupation, @nationality,
     @present_address, @city, @state, @secondary_contact,
     @session, @registration_date, @processed_by,
     @tuition_grade, @phone, @currency_code
   )
 `);
 
-    const insertedIds = [];
+const insertedIds = [];
+const skippedDuplicates = [];
 
-    const insertMany = db.transaction((rowsToInsert) => {
-      rowsToInsert.forEach((row) => {
-        const safeRow = {
-          status: "New Admission",
-          feeStatus: "New Admission",
-          dept: String(row.dept ?? ""),
-          student_name: String(row.student_name ?? ""),
-          gender: String(row.gender ?? ""),
-          dob: String(row.dob ?? ""),
-          grade: String(row.grade ?? ""),
-          father_name: String(row.father_name ?? ""),
-          guardian_whatsapp: String(row.guardian_whatsapp ?? ""),
-          religion: String(row.religion ?? ""),
-          father_email: String(row.father_email ?? ""),
-          father_occupation: String(row.father_occupation ?? ""),
-          nationality: String(row.nationality ?? ""),
-          present_address: String(row.present_address ?? ""),
-          city: String(row.city ?? ""),
-          state: String(row.state ?? ""),
-          secondary_contact: String(row.secondary_contact ?? ""),
-          session: String(row.session ?? ""),
-          registration_date: String(row.registration_date ?? ""),
-          processed_by: String(row.processed_by ?? ""),
-          tuition_grade: String(row.tuition_grade ?? ""),
-          phone: String(row.phone ?? ""),
-          currency_code: String(row.currency_code ?? ""),
-        };
+const insertMany = db.transaction((rowsToInsert) => {
+  rowsToInsert.forEach((row) => {
+    const safeRow = {
+      status: "New Admission",
+      feeStatus: "New Admission",
+      dept: String(row.dept ?? "").trim(),
+      student_name: String(row.student_name ?? "").trim(),
+      gender: String(row.gender ?? "").trim(),
+      dob: String(row.dob ?? "").trim(),
+      grade: String(row.grade ?? "").trim(),
+      father_name: String(row.father_name ?? "").trim(),
+      guardian_whatsapp: String(row.guardian_whatsapp ?? "").trim(),
+      religion: String(row.religion ?? "").trim(),
+      father_email: String(row.father_email ?? "").trim(),
+      father_occupation: String(row.father_occupation ?? "").trim(),
+      nationality: String(row.nationality ?? "").trim(),
+      present_address: String(row.present_address ?? "").trim(),
+      city: String(row.city ?? "").trim(),
+      state: String(row.state ?? "").trim(),
+      secondary_contact: String(row.secondary_contact ?? "").trim(),
+      session: String(row.session ?? "").trim(),
+      registration_date: String(row.registration_date ?? "").trim(),
+      processed_by: String(row.processed_by ?? "").trim(),
+      tuition_grade: String(row.tuition_grade ?? "").trim(),
+      phone: String(row.phone ?? "").trim(),
+      currency_code: String(row.currency_code ?? "").trim(),
+    };
 
-        const info = stmt.run(safeRow);
-        insertedIds.push(Number(info.lastInsertRowid));
+    const duplicate = findDuplicateAdmissionFromForm(safeRow);
+
+    if (duplicate) {
+      skippedDuplicates.push({
+        existingId: duplicate.id,
+        studentName: duplicate.student_name || safeRow.student_name,
       });
-    });
+      return;
+    }
 
-    insertMany(rows);
+    const info = stmt.run(safeRow);
+    insertedIds.push(Number(info.lastInsertRowid));
+  });
+});
+
+insertMany(rows);
 
     const hostBaseUrl = `${req.protocol}://${req.get("host")}/`;
     let pdfOk = 0;
@@ -3607,12 +3643,16 @@ app.post("/api/admissions", checkApiKey, async (req, res) => {
     emitAdmissionChanged(req, { type: "new_admission", insertedIds });
 
     return res.json({
-      success: true,
-      message: "Admissions saved to DB",
-      inserted: rows.length,
-      pdf_generated: pdfOk,
-      pdf_failed: pdfFail,
-    });
+  success: true,
+  message: insertedIds.length
+    ? "Admissions saved to DB"
+    : "Duplicate admissions skipped",
+  inserted: insertedIds.length,
+  duplicates_skipped: skippedDuplicates.length,
+  skipped_duplicates: skippedDuplicates,
+  pdf_generated: pdfOk,
+  pdf_failed: pdfFail,
+});
   } catch (err) {
     console.error("POST /api/admissions error:", err);
     return res
