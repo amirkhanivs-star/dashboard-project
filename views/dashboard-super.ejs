@@ -810,27 +810,27 @@
                       <% } %>
 
                      <%
-                        const rawCur = String(
-                        (a.currency_code || a.currencyCode) ||
-                        (a.admission && (a.admission.currencyCode || a.admission.currency_code)) ||
-                        ''
-                        ).trim().toUpperCase();
+                        <%
+  const cur = String(
+    (a.currency_code || a.currencyCode) ||
+    (a.admission && (a.admission.currencyCode || a.admission.currency_code)) ||
+    ''
+  ).trim().toUpperCase();
+%>
 
-                       const cur = rawCur === 'SAR' ? '' : rawCur;
-                       %>
-                     <select
-                          name="currency_code"
-                          form="<%= fid %>"
-                          class="form-select form-select-sm js-currency-select"
-                          data-prev-value="<%= cur %>">
-                    <option value="" <%= !cur ? 'selected' : '' %>>Select</option>
-                      <% DEFAULT_CURRENCY_OPTIONS.forEach(opt => { %>
-                       <option value="<%= opt.value %>" <%= cur === opt.value ? 'selected' : '' %>>
-                   <%= opt.value %>
-                       </option>
-                    <% }) %>
-                      <option value="__add_new_currency__">+ Add Option</option>
-                   </select>
+<select
+  name="currency_code"
+  form="<%= fid %>"
+  class="form-select form-select-sm js-currency-select"
+  data-prev-value="<%= cur %>">
+  <option value="" <%= !cur ? 'selected' : '' %>>Select</option>
+  <% DEFAULT_CURRENCY_OPTIONS.forEach(opt => { %>
+    <option value="<%= opt.value %>" <%= cur === opt.value ? 'selected' : '' %>>
+      <%= opt.value %>
+    </option>
+  <% }) %>
+  <option value="__add_new_currency__">+ Add Option</option>
+</select>
                     </td>
                   <% } %>
 
