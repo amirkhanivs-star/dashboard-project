@@ -374,8 +374,13 @@
         <% } %>
 
         <div class="sidebar-section-label mt-3">DB SETTING</div>
+
 <a href="/db-settings" class="<%= (pageTitle||'').includes('DB Settings') ? 'active' : '' %>">
   <i class="bi bi-database-gear"></i> <span>Database Settings</span>
+</a>
+
+<a href="/api-settings" class="<%= (pageTitle||'').includes('API Settings') ? 'active' : '' %>">
+  <i class="bi bi-key-fill"></i> <span>API'S</span>
 </a>
 
         <div class="sidebar-section-label mt-3">FORMS</div>

@@ -959,102 +959,122 @@
                         <% formPlaced = true; %>
                       <% } %>
 
-                      <div class="d-flex align-items-center flex-nowrap action-btns">
-                       <% if (P.btn.details) { %>
-                        <a
-                          href="/dashboard/super/admission/<%= a.id %>"
-                          class="action-circle action-details"
-                          title="View Details"
-                          aria-label="View Details">
-                          <i class="bi bi-eye"></i>
-                          </a>
-                          <% } %>
+                      <div class="d-flex align-items-center justify-content-end flex-nowrap action-btns compact-actions">
 
-                        <% if (P.btn.pdf) { %>
-                          <a
-                            href="/admissions/<%= a.id %>/pdf"
-                            class="action-circle action-pdf"
-                            target="_blank"
-                            title="PDF"
-                            aria-label="PDF">
-                            <i class="bi bi-file-earmark-pdf-fill"></i>
-                          </a>
-                        <% } %>
+  <% if (P.btn.details) { %>
+    <a
+      href="/dashboard/super/admission/<%= a.id %>"
+      class="action-circle action-details"
+      title="View Details"
+      aria-label="View Details">
+      <i class="bi bi-eye"></i>
+    </a>
+  <% } %>
 
-                        <% if (P.btn.update) { %>
-                          <button
-                            type="submit"
-                            form="<%= fid %>"
-                            class="action-circle action-update"
-                            title="Update"
-                            aria-label="Update">
-                            <i class="bi bi-check2-circle"></i>
-                          </button>
-                        <% } %>
+  <% if (P.btn.update) { %>
+    <button
+      type="submit"
+      form="<%= fid %>"
+      class="action-circle action-update"
+      title="Update"
+      aria-label="Update">
+      <i class="bi bi-check2-circle"></i>
+    </button>
+  <% } %>
 
-                        <% if (P.btn.whatsapp) { %>
-                          <button
-                            type="button"
-                            class="action-circle action-whatsapp btn-whatsapp"
-                            data-admission-id="<%= a.id %>"
-                            title="WhatsApp"
-                            aria-label="WhatsApp">
-                            <i class="bi bi-whatsapp"></i>
-                          </button>
-                        <% } %>
+  <% if (P.btn.pdf || P.btn.whatsapp || P.btn.billing || P.btn.upload || P.btn.files || canDeleteAdmissions) { %>
+  <div class="inline-more-wrap">
 
-                        <% if (P.btn.billing) { %>
-                          <button
-                            type="button"
-                            class="action-circle action-billing btn-billing"
-                            data-admission-id="<%= a.id %>"
-                            title="Billing"
-                            aria-label="Billing">
-                            <i class="bi bi-receipt"></i>
-                          </button>
-                        <% } %>
+    <button
+      type="button"
+      class="action-circle action-more"
+      title="More Actions"
+      aria-label="More Actions">
+      <i class="bi bi-three-dots-vertical"></i>
+    </button>
 
-                        <% if (P.btn.upload) { %>
-                          <input
-                            type="file"
-                            id="file_<%= a.id %>"
-                            class="d-none"
-                            data-admission-id="<%= a.id %>"
-                            accept=".png,.jpg,.jpeg,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
+    <div class="inline-more-actions">
 
-                          <button
-                            type="button"
-                            class="action-circle action-upload"
-                            onclick="document.getElementById('file_<%= a.id %>').click()"
-                            title="Upload"
-                            aria-label="Upload">
-                            <i class="bi bi-upload"></i>
-                          </button>
-                        <% } %>
+      <% if (P.btn.whatsapp) { %>
+        <button
+          type="button"
+          class="action-circle action-whatsapp btn-whatsapp"
+          data-admission-id="<%= a.id %>"
+          title="WhatsApp"
+          aria-label="WhatsApp">
+          <i class="bi bi-whatsapp"></i>
+        </button>
+      <% } %>
 
-                                                <% if (P.btn.files) { %>
-                         <a
-  href="<%= _isSuper ? '/dashboard/super/files?admission_id=' + a.id : '/admin/files?admission_id=' + a.id %>"
-  class="action-circle action-files"
-  title="View Files"
-  aria-label="View Files">
-  <i class="bi bi-folder2-open"></i>
-</a>
-                        <% } %>
+      <% if (P.btn.pdf) { %>
+        <a
+          href="/admissions/<%= a.id %>/pdf"
+          class="action-circle action-pdf"
+          target="_blank"
+          title="Admission PDF"
+          aria-label="Admission PDF">
+          <i class="bi bi-file-earmark-pdf-fill"></i>
+        </a>
+      <% } %>
 
-                        <% if (canDeleteAdmissions) { %>
-                          <button
-                            type="button"
-                            class="action-circle action-delete btn-delete-admission"
-                            data-admission-id="<%= a.id %>"
-                            data-student-name="<%= a.student || a.studentName || '' %>"
-                            title="Delete Admission"
-                            aria-label="Delete Admission">
-                            <i class="bi bi-trash3"></i>
-                          </button>
-                        <% } %>
+      <% if (P.btn.billing) { %>
+        <button
+          type="button"
+          class="action-circle action-billing btn-billing"
+          data-admission-id="<%= a.id %>"
+          title="Billing / Receipt"
+          aria-label="Billing / Receipt">
+          <i class="bi bi-receipt"></i>
+        </button>
+      <% } %>
 
-                      </div>
+      <% if (P.btn.upload) { %>
+        <input
+          type="file"
+          id="file_<%= a.id %>"
+          class="d-none"
+          data-admission-id="<%= a.id %>"
+          accept=".png,.jpg,.jpeg,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
+
+        <button
+          type="button"
+          class="action-circle action-upload"
+          onclick="document.getElementById('file_<%= a.id %>').click()"
+          title="Upload File"
+          aria-label="Upload File">
+          <i class="bi bi-upload"></i>
+        </button>
+      <% } %>
+
+      <% if (P.btn.files) { %>
+        <a
+          href="<%= _isSuper ? '/dashboard/super/files?admission_id=' + a.id : '/admin/files?admission_id=' + a.id %>"
+          class="action-circle action-files"
+          title="View Files"
+          aria-label="View Files">
+          <i class="bi bi-folder2-open"></i>
+        </a>
+      <% } %>
+
+      <% if (canDeleteAdmissions) { %>
+        <button
+          type="button"
+          class="action-circle action-delete btn-delete-admission"
+          data-admission-id="<%= a.id %>"
+          data-student-name="<%= a.student || a.studentName || '' %>"
+          title="Delete Admission"
+          aria-label="Delete Admission">
+          <i class="bi bi-trash3"></i>
+        </button>
+      <% } %>
+
+    </div>
+  </div>
+<% } %>
+
+     
+
+</div>
                     </td>
                   <% } %>
                 </tr>
@@ -1163,13 +1183,50 @@
     overflow-x: hidden;
   }
 
-  /* ✅ Only pipeline area scrolls horizontally */
+   /* ✅ Admissions Pipeline fixed area, only rows scroll */
+  .super-table-card{
+    height: calc(100vh - 105px);
+    min-height: 650px;
+    max-height: calc(100vh - 105px);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .super-table-card > .card-header{
+    flex: 0 0 auto;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .super-table-card > .bulk-challan-toolbar-wrap{
+    flex: 0 0 auto;
+    position: sticky;
+    top: 0;
+    z-index: 19;
+  }
+
+  .super-table-card > .card-body{
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ✅ Only admission rows area scrolls */
   .pipeline-scroll{
     width: 100%;
     max-width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .super-pagination-wrap{
+    flex: 0 0 auto;
   }
 
   /* keep table wide so scroll stays inside pipeline */
@@ -1214,10 +1271,6 @@
   }
 
   /* Action column a bit wider for buttons */
-   #superAdmissionsTable th.col-actions,
-  #superAdmissionsTable td.col-actions{
-    min-width: 320px;
-  }
 
   #superAdmissionsTable th.col-select,
   #superAdmissionsTable td.col-select{
@@ -1289,9 +1342,9 @@
     color: #fff;
   }
   .action-update{
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
-    color: #fff;
-  }
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: #fff;
+}
   .action-whatsapp{
     background: linear-gradient(135deg, #22c55e, #16a34a);
     color: #fff;
@@ -1333,10 +1386,10 @@
     margin: 0;
   }
 
-  #superAdmissionsTable thead.table-dark th{
+    #superAdmissionsTable thead.table-dark th{
     position: sticky;
     top: 0;
-    z-index: 3;
+    z-index: 12;
     background: linear-gradient(180deg, #111827, #0b1220);
     border-bottom: 1px solid rgba(255,255,255,.08);
     padding: 10px 10px;
@@ -1542,11 +1595,11 @@
   }
   /* ✅ Sticky Action Buttons column (right side) */
   #superAdmissionsTable th.col-actions{
-    position: sticky;
-    right: 0;
-    z-index: 6;
-    background: linear-gradient(180deg, #111827, #0b1220);
-  }
+  position: sticky;
+  right: 0;
+  z-index: 50 !important;
+  background: linear-gradient(180deg, #111827, #0b1220);
+}
 
   #superAdmissionsTable td.col-actions{
     position: sticky;
@@ -2481,6 +2534,108 @@
     width: 100%;
   }
 }
+
+/* ✅ Keep Admissions Pipeline under top red navbar and show more rows */
+.super-table-card{
+  position: sticky;
+  top: 88px;
+}
+
+/* ✅ Pipeline rows area taller */
+.pipeline-scroll{
+  max-height: calc(100vh - 250px);
+}
+
+/* ✅ Hide extra page-level scrolling feel */
+.super-shell{
+  padding-bottom: 10px;
+}
+
+
+/* ✅ Inline More actions, no dropdown list */
+.compact-actions{
+  gap: 8px;
+  position: relative;
+}
+
+.inline-more-wrap{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.inline-more-actions{
+  position: absolute;
+  right: 46px;
+  top: 50%;
+  transform: translateY(-50%) translateX(8px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.98);
+  border: 1px solid rgba(15,23,42,.08);
+  box-shadow: 0 16px 38px rgba(15,23,42,.16);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: all .16s ease;
+  z-index: 50;
+}
+
+.inline-more-wrap:hover .inline-more-actions,
+.inline-more-wrap:focus-within .inline-more-actions{
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(-50%) translateX(0);
+}
+
+.action-more{
+  background: linear-gradient(135deg, #f8fafc, #e5e7eb);
+  color: #111827;
+  border: 1px solid rgba(15,23,42,.10);
+}
+
+.action-more:hover{
+  color: #111827;
+}
+
+/* ✅ Make action column smaller and cleaner */
+#superAdmissionsTable th.col-actions,
+#superAdmissionsTable td.col-actions{
+  min-width: 154px !important;
+  width: 154px !important;
+  max-width: 154px !important;
+  overflow: visible !important;
+}
+
+#superAdmissionsTable td.col-actions{
+  z-index: 5;
+}
+
+#superAdmissionsTable tbody tr.super-row:hover td.col-actions{
+  z-index: 7;
+}
+
+/* ✅ Header must always stay above action buttons */
+#superAdmissionsTable thead th{
+  z-index: 40 !important;
+}
+
+#superAdmissionsTable thead th.col-actions{
+  z-index: 60 !important;
+}
+
+#superAdmissionsTable tbody td.col-actions{
+  z-index: 5 !important;
+}
+
+#superAdmissionsTable tbody tr.super-row:hover td.col-actions{
+  z-index: 8 !important;
+}
+
 </style>
 
 <div id="upload-flash-overlay"

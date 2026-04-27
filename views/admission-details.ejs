@@ -675,6 +675,15 @@ if (!user?.role && agentType) {
              ? parseFirstNumber(mm.history[mm.history.length - 1].fee)
              : 0;
 
+             const registrationFee =
+  parseFirstNumber(
+    admissionInfo?.registrationFee ||
+    admissionInfo?.registration_fee ||
+    X?.registrationFee ||
+    X?.registration_fee ||
+    0
+  ) || '-';
+
          const currentMonthlyFee =
            parseFirstNumber(
              admissionInfo?.monthly_fee_current ||
@@ -749,6 +758,16 @@ if (!user?.role && agentType) {
                     <span class="v">
                       <span class="chip"><%= (feeStatus || '-') %></span>
                     </span>
+                  </div>
+
+                  <div class="drow">
+                    <span class="k">Registration Fee:</span>
+                    <span class="v">
+                      <b><%= money(registrationFee) %></b>
+                      <span class="text-muted small ms-1">
+                     (<%= (curCode && curCode !== '-' ? curCode : '-') %>)
+                    </span>
+                   </span>
                   </div>
 
                   <div class="drow">

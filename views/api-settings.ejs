@@ -1,0 +1,831 @@
+<%- include('partials/bootstrap-header', {
+  user: user,
+  pageTitle: pageTitle || 'API Settings'
+}) %>
+
+<style>
+  .api-settings-page {
+    padding: 18px 14px 30px;
+  }
+
+  .api-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 24px;
+    padding: 22px 24px;
+    background:
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.80)),
+      linear-gradient(135deg, rgba(179, 0, 0, 0.11), rgba(255, 255, 255, 0.92));
+    border: 1px solid rgba(179, 0, 0, 0.12);
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  }
+
+  .api-hero::before {
+    content: "";
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    border-radius: 999px;
+    background: rgba(179, 0, 0, 0.10);
+    top: -150px;
+    right: -70px;
+  }
+
+  .api-hero::after {
+    content: "";
+    position: absolute;
+    width: 180px;
+    height: 180px;
+    border-radius: 999px;
+    background: rgba(179, 0, 0, 0.07);
+    bottom: -90px;
+    left: 12%;
+  }
+
+  .api-hero-content {
+    position: relative;
+    z-index: 2;
+  }
+
+  .api-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 11px;
+    border-radius: 999px;
+    background: rgba(179, 0, 0, 0.08);
+    border: 1px solid rgba(179, 0, 0, 0.14);
+    color: #9f0000;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+  }
+
+  .api-title {
+    margin: 12px 0 6px;
+    font-size: 26px;
+    font-weight: 900;
+    color: #111827;
+    letter-spacing: -0.5px;
+  }
+
+  .api-subtitle {
+    max-width: 760px;
+    color: #64748b;
+    font-size: 14px;
+    margin: 0;
+  }
+
+  .api-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .api-stat-card {
+    border-radius: 18px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(148, 163, 184, 0.20);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+  }
+
+  .api-stat-label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #64748b;
+    letter-spacing: .6px;
+  }
+
+  .api-stat-value {
+    margin-top: 6px;
+    font-size: 22px;
+    font-weight: 900;
+    color: #111827;
+  }
+
+  .api-panel {
+    margin-top: 18px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+  }
+
+  .api-panel-header {
+    padding: 18px 20px;
+    background:
+      linear-gradient(135deg, rgba(179, 0, 0, 0.96), rgba(207, 33, 33, 0.94)),
+      #b30000;
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .api-panel-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 900;
+  }
+
+  .api-panel-text {
+    margin: 4px 0 0;
+    font-size: 12px;
+    opacity: .86;
+  }
+
+  .api-save-top {
+    border: 0;
+    outline: 0;
+    border-radius: 999px;
+    padding: 11px 18px;
+    color: #b30000;
+    background: #fff;
+    font-weight: 900;
+    font-size: 13px;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.16);
+    transition: all .22s ease;
+  }
+
+  .api-save-top:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+    background: #fff7f7;
+  }
+
+  .api-settings-list {
+    padding: 18px;
+  }
+
+  .api-setting-card {
+    position: relative;
+    border-radius: 20px;
+    padding: 16px;
+    margin-bottom: 14px;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.98), rgba(248,250,252,0.92));
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.055);
+    transition: all .22s ease;
+  }
+
+  .api-setting-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(179, 0, 0, 0.24);
+    box-shadow: 0 18px 45px rgba(179, 0, 0, 0.10);
+  }
+
+  .api-setting-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .api-setting-label {
+    font-size: 15px;
+    font-weight: 900;
+    color: #111827;
+    margin-bottom: 4px;
+  }
+
+  .api-setting-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.045);
+    color: #475569;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .api-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    border-radius: 999px;
+    background: rgba(179, 0, 0, 0.08);
+    color: #9f0000;
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .api-input-wrap {
+    position: relative;
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .api-input {
+    min-height: 46px;
+    border-radius: 15px;
+    border: 1px solid rgba(203, 213, 225, 0.95);
+    background: #fff;
+    padding: 10px 13px;
+    color: #111827;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: all .18s ease;
+  }
+
+  .api-input:focus {
+    border-color: rgba(179, 0, 0, 0.52);
+    box-shadow: 0 0 0 4px rgba(179, 0, 0, 0.08);
+  }
+
+  .api-icon-btn {
+    width: 46px;
+    height: 46px;
+    border: 0;
+    border-radius: 15px;
+    background: #0f172a;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .22s ease;
+    flex-shrink: 0;
+  }
+
+  .api-icon-btn:hover {
+    transform: translateY(-2px) scale(1.02);
+    background: #b30000;
+    color: #fff;
+    box-shadow: 0 12px 24px rgba(179, 0, 0, 0.24);
+  }
+
+  .api-help-text {
+    margin-top: 8px;
+    color: #64748b;
+    font-size: 12px;
+  }
+
+  .api-warning {
+    border-radius: 18px;
+    padding: 14px 16px;
+    margin: 18px;
+    background: rgba(245, 158, 11, 0.10);
+    border: 1px solid rgba(245, 158, 11, 0.22);
+    color: #92400e;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 13px;
+  }
+
+  .api-footer-actions {
+    padding: 0 18px 20px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .api-save-main {
+    border: 0;
+    outline: 0;
+    border-radius: 999px;
+    padding: 13px 22px;
+    color: #fff;
+    background: linear-gradient(135deg, #b30000, #dc2626);
+    font-weight: 900;
+    font-size: 14px;
+    box-shadow: 0 12px 28px rgba(179, 0, 0, 0.24);
+    transition: all .22s ease;
+  }
+
+  .api-save-main:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 38px rgba(179, 0, 0, 0.34);
+    filter: brightness(1.03);
+  }
+
+  .api-reset-btn {
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    outline: 0;
+    border-radius: 999px;
+    padding: 13px 18px;
+    color: #334155;
+    background: #fff;
+    font-weight: 900;
+    font-size: 14px;
+    transition: all .22s ease;
+  }
+
+  .api-reset-btn:hover {
+    transform: translateY(-2px);
+    color: #b30000;
+    border-color: rgba(179, 0, 0, 0.24);
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+  }
+
+  .api-toast {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 3000;
+    min-width: 290px;
+    max-width: 380px;
+    border-radius: 20px;
+    background: #fff;
+    border: 1px solid rgba(226, 232, 240, .95);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, .22);
+    padding: 14px 15px;
+    display: none;
+  }
+
+  .api-toast.show {
+    display: block;
+    animation: toastIn .24s ease-out;
+  }
+
+  @keyframes toastIn {
+    from {
+      transform: translateY(14px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .api-toast-title {
+    font-weight: 900;
+    color: #111827;
+    margin-bottom: 2px;
+  }
+
+  .api-toast-message {
+    color: #64748b;
+    font-size: 13px;
+    margin: 0;
+  }
+
+  .api-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.48);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 2500;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+  }
+
+  .api-modal-backdrop.show {
+    display: flex;
+  }
+
+  .api-confirm-modal {
+    width: 100%;
+    max-width: 460px;
+    border-radius: 24px;
+    background: #fff;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+    overflow: hidden;
+    animation: modalPop .22s ease-out;
+  }
+
+  @keyframes modalPop {
+    from {
+      transform: scale(.96) translateY(10px);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .api-confirm-head {
+    padding: 18px 20px;
+    background: linear-gradient(135deg, #b30000, #dc2626);
+    color: #fff;
+  }
+
+  .api-confirm-title {
+    font-size: 17px;
+    font-weight: 900;
+    margin: 0;
+  }
+
+  .api-confirm-body {
+    padding: 18px 20px;
+    color: #475569;
+    font-size: 14px;
+  }
+
+  .api-confirm-actions {
+    padding: 0 20px 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+
+  .api-confirm-cancel,
+  .api-confirm-save {
+    border: 0;
+    border-radius: 999px;
+    padding: 11px 16px;
+    font-weight: 900;
+    transition: all .22s ease;
+  }
+
+  .api-confirm-cancel {
+    background: #f1f5f9;
+    color: #334155;
+  }
+
+  .api-confirm-save {
+    background: #b30000;
+    color: #fff;
+  }
+
+  .api-confirm-cancel:hover,
+  .api-confirm-save:hover {
+    transform: translateY(-2px);
+  }
+
+  @media (max-width: 768px) {
+    .api-panel-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .api-stats {
+      grid-template-columns: 1fr;
+    }
+
+    .api-setting-top {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .api-input-wrap {
+      flex-wrap: wrap;
+    }
+
+    .api-input {
+      width: 100%;
+      flex: 1 1 100%;
+    }
+  }
+</style>
+
+<%
+  const safeSettings = Array.isArray(settings) ? settings : [];
+  const secretCount = safeSettings.filter((item) => Number(item.is_secret || 0) === 1).length;
+  const webhookCount = safeSettings.filter((item) => String(item.setting_type || '').toLowerCase() === 'webhook').length;
+
+  const getIcon = (item) => {
+    const key = String(item.setting_key || '').toUpperCase();
+    const type = String(item.setting_type || '').toLowerCase();
+
+    if (key.includes('API_KEY') || type === 'secret') return 'bi-shield-lock-fill';
+    if (type === 'webhook' || key.includes('WEBHOOK')) return 'bi-diagram-3-fill';
+    if (key.includes('BASE_URL') || type === 'url') return 'bi-globe2';
+    return 'bi-sliders';
+  };
+
+  const getHelp = (item) => {
+    const key = String(item.setting_key || '').toUpperCase();
+
+    if (key === 'APP_BASE_URL') {
+      return 'Used for public PDF links and server URL generation.';
+    }
+
+    if (key === 'ADMISSIONS_API_KEY') {
+      return 'Used to protect external API routes and n8n update requests.';
+    }
+
+    if (key === 'N8N_WHATSAPP_WEBHOOK_URL') {
+      return 'Used when WhatsApp actions, bulk challans, or receipt messages are sent.';
+    }
+
+    if (key === 'N8N_BILLING_WEBHOOK_URL') {
+      return 'Used when billing data is saved and sent to automation.';
+    }
+
+    return 'System integration setting.';
+  };
+%>
+
+<div class="api-settings-page">
+  <div class="api-hero">
+    <div class="api-hero-content">
+      <span class="api-kicker">
+        <i class="bi bi-key-fill"></i>
+        Super Admin Control
+      </span>
+
+      <h1 class="api-title">API Settings</h1>
+      <p class="api-subtitle">
+        Manage application base URL, API keys, and n8n webhook URLs from one secure place.
+        These values can override the matching values from your environment file.
+      </p>
+
+      <div class="api-stats">
+        <div class="api-stat-card">
+          <div class="api-stat-label">Total Settings</div>
+          <div class="api-stat-value"><%= safeSettings.length %></div>
+        </div>
+
+        <div class="api-stat-card">
+          <div class="api-stat-label">Webhook URLs</div>
+          <div class="api-stat-value"><%= webhookCount %></div>
+        </div>
+
+        <div class="api-stat-card">
+          <div class="api-stat-label">Secret Keys</div>
+          <div class="api-stat-value"><%= secretCount %></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <form id="apiSettingsForm" method="POST" action="/api-settings/update" autocomplete="off">
+    <div class="api-panel">
+      <div class="api-panel-header">
+        <div>
+          <h2 class="api-panel-title">
+            <i class="bi bi-sliders me-2"></i>
+            Integration Configuration
+          </h2>
+          <p class="api-panel-text">
+            Update only when you are sure. Wrong values can stop automation, PDF links, or API access.
+          </p>
+        </div>
+
+        <button type="button" class="api-save-top" data-open-confirm>
+          <i class="bi bi-cloud-arrow-up-fill me-1"></i>
+          Save Changes
+        </button>
+      </div>
+
+      <div class="api-warning">
+        <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+        <div>
+          <strong>Important:</strong>
+          Keep webhook URLs and API keys private. After changing these values, test n8n, admission form API,
+          PDF links, and WhatsApp sending once.
+        </div>
+      </div>
+
+      <div class="api-settings-list">
+        <% if (!safeSettings.length) { %>
+          <div class="api-setting-card">
+            <div class="api-setting-label">No API settings found</div>
+            <div class="api-help-text">
+              Please confirm that the api_settings table and seed data exist in db.js.
+            </div>
+          </div>
+        <% } %>
+
+        <% safeSettings.forEach((item, index) => { %>
+          <%
+            const key = String(item.setting_key || '').trim();
+            const label = String(item.setting_label || key).trim();
+            const value = String(item.setting_value || '').trim();
+            const type = String(item.setting_type || 'text').trim();
+            const isSecret = Number(item.is_secret || 0) === 1;
+            const inputType = isSecret ? 'password' : 'text';
+            const icon = getIcon(item);
+          %>
+
+          <div class="api-setting-card">
+            <div class="api-setting-top">
+              <div>
+                <div class="api-setting-label">
+                  <i class="bi <%= icon %> me-1 text-danger"></i>
+                  <%= label %>
+                </div>
+
+                <span class="api-setting-key">
+                  <i class="bi bi-code-slash"></i>
+                  <%= key %>
+                </span>
+              </div>
+
+              <span class="api-type-badge">
+                <i class="bi <%= icon %>"></i>
+                <%= isSecret ? 'Secret' : type %>
+              </span>
+            </div>
+
+            <div class="api-input-wrap">
+              <input
+                class="form-control api-input"
+                type="<%= inputType %>"
+                name="<%= key %>"
+                value="<%= value %>"
+                placeholder="Enter <%= label %>"
+                data-secret="<%= isSecret ? '1' : '0' %>"
+              />
+
+              <% if (isSecret) { %>
+                <button
+                  type="button"
+                  class="api-icon-btn"
+                  data-toggle-secret
+                  title="Show or hide secret"
+                >
+                  <i class="bi bi-eye-fill"></i>
+                </button>
+              <% } %>
+
+              <button
+                type="button"
+                class="api-icon-btn"
+                data-copy-value
+                title="Copy value"
+              >
+                <i class="bi bi-copy"></i>
+              </button>
+            </div>
+
+            <div class="api-help-text">
+              <%= getHelp(item) %>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+
+      <div class="api-footer-actions">
+        <button type="reset" class="api-reset-btn">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>
+          Reset
+        </button>
+
+        <button type="button" class="api-save-main" data-open-confirm>
+          <i class="bi bi-check-circle-fill me-1"></i>
+          Save API Settings
+        </button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="api-modal-backdrop" id="apiConfirmModal">
+  <div class="api-confirm-modal">
+    <div class="api-confirm-head">
+      <h3 class="api-confirm-title">
+        <i class="bi bi-shield-check me-2"></i>
+        Confirm API Settings Update
+      </h3>
+    </div>
+
+    <div class="api-confirm-body">
+      You are about to update system API and webhook settings. This can affect n8n, WhatsApp automation,
+      admission form API, and generated PDF links.
+      <br><br>
+      Do you want to continue?
+    </div>
+
+    <div class="api-confirm-actions">
+      <button type="button" class="api-confirm-cancel" id="apiCancelSave">
+        Cancel
+      </button>
+
+      <button type="button" class="api-confirm-save" id="apiConfirmSave">
+        Yes, Save Changes
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="api-toast" id="apiToast">
+  <div class="d-flex align-items-start gap-2">
+    <div class="text-danger fs-5">
+      <i class="bi bi-info-circle-fill"></i>
+    </div>
+    <div>
+      <div class="api-toast-title" id="apiToastTitle">Copied</div>
+      <p class="api-toast-message" id="apiToastMessage">Value copied to clipboard.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const form = document.getElementById("apiSettingsForm");
+    const modal = document.getElementById("apiConfirmModal");
+    const confirmBtn = document.getElementById("apiConfirmSave");
+    const cancelBtn = document.getElementById("apiCancelSave");
+    const toast = document.getElementById("apiToast");
+    const toastTitle = document.getElementById("apiToastTitle");
+    const toastMessage = document.getElementById("apiToastMessage");
+
+    let toastTimer = null;
+
+    function showToast(title, message) {
+      if (!toast) return;
+
+      toastTitle.textContent = title || "Done";
+      toastMessage.textContent = message || "Action completed.";
+
+      toast.classList.add("show");
+
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () {
+        toast.classList.remove("show");
+      }, 2600);
+    }
+
+    function openModal() {
+      if (modal) modal.classList.add("show");
+    }
+
+    function closeModal() {
+      if (modal) modal.classList.remove("show");
+    }
+
+    document.querySelectorAll("[data-open-confirm]").forEach(function (btn) {
+      btn.addEventListener("click", openModal);
+    });
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener("click", closeModal);
+    }
+
+    if (modal) {
+      modal.addEventListener("click", function (event) {
+        if (event.target === modal) {
+          closeModal();
+        }
+      });
+    }
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", function () {
+        if (form) form.submit();
+      });
+    }
+
+    document.querySelectorAll("[data-toggle-secret]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const wrap = btn.closest(".api-input-wrap");
+        const input = wrap ? wrap.querySelector("input") : null;
+        const icon = btn.querySelector("i");
+
+        if (!input) return;
+
+        const isPassword = input.type === "password";
+        input.type = isPassword ? "text" : "password";
+
+        if (icon) {
+          icon.className = isPassword ? "bi bi-eye-slash-fill" : "bi bi-eye-fill";
+        }
+      });
+    });
+
+    document.querySelectorAll("[data-copy-value]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        const wrap = btn.closest(".api-input-wrap");
+        const input = wrap ? wrap.querySelector("input") : null;
+
+        if (!input) return;
+
+        try {
+          await navigator.clipboard.writeText(input.value || "");
+          showToast("Copied", "Setting value copied to clipboard.");
+        } catch (error) {
+          input.select();
+          document.execCommand("copy");
+          showToast("Copied", "Setting value copied to clipboard.");
+        }
+      });
+    });
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        closeModal();
+      }
+    });
+
+    <% if (typeof flash !== 'undefined' && flash) { %>
+      showToast(
+        "<%= (flash.title || 'Notification').replace(/"/g, '&quot;') %>",
+        "<%= (flash.message || '').replace(/"/g, '&quot;') %>"
+      );
+    <% } %>
+  })();
+</script>
+
+    <%- include('partials/bootstrap-footer') %>

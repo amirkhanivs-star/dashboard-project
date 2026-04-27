@@ -1,6 +1,8 @@
 // db.js  (ES module)
 
 import Database from "better-sqlite3";
+import dotenv from "dotenv";
+dotenv.config();
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -272,6 +274,17 @@ CREATE TABLE IF NOT EXISTS admission_billing_yearly (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(admission_id, billing_year, month_key)
 );
+  CREATE TABLE IF NOT EXISTS api_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    setting_key TEXT NOT NULL UNIQUE,
+    setting_label TEXT NOT NULL,
+    setting_value TEXT,
+    setting_type TEXT DEFAULT 'text',
+    is_secret INTEGER DEFAULT 0,
+    updated_at TEXT,
+    updated_by TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 function ensureColumn(table, column, type) {
@@ -487,6 +500,30 @@ ensureColumn("admission_billing_yearly", "verification_number", "TEXT");
 ensureColumn("admission_billing_yearly", "bank_name", "TEXT");
 ensureColumn("admission_billing_yearly", "created_at", "TEXT");
 ensureColumn("admission_billing_yearly", "updated_at", "TEXT");
+if (!tableExists("api_settings")) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS api_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      setting_key TEXT NOT NULL UNIQUE,
+      setting_label TEXT NOT NULL,
+      setting_value TEXT,
+      setting_type TEXT DEFAULT 'text',
+      is_secret INTEGER DEFAULT 0,
+      updated_at TEXT,
+      updated_by TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+}
+
+ensureColumn("api_settings", "setting_key", "TEXT");
+ensureColumn("api_settings", "setting_label", "TEXT");
+ensureColumn("api_settings", "setting_value", "TEXT");
+ensureColumn("api_settings", "setting_type", "TEXT DEFAULT 'text'");
+ensureColumn("api_settings", "is_secret", "INTEGER DEFAULT 0");
+ensureColumn("api_settings", "updated_at", "TEXT");
+ensureColumn("api_settings", "updated_by", "TEXT");
+ensureColumn("api_settings", "created_at", "TEXT");
 
 try {
   db.exec(`
@@ -889,7 +926,58 @@ try {
 } catch (e) {
   console.error("bank_options seed error:", e.message);
 }
+// ================== ✅ Ensure default api_settings always exist ==================
+try {
+  const ins = db.prepare(`
+    INSERT OR IGNORE INTO api_settings (
+      setting_key,
+      setting_label,
+      setting_value,
+      setting_type,
+      is_secret
+    )
+    VALUES (?, ?, ?, ?, ?)
+  `);
 
+  const seed = db.transaction(() => {
+    ins.run(
+      "APP_BASE_URL",
+      "App Base URL / Server IP",
+      process.env.APP_BASE_URL || process.env.BASE_URL || process.env.PUBLIC_BASE_URL || "",
+      "url",
+      0
+    );
+
+    ins.run(
+      "ADMISSIONS_API_KEY",
+      "Admissions API Key",
+      process.env.ADMISSIONS_API_KEY || "",
+      "secret",
+      1
+    );
+
+    ins.run(
+      "N8N_WHATSAPP_WEBHOOK_URL",
+      "n8n WhatsApp Webhook URL",
+      process.env.N8N_WHATSAPP_WEBHOOK_URL || "",
+      "webhook",
+      0
+    );
+
+    ins.run(
+      "N8N_BILLING_WEBHOOK_URL",
+      "n8n Billing Webhook URL",
+      process.env.N8N_BILLING_WEBHOOK_URL || "",
+      "webhook",
+      0
+    );
+  });
+
+  seed();
+  console.log("Ensured api_settings defaults");
+} catch (e) {
+  console.error("api_settings seed error:", e.message);
+}
 // ===============================
 // ✅ Admission Details (Single)
 // ===============================
@@ -1100,7 +1188,7 @@ export function saveAdmissionBillingMonthByYear({
       verification_number,
       bank_name,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(admission_id, billing_year, month_key)
     DO UPDATE SET
       status = excluded.status,
@@ -1119,8 +1207,7 @@ export function saveAdmissionBillingMonthByYear({
     feeAmount || "",
     paymentDate || "",
     verificationNumber || "",
-    bankName || "",
-
+    bankName || ""
   );
 }
 
@@ -1208,6 +1295,55 @@ export function dbGetAdmissionDetailsById(id, billingYear = new Date().getFullYe
     billingYear,
     billing: billingArr,
   };
+}
+export function getApiSetting(key, fallback = "") {
+  try {
+    const row = db
+      .prepare("SELECT setting_value FROM api_settings WHERE setting_key = ?")
+      .get(String(key || "").trim());
+
+    const value = String(row?.setting_value || "").trim();
+    return value || fallback || "";
+  } catch (e) {
+    return fallback || "";
+  }
+}
+
+export function getAllApiSettings() {
+  try {
+    return db
+      .prepare(`
+        SELECT
+          id,
+          setting_key,
+          setting_label,
+          setting_value,
+          setting_type,
+          is_secret,
+          updated_at,
+          updated_by,
+          created_at
+        FROM api_settings
+        ORDER BY id ASC
+      `)
+      .all();
+  } catch (e) {
+    console.error("getAllApiSettings error:", e.message);
+    return [];
+  }
+}
+
+export function updateApiSetting(key, value, updatedBy = "") {
+  const cleanKey = String(key || "").trim();
+  const cleanValue = String(value || "").trim();
+
+  return db.prepare(`
+    UPDATE api_settings
+    SET setting_value = ?,
+        updated_at = CURRENT_TIMESTAMP,
+        updated_by = ?
+    WHERE setting_key = ?
+  `).run(cleanValue, String(updatedBy || "").trim(), cleanKey);
 }
 export default db;
 export { PERMISSION_KEYS, buildDefaultPermissions, normalizePermissions };

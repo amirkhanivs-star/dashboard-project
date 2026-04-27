@@ -112,21 +112,39 @@ export default async function makeBulkPaidReceiptPdf({
         .filter((b) => safeNum(b?.amount || 0) > 0)
         .map((b) => String(b?.month || "").toLowerCase().trim());
 
-  const rows = monthKeys.map((mk) => {
-    const curBill = billingArr.find(
-      (b) => String(b?.month || "").toLowerCase() === mk
-    ) || {};
+  const paidMonthsMap = new Map(
+  (Array.isArray(paidMonths) ? paidMonths : [])
+    .map((m) => {
+      const mk = String(m?.monthKey || m?.month || "").toLowerCase().trim();
+      return [mk, m];
+    })
+    .filter(([mk]) => mk)
+);
 
-    const receivedAmount = safeNum(curBill?.amount || 0);
+const rows = monthKeys.map((mk) => {
+  const curBill = billingArr.find(
+    (b) => String(b?.month || "").toLowerCase() === mk
+  ) || {};
 
-    return {
-      regNo,
-      description: `Monthly Fee Paid\n${studentName}`,
-      grade,
-      month: monthTitle(mk),
-      amount: receivedAmount.toFixed(2),
-    };
-  });
+  const passedMonth = paidMonthsMap.get(mk) || {};
+
+  const receivedAmount =
+    safeNum(
+      passedMonth?.received ||
+      passedMonth?.used ||
+      passedMonth?.amount ||
+      curBill?.amount ||
+      0
+    );
+
+  return {
+    regNo,
+    description: `Monthly Fee Paid\n${studentName}`,
+    grade,
+    month: monthTitle(mk),
+    amount: receivedAmount.toFixed(2),
+  };
+});
 
   const totalReceived = rows.reduce((sum, r) => sum + safeNum(r.amount), 0);
 

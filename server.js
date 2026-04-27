@@ -15,7 +15,13 @@ import { Server as SocketIOServer } from "socket.io"; // ✅ NEW
 import dotenv from "dotenv";
 dotenv.config();
 
-import db, { PERMISSION_KEYS, normalizePermissions } from "./db.js";
+import db, {
+  PERMISSION_KEYS,
+  normalizePermissions,
+  getApiSetting,
+  getAllApiSettings,
+  updateApiSetting,
+} from "./db.js";
 import {
   calcPendingDues,
   BILLING_MONTHS,
@@ -687,9 +693,14 @@ function fetchAdmissionsForUser(user) {
 
 // ✅ Simple API key check for /api routes (admission form -> dashboard)
 function checkApiKey(req, res, next) {
-  const headerKey = req.headers["x-api-key"];
+  const headerKey = String(req.headers["x-api-key"] || "").trim();
 
-  if (!headerKey || headerKey !== process.env.ADMISSIONS_API_KEY) {
+  const validApiKey = getApiSetting(
+    "ADMISSIONS_API_KEY",
+    process.env.ADMISSIONS_API_KEY || ""
+  );
+
+  if (!headerKey || !validApiKey || headerKey !== validApiKey) {
     return res
       .status(401)
       .json({ success: false, message: "Invalid or missing API key" });
@@ -2692,6 +2703,127 @@ function buildBulkWhatsappPayload({ req, user, rows, className, section, monthKe
   };
 }
 
+async function generateReceivedPaidReceiptForN8n({
+  req,
+  admissionId,
+  billingYear,
+  paidMonths,
+  labelPrefix = "Received Paid Receipt",
+}) {
+  const cleanPaidMonths = (Array.isArray(paidMonths) ? paidMonths : [])
+    .map((x) => ({
+      monthKey: String(x.monthKey || "").trim().toLowerCase(),
+      monthLabel:
+        BILLING_MONTHS.find(
+          (m) => String(m.key).toLowerCase() === String(x.monthKey || "").trim().toLowerCase()
+        )?.label || String(x.monthKey || ""),
+      status: String(x.status || "").trim(),
+      received: Number(x.used || x.received || x.amount || 0),
+      verification: String(x.verification || "").trim(),
+      bank: String(x.bank || "").trim(),
+      year: billingYear,
+    }))
+    .filter((x) => x.monthKey && x.received > 0);
+
+  if (!cleanPaidMonths.length) {
+    return {
+      skipped: true,
+      reason: "no_received_paid_months",
+    };
+  }
+
+  const full = dbGetAdmissionDetailsById(admissionId, billingYear);
+  if (!full) {
+    throw new Error(`Admission details not found for id ${admissionId}`);
+  }
+
+  const bannerPath = path.join(__dirname, "public", "img", "ivs-banner.jpg");
+
+  const pdfBuffer = await makeBulkPaidReceiptPdf({
+    full,
+    paidMonths: cleanPaidMonths,
+    bannerPath,
+  });
+
+  if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
+    throw new Error(`Invalid PDF buffer for paid receipt ${admissionId}`);
+  }
+
+  const head = pdfBuffer.subarray(0, 5).toString("utf8");
+  if (head !== "%PDF-") {
+    throw new Error(`Generated paid receipt is not a valid PDF for ${admissionId}`);
+  }
+
+  const { year, month } = getYearMonthParts(new Date());
+  const challanDir = path.join(uploadsDir, "challans", year, month);
+  if (!fs.existsSync(challanDir)) fs.mkdirSync(challanDir, { recursive: true });
+
+  const filename = `received-paid-receipt-${admissionId}-${Date.now()}.pdf`;
+  const absPath = path.join(challanDir, filename);
+
+  fs.writeFileSync(absPath, pdfBuffer);
+
+  const relStored = toPosix(path.relative(uploadsDir, absPath));
+  const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+
+  const info = db.prepare(`
+    INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    admissionId,
+    labelPrefix,
+    relStored,
+    fileUrl,
+    "application/pdf",
+    pdfBuffer.length || 0
+  );
+
+  return {
+    skipped: false,
+    uploadId: info.lastInsertRowid,
+    admissionId,
+    billingYear,
+    paidMonths: cleanPaidMonths,
+    fileUrl,
+    storedName: relStored,
+    mimeType: "application/pdf",
+    size: pdfBuffer.length || 0,
+  };
+}
+
+function buildFeeCollectionWhatsappPayload({
+  user,
+  mode,
+  billingYear,
+  totalInputAmount,
+  unallocatedAmount,
+  applied,
+  receipts,
+  familyNumber,
+  admissionId,
+  receiving,
+}) {
+  return {
+    event: "fee_collection_paid_receipt_send_request",
+    ts: new Date().toISOString(),
+    triggeredBy: {
+      id: user?.id || null,
+      name: user?.name || null,
+      role: user?.role || null,
+      dept: user?.dept || null,
+    },
+    mode,
+    billingYear,
+    admissionId: admissionId || null,
+    familyNumber: familyNumber || "",
+    totalInputAmount,
+    unallocatedAmount,
+    receiving,
+    applied,
+    receipts,
+  };
+}
+
 function buildBillingWebhookPayload({
   user,
   updatedRow,
@@ -3169,9 +3301,14 @@ const billingPayload = buildBillingWebhookPayload({
 let n8nStatus = "skipped";
 let n8nResponseText = "";
 
-if (process.env.N8N_BILLING_WEBHOOK_URL) {
+const billingWebhookUrl = getApiSetting(
+  "N8N_BILLING_WEBHOOK_URL",
+  process.env.N8N_BILLING_WEBHOOK_URL || ""
+);
+
+if (billingWebhookUrl) {
   try {
-    const webhookResp = await fetch(process.env.N8N_BILLING_WEBHOOK_URL, {
+    const webhookResp = await fetch(billingWebhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(billingPayload),
@@ -4636,7 +4773,7 @@ app.get("/api/pending/admission/:id", requireLogin, (req, res) => {
 });
 
 
-app.post("/api/fee-collection/receive", requireLogin, requireSaveBilling, (req, res) => {
+app.post("/api/fee-collection/receive", requireLogin, requireSaveBilling, async (req, res) => {
   try {
     const user = req.session.user;
     const perms = getPerm(user);
@@ -4847,17 +4984,104 @@ applied.push({
 
     const summary = summarizeFeeCollectionRows(refreshedRows, billingYear, currentMonthKey());
 
-    return res.json({
-      success: true,
-      message: "Fee received successfully",
-      mode,
+   const receipts = [];
+
+for (const item of applied) {
+  const paidTouchedMonths = (item.touchedMonths || []).filter((m) => {
+    const used = Number(m.used || 0);
+    const status = String(m.status || "").trim().toLowerCase();
+
+    return used > 0 && status !== "not admitted";
+  });
+
+  if (!paidTouchedMonths.length) continue;
+
+  try {
+    const receipt = await generateReceivedPaidReceiptForN8n({
+      req,
+      admissionId: item.admissionId,
       billingYear,
-      totalInputAmount: amount,
-      unallocatedAmount: remaining,
-      applied,
-      feeRows: refreshedFeeRows,
-      summary,
+      paidMonths: paidTouchedMonths.map((m) => ({
+        ...m,
+        verification: cleanVerificationNumber,
+        bank: cleanCollectionAccount,
+      })),
+      labelPrefix: mode === "family"
+        ? `Family Received Paid Receipt (${cleanFamilyNumber})`
+        : "Received Paid Receipt",
     });
+
+    receipts.push({
+      admissionId: item.admissionId,
+      studentName: item.studentName || "",
+      ...receipt,
+    });
+  } catch (receiptErr) {
+    receipts.push({
+      admissionId: item.admissionId,
+      studentName: item.studentName || "",
+      error: String(receiptErr?.message || receiptErr),
+    });
+  }
+}
+
+let n8nStatus = "skipped";
+let n8nResponseText = "";
+
+const whatsappWebhookUrl = getApiSetting(
+  "N8N_WHATSAPP_WEBHOOK_URL",
+  process.env.N8N_WHATSAPP_WEBHOOK_URL || ""
+);
+
+if (whatsappWebhookUrl && receipts.some((r) => r.fileUrl)) {
+  const payload = buildFeeCollectionWhatsappPayload({
+    user,
+    mode,
+    billingYear,
+    totalInputAmount: amount,
+    unallocatedAmount: remaining,
+    applied,
+    receipts,
+    familyNumber: cleanFamilyNumber,
+    admissionId: admissionId || "",
+    receiving: {
+      amount,
+      verificationNumber: cleanVerificationNumber,
+      collectionAccount: cleanCollectionAccount,
+      receivingDate: cleanReceivingDate,
+      note: cleanNote,
+    },
+  });
+
+  try {
+    const webhookResp = await fetch(whatsappWebhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    n8nResponseText = await webhookResp.text();
+    n8nStatus = webhookResp.ok ? "sent" : "failed";
+  } catch (e) {
+    n8nStatus = "failed";
+    n8nResponseText = String(e?.message || e);
+  }
+}
+
+return res.json({
+  success: true,
+  message: "Fee received successfully",
+  mode,
+  billingYear,
+  totalInputAmount: amount,
+  unallocatedAmount: remaining,
+  applied,
+  receipts,
+  n8nStatus,
+  n8nResponse: n8nResponseText,
+  feeRows: refreshedFeeRows,
+  summary,
+});
   } catch (err) {
     console.error("POST /api/fee-collection/receive error:", err);
     return res.status(500).json({
@@ -5201,6 +5425,11 @@ app.post("/api/bulk-challan/send-whatsapp", requireLogin, requireSendWhatsApp, a
 
     const monthKey = toMonthKey(month);
 
+    const whatsappWebhookUrl = getApiSetting(
+      "N8N_WHATSAPP_WEBHOOK_URL",
+      process.env.N8N_WHATSAPP_WEBHOOK_URL || ""
+    );
+
     if (!monthKey || !cleanFeeType || !cleanClass || !cleanSection || !billingYear) {
       return res.status(400).json({
         success: false,
@@ -5208,12 +5437,12 @@ app.post("/api/bulk-challan/send-whatsapp", requireLogin, requireSendWhatsApp, a
       });
     }
 
-    if (!process.env.N8N_WHATSAPP_WEBHOOK_URL) {
-      return res.status(500).json({
-        success: false,
-        message: "N8N webhook missing in .env",
-      });
-    }
+    if (!whatsappWebhookUrl) {
+  return res.status(500).json({
+    success: false,
+    message: "N8N WhatsApp webhook missing in API Settings",
+  });
+}
 
     const matchedRows = getBulkChallanMatchingAdmissions({
       user,
@@ -5250,7 +5479,7 @@ app.post("/api/bulk-challan/send-whatsapp", requireLogin, requireSendWhatsApp, a
       feeType: cleanFeeType,
     });
 
-    const resp = await fetch(process.env.N8N_WHATSAPP_WEBHOOK_URL, {
+    const resp = await fetch(whatsappWebhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -5305,9 +5534,13 @@ app.post("/api/bulk-challan/send-whatsapp", requireLogin, requireSendWhatsApp, a
 
 function getBaseUrl(req) {
   return (
-    process.env.APP_BASE_URL ||
-    process.env.BASE_URL ||
-    process.env.PUBLIC_BASE_URL ||
+    getApiSetting(
+      "APP_BASE_URL",
+      process.env.APP_BASE_URL ||
+        process.env.BASE_URL ||
+        process.env.PUBLIC_BASE_URL ||
+        ""
+    ) ||
     `${req.protocol}://${req.get("host")}/`
   ).replace(/\/+$/, "/");
 }
@@ -6683,8 +6916,16 @@ app.post("/api/whatsapp/send", requireLogin, requireSendWhatsApp, async (req, re
       }
     }
 
-    if (!process.env.N8N_WHATSAPP_WEBHOOK_URL) {
-      return res.status(500).json({ success: false, message: "N8N webhook missing in .env" });
+    const whatsappWebhookUrl = getApiSetting(
+      "N8N_WHATSAPP_WEBHOOK_URL",
+      process.env.N8N_WHATSAPP_WEBHOOK_URL || ""
+    );
+
+    if (!whatsappWebhookUrl) {
+      return res.status(500).json({
+        success: false,
+        message: "N8N WhatsApp webhook missing in API Settings",
+      });
     }
 
     const payload = {
@@ -6703,7 +6944,7 @@ app.post("/api/whatsapp/send", requireLogin, requireSendWhatsApp, async (req, re
       manualMessage: manualSafe,
     };
 
-    const resp = await fetch(process.env.N8N_WHATSAPP_WEBHOOK_URL, {
+    const resp = await fetch(whatsappWebhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -6778,7 +7019,70 @@ app.post("/api/whatsapp/send", requireLogin, requireSendWhatsApp, async (req, re
     return res.status(500).json({ success: false, message: "Server error" });
   }
 });
+// ==================== API SETTINGS ROUTES ====================
 
+app.get("/api-settings", requireLogin, requireSuperAdmin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const settings = getAllApiSettings();
+
+    return res.render("api-settings", {
+      user,
+      perms: getPerm(user),
+      pageTitle: "API Settings",
+      settings,
+    });
+  } catch (err) {
+    console.error("GET /api-settings error:", err);
+    return res.status(500).send("Server error");
+  }
+});
+
+app.post("/api-settings/update", requireLogin, requireSuperAdmin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const body = req.body || {};
+
+    const allowedKeys = [
+      "APP_BASE_URL",
+      "ADMISSIONS_API_KEY",
+      "N8N_WHATSAPP_WEBHOOK_URL",
+      "N8N_BILLING_WEBHOOK_URL",
+    ];
+
+    for (const key of allowedKeys) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) {
+        updateApiSetting(key, body[key], user?.name || "Super Admin");
+      }
+    }
+
+    logAudit("api_settings_updated", user, {
+      details: {
+        updatedKeys: allowedKeys.filter((key) =>
+          Object.prototype.hasOwnProperty.call(body, key)
+        ),
+      },
+    });
+
+    req.session.flash = {
+      type: "success",
+      title: "API Settings Updated",
+      message: "API settings have been updated successfully.",
+    };
+
+    return res.redirect("/api-settings");
+  } catch (err) {
+    console.error("POST /api-settings/update error:", err);
+
+    req.session.flash = {
+      type: "danger",
+      title: "Update Failed",
+      message: "API settings could not be updated.",
+    };
+
+    return res.redirect("/api-settings");
+  }
+});
 // ==================== DB SETTINGS ROUTES ====================
 
 // Super Admin only page
@@ -6988,7 +7292,70 @@ app.use((err, req, res, next) => {
 
   return next(err);
 });
+/* ==================== API SETTINGS ROUTES ==================== */
 
+app.get("/api-settings", requireLogin, requireSuperAdmin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const settings = getAllApiSettings();
+
+    return res.render("api-settings", {
+      user,
+      perms: getPerm(user),
+      pageTitle: "API Settings",
+      settings,
+    });
+  } catch (err) {
+    console.error("GET /api-settings error:", err);
+    return res.status(500).send("Server error");
+  }
+});
+
+app.post("/api-settings/update", requireLogin, requireSuperAdmin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const body = req.body || {};
+
+    const allowedKeys = [
+      "APP_BASE_URL",
+      "ADMISSIONS_API_KEY",
+      "N8N_WHATSAPP_WEBHOOK_URL",
+      "N8N_BILLING_WEBHOOK_URL",
+    ];
+
+    for (const key of allowedKeys) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) {
+        updateApiSetting(key, body[key], user?.name || "Super Admin");
+      }
+    }
+
+    logAudit("api_settings_updated", user, {
+      details: {
+        updatedKeys: allowedKeys.filter((key) =>
+          Object.prototype.hasOwnProperty.call(body, key)
+        ),
+      },
+    });
+
+    req.session.flash = {
+      type: "success",
+      title: "API Settings Updated",
+      message: "API settings have been updated successfully.",
+    };
+
+    return res.redirect("/api-settings");
+  } catch (err) {
+    console.error("POST /api-settings/update error:", err);
+
+    req.session.flash = {
+      type: "danger",
+      title: "Update Failed",
+      message: "API settings could not be updated.",
+    };
+
+    return res.redirect("/api-settings");
+  }
+});
 /* ==================== Auth Routes ==================== */
 
 // Login page (with role boxes)
