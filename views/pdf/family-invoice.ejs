@@ -114,6 +114,11 @@
       margin-top: 1px;
     }
 
+    .regFeeText {
+  color: #006b3f;
+  font-weight: bold;
+}
+
     .final-row {
       background-color: #fff5f5;
       border-top: 0.2mm solid #a52a2a;
@@ -316,7 +321,7 @@
             <td><%= r.regNo || '-' %></td>
             <td>
               <% const d = String(r.description || '').split('\n'); %>
-              <%= d[0] || '' %>
+              <span class="<%= String(d[0] || '').toLowerCase().includes('registration fee') ? 'regFeeText' : '' %>"><%= d[0] || '' %></span>
               <% if (d[1]) { %><span class="descSmall"><%= d[1] %></span><% } %>
             </td>
             <td><%= r.grade || '-' %></td>
@@ -376,9 +381,7 @@
         </div>
 
         <div class="pay-col qr">
-          <div class="pay-col-title" style="font-size:7px;">PayPal Account</div>
-          <img src="<%= baseUrl + '/img/receipt-qr.jpg' %>" alt="Scan to pay">
-          <div style="font-size:6px; font-weight:bold; margin-top:2px;">SCAN TO PAY</div>
+          <img src="<%= locals.receiptQrSrc || '' %>" alt="Scan to pay">
         </div>
       </div>
 
@@ -412,8 +415,7 @@
         </div>
 
         <div class="inst-right">
-          <img src="<%= baseUrl + '/img/receipt-sign.jpg' %>" alt="Stamp and Signature">
-          <span class="sign-text">Authorized Signature</span>
+          <img src="<%= locals.receiptSignSrc || '' %>" alt="Stamp and Signature">
         </div>
       </div>
 

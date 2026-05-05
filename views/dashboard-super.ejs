@@ -221,6 +221,7 @@
         ];
     const visibleColCount =
     Object.values(P.col).filter(Boolean).length +
+    1 + // Row number column
     (showActions ? 1 : 0) +
     (canDeleteAdmissions ? 1 : 0);
 
@@ -470,7 +471,7 @@
                     title="Select All">
                 </th>
               <% } %>
-
+              <th class="text-center col-row-number" data-col="rowNumber">No.</th>
               <% if (P.col.status) { %><th data-col="status">Current Status</th><% } %>
               <% if (P.col.feeStatus) { %><th data-col="feeStatus">Fee Status</th><% } %>
 
@@ -516,7 +517,7 @@
               </tr>
             <% } %>
 
-            <% admissions.forEach(a => { 
+                        <% admissions.forEach((a, index) => { 
                  const fid = `rowForm_${a.id}`;
                  let formPlaced = false;
 
@@ -534,6 +535,12 @@
                         data-student-name="<%= a.student || a.studentName || '' %>">
                     </td>
                   <% } %>
+
+                                    <td class="text-center col-row-number" data-col="rowNumber">
+                    <span class="admission-row-number">
+                      <%= (startRecord || 1) + index %>
+                    </span>
+                  </td>
 
                   <% if (P.col.status) { %>
                     <td data-col="status">
@@ -1262,6 +1269,29 @@
 #superAdmissionsTable td[data-col="paidInvoiceStatusTimestamp"]{
   min-width: 210px;
 }
+
+  /* ✅ Row number black circle */
+  #superAdmissionsTable th.col-row-number,
+#superAdmissionsTable td.col-row-number{
+  min-width: 72px !important;
+  width: 72px !important;
+  max-width: 72px !important;
+  text-align: center;
+}
+
+  .admission-row-number{
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #020617, #111827);
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    box-shadow: 0 8px 16px rgba(2, 8, 23, 0.25);
+  }
   /* ✅ NEW: status columns width */
   #superAdmissionsTable th[data-col="status"],
   #superAdmissionsTable td[data-col="status"],
@@ -1273,11 +1303,12 @@
   /* Action column a bit wider for buttons */
 
   #superAdmissionsTable th.col-select,
-  #superAdmissionsTable td.col-select{
-    min-width: 64px;
-    width: 64px;
-    text-align: center;
-  }
+#superAdmissionsTable td.col-select{
+  min-width: 64px !important;
+  width: 64px !important;
+  max-width: 64px !important;
+  text-align: center;
+}
 
     #superAdmissionsTable th[data-col="select"],
   #superAdmissionsTable td[data-col="select"]{
@@ -1608,27 +1639,45 @@
     background: #fff;
     border-left: 1px solid rgba(15,23,42,.10);
   }
-/* ✅ Sticky FIRST two columns (Current Status + Fee Status) */
+/* ✅ Sticky left columns: Checkbox + No + Current Status + Fee Status */
+#superAdmissionsTable th[data-col="select"],
+#superAdmissionsTable td[data-col="select"]{
+  position: sticky;
+  left: 0;
+  z-index: 30;
+  background: #fff;
+}
+
+#superAdmissionsTable th[data-col="rowNumber"],
+#superAdmissionsTable td[data-col="rowNumber"]{
+  position: sticky;
+  left: 64px;
+  z-index: 30;
+  background: #fff;
+}
+
 #superAdmissionsTable th[data-col="status"],
 #superAdmissionsTable td[data-col="status"]{
   position: sticky;
-  left: 0;
-  z-index: 6;            /* above normal cells */
-  background: #fff;      /* body cell bg */
+  left: 136px;
+  z-index: 30;
+  background: #fff;
 }
 
 #superAdmissionsTable th[data-col="feeStatus"],
 #superAdmissionsTable td[data-col="feeStatus"]{
   position: sticky;
-  left: 170px;           /* must match status column width */
-  z-index: 6;
+  left: 306px;
+  z-index: 30;
   background: #fff;
 }
 
-/* Header row (dark) needs its own bg */
+/* Header dark background for sticky columns */
+#superAdmissionsTable thead.table-dark th[data-col="select"],
+#superAdmissionsTable thead.table-dark th[data-col="rowNumber"],
 #superAdmissionsTable thead.table-dark th[data-col="status"],
 #superAdmissionsTable thead.table-dark th[data-col="feeStatus"]{
-  z-index: 8; /* above body */
+  z-index: 70 !important;
   background: linear-gradient(180deg, #111827, #0b1220);
 }
 

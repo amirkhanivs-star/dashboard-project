@@ -338,7 +338,7 @@ const visibleActionCount =
 const actionColClass = `action-count-${visibleActionCount}`;
 
 const baseCols = Object.keys(P.col).filter(k => k !== 'actionButtons' && P.col[k]).length;
-const visibleColCount = baseCols + (showActions ? 1 : 0) + (canDeleteAdmissions ? 1 : 0);
+const visibleColCount = baseCols + 1 + (showActions ? 1 : 0) + (canDeleteAdmissions ? 1 : 0);
 
 const DEFAULT_CURRENT_STATUS_OPTIONS =
   (typeof statusOptionsCurrent !== 'undefined' && Array.isArray(statusOptionsCurrent) && statusOptionsCurrent.length)
@@ -627,6 +627,7 @@ const hasAnyUi = visibleColCount > 0;
         title="Select All">
     </th>
   <% } %>
+    <th class="text-center col-row-number" data-col="rowNumber">No.</th>
   <% if (P.col.status) { %><th data-col="status">Current Status</th><% } %>
   <% if (P.col.feeStatus) { %><th data-col="feeStatus">Fee Status</th><% } %>
   <% if (P.col.dept) { %><th data-col="dept">Dept</th><% } %>
@@ -671,7 +672,7 @@ const hasAnyUi = visibleColCount > 0;
                 </tr>
               <% } %>
 
-              <% (admissionsList || []).forEach(a => {
+                            <% (admissionsList || []).forEach((a, index) => {
                    const fid = `rowForm_${a.id}`;
                    let formPlaced = false;
 
@@ -725,6 +726,11 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
                         data-student-name="<%= a.studentName || a.student || '' %>">
                     </td>
                   <% } %>
+                                    <td class="text-center col-row-number" data-col="rowNumber">
+                    <span class="admission-row-number">
+                      <%= (startRecord || 1) + index %>
+                    </span>
+                  </td>
                   <% if (!formPlaced) { %>
                     <form id="<%= fid %>" action="/pipeline/update/<%= a.id %>" method="POST" class="d-none"></form>
                     <% formPlaced = true; %>
@@ -1380,10 +1386,34 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   max-width: 154px !important;
 }
 
-  #agentAccountsTable th.col-select,
+  /* ✅ Row number black circle */
+  #agentAccountsTable th.col-row-number,
+  #agentAccountsTable td.col-row-number{
+    min-width: 72px !important;
+    width: 72px !important;
+    max-width: 72px !important;
+    text-align: center;
+  }
+
+  .admission-row-number{
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #020617, #111827);
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    box-shadow: 0 8px 16px rgba(2, 8, 23, 0.25);
+  }
+
+    #agentAccountsTable th.col-select,
   #agentAccountsTable td.col-select {
-    min-width: 64px;
-    width: 64px;
+    min-width: 64px !important;
+    width: 64px !important;
+    max-width: 64px !important;
     text-align: center;
   }
 
@@ -1551,35 +1581,45 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     justify-content: flex-end;
   }
 
- /* ✅ Sticky FIRST three columns (Select + Current Status + Fee Status) */
+/* ✅ Sticky left columns: Checkbox + No + Current Status + Fee Status */
 #agentAccountsTable th[data-col="select"],
 #agentAccountsTable td[data-col="select"]{
   position: sticky;
   left: 0;
-  z-index: 7;
+  z-index: 30;
+  background: #fff;
+}
+
+#agentAccountsTable th[data-col="rowNumber"],
+#agentAccountsTable td[data-col="rowNumber"]{
+  position: sticky;
+  left: 64px;
+  z-index: 30;
   background: #fff;
 }
 
 #agentAccountsTable th[data-col="status"],
 #agentAccountsTable td[data-col="status"]{
   position: sticky;
-  left: 64px;
-  z-index: 6;
+  left: 136px;
+  z-index: 30;
   background: #fff;
 }
 
 #agentAccountsTable th[data-col="feeStatus"],
 #agentAccountsTable td[data-col="feeStatus"]{
   position: sticky;
-  left: 234px;
-  z-index: 6;
+  left: 306px;
+  z-index: 30;
   background: #fff;
 }
 
-/* Header row */
+/* Header dark background for sticky left columns */
+#agentAccountsTable thead.table-dark th[data-col="select"],
+#agentAccountsTable thead.table-dark th[data-col="rowNumber"],
 #agentAccountsTable thead.table-dark th[data-col="status"],
 #agentAccountsTable thead.table-dark th[data-col="feeStatus"]{
-  z-index: 8;
+  z-index: 70 !important;
   background: linear-gradient(180deg, #f59e0b, #d97706);
 }
 

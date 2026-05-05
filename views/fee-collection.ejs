@@ -75,60 +75,78 @@
               <div class="table-responsive">
                 <table class="table table-sm align-middle due-table mb-0" id="fcDueTable">
                   <thead>
-                    <tr>
-  <th style="width:8%">#</th>
+            <tr>
+  <th style="width:6%">#</th>
   <th style="width:8%">Select</th>
+  <th style="width:14%">Fee Type</th>
   <th style="width:16%">Student</th>
-  <th style="width:12%">Dept</th>
-  <th style="width:12%">Grade</th>
-  <th style="width:12%">Month</th>
+  <th style="width:10%">Dept</th>
+  <th style="width:10%">Grade</th>
+  <th style="width:10%">Month</th>
   <th style="width:12%">Status</th>
-  <th style="width:10%">Fee</th>
-  <th style="width:10%">Received</th>
-  <th style="width:10%">Due</th>
+  <th style="width:8%">Fee</th>
+  <th style="width:8%">Received</th>
+  <th style="width:8%">Due</th>
 </tr>
                   </thead>
                   <tbody id="fcDueTableBody">
                     <% if (!feeRowsSafe.length) { %>
                       <tr>
-                        <td colspan="10" class="text-muted small">No pending dues found.</td>
+                        <td colspan="11" class="text-muted small">No pending dues found.</td>
                       </tr>
                     <% } else { %>
                       <% feeRowsSafe.forEach((r, idx) => { %>
-                        <tr>
+                       <tr class="<%= r.isRegistrationFee ? 'registration-fee-row' : '' %>">
   <td>
     <span class="pill-mini"><%= idx + 1 %></span>
   </td>
+
   <td>
-    <div class="form-check m-0 d-flex justify-content-center">
-      <input
-        class="form-check-input fc-not-admitted-check"
-        type="checkbox"
-        value="<%= `${r.admissionId}:${r.monthKey}` %>"
-        data-admission-id="<%= r.admissionId %>"
-        data-month-key="<%= r.monthKey %>"
-        title="Mark this month as Not admitted"
-      >
-    </div>
+    <% if (r.isRegistrationFee) { %>
+      <span class="text-muted tiny">N/A</span>
+    <% } else { %>
+      <div class="form-check m-0 d-flex justify-content-center">
+        <input
+          class="form-check-input fc-not-admitted-check"
+          type="checkbox"
+          value="<%= `${r.admissionId}:${r.monthKey}` %>"
+          data-admission-id="<%= r.admissionId %>"
+          data-month-key="<%= r.monthKey %>"
+          title="Mark this month as Not admitted"
+        >
+      </div>
+    <% } %>
   </td>
+
+  <td>
+    <span class="<%= r.isRegistrationFee ? 'fee-type-chip reg-chip' : 'fee-type-chip monthly-chip' %>">
+      <%= r.feeType || (r.isRegistrationFee ? 'Registration Fee' : 'Monthly Fee') %>
+    </span>
+  </td>
+
   <td>
     <div class="fw-semibold"><%= r.studentName || '-' %></div>
     <div class="text-muted tiny"><%= r.registrationNumber || '-' %></div>
   </td>
-                          <td>
-                            <span class="pill-light text-capitalize"><%= r.dept || '-' %></span>
-                          </td>
-                          <td><%= r.grade || '-' %></td>
-                          <td>
-                            <span class="pill-month"><%= r.monthLabel || r.monthKey || '-' %></span>
-                          </td>
-                          <td>
-                            <span class="status-chip"><%= r.status || '-' %></span>
-                          </td>
-                          <td><span class="num fee-num"><%= fmt(r.fee) %></span></td>
-                          <td><span class="num recv-num"><%= fmt(r.received) %></span></td>
-                          <td><span class="num due-num"><%= fmt(r.due) %></span></td>
-                        </tr>
+
+  <td>
+    <span class="pill-light text-capitalize"><%= r.dept || '-' %></span>
+  </td>
+
+  <td><%= r.grade || '-' %></td>
+
+  <td>
+    <span class="pill-month"><%= r.monthLabel || r.monthKey || '-' %></span>
+  </td>
+
+  <td>
+    <span class="status-chip"><%= r.status || '-' %></span>
+  </td>
+
+  <td><span class="num fee-num"><%= fmt(r.fee) %></span></td>
+  <td><span class="num recv-num"><%= fmt(r.received) %></span></td>
+  <td><span class="num due-num"><%= fmt(r.due) %></span></td>
+</tr>
                       <% }) %>
                     <% } %>
                   </tbody>
@@ -174,7 +192,25 @@
             </div>
 
             <div class="mb-3">
-              <label for="receivingAmount" class="form-label fw-semibold">Receiving Amount</label>
+  <label for="registrationReceivingAmount" class="form-label fw-semibold">
+    Registration Fee Receiving Amount
+  </label>
+  <input
+    type="number"
+    step="0.01"
+    min="0"
+    class="form-control premium-input"
+    id="registrationReceivingAmount"
+    name="registrationReceivingAmount"
+    placeholder="Enter registration fee amount"
+  >
+  <div class="tiny text-muted mt-1">
+    Registration fee will only be received in the admission month
+  </div>
+</div>
+
+            <div class="mb-3">
+             <label for="receivingAmount" class="form-label fw-semibold">Monthly Fee Receiving Amount</label>
               <input
                 type="number"
                 step="0.01"
@@ -379,6 +415,32 @@ placeholder="Enter verification number"
     color: rgba(146,64,14,.95);
   }
 
+  .fee-type-chip{
+  display:inline-flex;
+  align-items:center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.reg-chip{
+  background: rgba(16,185,129,.12);
+  border: 1px solid rgba(16,185,129,.22);
+  color: rgba(6,95,70,.95);
+}
+
+.monthly-chip{
+  background: rgba(99,102,241,.10);
+  border: 1px solid rgba(99,102,241,.20);
+  color: rgba(67,56,202,.95);
+}
+
+.registration-fee-row{
+  background: rgba(16,185,129,.045);
+}
+
   .admission-pill{
     background: rgba(255,255,255,.90);
     border: 1px solid rgba(15,23,42,.10);
@@ -479,6 +541,7 @@ placeholder="Enter verification number"
   (() => {
     const form = document.getElementById('feeCollectionForm');
     const amountInput = document.getElementById('receivingAmount');
+const registrationAmountInput = document.getElementById('registrationReceivingAmount');
     const totalDuesBox = document.getElementById('fcTotalDuesBox');
     const remainingBox = document.getElementById('fcRemainingBalance');
     const msgBox = document.getElementById('fcMsg');
@@ -500,12 +563,19 @@ placeholder="Enter verification number"
 
     function updateRemainingPreview() {
       const totalDues = getTotalDues();
-      const entered = Number(amountInput?.value || 0);
-      const remaining = Math.max(0, totalDues - (Number.isFinite(entered) ? entered : 0));
+      const monthlyEntered = Number(amountInput?.value || 0);
+      const registrationEntered = Number(registrationAmountInput?.value || 0);
+
+      const totalEntered =
+        (Number.isFinite(monthlyEntered) ? monthlyEntered : 0) +
+        (Number.isFinite(registrationEntered) ? registrationEntered : 0);
+
+      const remaining = Math.max(0, totalDues - totalEntered);
       remainingBox.textContent = fmt(remaining);
     }
 
     amountInput?.addEventListener('input', updateRemainingPreview);
+    registrationAmountInput?.addEventListener('input', updateRemainingPreview);
     updateRemainingPreview();
 
     function renderRows(rows = []) {
@@ -514,41 +584,60 @@ placeholder="Enter verification number"
       if (!rows.length) {
 tableBody.innerHTML = `
   <tr>
-    <td colspan="10" class="text-muted small">No pending dues found.</td>
+    <td colspan="11" class="text-muted small">No pending dues found.</td>
   </tr>
 `;
         if (totalRowsEl) totalRowsEl.textContent = '0';
         return;
       }
 
-      tableBody.innerHTML = rows.map((r, idx) => `
-  <tr>
-    <td><span class="pill-mini">${idx + 1}</span></td>
-    <td>
-      <div class="form-check m-0 d-flex justify-content-center">
-        <input
-          class="form-check-input fc-not-admitted-check"
-          type="checkbox"
-          value="${r.admissionId}:${r.monthKey}"
-          data-admission-id="${r.admissionId}"
-          data-month-key="${r.monthKey}"
-          title="Mark this month as Not admitted"
-        >
-      </div>
-    </td>
-    <td>
-      <div class="fw-semibold">${r.studentName || '-'}</div>
-      <div class="text-muted tiny">${r.registrationNumber || '-'}</div>
-    </td>
-          <td><span class="pill-light text-capitalize">${r.dept || '-'}</span></td>
-          <td>${r.grade || '-'}</td>
-          <td><span class="pill-month">${r.monthLabel || r.monthKey || '-'}</span></td>
-          <td><span class="status-chip">${r.status || '-'}</span></td>
-          <td><span class="num fee-num">${fmt(r.fee)}</span></td>
-          <td><span class="num recv-num">${fmt(r.received)}</span></td>
-          <td><span class="num due-num">${fmt(r.due)}</span></td>
-        </tr>
-      `).join('');
+     tableBody.innerHTML = rows.map((r, idx) => {
+  const isReg = !!r.isRegistrationFee;
+
+  return `
+    <tr class="${isReg ? 'registration-fee-row' : ''}">
+      <td><span class="pill-mini">${idx + 1}</span></td>
+
+      <td>
+        ${
+          isReg
+            ? '<span class="text-muted tiny">N/A</span>'
+            : `
+              <div class="form-check m-0 d-flex justify-content-center">
+                <input
+                  class="form-check-input fc-not-admitted-check"
+                  type="checkbox"
+                  value="${r.admissionId}:${r.monthKey}"
+                  data-admission-id="${r.admissionId}"
+                  data-month-key="${r.monthKey}"
+                  title="Mark this month as Not admitted"
+                >
+              </div>
+            `
+        }
+      </td>
+
+      <td>
+        <span class="${isReg ? 'fee-type-chip reg-chip' : 'fee-type-chip monthly-chip'}">
+          ${r.feeType || (isReg ? 'Registration Fee' : 'Monthly Fee')}
+        </span>
+      </td>
+
+      <td>
+        <div class="fw-semibold">${r.studentName || '-'}</div>
+        <div class="text-muted tiny">${r.registrationNumber || '-'}</div>
+      </td>
+
+      <td><span class="pill-light text-capitalize">${r.dept || '-'}</span></td>
+      <td>${r.grade || '-'}</td>
+      <td><span class="pill-month">${r.monthLabel || r.monthKey || '-'}</span></td>
+      <td><span class="status-chip">${r.status || '-'}</span></td>
+      <td><span class="num fee-num">${fmt(r.fee)}</span></td>
+      <td><span class="num recv-num">${fmt(r.received)}</span></td>
+      <td><span class="num due-num">${fmt(r.due)}</span></td>
+    </tr>
+  `;
+}).join('');
 
       if (totalRowsEl) totalRowsEl.textContent = String(rows.length);
     }

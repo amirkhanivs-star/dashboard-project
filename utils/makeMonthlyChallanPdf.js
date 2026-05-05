@@ -85,6 +85,28 @@ function splitRowsIntoPages(allRows) {
   return out;
 }
 
+function imgDataUri(filePath) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return "";
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png";
+    const data = fs.readFileSync(filePath).toString("base64");
+    return `data:${mime};base64,${data}`;
+  } catch { return ""; }
+}
+
+function publicImg(fileName) {
+  const tryPaths = [
+    path.join(process.cwd(), "public", "img", fileName),
+    path.join(__dirname, "..", "public", "img", fileName),
+    path.join(__dirname, "..", "..", "public", "img", fileName),
+  ];
+  for (const p of tryPaths) {
+    if (fs.existsSync(p)) return imgDataUri(p);
+  }
+  return "";
+}
+
 export default async function makeMonthlyChallanPdf({
   full,
   monthKey,
@@ -164,6 +186,42 @@ export default async function makeMonthlyChallanPdf({
     (b) => String(b?.month || "").toLowerCase() === curKey
   );
 
+  const registrationFeeForChallan =
+  full?.registrationFeeForChallan && typeof full.registrationFeeForChallan === "object"
+    ? full.registrationFeeForChallan
+    : {};
+
+const registrationFeeByMonth =
+  full?.registrationFeeByMonth && typeof full.registrationFeeByMonth === "object"
+    ? full.registrationFeeByMonth
+    : {};
+
+function getRegistrationFeeRowForMonth(mk) {
+  const cleanMk = String(mk || "").trim().toLowerCase();
+
+  const direct =
+    registrationFeeForChallan.enabled === true &&
+    String(registrationFeeForChallan.monthKey || "").trim().toLowerCase() === cleanMk
+      ? registrationFeeForChallan
+      : null;
+
+  const fromMap =
+    registrationFeeByMonth[cleanMk] && typeof registrationFeeByMonth[cleanMk] === "object"
+      ? registrationFeeByMonth[cleanMk]
+      : null;
+
+  const picked = direct || fromMap || null;
+
+  if (!picked || picked.enabled !== true || safeNum(picked.due || 0) <= 0) {
+    return null;
+  }
+
+  return picked;
+}
+
+const registrationFeeForCurrentMonth = getRegistrationFeeRowForMonth(curKey);
+const hasRegistrationFeeForThisMonth = !!registrationFeeForCurrentMonth;
+
   const curStatus = normalizeStatus(curBill?.status || "");
   const isCurrentNotAdmitted = curStatus === "not admitted";
 
@@ -180,6 +238,25 @@ export default async function makeMonthlyChallanPdf({
    const list = Array.isArray(pendingMonths) && pendingMonths.length
       ? pendingMonths.map((x) => String(x).toLowerCase())
       : [];
+
+    const registrationMonthsForBulk = Object.keys(registrationFeeByMonth || {})
+  .map((x) => String(x || "").trim().toLowerCase())
+  .filter(Boolean);
+
+for (const regMonthKey of registrationMonthsForBulk) {
+  const regInfo = getRegistrationFeeRowForMonth(regMonthKey);
+
+  if (!regInfo) continue;
+  if (list.length && !list.includes(regMonthKey)) continue;
+
+  rows.push({
+    regNo,
+    description: `Registration Fee\n${studentName}`,
+    grade,
+    month: monthTitle(regMonthKey),
+    amount: safeNum(regInfo.due || 0).toFixed(2)
+  });
+}
       
     for (const mk of list) {
       const b =
@@ -211,13 +288,43 @@ export default async function makeMonthlyChallanPdf({
     }
   } else {
     if (!isCurrentNotAdmitted) {
-      rows.push({
-        regNo,
-        description: `Monthly Fee\n${studentName}`,
-        grade,
-        month: monthTitle(monthKey),
-        amount: currentMonthFee.toFixed(2)
-      });
+  rows.push({
+    regNo,
+    description: `Monthly Fee\n${studentName}`,
+    grade,
+    month: monthTitle(monthKey),
+    amount: currentMonthFee.toFixed(2)
+  });
+
+  if (hasRegistrationFeeForThisMonth) {
+    rows.push({
+      regNo,
+      description: `Registration Fee\n${studentName}`,
+      grade,
+      month: monthTitle(monthKey),
+      amount: safeNum(registrationFeeForCurrentMonth.due || 0).toFixed(2)
+    });
+  }
+}
+
+    if (curIdx === -1) {
+      const registrationMonthsForBulk = Object.keys(registrationFeeByMonth || {})
+        .map((x) => String(x || "").trim().toLowerCase())
+        .filter(Boolean);
+
+      for (const regMonthKey of registrationMonthsForBulk) {
+        const regInfo = getRegistrationFeeRowForMonth(regMonthKey);
+
+        if (!regInfo) continue;
+
+        rows.push({
+          regNo,
+          description: `Registration Fee\n${studentName}`,
+          grade,
+          month: monthTitle(regMonthKey),
+          amount: safeNum(regInfo.due || 0).toFixed(2)
+        });
+      }
     }
 
     for (const b of billingArr) {
@@ -281,20 +388,17 @@ const monthStrip = sixMonthsHistory.map((item) => {
   };
 });
 
-  let bannerSrc = "/img/ivs-banner.jpg";
-  try {
-    if (bannerPath && fs.existsSync(bannerPath)) {
-      const publicDir = path.join(__dirname, "..", "public");
-      const rel = path.relative(publicDir, bannerPath);
-      if (!rel.startsWith("..")) {
-        bannerSrc = "/" + rel.replaceAll("\\", "/");
-      }
-    }
-  } catch {}
+  const bannerSrcAbs =
+    bannerPath && fs.existsSync(bannerPath)
+      ? imgDataUri(bannerPath)
+      : publicImg("ivs-banner.jpg") || publicImg("ivs-banner.png");
 
   const html = await ejs.renderFile(templatePath, {
     baseUrl: BASE,
-    bannerSrcAbs: `${BASE}${bannerSrc}`,
+    bannerSrcAbs,
+    bannerSrc: bannerSrcAbs,
+    receiptQrSrc: publicImg("receipt-qr.jpg"),
+    receiptSignSrc: publicImg("receipt-sign.jpg"),
     currency,
     invoiceNo: full?.invoiceNo || full?.invoice_no || full?.id || "",
     parentName,

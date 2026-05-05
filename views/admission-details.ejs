@@ -229,6 +229,13 @@
       monthNumber: safeStr(entry.monthNumber || entry.month_number || entry.number || entry.num || entry.slipNumber || entry.receiptNumber || '').trim(),
       receivedOn: safeStr(entry.receivedOn || entry.received_on || entry.paidOn || entry.paid_on || entry.date || '').trim(),
       bank: safeStr(entry.bank || entry.bankName || entry.bank_name).trim(),
+
+registrationFeeTotal: safeStr(entry.registrationFeeTotal || '').trim(),
+registrationFeeReceived: safeStr(entry.registrationFeeReceived || '').trim(),
+registrationFeeStatus: safeStr(entry.registrationFeeStatus || '').trim(),
+registrationFeeVerification: safeStr(entry.registrationFeeVerification || '').trim(),
+registrationFeeBank: safeStr(entry.registrationFeeBank || '').trim(),
+registrationFeePaymentDate: safeStr(entry.registrationFeePaymentDate || '').trim(),
     };
   }
 
@@ -242,6 +249,12 @@
       monthNumber: "",
       receivedOn: "",
       bank: "",
+      registrationFeeTotal: "",
+registrationFeeReceived: "",
+registrationFeeStatus: "",
+registrationFeeVerification: "",
+registrationFeeBank: "",
+registrationFeePaymentDate: "",
     };
   }
 
@@ -254,6 +267,12 @@
     monthNumber: "",
     receivedOn: "",
     bank: "",
+    registrationFeeTotal: "",
+    registrationFeeReceived: "",
+    registrationFeeStatus: "",
+    registrationFeeVerification: "",
+    registrationFeeBank: "",
+    registrationFeePaymentDate: "",
   };
 };
 
@@ -434,12 +453,78 @@
         bank: bank || '-',
         receivedOn: receivedOn || '',
         feeOverride: feeOverride > 0 ? feeOverride : 0,
-        hasAny
+
+registrationFeeTotal: entry.registrationFeeTotal || '',
+registrationFeeReceived: entry.registrationFeeReceived || '',
+registrationFeeStatus: entry.registrationFeeStatus || '',
+registrationFeeVerification: entry.registrationFeeVerification || '',
+registrationFeeBank: entry.registrationFeeBank || '',
+registrationFeePaymentDate: entry.registrationFeePaymentDate || '',
+
+hasAny
       };
     });
 
     return { matrix, baseFee, history };
   };
+
+  const buildRegistrationFeeInfo = (x, admissionInfo, matrix) => {
+  const total = parseFirstNumber(
+    admissionInfo?.registrationFee ||
+    admissionInfo?.registration_fee ||
+    x?.registrationFee ||
+    x?.registration_fee ||
+    x?.admission_registration_fee ||
+    0
+  );
+
+  if (!total || total <= 0) {
+    return {
+      enabled: false,
+      total: 0,
+      received: 0,
+      pending: 0,
+      status: '',
+      monthKey: '',
+      monthLabel: '',
+      verification: '',
+      bank: '',
+      paymentDate: '',
+    };
+  }
+
+  const admissionMonthRaw =
+    admissionInfo?.month ||
+    admissionInfo?.admissionMonth ||
+    admissionInfo?.admission_month ||
+    x?.admission_month ||
+    x?.admissionMonth ||
+    '';
+
+  const monthKey = extractMonthName(admissionMonthRaw);
+  const monthRow = (Array.isArray(matrix) ? matrix : []).find((m) => sameMonth(m.key, monthKey));
+
+  const received = parseFirstNumber(monthRow?.registrationFeeReceived || 0);
+  const pending = Math.max(0, total - received);
+
+  return {
+    enabled: true,
+    total,
+    received,
+    pending,
+    status:
+      pending <= 0
+        ? 'Full payment'
+        : received > 0
+          ? 'Partial payment'
+          : 'No payment',
+    monthKey: monthKey || '',
+    monthLabel: monthKey ? (monthKey.charAt(0).toUpperCase() + monthKey.slice(1)) : '-',
+    verification: monthRow?.registrationFeeVerification || '-',
+    bank: monthRow?.registrationFeeBank || '-',
+    paymentDate: monthRow?.registrationFeePaymentDate || '',
+  };
+};
 
   const buildPendingDues = (matrix, admissionInfo) => {
     const mm = Array.isArray(matrix) ? matrix : [];
@@ -556,9 +641,24 @@ if (!user?.role && agentType) {
     if (billTotals.hasFee) { famFeeTotal += billTotals.feeTotal; famHasFee = true; }
     if (billTotals.hasRecv){ famRecvTotal += billTotals.recvTotal; famHasRecv = true; }
 
-    const duesRows = buildPendingDues(mm.matrix, admissionInfo);
-    const p = duesRows.reduce((s,r)=> Number.isFinite(r?.due) ? (s + r.due) : s, 0);
-    if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; famHasPending = true; }
+   const regInfo = buildRegistrationFeeInfo(X, admissionInfo, mm.matrix);
+
+if (regInfo.enabled) {
+  famFeeTotal += regInfo.total;
+  famRecvTotal += regInfo.received;
+  famHasFee = true;
+
+  if (regInfo.received > 0) famHasRecv = true;
+
+  if (regInfo.pending > 0) {
+    famPendingTotal += regInfo.pending;
+    famHasPending = true;
+  }
+}
+
+const duesRows = buildPendingDues(mm.matrix, admissionInfo);
+const p = duesRows.reduce((s,r)=> Number.isFinite(r?.due) ? (s + r.due) : s, 0);
+if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; famHasPending = true; }
   });
 
   const famCurrency = String(getCurrency(A) || '').trim() || '-';
@@ -656,9 +756,13 @@ if (!user?.role && agentType) {
          const monthMatrix = mm.matrix;
 
          const duesRows = buildPendingDues(monthMatrix, admissionInfo);
+         const regInfo = buildRegistrationFeeInfo(X, admissionInfo, monthMatrix);
 
-         const totalDues = duesRows.reduce((sum, r) => Number.isFinite(r.due) ? sum + r.due : sum, 0);
-         const hasNumericTotal = duesRows.some(r => Number.isFinite(r.due));
+         const monthlyDuesTotal = duesRows.reduce((sum, r) => Number.isFinite(r.due) ? sum + r.due : sum, 0);
+const registrationPendingTotal = regInfo.enabled ? Number(regInfo.pending || 0) : 0;
+
+const totalDues = monthlyDuesTotal + registrationPendingTotal;
+const hasNumericTotal = duesRows.some(r => Number.isFinite(r.due)) || registrationPendingTotal > 0;
 
          const historyRows = (monthMatrix || []).filter(m => {
            const st = String(m.status || '').trim();
@@ -669,6 +773,13 @@ if (!user?.role && agentType) {
          });
 
          const billTotals = sumFromMonthMatrix(monthMatrix);
+
+if (regInfo.enabled) {
+  billTotals.feeTotal += Number(regInfo.total || 0);
+  billTotals.recvTotal += Number(regInfo.received || 0);
+  billTotals.hasFee = true;
+  if (Number(regInfo.received || 0) > 0) billTotals.hasRecv = true;
+}
 
          const latestHistoryFee =
            (mm?.history && mm.history.length)
@@ -681,6 +792,7 @@ if (!user?.role && agentType) {
     admissionInfo?.registration_fee ||
     X?.registrationFee ||
     X?.registration_fee ||
+    X?.admission_registration_fee ||
     0
   ) || '-';
 
@@ -770,6 +882,24 @@ if (!user?.role && agentType) {
                    </span>
                   </div>
 
+                  <% if (regInfo.enabled) { %>
+  <div class="drow">
+    <span class="k">Reg Fee Received:</span>
+    <span class="v">
+      <b><%= money(regInfo.received) %></b>
+      <span class="text-muted small ms-1">(<%= (curCode && curCode !== '-' ? curCode : '-') %>)</span>
+    </span>
+  </div>
+
+  <div class="drow">
+    <span class="k">Reg Fee Pending:</span>
+    <span class="v">
+      <b><%= money(regInfo.pending) %></b>
+      <span class="text-muted small ms-1">(<%= (curCode && curCode !== '-' ? curCode : '-') %>)</span>
+    </span>
+  </div>
+<% } %>
+
                   <div class="drow">
                     <span class="k">Current Fee:</span>
                     <span class="v">
@@ -855,11 +985,52 @@ if (!user?.role && agentType) {
                           </tr>
                         </thead>
                         <tbody>
-                          <% if (!duesRows || duesRows.length === 0) { %>
+                          <% if ((!duesRows || duesRows.length === 0) && (!regInfo.enabled || regInfo.pending <= 0)) { %>
                             <tr>
                               <td colspan="8" class="text-muted small">No dues found.</td>
                             </tr>
                           <% } else { %>
+                            <% if (regInfo.enabled && regInfo.pending > 0) { %>
+                              <tr class="registration-fee-row">
+                                <td>
+                                  <div class="d-flex align-items-center gap-2">
+                                    <span class="tiny-dot reg-dot"></span>
+                                    <span>Registration Fee</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span class="pill-light text-capitalize"><%= regInfo.monthLabel || '-' %></span>
+                                </td>
+                                <td>
+                                  <span class="pill-mini">-</span>
+                                </td>
+                                <td>
+                                  <span class="pill-mini mono"><%= regInfo.verification || '-' %></span>
+                                </td>
+                                <td>
+                                  <span class="pill-mini mono">Yearly</span>
+                                </td>
+                                <td>
+                                  <span class="pill-fee"><%= money(regInfo.total) %></span>
+                                  <% if (curCode && curCode !== '-') { %>
+                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                                  <% } %>
+                                </td>
+                                <td>
+                                  <span class="pill-recv"><%= money(regInfo.received) %></span>
+                                  <% if (curCode && curCode !== '-') { %>
+                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                                  <% } %>
+                                </td>
+                                <td>
+                                  <span class="pill-balance"><%= money(regInfo.pending) %></span>
+                                  <% if (curCode && curCode !== '-') { %>
+                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
+                                  <% } %>
+                                </td>
+                              </tr>
+                            <% } %>
+
                             <% duesRows.forEach(r => { %>
                               <tr>
                                 <td>
@@ -921,9 +1092,9 @@ if (!user?.role && agentType) {
 
                 <div class="card border-0 inner-card">
                   <div class="card-body p-3">
-                    <% if (!historyRows || historyRows.length === 0) { %>
-                      <div class="text-muted small">No fee history found.</div>
-                    <% } else { %>
+                    <% if ((!historyRows || historyRows.length === 0) && !regInfo.enabled) { %>
+  <div class="text-muted small">No fee history found.</div>
+<% } else { %>
 
                       <div class="dues-summary mb-2">
                         <div class="sum-item">
@@ -956,6 +1127,60 @@ if (!user?.role && agentType) {
                       </div>
 
                       <div class="timeline">
+                        <% if (regInfo.enabled) { %>
+  <div class="t-item registration-fee-row">
+    <div class="t-dot reg-dot"></div>
+    <div class="t-line"></div>
+
+    <div class="t-content">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="fw-semibold">
+          <span class="me-2">Registration Fee</span>
+          <span class="text-muted">#<%= (String(X.id || '-') + '-registration') %></span>
+        </div>
+
+        <div class="text-muted small">
+          <span class="badge rounded-pill px-3 py-2 bill-pill <%= billingStatusClass(regInfo.status) %>">
+            <%= regInfo.status || '-' %>
+          </span>
+        </div>
+      </div>
+
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
+        <div class="text-muted">
+          Bank Name: <span class="pill-light"><%= regInfo.bank || '-' %></span>
+          <span class="ms-2 pill-mini"><%= regInfo.monthLabel || '-' %></span>
+        </div>
+        <div class="text-muted">
+          Verification #: <span class="pill-mini mono"><%= regInfo.verification || '-' %></span>
+        </div>
+      </div>
+
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
+        <div class="text-muted">
+          Fee: <b><%= money(regInfo.total) %></b>
+          <% if (curCode && curCode !== '-') { %>
+            <span class="text-muted small ms-1">( <%= curCode %> )</span>
+          <% } %>
+        </div>
+
+        <div class="text-muted">
+          Received: <b><%= money(regInfo.received) %></b>
+          <% if (curCode && curCode !== '-') { %>
+            <span class="text-muted small ms-1">( <%= curCode %> )</span>
+          <% } %>
+        </div>
+
+        <div class="text-muted">
+          Pending: <b><%= money(regInfo.pending) %></b>
+          <% if (curCode && curCode !== '-') { %>
+            <span class="text-muted small ms-1">( <%= curCode %> )</span>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+<% } %>
                         <% historyRows.slice().reverse().forEach((m, i, arr) => {
                              const st = String(m?.status || '-');
                              const stCls = billingStatusClass(st);
@@ -1296,6 +1521,14 @@ const canPrintPaid =
     border-color: rgba(15,23,42,.08);
     vertical-align: middle;
   }
+  .registration-fee-row{
+  background: rgba(16,185,129,.045);
+}
+
+.reg-dot{
+  background: rgba(16,185,129,.85) !important;
+  box-shadow: 0 10px 18px rgba(16,185,129,.18) !important;
+}
   .tiny-dot{
     width: 10px;
     height: 10px;

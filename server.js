@@ -1989,6 +1989,85 @@ function toMonthString(entry) {
 
   return status;
 }
+// ✅ Admission Month select hone par us se pehle ke months ko Not admitted karo
+function getBillingYearFromAdmissionMonthValue(monthValue, fallbackYear = new Date().getFullYear()) {
+  const raw = String(monthValue || "").trim();
+
+  const yearMatch = raw.match(/\b(20\d{2}|21\d{2})\b/);
+  if (yearMatch) return Number(yearMatch[1]);
+
+  const y = Number(fallbackYear);
+  if (Number.isInteger(y) && y >= 2020 && y <= 2100) return y;
+
+  return new Date().getFullYear();
+}
+
+function getMonthKeyFromAdmissionMonthValue(monthValue) {
+  const raw = String(monthValue || "").trim().toLowerCase();
+
+  for (const m of BILLING_MONTHS) {
+    const key = String(m.key || "").toLowerCase();
+    const label = String(m.label || "").toLowerCase();
+
+    if (raw === key || raw === label) return key;
+    if (raw.includes(key) || raw.includes(label)) return key;
+  }
+
+  return toMonthKey(raw);
+}
+
+function applyNotAdmittedBeforeAdmissionMonth({
+  admissionId,
+  billingJson,
+  admissionMonthValue,
+  billingYear,
+}) {
+  const selectedMonthKey = getMonthKeyFromAdmissionMonthValue(admissionMonthValue);
+  const selectedIdx = monthIndex(selectedMonthKey);
+
+  if (!admissionId || selectedIdx <= 0) {
+    return {
+      billingJson,
+      touchedMonths: [],
+    };
+  }
+
+  const touchedMonths = [];
+
+  for (const m of BILLING_MONTHS) {
+    const idx = monthIndex(m.key);
+
+    if (idx >= 0 && idx < selectedIdx) {
+      billingJson[m.key] = {
+        status: "Not admitted",
+        amount: "",
+        feeOverride: "",
+        verification: "",
+        bank: "",
+        paymentDate: "",
+      };
+
+      saveAdmissionBillingMonthByYear({
+        admissionId,
+        billingYear,
+        monthKey: m.key,
+        status: "Not admitted",
+        amountReceived: "",
+        feeAmount: "",
+        verificationNumber: "",
+        bankName: "",
+        paymentDate: "",
+      });
+
+      touchedMonths.push(m.key);
+    }
+  }
+
+  return {
+    billingJson,
+    touchedMonths,
+  };
+}
 // =========================
 // ✅ Pending Month Rows Helper (NEW)
 // =========================
@@ -2043,7 +2122,39 @@ function buildPendingRowsFromRow(row, billingYear = new Date().getFullYear()) {
       year: billingYear,
     });
   }
+     const regSnap = getRegistrationFeeSnapshot(row, billingJson, billingYear);
 
+  if (regSnap.enabled && regSnap.due > 0) {
+    const existingMonthRow = pending.find(
+      (x) => String(x.monthKey || "").trim().toLowerCase() === String(regSnap.monthKey || "").trim().toLowerCase()
+    );
+
+    if (existingMonthRow) {
+      existingMonthRow.registrationFeeTotal = regSnap.total;
+      existingMonthRow.registrationFeeReceived = regSnap.received;
+      existingMonthRow.registrationFeeDue = regSnap.due;
+      existingMonthRow.hasRegistrationFee = true;
+      existingMonthRow.due = Number(existingMonthRow.due || 0) + Number(regSnap.due || 0);
+    } else {
+      pending.push({
+        monthKey: regSnap.monthKey,
+        monthLabel: regSnap.monthLabel,
+        status: regSnap.status || "No payment",
+        fee: 0,
+        received: 0,
+        due: Number(regSnap.due || 0),
+        verification: regSnap.verification || "",
+        number: "",
+        bank: regSnap.bank || "",
+        year: billingYear,
+        isRegistrationFeeOnly: true,
+        hasRegistrationFee: true,
+        registrationFeeTotal: regSnap.total,
+        registrationFeeReceived: regSnap.received,
+        registrationFeeDue: regSnap.due,
+      });
+    }
+  }
   return pending;
 }
 function getPaidMonthsFromRow(row, billingYear = new Date().getFullYear()) {
@@ -2296,9 +2407,12 @@ function buildReceivableRowsFromRow(row, billingYear = new Date().getFullYear())
 
 function buildFeeCollectionRowsForAdmission(row, billingYear = new Date().getFullYear()) {
   const receivableRows = buildReceivableRowsFromRow(row, billingYear) || [];
+  const registrationFeeRow = buildRegistrationFeeCollectionRow(row, billingYear);
 
-  return receivableRows
+  const monthlyRows = receivableRows
     .map((r) => ({
+      feeType: "Monthly Fee",
+      isRegistrationFee: false,
       admissionId: row.id,
       studentName: row.student_name || "",
       familyNumber: String(row.accounts_family_number || "").trim(),
@@ -2317,6 +2431,11 @@ function buildFeeCollectionRowsForAdmission(row, billingYear = new Date().getFul
       year: Number(r.year || billingYear),
     }))
     .filter((x) => x.due > 0);
+
+  return [
+    ...(registrationFeeRow ? [registrationFeeRow] : []),
+    ...monthlyRows,
+  ];
 }
 
 function buildFeeCollectionRowsForFamily(rows, billingYear = new Date().getFullYear()) {
@@ -2342,8 +2461,12 @@ function summarizeFeeCollectionRows(
 ) {
   let totalFee = 0;
   let totalReceived = 0;
-  let totalDues = 0; // current month + previous pending
-  let totalFullPendingDues = 0; // all pending dues, including future receivable months
+  let totalDues = 0;
+  let totalFullPendingDues = 0;
+
+  let totalRegistrationFee = 0;
+  let totalRegistrationReceived = 0;
+  let totalRegistrationPending = 0;
 
   const uptoIdx = monthIndex(uptoMonthKey);
 
@@ -2381,6 +2504,23 @@ function summarizeFeeCollectionRows(
         totalDues += due;
       }
     }
+
+    const regSnap = getRegistrationFeeSnapshot(row, billingJson, billingYear);
+
+    if (regSnap.enabled) {
+      totalRegistrationFee += Number(regSnap.total || 0);
+      totalRegistrationReceived += Number(regSnap.received || 0);
+      totalRegistrationPending += Number(regSnap.due || 0);
+
+      totalFee += Number(regSnap.total || 0);
+      totalReceived += Number(regSnap.received || 0);
+      totalFullPendingDues += Number(regSnap.due || 0);
+
+      const regIdx = monthIndex(regSnap.monthKey);
+      if (uptoIdx === -1 || regIdx === -1 || regIdx <= uptoIdx) {
+        totalDues += Number(regSnap.due || 0);
+      }
+    }
   }
 
   return {
@@ -2391,17 +2531,40 @@ function summarizeFeeCollectionRows(
     totalFeeForSession: totalFee,
     totalDuesUptoCurrentMonth: totalDues,
     currentMonthKey: uptoMonthKey,
+
+    totalRegistrationFee,
+    totalRegistrationReceived,
+    totalRegistrationPending,
   };
 }
 
 
 function getBillingJsonByAdmissionId(admissionId, billingYear = new Date().getFullYear()) {
+  const row = getActiveAdmissionById(admissionId);
+  const savedBillingJson = row ? safeJsonParse(row.billing_json) : {};
   const billingArr = getAdmissionBillingByYear(admissionId, billingYear);
+
   const billingJson = {};
 
+  for (const m of BILLING_MONTHS) {
+    billingJson[m.key] = {
+      ...(savedBillingJson?.[m.key] || {}),
+      status: String(savedBillingJson?.[m.key]?.status || ""),
+      amount: String(savedBillingJson?.[m.key]?.amount || ""),
+      feeOverride: String(savedBillingJson?.[m.key]?.feeOverride || ""),
+      verification: String(savedBillingJson?.[m.key]?.verification || ""),
+      bank: String(savedBillingJson?.[m.key]?.bank || ""),
+      paymentDate: String(savedBillingJson?.[m.key]?.paymentDate || ""),
+    };
+  }
+
   for (const item of billingArr) {
-    billingJson[item.month] = {
-      status: item.status || "",
+    const monthKey = String(item.month || "").trim().toLowerCase();
+    if (!monthKey) continue;
+
+    billingJson[monthKey] = {
+      ...(billingJson[monthKey] || {}),
+      status: String(item.status || ""),
       amount: String(item.amount || item.amountReceived || ""),
       feeOverride: String(item.fee || item.feeAmount || ""),
       verification: String(item.verificationNumber || ""),
@@ -2411,6 +2574,255 @@ function getBillingJsonByAdmissionId(admissionId, billingYear = new Date().getFu
   }
 
   return billingJson;
+}
+
+function getRegistrationFeeSnapshot(row, billingJson, billingYear = new Date().getFullYear()) {
+  if (!row) {
+    return {
+      enabled: false,
+      monthKey: "",
+      monthLabel: "",
+      total: 0,
+      received: 0,
+      due: 0,
+      status: "",
+    };
+  }
+
+  const registrationFeeTotal = parseFirstNumber(row.admission_registration_fee || 0);
+  if (registrationFeeTotal <= 0) {
+    return {
+      enabled: false,
+      monthKey: "",
+      monthLabel: "",
+      total: 0,
+      received: 0,
+      due: 0,
+      status: "",
+    };
+  }
+
+  const admissionMonthValue = String(row.admission_month || "").trim();
+  const monthKey = getMonthKeyFromAdmissionMonthValue(admissionMonthValue);
+  const admissionBillingYear = getBillingYearFromAdmissionMonthValue(admissionMonthValue, billingYear);
+
+  if (!monthKey || admissionBillingYear !== Number(billingYear)) {
+    return {
+      enabled: false,
+      monthKey: "",
+      monthLabel: "",
+      total: registrationFeeTotal,
+      received: 0,
+      due: 0,
+      status: "",
+    };
+  }
+
+  const monthEntry = billingJson?.[monthKey] || {};
+  const received = parseFirstNumber(monthEntry.registrationFeeReceived || 0);
+  const due = Math.max(0, registrationFeeTotal - received);
+
+  const monthMeta = BILLING_MONTHS.find((m) => String(m.key).toLowerCase() === monthKey);
+
+  return {
+    enabled: true,
+    monthKey,
+    monthLabel: monthMeta?.label || monthKey,
+    total: registrationFeeTotal,
+    received,
+    due,
+    status:
+      due <= 0
+        ? "Full payment"
+        : received > 0
+          ? "Partial payment"
+          : "No payment",
+    verification: String(monthEntry.registrationFeeVerification || "").trim(),
+    bank: String(monthEntry.registrationFeeBank || "").trim(),
+    paymentDate: String(monthEntry.registrationFeePaymentDate || "").trim(),
+  };
+}
+
+function buildRegistrationFeeCollectionRow(row, billingYear = new Date().getFullYear()) {
+  const billingJson = getBillingJsonByAdmissionId(row.id, billingYear);
+  const snap = getRegistrationFeeSnapshot(row, billingJson, billingYear);
+
+  if (!snap.enabled || snap.due <= 0) return null;
+
+  return {
+    feeType: "Registration Fee",
+    isRegistrationFee: true,
+    admissionId: row.id,
+    studentName: row.student_name || "",
+    familyNumber: String(row.accounts_family_number || "").trim(),
+    registrationNumber: String(row.accounts_registration_number || "").trim(),
+    dept: row.dept || "",
+    grade: row.grade || "",
+    currency: row.currency_code || "",
+    monthKey: snap.monthKey,
+    monthLabel: snap.monthLabel,
+    status: snap.status,
+    fee: snap.total,
+    received: snap.received,
+    due: snap.due,
+    verification: snap.verification || "",
+    bank: snap.bank || "",
+    year: Number(billingYear),
+  };
+}
+
+function applyRegistrationFeeCollectionToBilling({
+  row,
+  billingYear,
+  receiveAmount,
+  verificationNumber,
+  collectionAccount,
+  receivingDate,
+  note,
+  actorUser,
+}) {
+  let remaining = Number(receiveAmount || 0);
+
+  if (!row || remaining <= 0) {
+    return {
+      success: false,
+      appliedAmount: 0,
+      remainingAmount: remaining,
+      touchedMonths: [],
+    };
+  }
+
+  const billingJson = getBillingJsonByAdmissionId(row.id, billingYear);
+  const snap = getRegistrationFeeSnapshot(row, billingJson, billingYear);
+
+  if (!snap.enabled || snap.due <= 0) {
+    return {
+      success: true,
+      appliedAmount: 0,
+      remainingAmount: remaining,
+      touchedMonths: [],
+    };
+  }
+
+  const used = Math.min(remaining, snap.due);
+  const newReceived = snap.received + used;
+  const balance = Math.max(0, snap.total - newReceived);
+
+  const current = billingJson[snap.monthKey] || {
+    status: "",
+    amount: "",
+    feeOverride: "",
+    verification: "",
+    bank: "",
+    paymentDate: "",
+  };
+
+  current.registrationFeeTotal = String(snap.total);
+  current.registrationFeeReceived = String(newReceived);
+  current.registrationFeeVerification = String(verificationNumber || "").trim();
+  current.registrationFeeBank = String(collectionAccount || "").trim();
+  current.registrationFeePaymentDate = String(receivingDate || "").trim();
+  current.registrationFeeStatus = balance <= 0 ? "Full payment" : "Partial payment";
+
+  billingJson[snap.monthKey] = current;
+
+  for (const m of BILLING_MONTHS) {
+    const item = billingJson[m.key] || {};
+
+    saveAdmissionBillingMonthByYear({
+      admissionId: row.id,
+      billingYear,
+      monthKey: m.key,
+      status: String(item.status || ""),
+      amountReceived: String(item.amount || ""),
+      feeAmount: String(item.feeOverride || ""),
+      verificationNumber: String(item.verification || ""),
+      bankName: String(item.bank || ""),
+      paymentDate: String(item.paymentDate || ""),
+    });
+  }
+
+  const oldFeeSnapshot =
+    parseFirstNumber(row?.monthly_fee_current || 0) ||
+    parseFirstNumber(row?.admission_fees || 0) ||
+    inferMonthlyFee(row, billingJson) ||
+    0;
+
+  let feeHistory = ensureInitialFeeHistory(row, getFeeHistory(row), oldFeeSnapshot);
+  const baseFee = baseFeeFromHistoryOrRow(row, feeHistory, oldFeeSnapshot);
+  const dues = calcPendingDues(baseFee, billingJson, feeHistory);
+
+  const paidUpto = computePaidUptoFromBillingJson(billingJson);
+  const monthlyReceivedPayment = computeReceivedPaymentFromBillingJson(billingJson);
+
+  const regAfter = getRegistrationFeeSnapshot(row, billingJson, billingYear);
+  const totalExpectedWithReg = Number(dues.expected || 0) + Number(regAfter.total || 0);
+  const totalPendingWithReg = Number(dues.pending || 0) + Number(regAfter.due || 0);
+  const totalReceivedWithReg = Number(monthlyReceivedPayment || 0) + Number(regAfter.received || 0);
+
+  db.prepare(`
+    UPDATE admissions
+    SET billing_json = @billing_json,
+        fee_history = @fee_history,
+        monthly_fee_current = @monthly_fee_current,
+        accounts_paid_upto = @accounts_paid_upto,
+        accounts_verification_number = @accounts_verification_number,
+        admission_total_fees = @admission_total_fees,
+        admission_pending_dues = @admission_pending_dues,
+        admission_total_paid = @admission_total_paid
+    WHERE id = @id
+  `).run({
+    id: row.id,
+    billing_json: JSON.stringify(billingJson),
+    fee_history: JSON.stringify(feeHistory),
+    monthly_fee_current: dues.currentFee || baseFee || 0,
+    accounts_paid_upto: paidUpto || "",
+    accounts_verification_number: String(verificationNumber || row.accounts_verification_number || "").trim(),
+    admission_total_fees: String(totalExpectedWithReg || 0),
+    admission_pending_dues: String(totalPendingWithReg || 0),
+    admission_total_paid: String(totalReceivedWithReg || 0),
+  });
+
+  logAudit("registration_fee_collection_received", actorUser, {
+    dept: row.dept || "",
+    details: {
+      admissionId: row.id,
+      studentName: row.student_name || "",
+      billingYear,
+      monthKey: snap.monthKey,
+      collectionAccount,
+      receivingDate,
+      note: String(note || "").trim(),
+      receiveAmount: Number(receiveAmount || 0),
+      appliedAmount: used,
+      remainingAmount: remaining - used,
+      registrationFeeTotal: snap.total,
+      registrationFeeReceived: newReceived,
+      registrationFeeBalance: balance,
+    },
+  });
+
+  return {
+    success: true,
+    billingJson,
+    paidUpto,
+    receivedPayment: totalReceivedWithReg,
+    appliedAmount: used,
+    remainingAmount: remaining - used,
+    touchedMonths: [
+      {
+        feeType: "Registration Fee",
+        isRegistrationFee: true,
+        monthKey: snap.monthKey,
+        fee: snap.total,
+        previousReceived: snap.received,
+        used,
+        newReceived,
+        balance,
+        status: balance <= 0 ? "Full payment" : "Partial payment",
+      },
+    ],
+  };
 }
 
 function markSelectedMonthsNotAdmitted({
@@ -2613,8 +3025,18 @@ for (const p of receivableRows) {
   }
 
   const dues = calcPendingDues(baseFee, billingJson, feeHistory);
-  const paidUpto = computePaidUptoFromBillingJson(billingJson);
-  const receivedPayment = computeReceivedPaymentFromBillingJson(billingJson);
+const paidUpto = computePaidUptoFromBillingJson(billingJson);
+const monthlyReceivedPayment = computeReceivedPaymentFromBillingJson(billingJson);
+
+const regSnapAfterMonthly = getRegistrationFeeSnapshot(row, billingJson, billingYear);
+const receivedPayment =
+  Number(monthlyReceivedPayment || 0) + Number(regSnapAfterMonthly.received || 0);
+
+const expectedWithRegistration =
+  Number(dues.expected || 0) + Number(regSnapAfterMonthly.total || 0);
+
+const pendingWithRegistration =
+  Number(dues.pending || 0) + Number(regSnapAfterMonthly.due || 0);
 
   const latestTouched = touchedMonths.length ? touchedMonths[touchedMonths.length - 1] : null;
   const latestVerificationForColumn =
@@ -2627,7 +3049,6 @@ for (const p of receivableRows) {
     SET billing_json = @billing_json,
         fee_history = @fee_history,
         monthly_fee_current = @monthly_fee_current,
-        
         accounts_paid_upto = @accounts_paid_upto,
         accounts_verification_number = @accounts_verification_number,
         admission_total_fees = @admission_total_fees,
@@ -2639,11 +3060,10 @@ for (const p of receivableRows) {
     billing_json: JSON.stringify(billingJson),
     fee_history: JSON.stringify(feeHistory),
     monthly_fee_current: dues.currentFee || baseFee || 0,
-    
     accounts_paid_upto: paidUpto || "",
     accounts_verification_number: latestVerificationForColumn,
-    admission_total_fees: String(dues.expected || 0),
-    admission_pending_dues: String(dues.pending || 0),
+    admission_total_fees: String(expectedWithRegistration || 0),
+    admission_pending_dues: String(pendingWithRegistration || 0),
     admission_total_paid: String(receivedPayment || 0),
   });
 
@@ -3184,8 +3604,19 @@ const latestVerificationForColumn = latestChangedMonthKey
     // ✅ now calculate dues using history + billingJson
     const dues = calcPendingDues(baseFee, billingJson, feeHistoryAfter);
 
-    const paidUpto = computePaidUptoFromBillingJson(billingJson);
-    const receivedPayment = computeReceivedPaymentFromBillingJson(billingJson);
+const paidUpto = computePaidUptoFromBillingJson(billingJson);
+const monthlyReceivedPayment = computeReceivedPaymentFromBillingJson(billingJson);
+
+const regSnapAfterBilling = getRegistrationFeeSnapshot(row, billingJson, billingYear);
+
+const receivedPayment =
+  Number(monthlyReceivedPayment || 0) + Number(regSnapAfterBilling.received || 0);
+
+const expectedWithRegistration =
+  Number(dues.expected || 0) + Number(regSnapAfterBilling.total || 0);
+
+const pendingWithRegistration =
+  Number(dues.pending || 0) + Number(regSnapAfterBilling.due || 0);
 
     const billingStrings = {};
     for (const m of BILLING_MONTHS) {
@@ -3242,9 +3673,9 @@ const latestVerificationForColumn = latestChangedMonthKey
       monthly_fee_current: dues.currentFee || baseFee || 0,
 
       accounts_paid_upto: paidUpto || "",
-      admission_total_fees: String(dues.expected || 0),
-      admission_pending_dues: String(dues.pending || 0),
-      admission_total_paid: String(receivedPayment || 0),
+      admission_total_fees: String(expectedWithRegistration || 0),
+admission_pending_dues: String(pendingWithRegistration || 0),
+admission_total_paid: String(receivedPayment || 0),
       accounts_verification_number: latestVerificationForColumn,
     });
 
@@ -3380,6 +3811,73 @@ function attachPreviousSixMonthsToFull(full, selectedMonthKey) {
     sixMonthsHistory,
   };
 }
+function attachRegistrationFeeToFullForMonth({
+  full,
+  row,
+  billingYear = new Date().getFullYear(),
+  monthKey,
+}) {
+  if (!full || !row) return full;
+
+  const cleanMonthKey = String(monthKey || "").trim().toLowerCase();
+  const billingJson = getBillingJsonByAdmissionId(row.id, billingYear);
+  const snap = getRegistrationFeeSnapshot(row, billingJson, billingYear);
+
+  const emptyRegistrationFeeForChallan = {
+    enabled: false,
+    monthKey: "",
+    monthLabel: "",
+    total: 0,
+    received: 0,
+    due: 0,
+    status: "",
+    verification: "",
+    bank: "",
+    paymentDate: "",
+  };
+
+  const registrationFeeForChallan =
+    snap.enabled && String(snap.monthKey || "").trim().toLowerCase() === cleanMonthKey
+      ? {
+          enabled: true,
+          feeType: "Registration Fee",
+          monthKey: snap.monthKey,
+          monthLabel: snap.monthLabel,
+          total: Number(snap.total || 0),
+          received: Number(snap.received || 0),
+          due: Number(snap.due || 0),
+          status: snap.status || "",
+          verification: snap.verification || "",
+          bank: snap.bank || "",
+          paymentDate: snap.paymentDate || "",
+        }
+      : emptyRegistrationFeeForChallan;
+
+  return {
+    ...full,
+    registrationFeeForChallan,
+
+    // Family challan/PDF files ke liye helper data.
+    // PDF utility khud month match karke sirf admission month mai show karegi.
+    registrationFeeByMonth: snap.enabled
+      ? {
+          [snap.monthKey]: {
+            enabled: true,
+            feeType: "Registration Fee",
+            monthKey: snap.monthKey,
+            monthLabel: snap.monthLabel,
+            total: Number(snap.total || 0),
+            received: Number(snap.received || 0),
+            due: Number(snap.due || 0),
+            status: snap.status || "",
+            verification: snap.verification || "",
+            bank: snap.bank || "",
+            paymentDate: snap.paymentDate || "",
+          },
+        }
+      : {},
+  };
+}
 function getLastActiveMonthKeyFromBilling(billingJson) {
   let last = null;
   for (const m of BILLING_MONTHS) {
@@ -3486,7 +3984,80 @@ feeHistory = applyFeeChangeIfNeeded(
 
 // ✅ baseFee + dues
 const baseFee = baseFeeFromHistoryOrRow(row, feeHistory, incomingFeeNumber || oldFeeSnapshot);
-const dues = calcPendingDues(baseFee, billingJson, feeHistory);
+
+// ✅ Sirf jab Month/Year column update ho tab previous months Not admitted karo
+const incomingAdmissionMonth =
+  typeof month !== "undefined" && month !== null
+    ? String(month || "").trim()
+    : "";
+
+const oldAdmissionMonth = String(row.admission_month || "").trim();
+
+const canChangeAdmissionMonth =
+  user?.role === "super_admin" ||
+  (typeof perms !== "undefined" && perms?.colMonth) ||
+  (typeof canAccounts !== "undefined" && canAccounts) ||
+  (typeof canAdmissions !== "undefined" && canAdmissions);
+
+const monthColumnChanged =
+  canChangeAdmissionMonth &&
+  incomingAdmissionMonth &&
+  incomingAdmissionMonth !== oldAdmissionMonth;
+
+let updatedBillingJson = billingJson;
+
+if (monthColumnChanged) {
+  const selectedBillingYear = getBillingYearFromAdmissionMonthValue(
+    incomingAdmissionMonth,
+    getBillingYearFromReq(req)
+  );
+
+  const notAdmittedResult = applyNotAdmittedBeforeAdmissionMonth({
+    admissionId: id,
+    billingJson,
+    admissionMonthValue: incomingAdmissionMonth,
+    billingYear: selectedBillingYear,
+  });
+
+  updatedBillingJson = notAdmittedResult.billingJson;
+}
+
+const dues = calcPendingDues(baseFee, updatedBillingJson, feeHistory);
+
+const rowForRegistrationTotals = {
+  ...row,
+  admission_registration_fee:
+    (typeof registrationFee !== "undefined" && registrationFee !== null && String(registrationFee).trim() !== "")
+      ? String(registrationFee).trim()
+      : (row.admission_registration_fee || ""),
+  admission_month:
+    typeof month !== "undefined" && month !== null
+      ? month
+      : row.admission_month || "",
+};
+
+const regSnapAfterAdmissionMonth = getRegistrationFeeSnapshot(
+  rowForRegistrationTotals,
+  updatedBillingJson,
+  getBillingYearFromAdmissionMonthValue(rowForRegistrationTotals.admission_month, getBillingYearFromReq(req))
+);
+
+const paidUptoAfterAdmissionMonth = computePaidUptoFromBillingJson(updatedBillingJson);
+const monthlyReceivedPaymentAfterAdmissionMonth = computeReceivedPaymentFromBillingJson(updatedBillingJson);
+
+const receivedPaymentAfterAdmissionMonth =
+  Number(monthlyReceivedPaymentAfterAdmissionMonth || 0) + Number(regSnapAfterAdmissionMonth.received || 0);
+
+const expectedWithRegistrationAfterAdmissionMonth =
+  Number(dues.expected || 0) + Number(regSnapAfterAdmissionMonth.total || 0);
+
+const pendingWithRegistrationAfterAdmissionMonth =
+  Number(dues.pending || 0) + Number(regSnapAfterAdmissionMonth.due || 0);
+
+const billingStringsAfterAdmissionMonth = {};
+for (const m of BILLING_MONTHS) {
+  billingStringsAfterAdmissionMonth[m.key] = toMonthString(updatedBillingJson[m.key]);
+}
 
 
   const updated = {
@@ -3547,8 +4118,11 @@ const dues = calcPendingDues(baseFee, billingJson, feeHistory);
         ? month
         : row.admission_month || "",
     fee_history: JSON.stringify(feeHistory),
-    admission_total_fees: String(dues.expected || 0),
-    admission_pending_dues: String(dues.pending || 0),
+    admission_total_fees: String(expectedWithRegistrationAfterAdmissionMonth || 0),
+admission_pending_dues: String(pendingWithRegistrationAfterAdmissionMonth || 0),
+admission_total_paid: String(receivedPaymentAfterAdmissionMonth || 0),
+    accounts_paid_upto: paidUptoAfterAdmissionMonth || "",
+    billing_json: JSON.stringify(updatedBillingJson),
   };
 
   db.prepare(`
@@ -3574,11 +4148,26 @@ const dues = calcPendingDues(baseFee, billingJson, feeHistory);
          fee_history = @fee_history,
          monthly_fee_current = @monthly_fee_current,
          admission_total_fees = @admission_total_fees,
-         admission_pending_dues = @admission_pending_dues
+         admission_pending_dues = @admission_pending_dues,
+         admission_total_paid = @admission_total_paid,
+         billing_json = @billing_json,
+         january = @january,
+         february = @february,
+         march = @march,
+         april = @april,
+         may = @may,
+         june = @june,
+         july = @july,
+         august = @august,
+         september = @september,
+         october = @october,
+         november = @november,
+         december = @december
      WHERE id = @id
   `).run({
     id,
     ...updated,
+    ...billingStringsAfterAdmissionMonth,
     monthly_fee_current: incomingFeeNumber > 0 ? incomingFeeNumber : (dues.currentFee || baseFee || 0),
   });
 
@@ -4089,6 +4678,7 @@ app.get("/dashboard/super/admission/:id/challan/:monthKey", requireLogin, async 
 
     const id = parseInt(req.params.id, 10);
     const monthKey = String(req.params.monthKey || "").toLowerCase().trim();
+    
 
     if (!id) return res.status(400).send("Invalid id");
     if (!monthKey) return res.status(400).send("Invalid month");
@@ -4116,7 +4706,12 @@ app.get("/dashboard/super/admission/:id/challan/:monthKey", requireLogin, async 
 
     const bannerPath = path.join(__dirname, "public", "img", "ivs-banner.jpg");
 
-    const fullWithHistory = attachPreviousSixMonthsToFull(full, monthKey);
+    const fullWithHistory = attachRegistrationFeeToFullForMonth({
+  full: attachPreviousSixMonthsToFull(full, monthKey),
+  row,
+  billingYear,
+  monthKey,
+});
 
 const pdfBuffer = await makeMonthlyChallanPdf({
   full: fullWithHistory,
@@ -4216,13 +4811,18 @@ app.get("/dashboard/super/admission/:id/challan/bulk", requireLogin, async (req,
     let made = 0;
 
     for (const p of pendingRows) {
-     const fullWithHistory = attachPreviousSixMonthsToFull(full, p.monthKey);
+  const fullWithHistory = attachRegistrationFeeToFullForMonth({
+    full: attachPreviousSixMonthsToFull(full, p.monthKey),
+    row,
+    billingYear,
+    monthKey: p.monthKey,
+  });
 
-const pdfBuffer = await makeMonthlyChallanPdf({
-  full: fullWithHistory,
-  monthKey: p.monthKey,
-  bannerPath,
-});
+  const pdfBuffer = await makeMonthlyChallanPdf({
+    full: fullWithHistory,
+    monthKey: p.monthKey,
+    bannerPath,
+  });
 
       const fname = `fee-bulk-${id}-${p.monthKey}-${Date.now()}.pdf`;
       const absPath = path.join(challanDir, fname);
@@ -4515,7 +5115,14 @@ const latestAnyMonth =
 
 const currentMonthKey = latestPendingMonth || latestAnyMonth || "january";
 
-  return attachPreviousSixMonthsToFull(adm, currentMonthKey);
+    const originalRow = getActiveAdmissionById(adm.id);
+
+  return attachRegistrationFeeToFullForMonth({
+    full: attachPreviousSixMonthsToFull(adm, currentMonthKey),
+    row: originalRow,
+    billingYear,
+    monthKey: currentMonthKey,
+  });
 });
 
 const pdfBuffer = await makeFamilyChallanPdf({
@@ -4609,7 +5216,14 @@ const latestAnyMonth =
 
 const currentMonthKey = latestPendingMonth || latestAnyMonth || "january";
 
-  return attachPreviousSixMonthsToFull(adm, currentMonthKey);
+    const originalRow = getActiveAdmissionById(adm.id);
+
+  return attachRegistrationFeeToFullForMonth({
+    full: attachPreviousSixMonthsToFull(adm, currentMonthKey),
+    row: originalRow,
+    billingYear,
+    monthKey: currentMonthKey,
+  });
 });
 
 const pdfBuffer = await makeFamilyChallanPdf({
@@ -4785,6 +5399,7 @@ app.post("/api/fee-collection/receive", requireLogin, requireSaveBilling, async 
     const {
   admissionId,
   familyNumber,
+  registrationReceivingAmount,
   receivingAmount,
   verificationNumber,
   collectionAccount,
@@ -4795,7 +5410,9 @@ app.post("/api/fee-collection/receive", requireLogin, requireSaveBilling, async 
 } = req.body || {};
 
     const billingYear = Number(year) || new Date().getFullYear();
-    const amount = Number(receivingAmount || 0);
+    const registrationAmount = Number(registrationReceivingAmount || 0);
+const amount = Number(receivingAmount || 0);
+const totalInputAmount = registrationAmount + amount;
     const cleanFamilyNumber = String(familyNumber || "").trim();
     const cleanVerificationNumber = String(verificationNumber || "").trim();
     const cleanCollectionAccount = String(collectionAccount || "").trim();
@@ -4810,27 +5427,27 @@ app.post("/api/fee-collection/receive", requireLogin, requireSaveBilling, async 
       .filter((x) => x.admissionId > 0 && BILLING_MONTH_KEYS.includes(x.monthKey))
   : [];
 
-    if (amount <= 0 && !cleanSelectedNotAdmittedMonths.length) {
+    if (totalInputAmount <= 0 && !cleanSelectedNotAdmittedMonths.length) {
   return res.status(400).json({
     success: false,
     message: "Receiving amount must be greater than zero or select month(s) for Not admitted",
   });
 }
 
-if (amount > 0 && !cleanVerificationNumber) {
+if (totalInputAmount > 0 && !cleanVerificationNumber) {
   return res.status(400).json({
     success: false,
     message: "Verification number is required",
   });
 }
 
-if (amount > 0 && !cleanCollectionAccount) {
+if (totalInputAmount > 0 && !cleanCollectionAccount) {
   return res.status(400).json({
     success: false,
     message: "Collection account is required",
   });
 }
-   if (amount > 0) {
+   if (totalInputAmount > 0) {
   const allowedBank = db
     .prepare("SELECT id FROM bank_options WHERE label = ?")
     .get(cleanCollectionAccount);
@@ -4894,8 +5511,9 @@ if (!allPendingRows.length && !cleanSelectedNotAdmittedMonths.length) {
   });
 }
 
-    let remaining = amount;
-    const applied = [];
+    let registrationRemaining = registrationAmount;
+let remaining = amount;
+const applied = [];
 
     const rowsInOrder = [...targetRows].sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
 
@@ -4912,16 +5530,36 @@ if (!allPendingRows.length && !cleanSelectedNotAdmittedMonths.length) {
     });
   }
 
+  let registrationResult = null;
+
+if (registrationRemaining > 0) {
+  registrationResult = applyRegistrationFeeCollectionToBilling({
+    row,
+    billingYear,
+    receiveAmount: registrationRemaining,
+    verificationNumber: cleanVerificationNumber,
+    collectionAccount: cleanCollectionAccount,
+    receivingDate: cleanReceivingDate,
+    note: cleanNote,
+    actorUser: user,
+  });
+
+  registrationRemaining = Number(registrationResult.remainingAmount || 0);
+}
+
   if (remaining <= 0) {
     applied.push({
       admissionId: row.id,
       studentName: row.student_name || "",
-      usedAmount: 0,
-      remainingAmount: remaining,
-      touchedMonths: selectedForThisRow.map((x) => ({
-        monthKey: x.monthKey,
-        status: "Not admitted",
-      })),
+      usedAmount: Number(registrationResult?.appliedAmount || 0),
+remainingAmount: registrationRemaining + remaining,
+      touchedMonths: [
+  ...selectedForThisRow.map((x) => ({
+    monthKey: x.monthKey,
+    status: "Not admitted",
+  })),
+  ...(registrationResult?.touchedMonths || []),
+],
       paidUpto: "",
       receivedPayment: 0,
     });
@@ -4955,12 +5593,13 @@ applied.push({
   usedAmount: used,
   remainingAmount: remaining,
   touchedMonths: [
-    ...selectedForThisRow.map((x) => ({
-      monthKey: x.monthKey,
-      status: "Not admitted",
-    })),
-    ...(result.touchedMonths || []),
-  ],
+  ...selectedForThisRow.map((x) => ({
+    monthKey: x.monthKey,
+    status: "Not admitted",
+  })),
+  ...(registrationResult?.touchedMonths || []),
+  ...(result.touchedMonths || []),
+],
   paidUpto: result.paidUpto || "",
   receivedPayment: result.receivedPayment || 0,
 });
@@ -5038,15 +5677,17 @@ if (whatsappWebhookUrl && receipts.some((r) => r.fileUrl)) {
     user,
     mode,
     billingYear,
-    totalInputAmount: amount,
-    unallocatedAmount: remaining,
+    totalInputAmount,
+unallocatedAmount: registrationRemaining + remaining,
     applied,
     receipts,
     familyNumber: cleanFamilyNumber,
     admissionId: admissionId || "",
     receiving: {
-      amount,
-      verificationNumber: cleanVerificationNumber,
+      amount: totalInputAmount,
+registrationAmount,
+monthlyAmount: amount,
+verificationNumber: cleanVerificationNumber,
       collectionAccount: cleanCollectionAccount,
       receivingDate: cleanReceivingDate,
       note: cleanNote,
@@ -5073,8 +5714,10 @@ return res.json({
   message: "Fee received successfully",
   mode,
   billingYear,
-  totalInputAmount: amount,
-  unallocatedAmount: remaining,
+  totalInputAmount,
+registrationInputAmount: registrationAmount,
+monthlyInputAmount: amount,
+unallocatedAmount: registrationRemaining + remaining,
   applied,
   receipts,
   n8nStatus,
@@ -5544,7 +6187,101 @@ function getBaseUrl(req) {
     `${req.protocol}://${req.get("host")}/`
   ).replace(/\/+$/, "/");
 }
+async function generateMonthlyChallanForApi({
+  req,
+  admissionId,
+  monthKey,
+  billingYear,
+  labelPrefix = "API Fee Invoice",
+}) {
+  const row = getActiveAdmissionById(admissionId);
+  if (!row) {
+    throw new Error(`Admission not found for id ${admissionId}`);
+  }
 
+  const full = dbGetAdmissionDetailsById(admissionId, billingYear);
+  if (!full) {
+    throw new Error(`Admission details not found for id ${admissionId}`);
+  }
+
+  const cleanMonthKey = String(monthKey || "").trim().toLowerCase();
+
+  const billArr = Array.isArray(full?.billing) ? full.billing : [];
+  const monthRow = billArr.find(
+    (b) =>
+      String(b?.month || "").toLowerCase().trim() === cleanMonthKey
+  );
+
+  const monthStatus = String(monthRow?.status || "").trim().toLowerCase();
+
+  if (monthStatus === "not admitted") {
+    return {
+      skipped: true,
+      reason: "not_admitted_month",
+      month: cleanMonthKey,
+      year: billingYear,
+    };
+  }
+
+  const bannerPath = path.join(__dirname, "public", "img", "ivs-banner.jpg");
+
+  const fullWithRegistrationFee = attachRegistrationFeeToFullForMonth({
+    full: attachPreviousSixMonthsToFull(full, cleanMonthKey),
+    row,
+    billingYear,
+    monthKey: cleanMonthKey,
+  });
+
+  const pdfBuffer = await makeMonthlyChallanPdf({
+    full: fullWithRegistrationFee,
+    monthKey: cleanMonthKey,
+    bannerPath,
+  });
+
+  if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
+    throw new Error(`Invalid PDF buffer for invoice ${admissionId} month ${cleanMonthKey}`);
+  }
+
+  const head = pdfBuffer.subarray(0, 5).toString("utf8");
+  if (head !== "%PDF-") {
+    throw new Error(`Generated invoice is not a valid PDF for ${admissionId} month ${cleanMonthKey}`);
+  }
+
+  const { year, month } = getYearMonthParts(new Date());
+  const challanDir = path.join(uploadsDir, "challans", year, month);
+  if (!fs.existsSync(challanDir)) fs.mkdirSync(challanDir, { recursive: true });
+
+  const filename = `api-fee-invoice-${admissionId}-${cleanMonthKey}-${Date.now()}.pdf`;
+  const absPath = path.join(challanDir, filename);
+
+  fs.writeFileSync(absPath, pdfBuffer);
+
+  const relStored = toPosix(path.relative(uploadsDir, absPath));
+  const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+
+  const info = db.prepare(`
+    INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    admissionId,
+    `${labelPrefix} (${cleanMonthKey})`,
+    relStored,
+    fileUrl,
+    "application/pdf",
+    pdfBuffer.length || 0
+  );
+
+  return {
+    skipped: false,
+    uploadId: info.lastInsertRowid,
+    month: cleanMonthKey,
+    year: billingYear,
+    fileUrl,
+    storedName: relStored,
+    mimeType: "application/pdf",
+    size: pdfBuffer.length || 0,
+  };
+}
 async function generateMonthlyPaidReceiptForApi({
   req,
   admissionId,
@@ -9277,7 +10014,52 @@ feeHistory = applyFeeChangeIfNeeded(
 );
 
 const baseFee = baseFeeFromHistoryOrRow(row, feeHistory, incomingFeeNumber || oldFeeSnapshot);
-const dues = calcPendingDues(baseFee, billingJson, feeHistory);
+// ✅ Sirf jab Month/Year column update ho tab previous months Not admitted karo
+const incomingAdmissionMonth =
+  typeof month !== "undefined" && month !== null
+    ? String(month || "").trim()
+    : "";
+
+const oldAdmissionMonth = String(row.admission_month || "").trim();
+
+const canChangeAdmissionMonth =
+  user?.role === "super_admin" ||
+  (typeof perms !== "undefined" && perms?.colMonth) ||
+  (typeof canAccounts !== "undefined" && canAccounts) ||
+  (typeof canAdmissions !== "undefined" && canAdmissions);
+
+const monthColumnChanged =
+  canChangeAdmissionMonth &&
+  incomingAdmissionMonth &&
+  incomingAdmissionMonth !== oldAdmissionMonth;
+
+let updatedBillingJson = billingJson;
+
+if (monthColumnChanged) {
+  const selectedBillingYear = getBillingYearFromAdmissionMonthValue(
+    incomingAdmissionMonth,
+    getBillingYearFromReq(req)
+  );
+
+  const notAdmittedResult = applyNotAdmittedBeforeAdmissionMonth({
+    admissionId: id,
+    billingJson,
+    admissionMonthValue: incomingAdmissionMonth,
+    billingYear: selectedBillingYear,
+  });
+
+  updatedBillingJson = notAdmittedResult.billingJson;
+}
+
+const dues = calcPendingDues(baseFee, updatedBillingJson, feeHistory);
+
+const paidUptoAfterAdmissionMonth = computePaidUptoFromBillingJson(updatedBillingJson);
+const receivedPaymentAfterAdmissionMonth = computeReceivedPaymentFromBillingJson(updatedBillingJson);
+
+const billingStringsAfterAdmissionMonth = {};
+for (const m of BILLING_MONTHS) {
+  billingStringsAfterAdmissionMonth[m.key] = toMonthString(updatedBillingJson[m.key]);
+}
 
   const updated = {
       status: canAdmissions
@@ -9342,6 +10124,9 @@ const dues = calcPendingDues(baseFee, billingJson, feeHistory);
       monthly_fee_current: incomingFeeNumber > 0 ? incomingFeeNumber : (dues.currentFee || baseFee || 0),
       admission_total_fees: String(dues.expected || 0),
       admission_pending_dues: String(dues.pending || 0),
+          admission_total_paid: String(receivedPaymentAfterAdmissionMonth || 0),
+    accounts_paid_upto: paidUptoAfterAdmissionMonth || "",
+    billing_json: JSON.stringify(updatedBillingJson),
   };
 
   db.prepare(`
@@ -9366,9 +10151,27 @@ const dues = calcPendingDues(baseFee, billingJson, feeHistory);
          fee_history = @fee_history,
          monthly_fee_current = @monthly_fee_current,
          admission_total_fees = @admission_total_fees,
-         admission_pending_dues = @admission_pending_dues
+         admission_pending_dues = @admission_pending_dues,
+         admission_total_paid = @admission_total_paid,
+         billing_json = @billing_json,
+         january = @january,
+         february = @february,
+         march = @march,
+         april = @april,
+         may = @may,
+         june = @june,
+         july = @july,
+         august = @august,
+         september = @september,
+         october = @october,
+         november = @november,
+         december = @december
          WHERE id = @id
-  `).run({ id, ...updated });
+  `).run({
+    id,
+    ...updated,
+    ...billingStringsAfterAdmissionMonth,
+  });
 
   const afterRow = { ...row, ...updated };
   const after = buildPipelineSnapshotFromRow(afterRow);
@@ -9443,7 +10246,52 @@ feeHistory = applyFeeChangeIfNeeded(
 );
 
 const baseFee = baseFeeFromHistoryOrRow(row, feeHistory, incomingFeeNumber || oldFeeSnapshot);
-const dues = calcPendingDues(baseFee, billingJson, feeHistory);
+// ✅ Sirf jab Month/Year column update ho tab previous months Not admitted karo
+const incomingAdmissionMonth =
+  typeof month !== "undefined" && month !== null
+    ? String(month || "").trim()
+    : "";
+
+const oldAdmissionMonth = String(row.admission_month || "").trim();
+
+const canChangeAdmissionMonth =
+  user?.role === "super_admin" ||
+  (typeof perms !== "undefined" && perms?.colMonth) ||
+  (typeof canAccounts !== "undefined" && canAccounts) ||
+  (typeof canAdmissions !== "undefined" && canAdmissions);
+
+const monthColumnChanged =
+  canChangeAdmissionMonth &&
+  incomingAdmissionMonth &&
+  incomingAdmissionMonth !== oldAdmissionMonth;
+
+let updatedBillingJson = billingJson;
+
+if (monthColumnChanged) {
+  const selectedBillingYear = getBillingYearFromAdmissionMonthValue(
+    incomingAdmissionMonth,
+    getBillingYearFromReq(req)
+  );
+
+  const notAdmittedResult = applyNotAdmittedBeforeAdmissionMonth({
+    admissionId: id,
+    billingJson,
+    admissionMonthValue: incomingAdmissionMonth,
+    billingYear: selectedBillingYear,
+  });
+
+  updatedBillingJson = notAdmittedResult.billingJson;
+}
+
+const dues = calcPendingDues(baseFee, updatedBillingJson, feeHistory);
+
+const paidUptoAfterAdmissionMonth = computePaidUptoFromBillingJson(updatedBillingJson);
+const receivedPaymentAfterAdmissionMonth = computeReceivedPaymentFromBillingJson(updatedBillingJson);
+
+const billingStringsAfterAdmissionMonth = {};
+for (const m of BILLING_MONTHS) {
+  billingStringsAfterAdmissionMonth[m.key] = toMonthString(updatedBillingJson[m.key]);
+}
   const updated = {
     status: perms.colStatus ? (status ?? row.status) : row.status,
     feeStatus: perms.colFeeStatus ? (feeStatus ?? row.feeStatus) : row.feeStatus, 
@@ -9479,6 +10327,9 @@ const dues = calcPendingDues(baseFee, billingJson, feeHistory);
     
     admission_total_fees: String(dues.expected || 0),
    admission_pending_dues: String(dues.pending || 0),
+       admission_total_paid: String(receivedPaymentAfterAdmissionMonth || 0),
+    accounts_paid_upto: paidUptoAfterAdmissionMonth || "",
+    billing_json: JSON.stringify(updatedBillingJson),
   };
 
   db.prepare(`
@@ -9505,9 +10356,27 @@ const dues = calcPendingDues(baseFee, billingJson, feeHistory);
            monthly_fee_current=@monthly_fee_current,
            
            admission_total_fees=@admission_total_fees,
-           admission_pending_dues=@admission_pending_dues
+           admission_pending_dues = @admission_pending_dues,
+         admission_total_paid = @admission_total_paid,
+         billing_json = @billing_json,
+         january = @january,
+         february = @february,
+         march = @march,
+         april = @april,
+         may = @may,
+         june = @june,
+         july = @july,
+         august = @august,
+         september = @september,
+         october = @october,
+         november = @november,
+         december = @december
      WHERE id=@id
-  `).run({ id, ...updated });
+  `).run({
+    id,
+    ...updated,
+    ...billingStringsAfterAdmissionMonth,
+  });
   const afterRow = { ...row, ...updated };
 const after = buildPipelineSnapshotFromRow(afterRow);
 

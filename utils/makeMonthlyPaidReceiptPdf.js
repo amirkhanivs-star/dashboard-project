@@ -83,6 +83,28 @@ function billingJsonToArray(billingJson) {
   });
 }
 
+function imgDataUri(filePath) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return "";
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png";
+    const data = fs.readFileSync(filePath).toString("base64");
+    return `data:${mime};base64,${data}`;
+  } catch { return ""; }
+}
+
+function publicImg(fileName) {
+  const tryPaths = [
+    path.join(process.cwd(), "public", "img", fileName),
+    path.join(__dirname, "..", "public", "img", fileName),
+    path.join(__dirname, "..", "..", "public", "img", fileName),
+  ];
+  for (const p of tryPaths) {
+    if (fs.existsSync(p)) return imgDataUri(p);
+  }
+  return "";
+}
+
 export default async function makeMonthlyPaidReceiptPdf({
   full,
   monthKey,
@@ -162,27 +184,22 @@ export default async function makeMonthlyPaidReceiptPdf({
       description: `Monthly Fee Paid\n${studentName}`,
       grade,
       month: monthTitle(mk),
-      amount: receivedAmount.toFixed(2),
+      amount: baseFee.toFixed(2),
     },
   ];
 
   const rowPages = [rows];
   const totalText = `${currency} ${receivedAmount.toFixed(2)}`;
 
-  let bannerSrc = "/img/ivs-banner.jpg";
-  try {
-    if (bannerPath && fs.existsSync(bannerPath)) {
-      const publicDir = path.join(__dirname, "..", "public");
-      const rel = path.relative(publicDir, bannerPath);
-      if (!rel.startsWith("..")) {
-        bannerSrc = "/" + rel.replaceAll("\\", "/");
-      }
-    }
-  } catch {}
+  const bannerSrcAbs =
+    bannerPath && fs.existsSync(bannerPath)
+      ? imgDataUri(bannerPath)
+      : publicImg("ivs-banner.jpg") || publicImg("ivs-banner.png");
 
   const html = await ejs.renderFile(templatePath, {
     baseUrl: BASE,
-    bannerSrcAbs: `${BASE}${bannerSrc}`,
+    bannerSrcAbs,
+    bannerSrc: bannerSrcAbs,
     currency,
     receiptNo: full?.receiptNo || full?.receipt_no || full?.id || "",
     receiptMonth: `${monthTitle(mk)} ${YEAR}`,
@@ -193,7 +210,9 @@ export default async function makeMonthlyPaidReceiptPdf({
     rowPages,
     totalText,
 
-    paidStampSrc: "/img/fee-paid-stamp.png",
+    paidStampSrc: publicImg("fee-paid-stamp.png"),
+    receiptQrSrc: publicImg("receipt-qr.jpg"),
+    receiptSignSrc: publicImg("receipt-sign.jpg"),
     formLink: "https://forms.gle/W4y3Q1VjyU8cRDvp7",
 
     settings: {

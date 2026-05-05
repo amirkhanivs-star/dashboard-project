@@ -1090,13 +1090,21 @@ function parseBillingFromJson(billingJson) {
   // If already array -> normalize keys
   if (Array.isArray(data)) {
     return data.map((x) => ({
-      month: x.month || x.key || "",
-      status: x.status || x.paymentStatus || "",
-      amount: x.amount ?? x.amountReceived ?? x.received ?? "",
-      fee: x.fee ?? x.monthlyFee ?? "",
-      date: x.date || x.receivedOn || x.received_on || x.paidOn || "",
-      verificationNumber: x.verificationNumber || x.verification_number || "",
-    }));
+  month: x.month || x.key || "",
+  status: x.status || x.paymentStatus || "",
+  amount: x.amount ?? x.amountReceived ?? x.received ?? "",
+  fee: x.fee ?? x.monthlyFee ?? "",
+  date: x.date || x.receivedOn || x.received_on || x.paidOn || "",
+  verificationNumber: x.verificationNumber || x.verification_number || "",
+  bank: x.bank || x.bankName || x.bank_name || "",
+
+  registrationFeeTotal: x.registrationFeeTotal || "",
+  registrationFeeReceived: x.registrationFeeReceived || "",
+  registrationFeeStatus: x.registrationFeeStatus || "",
+  registrationFeeVerification: x.registrationFeeVerification || "",
+  registrationFeeBank: x.registrationFeeBank || "",
+  registrationFeePaymentDate: x.registrationFeePaymentDate || "",
+}));
   }
 
   // If object like { january: {...}, february: {...} }
@@ -1109,13 +1117,21 @@ function parseBillingFromJson(billingJson) {
     return monthsOrder.map((m) => {
       const x = data[m] || {};
       return {
-        month: m,
-        status: x.status || x.paymentStatus || "",
-        amount: x.amount ?? x.amountReceived ?? x.received ?? "",
-        fee: x.fee ?? x.monthlyFee ?? "",
-        date: x.date || x.receivedOn || x.received_on || x.paidOn || "",
-        verificationNumber: x.verificationNumber || x.verification_number || "",
-      };
+  month: m,
+  status: x.status || x.paymentStatus || "",
+  amount: x.amount ?? x.amountReceived ?? x.received ?? "",
+  fee: x.fee ?? x.monthlyFee ?? "",
+  date: x.date || x.receivedOn || x.received_on || x.paidOn || "",
+  verificationNumber: x.verificationNumber || x.verification_number || "",
+  bank: x.bank || x.bankName || x.bank_name || "",
+
+  registrationFeeTotal: x.registrationFeeTotal || "",
+  registrationFeeReceived: x.registrationFeeReceived || "",
+  registrationFeeStatus: x.registrationFeeStatus || "",
+  registrationFeeVerification: x.registrationFeeVerification || "",
+  registrationFeeBank: x.registrationFeeBank || "",
+  registrationFeePaymentDate: x.registrationFeePaymentDate || "",
+};
     });
   }
 
@@ -1278,12 +1294,22 @@ export function dbGetAdmissionDetailsById(id, billingYear = new Date().getFullYe
     },
 
     admission: {
-      registrationFee: row.admission_registration_fee || "",
-      fees: row.admission_fees || "",
-      month: row.admission_month || "",
-      totalFees: row.admission_total_fees || "",
-      pendingDues: row.admission_pending_dues || "",
-      receivedPayment: row.admission_total_paid || "0",
+  registrationFee: row.admission_registration_fee || "",
+  registration_fee: row.admission_registration_fee || "",
+  fees: row.admission_fees || "",
+  fee: row.admission_fees || "",
+  monthly_fee_current: row.monthly_fee_current || "",
+  monthlyFeeCurrent: row.monthly_fee_current || "",
+  feeHistory: row.fee_history || "",
+  fee_history: row.fee_history || "",
+  billingJson: row.billing_json || "",
+  billing_json: row.billing_json || "",
+  month: row.admission_month || "",
+  admissionMonth: row.admission_month || "",
+  admission_month: row.admission_month || "",
+  totalFees: row.admission_total_fees || "",
+  pendingDues: row.admission_pending_dues || "",
+  receivedPayment: row.admission_total_paid || "0",
       invoiceStatus: row.admission_invoice_status || "",
       invoiceStatusTimestamp: row.admission_invoice_status_timestamp || "",
       paidInvoiceStatus: row.admission_paid_invoice_status || "",
@@ -1292,8 +1318,18 @@ export function dbGetAdmissionDetailsById(id, billingYear = new Date().getFullYe
     },
 
     currency_code: row.currency_code || "",
-    billingYear,
-    billing: billingArr,
+
+admission_registration_fee: row.admission_registration_fee || "",
+admission_fees: row.admission_fees || "",
+admission_month: row.admission_month || "",
+billing_json: row.billing_json || "",
+billingJson: row.billing_json || "",
+fee_history: row.fee_history || "",
+feeHistory: row.fee_history || "",
+monthly_fee_current: row.monthly_fee_current || "",
+
+billingYear,
+billing: billingArr,
   };
 }
 export function getApiSetting(key, fallback = "") {

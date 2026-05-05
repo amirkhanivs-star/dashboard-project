@@ -66,6 +66,28 @@ function fmtDate(d) {
   }
 }
 
+function imgDataUri(filePath) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return "";
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png";
+    const data = fs.readFileSync(filePath).toString("base64");
+    return `data:${mime};base64,${data}`;
+  } catch { return ""; }
+}
+
+function publicImg(fileName) {
+  const tryPaths = [
+    path.join(process.cwd(), "public", "img", fileName),
+    path.join(__dirname, "..", "public", "img", fileName),
+    path.join(__dirname, "..", "..", "public", "img", fileName),
+  ];
+  for (const p of tryPaths) {
+    if (fs.existsSync(p)) return imgDataUri(p);
+  }
+  return "";
+}
+
 export default async function makeFamilyChallanPdf({
   familyNumber,
   admissionsFull,
@@ -94,16 +116,10 @@ export default async function makeFamilyChallanPdf({
   const dueOn = new Date();
   dueOn.setDate(dueOn.getDate() + 10);
 
-  let bannerSrc = "/img/ivs-banner.jpg";
-  try {
-    if (bannerPath && fs.existsSync(bannerPath)) {
-      const publicDir = path.join(__dirname, "..", "public");
-      const rel = path.relative(publicDir, bannerPath);
-      if (!rel.startsWith("..")) {
-        bannerSrc = "/" + rel.replaceAll("\\", "/");
-      }
-    }
-  } catch {}
+  const bannerSrcAbs =
+    bannerPath && fs.existsSync(bannerPath)
+      ? imgDataUri(bannerPath)
+      : publicImg("ivs-banner.jpg") || publicImg("ivs-banner.png");
 
   const list = Array.isArray(admissionsFull) ? admissionsFull : [];
   const parentName =
@@ -113,9 +129,10 @@ export default async function makeFamilyChallanPdf({
     "-";
 
   const YEAR = Number(year) || new Date().getFullYear();
+const currentMonthKey = String(monthKey || "").trim().toLowerCase();
 
-  const rows = [];
-  const familyMonthStripMap = new Map();
+const rows = [];
+const familyMonthStripMap = new Map();
 
   for (const a of list) {
     const currency =
@@ -131,6 +148,15 @@ export default async function makeFamilyChallanPdf({
     const student = a?.student || a?.studentName || "-";
     const grade = a?.grade || "-";
     const monthFeesMap = a?.monthFees || a?.month_fees || null;
+    const registrationFeeForChallan =
+  a?.registrationFeeForChallan && typeof a.registrationFeeForChallan === "object"
+    ? a.registrationFeeForChallan
+    : {};
+
+const hasRegistrationFeeForThisMonth =
+  registrationFeeForChallan.enabled === true &&
+  String(registrationFeeForChallan.monthKey || "").trim().toLowerCase() === currentMonthKey &&
+  safeNum(registrationFeeForChallan.due || 0) > 0;
 
     let billArr = Array.isArray(a?.billing) ? a.billing : null;
     if (!billArr) {
@@ -202,7 +228,21 @@ export default async function makeFamilyChallanPdf({
     }
 
     if (pendingOnly) {
-      for (const b of billArr) {
+  if (hasRegistrationFeeForThisMonth) {
+    const regDue = safeNum(registrationFeeForChallan.due || 0);
+
+    rows.push({
+      regNo,
+      description: `Registration Fee\n${student}`,
+      grade,
+      month: `${monthTitle(currentMonthKey)} ${YEAR}`,
+      amount: `${currency} ${regDue.toFixed(2)}`,
+      _n: regDue,
+      _currency: currency,
+    });
+  }
+
+  for (const b of billArr) {
         const mk = String(b?.month || "").toLowerCase();
         if (!mk) continue;
 
@@ -231,13 +271,18 @@ export default async function makeFamilyChallanPdf({
             String(b?.month || "").toLowerCase() === String(monthKey || "").toLowerCase()
         ) || {};
 
-      const monthlyFee =
-        safeNum(curBill?.fee) ||
-        safeNum(curBill?.amount) ||
-        feeFallback ||
-        0;
+      const currentStatus = String(curBill?.status || "").trim().toLowerCase();
+if (currentStatus === "not admitted") {
+  continue;
+}
 
-      rows.push({
+const monthlyFee =
+  safeNum(curBill?.fee) ||
+  safeNum(curBill?.amount) ||
+  feeFallback ||
+  0;
+
+rows.push({
         regNo,
         description: `Monthly Fee\n${student}`,
         grade,
@@ -246,6 +291,20 @@ export default async function makeFamilyChallanPdf({
         _n: monthlyFee,
         _currency: currency,
       });
+
+      if (hasRegistrationFeeForThisMonth) {
+  const regDue = safeNum(registrationFeeForChallan.due || 0);
+
+  rows.push({
+    regNo,
+    description: `Registration Fee\n${student}`,
+    grade,
+    month: `${monthTitle(currentMonthKey)} ${YEAR}`,
+    amount: `${currency} ${regDue.toFixed(2)}`,
+    _n: regDue,
+    _currency: currency,
+  });
+}
 
       const dues = safeNum(
         a?.admission?.pendingDues || a?.admission_pending_dues || 0
@@ -292,8 +351,10 @@ export default async function makeFamilyChallanPdf({
 
   const html = await ejs.renderFile(templatePath, {
     baseUrl: BASE,
-    bannerSrc,
-    bannerSrcAbs: `${BASE}${bannerSrc}`,
+    bannerSrcAbs,
+    bannerSrc: bannerSrcAbs,
+    receiptQrSrc: publicImg("receipt-qr.jpg"),
+    receiptSignSrc: publicImg("receipt-sign.jpg"),
     familyNo: familyNumber || "-",
     parentName,
     issuedOn: fmtDate(issuedOn),

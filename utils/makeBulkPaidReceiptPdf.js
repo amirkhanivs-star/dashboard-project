@@ -38,6 +38,38 @@ function fmtDate(d) {
     return "";
   }
 }
+function imgDataUri(filePath) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return "";
+
+    const ext = path.extname(filePath).toLowerCase();
+    const mime =
+      ext === ".jpg" || ext === ".jpeg"
+        ? "image/jpeg"
+        : ext === ".png"
+        ? "image/png"
+        : "image/png";
+
+    const data = fs.readFileSync(filePath).toString("base64");
+    return `data:${mime};base64,${data}`;
+  } catch {
+    return "";
+  }
+}
+
+function publicImg(fileName) {
+  const projectRoot = path.resolve(__dirname, "..", "..", "..").split("node_modules")[0].replace(/[\\/]src.*/, "");
+  const tryPaths = [
+    path.join(process.cwd(), "public", "img", fileName),
+    path.join(__dirname, "..", "public", "img", fileName),
+    path.join(__dirname, "..", "..", "public", "img", fileName),
+    path.join(__dirname, "..", "..", "..", "public", "img", fileName),
+  ];
+  for (const p of tryPaths) {
+    if (fs.existsSync(p)) return imgDataUri(p);
+  }
+  return "";
+}
 
 function billingJsonToArray(billingJson) {
   const bj = billingJson && typeof billingJson === "object" ? billingJson : {};
@@ -165,20 +197,19 @@ const rows = monthKeys.map((mk) => {
   const rowPages = [rows];
   const totalText = `${currency} ${totalReceived.toFixed(2)}`;
 
-  let bannerSrc = "/img/ivs-banner.jpg";
-  try {
-    if (bannerPath && fs.existsSync(bannerPath)) {
-      const publicDir = path.join(__dirname, "..", "public");
-      const rel = path.relative(publicDir, bannerPath);
-      if (!rel.startsWith("..")) {
-        bannerSrc = "/" + rel.replaceAll("\\", "/");
-      }
-    }
-  } catch {}
+  const bannerSrcAbs =
+  bannerPath && fs.existsSync(bannerPath)
+    ? imgDataUri(bannerPath)
+    : publicImg("ivs-banner.jpg") || publicImg("ivs-banner.png");
+
+const paidStampSrcAbs = publicImg("fee-paid-stamp.png");
+const receiptQrSrcAbs = publicImg("receipt-qr.jpg");
+const receiptSignSrcAbs = publicImg("receipt-sign.jpg");
 
   const html = await ejs.renderFile(templatePath, {
     baseUrl: BASE,
-    bannerSrcAbs: `${BASE}${bannerSrc}`,
+    bannerSrcAbs,
+bannerSrc: bannerSrcAbs,
     currency,
     receiptNo: full?.receiptNo || full?.receipt_no || full?.id || "",
     receiptMonth,
@@ -189,7 +220,9 @@ const rows = monthKeys.map((mk) => {
     rowPages,
     totalText,
 
-    paidStampSrc: "/img/fee-paid-stamp.png",
+    paidStampSrc: paidStampSrcAbs,
+receiptQrSrc: receiptQrSrcAbs,
+receiptSignSrc: receiptSignSrcAbs,
     formLink: "https://forms.gle/W4y3Q1VjyU8cRDvp7",
 
     settings: {

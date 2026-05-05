@@ -364,7 +364,7 @@
 
           <% if (paidStampSrc) { %>
             <div class="paid-stamp-wrap">
-              <img src="<%= baseUrl + paidStampSrc %>" alt="Paid Stamp">
+              <img src="<%= locals.paidStampSrc || '' %>" alt="Paid Stamp">
             </div>
           <% } %>
         </div>
@@ -391,9 +391,7 @@
           </div>
 
           <div class="pay-col qr">
-            <div class="pay-col-title" style="font-size:7px;">PayPal Account</div>
-            <img src="<%= baseUrl + '/img/receipt-qr.jpg' %>" alt="Scan to pay">
-            <div style="font-size:6px; font-weight:bold; margin-top:2px;">SCAN TO PAY</div>
+            <img src="<%= locals.receiptQrSrc || '' %>" alt="Scan to pay">
           </div>
         </div>
 
@@ -422,8 +420,7 @@
           </div>
 
           <div class="inst-right">
-            <img src="<%= baseUrl + '/img/receipt-sign.jpg' %>" alt="Stamp and Signature">
-            <span class="sign-text">Authorized Signature</span>
+            <img src="<%= locals.receiptSignSrc || '' %>" alt="Stamp and Signature">
           </div>
         </div>
       <% } %>

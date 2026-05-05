@@ -356,7 +356,7 @@ const visibleActionCount =
 const actionColClass = `action-count-${visibleActionCount}`;
 
 const baseCols = Object.keys(P.col).filter(k => k !== 'actionButtons' && P.col[k]).length;
-const visibleColCount = baseCols + (showActions ? 1 : 0) + (canDeleteAdmissions ? 1 : 0);
+const visibleColCount = baseCols + 1 + (showActions ? 1 : 0) + (canDeleteAdmissions ? 1 : 0);
 const DEFAULT_CURRENT_STATUS_OPTIONS =
   (typeof statusOptionsCurrent !== 'undefined' && Array.isArray(statusOptionsCurrent) && statusOptionsCurrent.length)
     ? statusOptionsCurrent.map(opt => ({
@@ -641,7 +641,7 @@ const DEFAULT_FEE_STATUS_OPTIONS =
                     title="Select All">
                 </th>
               <% } %>
-
+              <th class="text-center col-row-number" data-col="rowNumber">No.</th>
               <% if (P.col.status) { %><th data-col="status">Current Status</th><% } %>
               <% if (P.col.feeStatus) { %><th data-col="feeStatus">Fee Status</th><% } %>
               <% if (P.col.dept) { %><th data-col="dept">Dept</th><% } %>
@@ -684,7 +684,7 @@ const DEFAULT_FEE_STATUS_OPTIONS =
               </tr>
             <% } %>
 
-            <% (admissions || []).forEach(a => {
+                        <% (admissions || []).forEach((a, index) => {
                  const fid = `rowForm_${a.id}`;
                  let formPlaced = false;
 
@@ -731,6 +731,11 @@ const DEFAULT_FEE_STATUS_OPTIONS =
                       data-student-name="<%= a.studentName || a.student || '' %>">
                   </td>
                 <% } %>
+                                <td class="text-center col-row-number" data-col="rowNumber">
+                  <span class="admission-row-number">
+                    <%= (startRecord || 1) + index %>
+                  </span>
+                </td>
                 <% if (!formPlaced) { %>
                   <form id="<%= fid %>" action="/admin/update/<%= a.id %>" method="POST" class="d-none"></form>
                   <% formPlaced = true; %>
@@ -1412,32 +1417,49 @@ const DEFAULT_FEE_STATUS_OPTIONS =
     min-width: 120px;
   }
 
-/* ✅ Sticky FIRST three columns (Select + Current Status + Fee Status) */
+/* ✅ Sticky left columns: Checkbox + No + Current Status + Fee Status */
 #adminAdmissionsTable th[data-col="select"],
 #adminAdmissionsTable td[data-col="select"]{
   position: sticky;
   left: 0;
-  z-index: 7;
+  z-index: 30;
+  background: #fff;
+}
+
+#adminAdmissionsTable th[data-col="rowNumber"],
+#adminAdmissionsTable td[data-col="rowNumber"]{
+  position: sticky;
+  left: 64px;
+  z-index: 30;
   background: #fff;
 }
 
 #adminAdmissionsTable th[data-col="status"],
 #adminAdmissionsTable td[data-col="status"]{
   position: sticky;
-  left: 64px;
-  z-index: 6;
+  left: 136px;
+  z-index: 30;
   background: #fff;
 }
 
 #adminAdmissionsTable th[data-col="feeStatus"],
 #adminAdmissionsTable td[data-col="feeStatus"]{
   position: sticky;
-  left: 234px; /* 64 + 170 */
-  z-index: 6;
+  left: 306px;
+  z-index: 30;
   background: #fff;
 }
 
-/* Header row (dark) */
+/* Header dark background for sticky left columns */
+#adminAdmissionsTable thead.table-dark th[data-col="select"],
+#adminAdmissionsTable thead.table-dark th[data-col="rowNumber"],
+#adminAdmissionsTable thead.table-dark th[data-col="status"],
+#adminAdmissionsTable thead.table-dark th[data-col="feeStatus"]{
+  z-index: 70 !important;
+  background: linear-gradient(180deg, #15803d, #166534);
+}
+
+/* Header row (right action column) */
 #adminAdmissionsTable th.col-actions {
   position: sticky;
   right: 0;
@@ -1482,10 +1504,34 @@ const DEFAULT_FEE_STATUS_OPTIONS =
   max-width: 154px !important;
 }
 
-  #adminAdmissionsTable th.col-select,
+  /* ✅ Row number black circle */
+  #adminAdmissionsTable th.col-row-number,
+  #adminAdmissionsTable td.col-row-number{
+    min-width: 72px !important;
+    width: 72px !important;
+    max-width: 72px !important;
+    text-align: center;
+  }
+
+  .admission-row-number{
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #020617, #111827);
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    box-shadow: 0 8px 16px rgba(2, 8, 23, 0.25);
+  }
+
+    #adminAdmissionsTable th.col-select,
   #adminAdmissionsTable td.col-select {
-    min-width: 64px;
-    width: 64px;
+    min-width: 64px !important;
+    width: 64px !important;
+    max-width: 64px !important;
     text-align: center;
   }
 
