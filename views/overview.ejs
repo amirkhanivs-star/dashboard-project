@@ -3,10 +3,10 @@
 
 <style>
   .overview-page {
-    padding: 1.25rem;
+    padding: 1rem;
     background:
-      radial-gradient(circle at top left, rgba(59,130,246,.10), transparent 26%),
-      radial-gradient(circle at top right, rgba(16,185,129,.08), transparent 24%),
+      radial-gradient(circle at top left, rgba(220, 38, 38, .10), transparent 26%),
+      radial-gradient(circle at top right, rgba(15, 23, 42, .08), transparent 24%),
       linear-gradient(180deg, #f8fbff 0%, #f6f8fc 100%);
     min-height: calc(100vh - 80px);
   }
@@ -14,362 +14,420 @@
   .overview-hero {
     position: relative;
     overflow: hidden;
-    border-radius: 28px;
-    padding: 1rem 1.2rem;
-    background: linear-gradient(135deg, #000000 0%, #0a0a0a 55%, #111111 100%);
+    border-radius: 24px;
+    padding: 1rem;
+    background:
+      radial-gradient(circle at 78% 22%, rgba(255,255,255,.16), transparent 22%),
+      linear-gradient(135deg, #070707 0%, #18181b 54%, #7f0000 135%);
     color: #fff;
-    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.16);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
   }
 
-  .overview-hero::after {
+  .overview-hero::before {
     content: "";
     position: absolute;
-    inset: auto -60px -60px auto;
-    width: 220px;
-    height: 220px;
-    border-radius: 50%;
-    background: rgba(255,255,255,.08);
-    filter: blur(8px);
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+    background-size: 34px 34px;
+    opacity: .55;
+    pointer-events: none;
   }
 
+  .overview-hero > * { position: relative; z-index: 1; }
+
   .overview-hero h1 {
-    font-size: clamp(1.5rem, 2vw, 2.2rem);
-    font-weight: 800;
+    font-size: clamp(1.45rem, 2vw, 2.15rem);
+    font-weight: 900;
     margin-bottom: .35rem;
+    letter-spacing: -.03em;
   }
 
   .overview-hero p {
     margin: 0;
     color: rgba(255,255,255,.84);
+    font-size: .88rem;
+    max-width: 900px;
   }
 
   .overview-chip-wrap {
     display: flex;
     flex-wrap: wrap;
-    gap: .65rem;
-    margin-top: .7rem;
+    gap: .5rem;
+    margin-top: .75rem;
   }
 
   .overview-chip {
     display: inline-flex;
     align-items: center;
-    gap: .45rem;
-    padding: .58rem .85rem;
+    gap: .42rem;
+    padding: .48rem .72rem;
     border-radius: 999px;
     background: rgba(255,255,255,.12);
-    border: 1px solid rgba(255,255,255,.12);
-    font-size: .9rem;
+    border: 1px solid rgba(255,255,255,.14);
+    font-size: .78rem;
+    font-weight: 800;
     color: #fff;
   }
 
   .panel-card {
-    border: 0;
-    border-radius: 24px;
-    background: rgba(255,255,255,.88);
-    box-shadow: 0 12px 35px rgba(15, 23, 42, 0.08);
+    border: 1px solid rgba(226, 232, 240, .75);
+    border-radius: 20px;
+    background: rgba(255,255,255,.92);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.07);
     backdrop-filter: blur(10px);
   }
+
+  .panel-card.tight { border-radius: 18px; }
 
   .section-title {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1rem;
+    gap: .8rem;
+    margin-bottom: .75rem;
   }
 
   .section-title h4,
-  .section-title h5 {
+  .section-title h5,
+  .section-title h6 {
     margin: 0;
-    font-weight: 800;
+    font-weight: 900;
     color: #0f172a;
+    letter-spacing: -.02em;
   }
 
   .section-sub {
     color: #64748b;
-    font-size: .92rem;
+    font-size: .78rem;
+    line-height: 1.35;
+  }
+
+  .ceo-filter-card {
+    border-radius: 20px;
+    border: 1px solid rgba(220,38,38,.16);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,250,250,.88));
+    box-shadow: 0 14px 34px rgba(127, 29, 29, .10);
   }
 
   .filter-grid {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: .9rem;
+    grid-template-columns: 1.45fr repeat(5, minmax(0, 1fr));
+    gap: .65rem;
   }
 
   .filter-grid .form-label {
-    font-size: .84rem;
-    font-weight: 700;
+    font-size: .72rem;
+    font-weight: 900;
     color: #475569;
-    margin-bottom: .35rem;
+    margin-bottom: .25rem;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+
+  .filter-grid .form-control,
+  .filter-grid .form-select,
+  .table-search {
+    border-radius: 12px;
+    border-color: #e2e8f0;
+    min-height: 38px;
+    font-size: .82rem;
   }
 
   .filter-actions {
     display: flex;
-    gap: .65rem;
+    gap: .45rem;
     align-items: end;
     flex-wrap: wrap;
   }
 
+  .btn-ceo {
+    border: 0;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #dc2626, #991b1b);
+    color: #fff;
+    font-size: .82rem;
+    font-weight: 900;
+    padding: .55rem .85rem;
+    box-shadow: 0 10px 20px rgba(220,38,38,.20);
+  }
+
+  .btn-ceo:hover { color: #fff; filter: brightness(.96); }
+
+  .btn-soft {
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #334155;
+    font-size: .82rem;
+    font-weight: 800;
+    padding: .52rem .8rem;
+  }
+
   .summary-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: .75rem;
   }
 
   .summary-card {
     position: relative;
     overflow: hidden;
-    border: 0;
-    border-radius: 24px;
-    padding: 1rem;
+    border: 1px solid #e9eef7;
+    border-radius: 18px;
+    padding: .85rem;
     background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-    transition: transform .18s ease, box-shadow .18s ease;
-    min-height: 145px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    min-height: 105px;
   }
 
-  .summary-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
+  .summary-card::after {
+    content: "";
+    position: absolute;
+    right: -28px;
+    top: -28px;
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    background: rgba(220,38,38,.09);
   }
 
   .summary-card .icon-wrap {
-    width: 48px;
-    height: 48px;
-    border-radius: 16px;
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.15rem;
-    margin-bottom: .8rem;
-    color: #0b5ed7;
-    background: rgba(11,94,215,.10);
+    font-size: .95rem;
+    margin-bottom: .55rem;
+    color: #b91c1c;
+    background: rgba(220,38,38,.10);
   }
 
   .summary-card .label {
-    font-size: .84rem;
-    font-weight: 700;
+    font-size: .7rem;
+    font-weight: 900;
     color: #64748b;
-    margin-bottom: .3rem;
+    margin-bottom: .22rem;
+    text-transform: uppercase;
+    letter-spacing: .03em;
   }
 
   .summary-card .value {
-    font-size: 1.65rem;
-    line-height: 1.1;
-    font-weight: 800;
+    font-size: 1.35rem;
+    line-height: 1.05;
+    font-weight: 950;
     color: #0f172a;
   }
 
   .summary-card .hint {
-    margin-top: .45rem;
+    margin-top: .35rem;
     color: #94a3b8;
-    font-size: .82rem;
+    font-size: .72rem;
   }
 
   .mini-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: .6rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .55rem;
   }
 
+  .mini-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
   .mini-stat {
-   border-radius: 14px;
-padding: .55rem .65rem;
+    border-radius: 14px;
+    padding: .55rem .65rem;
     background: linear-gradient(180deg, #fff, #f8fafc);
     border: 1px solid #e2e8f0;
   }
 
   .mini-stat .title {
-    font-size: .72rem;
+    font-size: .68rem;
     color: #64748b;
-    font-weight: 700;
-    margin-bottom: .3rem;
+    font-weight: 900;
+    margin-bottom: .18rem;
+    text-transform: uppercase;
+    letter-spacing: .03em;
   }
 
   .mini-stat .num {
     font-size: 1rem;
-    font-weight: 800;
+    font-weight: 950;
     color: #0f172a;
+    line-height: 1.05;
   }
+
+  .table-premium { font-size: .82rem; }
 
   .table-premium thead th {
     border-bottom: 1px solid #e2e8f0;
-    font-size: .82rem;
+    font-size: .7rem;
     text-transform: uppercase;
-    letter-spacing: .02em;
+    letter-spacing: .03em;
     color: #64748b;
-    font-weight: 800;
-    background: transparent;
+    font-weight: 950;
+    background: #fbfdff;
     white-space: nowrap;
   }
 
   .table-premium tbody td {
     vertical-align: middle;
     border-color: #eef2f7;
+    white-space: nowrap;
   }
+
+  .table-compact tbody td,
+  .table-compact thead th { padding: .48rem .55rem; }
 
   .soft-badge {
     display: inline-flex;
     align-items: center;
     border-radius: 999px;
-    padding: .36rem .7rem;
-    font-size: .78rem;
-    font-weight: 700;
+    padding: .28rem .55rem;
+    font-size: .72rem;
+    font-weight: 900;
     background: #eff6ff;
     color: #1d4ed8;
   }
 
+  .danger-badge { background: #fef2f2; color: #b91c1c; }
+  .dark-badge { background: #f1f5f9; color: #0f172a; }
+  .success-badge { background: #ecfdf5; color: #047857; }
+  .warning-badge { background: #fffbeb; color: #b45309; }
+
   .empty-state {
-    border-radius: 22px;
-    padding: 2rem 1rem;
+    border-radius: 18px;
+    padding: 1.25rem 1rem;
     background: linear-gradient(180deg, #fff, #f8fafc);
     border: 1px dashed #cbd5e1;
     text-align: center;
     color: #64748b;
+    font-size: .86rem;
   }
 
-  .chart-box {
-    position: relative;
-    min-height: 340px;
-  }
+  .chart-box { position: relative; min-height: 290px; }
+  .chart-box.chart-box-sm { min-height: 200px; }
 
- .chart-box.chart-box-sm {
-  min-height: 220px;
-}
-
-  .stat-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .45rem;
-  }
-
-  .stat-pill {
-    border-radius: 999px;
-    padding: .3rem .65rem;
-    font-size: .76rem;
-    font-weight: 700;
-    background: #f1f5f9;
-    color: #334155;
-  }
-
-  .muted-note {
-    font-size: .8rem;
-    color: #94a3b8;
-  }
-
-    .chart-toolbar {
-    display: flex;
-    gap: .5rem;
-    flex-wrap: wrap;
+  .analytics-toggle-btn {
+    display: inline-flex;
     align-items: center;
-  }
-
-  .chart-tab {
-    border: 1px solid #dbeafe;
-    background: #eff6ff;
-    color: #1d4ed8;
-    border-radius: 999px;
-    padding: .45rem .85rem;
-    font-size: .78rem;
-    font-weight: 700;
+    gap: .55rem;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-size: 1.05rem;
+    font-weight: 950;
+    color: #0f172a;
     cursor: pointer;
   }
 
-  .chart-tab.active {
-    background: #1d4ed8;
-    color: #fff;
-    border-color: #1d4ed8;
+  .analytics-toggle-btn i {
+    font-size: .9rem;
+    transition: transform .25s ease;
   }
 
-  .analytics-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: .55rem;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  font-size: 1.35rem;
-  font-weight: 800;
-  color: #0f172a;
-  cursor: pointer;
-}
+  .analytics-toggle-btn.is-collapsed i { transform: rotate(180deg); }
+  #analyticsChartsBody.is-hidden { display: none; }
 
-.analytics-toggle-btn i {
-  font-size: 1rem;
-  transition: transform .25s ease;
-}
-
-.analytics-toggle-btn.is-collapsed i {
-  transform: rotate(180deg);
-}
-
-#analyticsChartsBody.is-hidden {
-  display: none;
-}
-
-  .table-search {
-    max-width: 260px;
-  }
-
-  .dept-chart-title {
-    font-size: .88rem;
-    color: #64748b;
-    font-weight: 700;
-    margin-bottom: .6rem;
-  }
+  .table-search { max-width: 230px; }
 
   .snapshot-mini-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: .55rem;
-}
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .5rem;
+  }
 
-.snapshot-mini-grid .mini-stat {
-  padding: .45rem .55rem;
-  border-radius: 12px;
-  min-height: auto;
-}
+  .snapshot-mini-grid .mini-stat {
+    padding: .45rem .55rem;
+    border-radius: 12px;
+    min-height: auto;
+  }
 
-.snapshot-mini-grid .mini-stat .title {
-  font-size: .68rem;
-  margin-bottom: .15rem;
-}
+  .insight-list {
+    display: grid;
+    gap: .55rem;
+  }
 
-.snapshot-mini-grid .mini-stat .num {
-  font-size: .95rem;
-  line-height: 1.05;
-}
+  .insight-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .55rem;
+    padding: .65rem;
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    font-size: .82rem;
+  }
 
-  @media (max-width: 1399px) {
+  .insight-item i {
+    color: #dc2626;
+    margin-top: .1rem;
+  }
+
+  .person-card {
+    border-radius: 15px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    padding: .65rem;
+  }
+
+  .person-card .name {
+    font-size: .88rem;
+    font-weight: 950;
+    color: #0f172a;
+    margin-bottom: .35rem;
+  }
+
+  .person-card .person-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: .35rem;
+  }
+
+  .person-card .person-stats span {
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: .35rem;
+    font-size: .72rem;
+    color: #64748b;
+    font-weight: 800;
+  }
+
+  .person-card .person-stats b {
+    display: block;
+    color: #0f172a;
+    font-size: .95rem;
+  }
+
+  .super-pagination-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    justify-content: flex-end;
+  }
+
+  .super-pagination-wrap .btn { border-radius: 10px; font-weight: 800; }
+
+  @media (max-width: 1599px) {
     .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .filter-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
 
   @media (max-width: 1199px) {
     .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .mini-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .mini-grid, .mini-grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
   @media (max-width: 767px) {
-    .summary-grid,
-    .mini-grid,
-    .filter-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .overview-page {
-      padding: .85rem;
-    }
-
-    .overview-hero {
-      padding: 1rem;
-      border-radius: 22px;
-    }
-
-    .chart-box,
-    .chart-box.chart-box-sm {
-      min-height: 260px;
-    }
+    .overview-page { padding: .75rem; }
+    .overview-hero { padding: .9rem; border-radius: 20px; }
+    .summary-grid, .mini-grid, .mini-grid.three, .filter-grid { grid-template-columns: 1fr; }
+    .chart-box, .chart-box.chart-box-sm { min-height: 250px; }
+    .section-title { align-items: flex-start; flex-direction: column; }
+    .table-search { max-width: 100%; }
   }
 </style>
 
@@ -390,139 +448,391 @@ padding: .55rem .65rem;
   const pendingDuePageData = pendingDueAdmissions;
   const noPaymentAdmissions = Array.isArray(billingStats.noPaymentAdmissions) ? billingStats.noPaymentAdmissions : [];
   const noPaymentPageData = noPaymentAdmissions;
+  const processedByStatsFromServer = Array.isArray(safeOverview.processedByStats) ? safeOverview.processedByStats : [];
+  const dailyAdmissionStatsFromServer = Array.isArray(safeOverview.dailyAdmissionStats) ? safeOverview.dailyAdmissionStats : [];
+  const searchResultsFromServer = Array.isArray(safeOverview.searchResults) ? safeOverview.searchResults : [];
+  const missingInsightsFromServer = Array.isArray(safeOverview.missingInsights) ? safeOverview.missingInsights : [];
+  const queryFilters = safeOverview.filters || {};
+  const urlFilters = typeof req !== 'undefined' && req.query ? req.query : {};
+  const activeSearch = String(queryFilters.q || urlFilters.q || '').trim();
+  const activeDept = String(queryFilters.department || urlFilters.department || '').trim();
+  const activeStatus = String(queryFilters.status || urlFilters.status || '').trim();
+  const activeFeeStatus = String(queryFilters.feeStatus || urlFilters.feeStatus || '').trim();
+  const activeProcessedBy = String(queryFilters.processedBy || urlFilters.processedBy || '').trim();
+  const activeFromDate = String(queryFilters.fromDate || urlFilters.fromDate || '').trim();
+  const activeToDate = String(queryFilters.toDate || urlFilters.toDate || '').trim();
+
+  function cleanText(value) {
+    return String(value || '').trim();
+  }
+
+  function getAdmissionDate(item) {
+    return cleanText(item.createdAt || item.created_at || item.registration_date || item.date || item.admissionDate).slice(0, 10);
+  }
+
+  function getProcessedBy(item) {
+    return cleanText(item.processedBy || item.processed_by || item.createdBy || item.created_by || item.agentName || item.agent_name || item.userName || item.user_name || 'Not Assigned');
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const fallbackProcessedMap = {};
+  const fallbackDailyMap = {};
+  let todayAdmissionsCount = 0;
+  recentAdmissions.forEach((item) => {
+    const processor = getProcessedBy(item);
+    const dept = cleanText(item.dept || item.department || 'Unknown') || 'Unknown';
+    const date = getAdmissionDate(item) || 'No Date';
+    if (!fallbackProcessedMap[processor]) {
+      fallbackProcessedMap[processor] = { name: processor, total: 0, school: 0, tuition: 0, quran: 0, latestDate: '' };
+    }
+    fallbackProcessedMap[processor].total += 1;
+    const deptLower = dept.toLowerCase();
+    if (deptLower.includes('school')) fallbackProcessedMap[processor].school += 1;
+    if (deptLower.includes('tuition')) fallbackProcessedMap[processor].tuition += 1;
+    if (deptLower.includes('quran')) fallbackProcessedMap[processor].quran += 1;
+    if (date && date !== 'No Date') fallbackProcessedMap[processor].latestDate = date;
+
+    if (!fallbackDailyMap[date]) fallbackDailyMap[date] = { date, total: 0, school: 0, tuition: 0, quran: 0 };
+    fallbackDailyMap[date].total += 1;
+    if (deptLower.includes('school')) fallbackDailyMap[date].school += 1;
+    if (deptLower.includes('tuition')) fallbackDailyMap[date].tuition += 1;
+    if (deptLower.includes('quran')) fallbackDailyMap[date].quran += 1;
+    if (date === todayIso) todayAdmissionsCount += 1;
+  });
+
+  const processedByStats = processedByStatsFromServer.length ? processedByStatsFromServer : Object.values(fallbackProcessedMap).sort((a, b) => (b.total || 0) - (a.total || 0));
+  const dailyAdmissionStats = dailyAdmissionStatsFromServer.length ? dailyAdmissionStatsFromServer : Object.values(fallbackDailyMap).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const searchResults = searchResultsFromServer.length ? searchResultsFromServer : recentAdmissions;
+  const selectedProcessorTotal = activeProcessedBy ? processedByStats.filter(x => cleanText(x.name || x.processedBy || x.processed_by).toLowerCase().includes(activeProcessedBy.toLowerCase())).reduce((sum, x) => sum + Number(x.total || 0), 0) : 0;
+  const totalAdmissions = ['school','tuition','quran'].reduce((sum, key) => sum + Number(departmentStats?.[key]?.total || 0), 0);
+  const totalRecentAdmissions = recentAdmissions.length;
+  const totalProcessedPeople = processedByStats.length;
+  const latestDailyAdmissions = dailyAdmissionStats[0]?.total || todayAdmissionsCount || 0;
+  const missingInsights = missingInsightsFromServer.length ? missingInsightsFromServer : [
+    { title: 'Processed By tracking', description: processedByStatsFromServer.length ? 'Processed By data is connected.' : 'If full processed-by counts are required, pass overviewData.processedByStats from server.js.' },
+    { title: 'Daily admissions tracking', description: dailyAdmissionStatsFromServer.length ? 'Daily admissions data is connected.' : 'If full date-wise counts are required, pass overviewData.dailyAdmissionStats from server.js.' },
+    { title: 'CEO search results', description: searchResultsFromServer.length ? 'Server search results are connected.' : 'This page can show recent admissions now. For all records, pass overviewData.searchResults from server.js.' }
+  ];
 %>
 
 <div class="overview-page">
-<div class="overview-hero mb-4">
-  <div class="row g-4 align-items-center">
-  <div class="col-lg-8">
-      <div class="small text-uppercase fw-bold mb-2" style="letter-spacing:.08em;color:rgba(255,255,255,.72);">
-        Super Admin Intelligence Panel
-      </div>
-      <h1>Overview Dashboard</h1>
-      <p>
-        School, Tuition aur Quran ka combined executive-level overview yahan show hoga.
-        Is page par totals, charts, status insights aur billing analytics ek jagah par ayegi.
-      </p>
+  <div class="overview-hero mb-3">
+    <div class="row g-3 align-items-center">
+      <div class="col-lg-8">
+        <div class="small text-uppercase fw-bold mb-2" style="letter-spacing:.08em;color:rgba(255,255,255,.72);">
+          Super Admin Intelligence Panel
+        </div>
+        <h1>Overview Dashboard</h1>
+        <p>CEO-level overview for admissions, processed-by performance, date-wise intake, billing health, status insights and missing operational data.</p>
 
-          <div class="overview-chip-wrap">
-        <span class="overview-chip"><i class="bi bi-mortarboard-fill"></i> School</span>
-        <span class="overview-chip"><i class="bi bi-journal-bookmark-fill"></i> Tuition</span>
-        <span class="overview-chip"><i class="bi bi-book-half"></i> Quran</span>
-        <span class="overview-chip"><i class="bi bi-shield-lock-fill"></i> Super Admin Only</span>
+        <div class="overview-chip-wrap">
+          <span class="overview-chip"><i class="bi bi-mortarboard-fill"></i> School</span>
+          <span class="overview-chip"><i class="bi bi-journal-bookmark-fill"></i> Tuition</span>
+          <span class="overview-chip"><i class="bi bi-book-half"></i> Quran</span>
+          <span class="overview-chip"><i class="bi bi-person-check-fill"></i> Processed By</span>
+          <span class="overview-chip"><i class="bi bi-calendar2-check-fill"></i> Daily Intake</span>
+        </div>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="panel-card p-3 h-100" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);box-shadow:none;">
+          <div class="section-title mb-2">
+            <div>
+              <h6 class="text-white mb-1">Department Snapshot</h6>
+              <div style="color:rgba(255,255,255,.72);font-size:.74rem;">Quick department totals</div>
+            </div>
+          </div>
+
+          <div class="mini-grid snapshot-mini-grid">
+            <div class="mini-stat">
+              <div class="title">School</div>
+              <div class="num"><%= departmentStats.school?.total || 0 %></div>
+            </div>
+            <div class="mini-stat">
+              <div class="title">Tuition</div>
+              <div class="num"><%= departmentStats.tuition?.total || 0 %></div>
+            </div>
+            <div class="mini-stat">
+              <div class="title">Quran</div>
+              <div class="num"><%= departmentStats.quran?.total || 0 %></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="summary-grid mb-3">
+    <div class="summary-card">
+      <div class="icon-wrap"><i class="bi bi-people-fill"></i></div>
+      <div class="label">Total Admissions</div>
+      <div class="value"><%= totalAdmissions %></div>
+      <div class="hint">School, Tuition and Quran</div>
+    </div>
+    <div class="summary-card">
+      <div class="icon-wrap"><i class="bi bi-calendar-check-fill"></i></div>
+      <div class="label">Today Admissions</div>
+      <div class="value"><%= todayAdmissionsCount || 0 %></div>
+      <div class="hint"><%= todayIso %></div>
+    </div>
+    <div class="summary-card">
+      <div class="icon-wrap"><i class="bi bi-person-lines-fill"></i></div>
+      <div class="label">Processed People</div>
+      <div class="value"><%= totalProcessedPeople %></div>
+      <div class="hint">Based on processed-by data</div>
+    </div>
+    <div class="summary-card">
+      <div class="icon-wrap"><i class="bi bi-search-heart-fill"></i></div>
+      <div class="label">Search Results</div>
+      <div class="value"><%= searchResults.length %></div>
+      <div class="hint">Current visible result set</div>
+    </div>
+    <div class="summary-card">
+      <div class="icon-wrap"><i class="bi bi-wallet2"></i></div>
+      <div class="label">Pending Dues</div>
+      <div class="value"><%= billingStats.totalPendingDues || 0 %></div>
+      <div class="hint">Billing amount pending</div>
+    </div>
+    <div class="summary-card">
+      <div class="icon-wrap"><i class="bi bi-exclamation-triangle-fill"></i></div>
+      <div class="label">Missing Checks</div>
+      <div class="value"><%= missingInsights.length %></div>
+      <div class="hint">Items to verify</div>
+    </div>
+  </div>
+
+  <div class="ceo-filter-card p-3 mb-3">
+    <div class="section-title">
+      <div>
+        <h5>CEO Search Center</h5>
+        <div class="section-sub">Search by student, registration, phone, department, status, fee status, processed by, or admission date.</div>
       </div>
     </div>
 
-    <div class="col-lg-4">
-      <div class="panel-card p-3 p-lg-4 h-100" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.10);box-shadow:none;">
-        <div class="section-title mb-2">
+    <form method="GET" action="" class="filter-grid">
+      <div>
+        <label class="form-label">Search</label>
+        <input type="text" class="form-control" name="q" value="<%= activeSearch %>" placeholder="Student, reg no, phone, processed by">
+      </div>
+      <div>
+        <label class="form-label">Department</label>
+        <select class="form-select" name="department">
+          <option value="">All</option>
+          <option value="school" <%= activeDept === 'school' ? 'selected' : '' %>>School</option>
+          <option value="tuition" <%= activeDept === 'tuition' ? 'selected' : '' %>>Tuition</option>
+          <option value="quran" <%= activeDept === 'quran' ? 'selected' : '' %>>Quran</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Status</label>
+        <input type="text" class="form-control" name="status" value="<%= activeStatus %>" placeholder="Current status">
+      </div>
+      <div>
+        <label class="form-label">Fee Status</label>
+        <input type="text" class="form-control" name="feeStatus" value="<%= activeFeeStatus %>" placeholder="Fee status">
+      </div>
+      <div>
+        <label class="form-label">Processed By</label>
+        <input type="text" class="form-control" name="processedBy" value="<%= activeProcessedBy %>" placeholder="Agent/Admin name">
+      </div>
+      <div>
+        <label class="form-label">From</label>
+        <input type="date" class="form-control" name="fromDate" value="<%= activeFromDate %>">
+      </div>
+      <div>
+        <label class="form-label">To</label>
+        <input type="date" class="form-control" name="toDate" value="<%= activeToDate %>">
+      </div>
+      <div class="filter-actions">
+        <button type="submit" class="btn-ceo"><i class="bi bi-funnel-fill me-1"></i> Apply</button>
+        <a href="/dashboard/overview" class="btn-soft text-decoration-none"><i class="bi bi-arrow-counterclockwise me-1"></i> Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-xl-8">
+      <div class="panel-card p-3 h-100">
+        <div class="section-title">
           <div>
-            <h6 class="text-white mb-1" style="font-size:1rem;font-weight:800;">Department Snapshot</h6>
-            <div style="color:rgba(255,255,255,.72);font-size:.76rem;">School, Tuition, Quran quick view</div>
+            <h5>Processed By Performance</h5>
+            <div class="section-sub">How many admissions each person processed. Search a name above to narrow server results.</div>
           </div>
+          <% if (activeProcessedBy) { %>
+            <span class="soft-badge danger-badge">Selected total: <%= selectedProcessorTotal %></span>
+          <% } %>
         </div>
 
-        <div class="mini-grid snapshot-mini-grid">
-          <div class="mini-stat">
-            <div class="title">School</div>
-            <div class="num"><%= departmentStats.school?.total || 0 %></div>
+        <% if (processedByStats.length) { %>
+          <div class="row g-2">
+            <% processedByStats.slice(0, 12).forEach((item) => { 
+              const personName = item.name || item.processedBy || item.processed_by || 'Not Assigned';
+            %>
+              <div class="col-md-6 col-xl-4">
+                <div class="person-card">
+                  <div class="name"><i class="bi bi-person-badge me-1 text-danger"></i><%= personName %></div>
+                  <div class="person-stats">
+                    <span><b><%= item.total || 0 %></b>Total</span>
+                    <span><b><%= item.school || 0 %></b>School</span>
+                    <span><b><%= item.tuition || 0 %></b>Tuition</span>
+                  </div>
+                  <div class="mt-2 d-flex justify-content-between align-items-center">
+                    <span class="soft-badge dark-badge">Quran: <%= item.quran || 0 %></span>
+                    <small class="text-muted"><%= item.latestDate || item.lastDate || '' %></small>
+                  </div>
+                </div>
+              </div>
+            <% }) %>
           </div>
-          <div class="mini-stat">
-            <div class="title">Tuition</div>
-            <div class="num"><%= departmentStats.tuition?.total || 0 %></div>
-          </div>
-          <div class="mini-stat">
-            <div class="title">Quran</div>
-            <div class="num"><%= departmentStats.quran?.total || 0 %></div>
-          </div>
-        </div>
+        <% } else { %>
+          <div class="empty-state">No processed-by data found</div>
+        <% } %>
       </div>
     </div>
-  </div>
-</div>
 
- 
-
-  
-
- <div class="row g-4 mb-4">
-  <div class="col-12">
-      <div class="panel-card p-3 p-lg-4 h-100">
-       <div class="section-title d-flex align-items-center justify-content-between">
-  <div>
-    <button
-      type="button"
-      class="analytics-toggle-btn is-collapsed"
-      id="analyticsChartsToggle"
-      aria-expanded="false"
-      aria-controls="analyticsChartsBody"
-    >
-      <span>Analytics Charts</span>
-      <i class="bi bi-chevron-up" id="analyticsChartsToggleIcon"></i>
-    </button>
-    <div class="section-sub">Line, bar, pie aur doughnut charts</div>
-  </div>
-</div>
-
-        <div class="row g-4 is-hidden" id="analyticsChartsBody">
-          
-
-          <div class="col-lg-4">
-            <div class="panel-card p-3">
-              <div class="section-title mb-3">
-                <div>
-                  <h5>Department Comparison</h5>
-                  <div class="section-sub">School, Tuition, Quran comparison</div>
-                </div>
-              </div>
-              <div class="chart-box chart-box-sm">
-                <canvas id="departmentComparisonChart"></canvas>
+    <div class="col-xl-4">
+      <div class="panel-card p-3 h-100">
+        <div class="section-title">
+          <div>
+            <h5>Missing Data Monitor</h5>
+            <div class="section-sub">CEO can quickly see what is missing or not connected.</div>
+          </div>
+        </div>
+        <div class="insight-list">
+          <% missingInsights.forEach((item) => { %>
+            <div class="insight-item">
+              <i class="bi bi-info-circle-fill"></i>
+              <div>
+                <strong><%= item.title || 'Insight' %></strong>
+                <div class="text-muted"><%= item.description || item.message || '-' %></div>
               </div>
             </div>
-          </div>
-
-          <div class="col-lg-4">
-            <div class="panel-card p-2">
-              <div class="section-title mb-3">
-                <div>
-                  <h5>Status Distribution</h5>
-                  <div class="section-sub">Dynamic current statuses</div>
-                </div>
-              </div>
-              <div class="chart-box chart-box-sm">
-                <canvas id="statusDistributionChart"></canvas>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-lg-4">
-            <div class="panel-card p-2">
-              <div class="section-title mb-3">
-                <div>
-                  <h5>Fee Distribution</h5>
-                  <div class="section-sub">Paid, unpaid, partial and more</div>
-                </div>
-              </div>
-              <div class="chart-box chart-box-sm">
-                <canvas id="feeDistributionChart"></canvas>
-              </div>
-            </div>
-          </div>
+          <% }) %>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="panel-card p-3 p-lg-4 mb-4">
+  <div class="row g-3 mb-3">
+    <div class="col-xl-7">
+      <div class="panel-card p-3 h-100">
+        <div class="section-title">
+          <div>
+            <h5>Date-wise Admissions</h5>
+            <div class="section-sub">Admissions by day with total admission number.</div>
+          </div>
+          <input type="text" class="form-control table-search" id="dailyAdmissionsSearch" placeholder="Search date">
+        </div>
+        <% if (dailyAdmissionStats.length) { %>
+          <div class="table-responsive">
+            <table class="table table-premium table-compact align-middle mb-0" id="dailyAdmissionsTable">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Total Admissions</th>
+                  <th>School</th>
+                  <th>Tuition</th>
+                  <th>Quran</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% dailyAdmissionStats.slice(0, 20).forEach((item) => { %>
+                  <tr>
+                    <td><span class="soft-badge dark-badge"><%= item.date || item.day || '-' %></span></td>
+                    <td><strong><%= item.total || 0 %></strong></td>
+                    <td><%= item.school || 0 %></td>
+                    <td><%= item.tuition || 0 %></td>
+                    <td><%= item.quran || 0 %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %>
+          <div class="empty-state">No date-wise admission data found</div>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="col-xl-5">
+      <div class="panel-card p-3 h-100">
+        <div class="section-title">
+          <div>
+            <h5>Executive Quick Numbers</h5>
+            <div class="section-sub">Compact numbers for quick CEO review.</div>
+          </div>
+        </div>
+        <div class="mini-grid three mb-3">
+          <div class="mini-stat"><div class="title">Recent Admissions</div><div class="num"><%= totalRecentAdmissions %></div></div>
+          <div class="mini-stat"><div class="title">Latest Day Intake</div><div class="num"><%= latestDailyAdmissions %></div></div>
+          <div class="mini-stat"><div class="title">Received</div><div class="num"><%= billingStats.totalReceivedAmount || 0 %></div></div>
+          <div class="mini-stat"><div class="title">Fully Paid</div><div class="num"><%= billingStats.totalFullyPaidAdmissions || 0 %></div></div>
+          <div class="mini-stat"><div class="title">Partial Paid</div><div class="num"><%= billingStats.totalPartiallyPaidAdmissions || 0 %></div></div>
+          <div class="mini-stat"><div class="title">Unpaid</div><div class="num"><%= billingStats.totalUnpaidAdmissions || 0 %></div></div>
+        </div>
+        <div class="empty-state py-3">Use the search filters to review exact records by name, date, status, fee status or processed-by person.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel-card p-3 mb-3">
+    <div class="section-title d-flex align-items-center justify-content-between">
+      <div>
+        <button type="button" class="analytics-toggle-btn is-collapsed" id="analyticsChartsToggle" aria-expanded="false" aria-controls="analyticsChartsBody">
+          <span>Analytics Charts</span>
+          <i class="bi bi-chevron-up" id="analyticsChartsToggleIcon"></i>
+        </button>
+        <div class="section-sub">Line, bar, pie and doughnut charts</div>
+      </div>
+    </div>
+
+    <div class="row g-3 is-hidden" id="analyticsChartsBody">
+      <div class="col-lg-4">
+        <div class="panel-card tight p-3">
+          <div class="section-title mb-2">
+            <div>
+              <h6>Department Comparison</h6>
+              <div class="section-sub">School, Tuition, Quran comparison</div>
+            </div>
+          </div>
+          <div class="chart-box chart-box-sm"><canvas id="departmentComparisonChart"></canvas></div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="panel-card tight p-3">
+          <div class="section-title mb-2">
+            <div>
+              <h6>Status Distribution</h6>
+              <div class="section-sub">Dynamic current statuses</div>
+            </div>
+          </div>
+          <div class="chart-box chart-box-sm"><canvas id="statusDistributionChart"></canvas></div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="panel-card tight p-3">
+          <div class="section-title mb-2">
+            <div>
+              <h6>Fee Distribution</h6>
+              <div class="section-sub">Paid, unpaid, partial and more</div>
+            </div>
+          </div>
+          <div class="chart-box chart-box-sm"><canvas id="feeDistributionChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel-card p-3 mb-3">
     <div class="section-title">
       <div>
         <h5>Department Summary</h5>
-        <div class="section-sub">Department-wise totals, statuses, fee health, billing health aur intake</div>
+        <div class="section-sub">Department-wise totals, statuses, fee health, billing health and intake.</div>
       </div>
     </div>
 
     <div class="table-responsive">
-      <table class="table table-premium align-middle mb-0">
+      <table class="table table-premium table-compact align-middle mb-0">
         <thead>
           <tr>
             <th>Department</th>
@@ -537,13 +847,9 @@ padding: .55rem .65rem;
           </tr>
         </thead>
         <tbody>
-          <% ['school','tuition','quran'].forEach((deptKey) => {
-            const dept = departmentStats?.[deptKey] || {};
-          %>
+          <% ['school','tuition','quran'].forEach((deptKey) => { const dept = departmentStats?.[deptKey] || {}; %>
             <tr>
-              <td>
-                <span class="soft-badge"><%= deptKey.charAt(0).toUpperCase() + deptKey.slice(1) %></span>
-              </td>
+              <td><span class="soft-badge"><%= deptKey.charAt(0).toUpperCase() + deptKey.slice(1) %></span></td>
               <td><strong><%= dept.total || 0 %></strong></td>
               <td><%= Object.keys(dept.currentStatus || {}).length %></td>
               <td><%= Object.keys(dept.feeStatus || {}).length %></td>
@@ -559,204 +865,86 @@ padding: .55rem .65rem;
     </div>
   </div>
 
-  <div class="row g-4 mb-4">
+  <div class="row g-3 mb-3">
     <div class="col-xl-6">
-      <div class="panel-card p-3 p-lg-4 h-100">
-        <div class="section-title">
-          <div>
-            <h5>Status Summary</h5>
-            <div class="section-sub">Dynamic current statuses with department-wise count</div>
-          </div>
-        </div>
-
+      <div class="panel-card p-3 h-100">
+        <div class="section-title"><div><h5>Status Summary</h5><div class="section-sub">Dynamic current statuses with department-wise count</div></div></div>
         <% if (statusStats.length) { %>
           <div class="table-responsive">
-            <table class="table table-premium align-middle mb-0">
-              <thead>
-                <tr>
-                  <th>Status</th>
-                  <th>Total</th>
-                  <th>School</th>
-                  <th>Tuition</th>
-                  <th>Quran</th>
-                </tr>
-              </thead>
+            <table class="table table-premium table-compact align-middle mb-0">
+              <thead><tr><th>Status</th><th>Total</th><th>School</th><th>Tuition</th><th>Quran</th></tr></thead>
               <tbody>
                 <% statusStats.forEach((item) => { %>
                   <tr>
-                    <td>
-                      <span class="soft-badge" style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>">
-                        <%= item.label || item.name || 'Unknown' %>
-                      </span>
-                    </td>
-                    <td><strong><%= item.total || 0 %></strong></td>
-                    <td><%= item.school || 0 %></td>
-                    <td><%= item.tuition || 0 %></td>
-                    <td><%= item.quran || 0 %></td>
+                    <td><span class="soft-badge" style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>"><%= item.label || item.name || 'Unknown' %></span></td>
+                    <td><strong><%= item.total || 0 %></strong></td><td><%= item.school || 0 %></td><td><%= item.tuition || 0 %></td><td><%= item.quran || 0 %></td>
                   </tr>
                 <% }) %>
               </tbody>
             </table>
           </div>
-        <% } else { %>
-          <div class="empty-state">No status analytics found</div>
-        <% } %>
+        <% } else { %><div class="empty-state">No status analytics found</div><% } %>
       </div>
     </div>
 
     <div class="col-xl-6">
-      <div class="panel-card p-3 p-lg-4 h-100">
-        <div class="section-title">
-          <div>
-            <h5>Fee Summary</h5>
-            <div class="section-sub">Dynamic fee status breakdown with department-wise count</div>
-          </div>
-        </div>
-
+      <div class="panel-card p-3 h-100">
+        <div class="section-title"><div><h5>Fee Summary</h5><div class="section-sub">Dynamic fee status breakdown with department-wise count</div></div></div>
         <% if (feeStats.length) { %>
           <div class="table-responsive">
-            <table class="table table-premium align-middle mb-0">
-              <thead>
-                <tr>
-                  <th>Fee Status</th>
-                  <th>Total</th>
-                  <th>School</th>
-                  <th>Tuition</th>
-                  <th>Quran</th>
-                </tr>
-              </thead>
+            <table class="table table-premium table-compact align-middle mb-0">
+              <thead><tr><th>Fee Status</th><th>Total</th><th>School</th><th>Tuition</th><th>Quran</th></tr></thead>
               <tbody>
                 <% feeStats.forEach((item) => { %>
                   <tr>
-                    <td>
-                      <span class="soft-badge" style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>">
-                        <%= item.label || item.name || 'Unknown' %>
-                      </span>
-                    </td>
-                    <td><strong><%= item.total || 0 %></strong></td>
-                    <td><%= item.school || 0 %></td>
-                    <td><%= item.tuition || 0 %></td>
-                    <td><%= item.quran || 0 %></td>
+                    <td><span class="soft-badge" style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>"><%= item.label || item.name || 'Unknown' %></span></td>
+                    <td><strong><%= item.total || 0 %></strong></td><td><%= item.school || 0 %></td><td><%= item.tuition || 0 %></td><td><%= item.quran || 0 %></td>
                   </tr>
                 <% }) %>
               </tbody>
             </table>
           </div>
-        <% } else { %>
-          <div class="empty-state">No fee analytics found</div>
-        <% } %>
+        <% } else { %><div class="empty-state">No fee analytics found</div><% } %>
       </div>
     </div>
   </div>
 
-  <div class="row g-4 mb-4">
+  <div class="row g-3 mb-3">
     <div class="col-xl-6">
-      <div class="panel-card p-3 p-lg-4 h-100">
-        <div class="section-title">
-          <div>
-            <h5>Currency Summary</h5>
-            <div class="section-sub">Dynamic currencies with received and pending amounts</div>
-          </div>
-        </div>
-
+      <div class="panel-card p-3 h-100">
+        <div class="section-title"><div><h5>Currency Summary</h5><div class="section-sub">Dynamic currencies with received and pending amounts</div></div></div>
         <% if (currencyStats.length) { %>
           <div class="table-responsive">
-            <table class="table table-premium align-middle mb-0">
-              <thead>
-                <tr>
-                  <th>Currency</th>
-                  <th>Total Admissions</th>
-                  <th>Received</th>
-                  <th>Pending</th>
-                </tr>
-              </thead>
+            <table class="table table-premium table-compact align-middle mb-0">
+              <thead><tr><th>Currency</th><th>Total Admissions</th><th>Received</th><th>Pending</th></tr></thead>
               <tbody>
                 <% currencyStats.forEach((item) => { %>
-                  <tr>
-                    <td><span class="soft-badge"><%= item.currency || item.label || 'Unknown' %></span></td>
-                    <td><strong><%= item.total || 0 %></strong></td>
-                    <td><%= item.received || 0 %></td>
-                    <td><%= item.pending || 0 %></td>
-                  </tr>
+                  <tr><td><span class="soft-badge"><%= item.currency || item.label || 'Unknown' %></span></td><td><strong><%= item.total || 0 %></strong></td><td><%= item.received || 0 %></td><td><%= item.pending || 0 %></td></tr>
                 <% }) %>
               </tbody>
             </table>
           </div>
-        <% } else { %>
-          <div class="empty-state">No currency analytics found</div>
-        <% } %>
+        <% } else { %><div class="empty-state">No currency analytics found</div><% } %>
       </div>
     </div>
 
     <div class="col-xl-6">
-      <div class="panel-card p-3 p-lg-4 h-100">
-        <div class="section-title">
-          <div>
-            <h5>Billing Summary</h5>
-            <div class="section-sub">Billing health, invoice status aur dues insight</div>
-          </div>
+      <div class="panel-card p-3 h-100">
+        <div class="section-title"><div><h5>Billing Summary</h5><div class="section-sub">Billing health, invoice status and dues insight</div></div></div>
+        <div class="mini-grid mb-3">
+          <div class="mini-stat"><div class="title">Total Billed</div><div class="num"><%= billingStats.totalBilled || 0 %></div></div>
+          <div class="mini-stat"><div class="title">Pending Dues</div><div class="num"><%= billingStats.totalPendingDues || 0 %></div></div>
+          <div class="mini-stat"><div class="title">Received Amount</div><div class="num"><%= billingStats.totalReceivedAmount || 0 %></div></div>
+          <div class="mini-stat"><div class="title">No Payment</div><div class="num"><%= billingStats.totalNoPaymentAdmissions || 0 %></div></div>
         </div>
-
-        <div class="mini-grid mb-4">
-          <div class="mini-stat">
-            <div class="title">Total Billed</div>
-            <div class="num"><%= billingStats.totalBilled || 0 %></div>
-          </div>
-          <div class="mini-stat">
-            <div class="title">Pending Dues</div>
-            <div class="num"><%= billingStats.totalPendingDues || 0 %></div>
-          </div>
-          <div class="mini-stat">
-            <div class="title">Received Amount</div>
-            <div class="num"><%= billingStats.totalReceivedAmount || 0 %></div>
-          </div>
-          <div class="mini-stat">
-            <div class="title">Fully Paid</div>
-            <div class="num"><%= billingStats.totalFullyPaidAdmissions || 0 %></div>
-          </div>
-          <div class="mini-stat">
-            <div class="title">Partial Paid</div>
-            <div class="num"><%= billingStats.totalPartiallyPaidAdmissions || 0 %></div>
-          </div>
-          <div class="mini-stat">
-            <div class="title">Unpaid</div>
-            <div class="num"><%= billingStats.totalUnpaidAdmissions || 0 %></div>
-          </div>
-          <div class="mini-stat">
-            <div class="title">No Payment</div>
-            <div class="num"><%= billingStats.totalNoPaymentAdmissions || 0 %></div>
-          </div>
-          <div class="mini-stat">
-            <div class="title">Billing Types</div>
-            <div class="num"><%= billingStats.invoiceStatusTotals || 0 %></div>
-          </div>
-        </div>
-
         <div class="table-responsive">
-          <table class="table table-premium align-middle mb-0">
-            <thead>
-              <tr>
-                <th>Billing Status</th>
-                <th>Total</th>
-              </tr>
-            </thead>
+          <table class="table table-premium table-compact align-middle mb-0">
+            <thead><tr><th>Billing Status</th><th>Total</th></tr></thead>
             <tbody>
               <% billingBreakdown.forEach((item) => { %>
-                <tr>
-                  <td>
-                    <span class="soft-badge" style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>">
-                      <%= item.label || 'Unknown' %>
-                    </span>
-                  </td>
-                  <td><strong><%= item.total || 0 %></strong></td>
-                </tr>
+                <tr><td><span class="soft-badge" style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>"><%= item.label || 'Unknown' %></span></td><td><strong><%= item.total || 0 %></strong></td></tr>
               <% }) %>
-
-              <% if (!billingBreakdown.length) { %>
-                <tr>
-                  <td colspan="2" class="text-center text-muted py-4">No billing summary found</td>
-                </tr>
-              <% } %>
+              <% if (!billingBreakdown.length) { %><tr><td colspan="2" class="text-center text-muted py-3">No billing summary found</td></tr><% } %>
             </tbody>
           </table>
         </div>
@@ -764,79 +952,81 @@ padding: .55rem .65rem;
     </div>
   </div>
 
-    <div class="panel-card p-3 p-lg-4 mb-4">
+  <div class="panel-card p-3 mb-3">
+    <div class="section-title">
+      <div>
+        <h5>Search Result Details</h5>
+        <div class="section-sub">Records visible for CEO review. Backend can pass all matched admissions through overviewData.searchResults.</div>
+      </div>
+      <input type="text" class="form-control table-search" id="searchResultsTableSearch" placeholder="Search table">
+    </div>
+    <% if (searchResults.length) { %>
+      <div class="table-responsive">
+        <table class="table table-premium table-compact align-middle mb-0" id="searchResultsTable">
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Registration</th>
+              <th>Department</th>
+              <th>Current Status</th>
+              <th>Fee Status</th>
+              <th>Processed By</th>
+              <th>Admission Date</th>
+              <th>Phone</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% searchResults.slice(0, 100).forEach((item) => { %>
+              <tr>
+                <td><strong><%= item.studentName || item.student_name || item.name || '-' %></strong></td>
+                <td><%= item.registrationNo || item.registration_no || item.regNo || item.reg_no || '-' %></td>
+                <td><span class="soft-badge"><%= item.dept || item.department || '-' %></span></td>
+                <td><%= item.status || item.currentStatus || item.current_status || '-' %></td>
+                <td><%= item.feeStatus || item.fee_status || '-' %></td>
+                <td><%= getProcessedBy(item) %></td>
+                <td><%= getAdmissionDate(item) || '-' %></td>
+                <td><%= item.phone || item.contact || item.mobile || '-' %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } else { %>
+      <div class="empty-state">No search results found</div>
+    <% } %>
+  </div>
+
+  <div class="panel-card p-3 mb-3">
     <div class="section-title">
       <div>
         <h5>Invoice & Report Status Summary</h5>
-        <div class="section-sub">Deliverability, paid invoice status aur timestamps overview</div>
+        <div class="section-sub">Deliverability, paid invoice status and timestamps overview</div>
       </div>
     </div>
-
-    <div class="mini-grid mb-4">
-      <div class="mini-stat">
-        <div class="title">Invoice Status Types</div>
-        <div class="num"><%= billingStats.invoiceStatusTotals || 0 %></div>
-      </div>
-      <div class="mini-stat">
-        <div class="title">Paid Invoice Status Types</div>
-        <div class="num"><%= billingStats.paidInvoiceStatusTotals || 0 %></div>
-      </div>
-      <div class="mini-stat">
-        <div class="title">Timestamped Updates</div>
-        <div class="num"><%= billingStats.invoiceTimestampTotals || 0 %></div>
-      </div>
+    <div class="mini-grid three mb-3">
+      <div class="mini-stat"><div class="title">Invoice Status Types</div><div class="num"><%= billingStats.invoiceStatusTotals || 0 %></div></div>
+      <div class="mini-stat"><div class="title">Paid Invoice Status Types</div><div class="num"><%= billingStats.paidInvoiceStatusTotals || 0 %></div></div>
+      <div class="mini-stat"><div class="title">Timestamped Updates</div><div class="num"><%= billingStats.invoiceTimestampTotals || 0 %></div></div>
     </div>
-
-    <div class="row g-4">
+    <div class="row g-3">
       <div class="col-lg-6">
         <div class="table-responsive">
-          <table class="table table-premium align-middle mb-0">
-            <thead>
-              <tr>
-                <th>Invoice Status</th>
-                <th>Total</th>
-              </tr>
-            </thead>
+          <table class="table table-premium table-compact align-middle mb-0">
+            <thead><tr><th>Invoice Status</th><th>Total</th></tr></thead>
             <tbody>
-              <% (billingStats.invoiceStatusBreakdown || []).forEach((item) => { %>
-                <tr>
-                  <td><span class="soft-badge"><%= item.label || '-' %></span></td>
-                  <td><strong><%= item.total || 0 %></strong></td>
-                </tr>
-              <% }) %>
-
-              <% if (!(billingStats.invoiceStatusBreakdown || []).length) { %>
-                <tr>
-                  <td colspan="2" class="text-center text-muted py-4">No invoice status data found</td>
-                </tr>
-              <% } %>
+              <% (billingStats.invoiceStatusBreakdown || []).forEach((item) => { %><tr><td><span class="soft-badge"><%= item.label || '-' %></span></td><td><strong><%= item.total || 0 %></strong></td></tr><% }) %>
+              <% if (!(billingStats.invoiceStatusBreakdown || []).length) { %><tr><td colspan="2" class="text-center text-muted py-3">No invoice status data found</td></tr><% } %>
             </tbody>
           </table>
         </div>
       </div>
-
       <div class="col-lg-6">
         <div class="table-responsive">
-          <table class="table table-premium align-middle mb-0">
-            <thead>
-              <tr>
-                <th>Paid Invoice Status</th>
-                <th>Total</th>
-              </tr>
-            </thead>
+          <table class="table table-premium table-compact align-middle mb-0">
+            <thead><tr><th>Paid Invoice Status</th><th>Total</th></tr></thead>
             <tbody>
-              <% (billingStats.paidInvoiceStatusBreakdown || []).forEach((item) => { %>
-                <tr>
-                  <td><span class="soft-badge"><%= item.label || '-' %></span></td>
-                  <td><strong><%= item.total || 0 %></strong></td>
-                </tr>
-              <% }) %>
-
-              <% if (!(billingStats.paidInvoiceStatusBreakdown || []).length) { %>
-                <tr>
-                  <td colspan="2" class="text-center text-muted py-4">No paid invoice status data found</td>
-                </tr>
-              <% } %>
+              <% (billingStats.paidInvoiceStatusBreakdown || []).forEach((item) => { %><tr><td><span class="soft-badge"><%= item.label || '-' %></span></td><td><strong><%= item.total || 0 %></strong></td></tr><% }) %>
+              <% if (!(billingStats.paidInvoiceStatusBreakdown || []).length) { %><tr><td colspan="2" class="text-center text-muted py-3">No paid invoice status data found</td></tr><% } %>
             </tbody>
           </table>
         </div>
@@ -844,211 +1034,109 @@ padding: .55rem .65rem;
     </div>
   </div>
 
-  <div class="row g-4">
+  <div class="row g-3">
     <div class="col-xl-6">
-      <div class="panel-card p-3 p-lg-4 h-100">
-               <div class="section-title">
-          <div>
-            <h5>Recent Admissions</h5>
-            <div class="section-sub">Latest admissions</div>
-          </div>
+      <div class="panel-card p-3 h-100">
+        <div class="section-title">
+          <div><h5>Recent Admissions</h5><div class="section-sub">Latest admissions</div></div>
           <input type="text" class="form-control table-search" id="recentAdmissionsSearch" placeholder="Search admissions">
         </div>
         <% if (recentAdmissions.length) { %>
           <div class="table-responsive">
-                        <table class="table table-premium align-middle mb-0" id="recentAdmissionsTable">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Department</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                </tr>
-              </thead>
+            <table class="table table-premium table-compact align-middle mb-0" id="recentAdmissionsTable">
+              <thead><tr><th>Student</th><th>Department</th><th>Status</th><th>Processed By</th><th>Created</th></tr></thead>
               <tbody>
                 <% recentAdmissionsPageData.forEach((item) => { %>
-                  <tr>
-                    <td><strong><%= item.studentName || item.student_name || '-' %></strong></td>
-                    <td><%= item.dept || '-' %></td>
-                    <td><span class="soft-badge"><%= item.status || '-' %></span></td>
-                    <td><%= item.createdAt || item.registration_date || '-' %></td>
-                  </tr>
+                  <tr><td><strong><%= item.studentName || item.student_name || '-' %></strong></td><td><%= item.dept || '-' %></td><td><span class="soft-badge"><%= item.status || '-' %></span></td><td><%= getProcessedBy(item) %></td><td><%= item.createdAt || item.registration_date || '-' %></td></tr>
                 <% }) %>
               </tbody>
             </table>
-            <% if (recentAdmissionsPagination && recentAdmissionsPagination.totalPages > 1) { %>
-  <div class="super-pagination-wrap pt-3">
-    <% for (let p = 1; p <= recentAdmissionsPagination.totalPages; p++) { %>
-      <a href="?recentAdmissionsPage=<%= p %>" 
-         class="btn btn-sm <%= p === recentAdmissionsPagination.page ? 'btn-danger' : 'btn-outline-secondary' %>">
-        <%= p %>
-      </a>
-    <% } %>
-  </div>
-<% } %>
+            <% if (typeof recentAdmissionsPagination !== 'undefined' && recentAdmissionsPagination && recentAdmissionsPagination.totalPages > 1) { %>
+              <div class="super-pagination-wrap pt-3">
+                <% for (let p = 1; p <= recentAdmissionsPagination.totalPages; p++) { %>
+                  <a href="?recentAdmissionsPage=<%= p %>" class="btn btn-sm <%= p === recentAdmissionsPagination.page ? 'btn-danger' : 'btn-outline-secondary' %>"><%= p %></a>
+                <% } %>
+              </div>
+            <% } %>
           </div>
-        <% } else { %>
-          <div class="empty-state">No recent admissions found</div>
-        <% } %>
+        <% } else { %><div class="empty-state">No recent admissions found</div><% } %>
       </div>
     </div>
 
     <div class="col-xl-6">
-      <div class="panel-card p-3 p-lg-4 h-100">
-              <div class="section-title">
-          <div>
-            <h5>Recent Billing Changes</h5>
-            <div class="section-sub">Latest billing updates</div>
-          </div>
+      <div class="panel-card p-3 h-100">
+        <div class="section-title">
+          <div><h5>Recent Billing Changes</h5><div class="section-sub">Latest billing updates</div></div>
           <input type="text" class="form-control table-search" id="recentBillingSearch" placeholder="Search billing">
         </div>
-
         <% if (recentBillingChanges.length) { %>
           <div class="table-responsive">
-                        <table class="table table-premium align-middle mb-0" id="recentBillingTable">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Month</th>
-                  <th>Status</th>
-                  <th>Updated</th>
-                </tr>
-              </thead>
+            <table class="table table-premium table-compact align-middle mb-0" id="recentBillingTable">
+              <thead><tr><th>Student</th><th>Month</th><th>Status</th><th>Updated</th></tr></thead>
               <tbody>
                 <% recentBillingPageData.forEach((item) => { %>
-                  <tr>
-                    <td><strong><%= item.studentName || item.student_name || '-' %></strong></td>
-                    <td><%= item.month || '-' %></td>
-                    <td><span class="soft-badge"><%= item.status || '-' %></span></td>
-                    <td><%= item.updatedAt || '-' %></td>
-                  </tr>
+                  <tr><td><strong><%= item.studentName || item.student_name || '-' %></strong></td><td><%= item.month || '-' %></td><td><span class="soft-badge"><%= item.status || '-' %></span></td><td><%= item.updatedAt || '-' %></td></tr>
                 <% }) %>
               </tbody>
             </table>
-            <% if (typeof pagination !== 'undefined' && pagination.totalPages > 1) { %>
-  <div class="super-pagination-wrap pt-3">
-    <% for (let p = 1; p <= pagination.totalPages; p++) { %>
-      <a href="?recentBillingPage=<%= p %>" 
-         class="btn btn-sm <%= p === pagination.page ? 'btn-danger' : 'btn-outline-secondary' %>">
-        <%= p %>
-      </a>
-    <% } %>
-  </div>
-<% } %>
+            <% if (typeof pagination !== 'undefined' && pagination && pagination.totalPages > 1) { %>
+              <div class="super-pagination-wrap pt-3">
+                <% for (let p = 1; p <= pagination.totalPages; p++) { %>
+                  <a href="?recentBillingPage=<%= p %>" class="btn btn-sm <%= p === pagination.page ? 'btn-danger' : 'btn-outline-secondary' %>"><%= p %></a>
+                <% } %>
+              </div>
+            <% } %>
           </div>
-        <% } else { %>
-          <div class="empty-state">No recent billing changes found</div>
-        <% } %>
+        <% } else { %><div class="empty-state">No recent billing changes found</div><% } %>
       </div>
     </div>
   </div>
 
-  <div class="row g-4 mt-1">
+  <div class="row g-3 mt-1">
     <div class="col-xl-6">
-      <div class="panel-card p-3 p-lg-4 h-100">
-        <div class="section-title">
-          <div>
-            <h5>Pending Due Admissions</h5>
-            <div class="section-sub">Jin admissions par dues pending hain</div>
-          </div>
-        </div>
-
+      <div class="panel-card p-3 h-100">
+        <div class="section-title"><div><h5>Pending Due Admissions</h5><div class="section-sub">Admissions with pending dues</div></div></div>
         <div class="table-responsive">
-          <table class="table table-premium align-middle mb-0">
-            <thead>
-    <tr>
-    <th>Student</th>
-    <th>Dept</th>
-    <th>Amount</th>
-    <th>Month</th>
-    <th>Year</th>
-    <th>Entered</th>
-  </tr>
-</thead>
-<tbody>
-  <% pendingDuePageData.forEach((item) => { %>
-       <tr>
-      <td><strong><%= item.studentName || '-' %></strong></td>
-      <td><%= item.dept || '-' %></td>
-      <td><%= item.amount || 0 %></td>
-      <td><%= item.monthLabel || item.month || '-' %></td>
-      <td><%= item.billingYear || '-' %></td>
-      <td><%= item.enteredAt || '-' %></td>
-    </tr>
-  <% }) %>
-
-              <% if (!pendingDueAdmissions.length) { %>
-                <tr>
-                  <td colspan="6" class="text-center text-muted py-4">No pending dues found</td>
-                </tr>
-              <% } %>
+          <table class="table table-premium table-compact align-middle mb-0">
+            <thead><tr><th>Student</th><th>Dept</th><th>Amount</th><th>Month</th><th>Year</th><th>Entered</th></tr></thead>
+            <tbody>
+              <% pendingDuePageData.forEach((item) => { %>
+                <tr><td><strong><%= item.studentName || '-' %></strong></td><td><%= item.dept || '-' %></td><td><%= item.amount || 0 %></td><td><%= item.monthLabel || item.month || '-' %></td><td><%= item.billingYear || '-' %></td><td><%= item.enteredAt || '-' %></td></tr>
+              <% }) %>
+              <% if (!pendingDueAdmissions.length) { %><tr><td colspan="6" class="text-center text-muted py-3">No pending dues found</td></tr><% } %>
             </tbody>
           </table>
-          <% if (typeof pendingDuePagination !== "undefined" && pendingDuePagination.totalPages > 1) { %>
-  <div class="super-pagination-wrap pt-3">
-    <% for (let p = 1; p <= pendingDuePagination.totalPages; p++) { %>
-      <a href="?pendingDuePage=<%= p %>" 
-         class="btn btn-sm <%= p === pendingDuePagination.page ? 'btn-danger' : 'btn-outline-secondary' %>">
-        <%= p %>
-      </a>
-    <% } %>
-  </div>
-<% } %>
+          <% if (typeof pendingDuePagination !== 'undefined' && pendingDuePagination && pendingDuePagination.totalPages > 1) { %>
+            <div class="super-pagination-wrap pt-3">
+              <% for (let p = 1; p <= pendingDuePagination.totalPages; p++) { %>
+                <a href="?pendingDuePage=<%= p %>" class="btn btn-sm <%= p === pendingDuePagination.page ? 'btn-danger' : 'btn-outline-secondary' %>"><%= p %></a>
+              <% } %>
+            </div>
+          <% } %>
         </div>
       </div>
     </div>
 
-
     <div class="col-xl-6">
-      <div class="panel-card p-3 p-lg-4 h-100">
-        <div class="section-title">
-          <div>
-            <h5>No Payment Admissions</h5>
-            <div class="section-sub">Jahan no payment status mila</div>
-          </div>
-        </div>
-
+      <div class="panel-card p-3 h-100">
+        <div class="section-title"><div><h5>No Payment Admissions</h5><div class="section-sub">Admissions where no-payment status was found</div></div></div>
         <div class="table-responsive">
-          <table class="table table-premium align-middle mb-0">
-           <thead>
-  <tr>
-    <th>Student</th>
-    <th>Dept</th>
-    <th>Amount</th>
-    <th>Month</th>
-    <th>Year</th>
-    <th>Entered</th>
-  </tr>
-</thead>
-<tbody>
-  <% noPaymentPageData.forEach((item) => { %>
-    <tr>
-      <td><strong><%= item.studentName || '-' %></strong></td>
-      <td><%= item.dept || '-' %></td>
-      <td><%= item.amount || 0 %></td>
-      <td><%= item.monthLabel || item.month || '-' %></td>
-      <td><%= item.billingYear || '-' %></td>
-      <td><%= item.enteredAt || '-' %></td>
-    </tr>
-  <% }) %>
-
-  <% if (!noPaymentAdmissions.length) { %>
-    <tr>
-      <td colspan="6" class="text-center text-muted py-4">No no-payment admissions found</td>
-    </tr>
-  <% } %>
-</tbody>
+          <table class="table table-premium table-compact align-middle mb-0">
+            <thead><tr><th>Student</th><th>Dept</th><th>Amount</th><th>Month</th><th>Year</th><th>Entered</th></tr></thead>
+            <tbody>
+              <% noPaymentPageData.forEach((item) => { %>
+                <tr><td><strong><%= item.studentName || '-' %></strong></td><td><%= item.dept || '-' %></td><td><%= item.amount || 0 %></td><td><%= item.monthLabel || item.month || '-' %></td><td><%= item.billingYear || '-' %></td><td><%= item.enteredAt || '-' %></td></tr>
+              <% }) %>
+              <% if (!noPaymentAdmissions.length) { %><tr><td colspan="6" class="text-center text-muted py-3">No no-payment admissions found</td></tr><% } %>
+            </tbody>
           </table>
           <% if (typeof noPaymentPagination !== 'undefined' && noPaymentPagination && noPaymentPagination.totalPages > 1) { %>
-  <div class="super-pagination-wrap pt-3">
-    <% for (let p = 1; p <= noPaymentPagination.totalPages; p++) { %>
-      <a href="?noPaymentPage=<%= p %>" 
-         class="btn btn-sm <%= p === noPaymentPagination.page ? 'btn-danger' : 'btn-outline-secondary' %>">
-        <%= p %>
-      </a>
-    <% } %>
-  </div>
-<% } %>
+            <div class="super-pagination-wrap pt-3">
+              <% for (let p = 1; p <= noPaymentPagination.totalPages; p++) { %>
+                <a href="?noPaymentPage=<%= p %>" class="btn btn-sm <%= p === noPaymentPagination.page ? 'btn-danger' : 'btn-outline-secondary' %>"><%= p %></a>
+              <% } %>
+            </div>
+          <% } %>
         </div>
       </div>
     </div>
@@ -1067,60 +1155,35 @@ padding: .55rem .65rem;
     const el = document.getElementById(id);
     if (!el || !labels || !labels.length) return;
 
-    const palette = [
-      "#2563eb", "#16a34a", "#f59e0b", "#ef4444", "#8b5cf6",
-      "#06b6d4", "#14b8a6", "#e11d48", "#334155", "#0ea5e9"
-    ];
-
-    const dataset = {
-      label: opts.label || "Overview",
-      data: values,
-      borderWidth: 2,
-      fill: !!opts.fill,
-      tension: .35
-    };
+    const palette = ["#dc2626", "#111827", "#2563eb", "#16a34a", "#f59e0b", "#8b5cf6", "#06b6d4", "#e11d48", "#334155", "#0ea5e9"];
+    const dataset = { label: opts.label || "Overview", data: values, borderWidth: 2, fill: !!opts.fill, tension: .35 };
 
     if (type === "pie" || type === "doughnut") {
       dataset.backgroundColor = opts.backgroundColor || palette;
       dataset.borderColor = "#ffffff";
     } else if (type === "bar") {
-      dataset.backgroundColor = opts.backgroundColor || "rgba(37,99,235,.75)";
-      dataset.borderColor = opts.borderColor || "#2563eb";
+      dataset.backgroundColor = opts.backgroundColor || "rgba(220,38,38,.72)";
+      dataset.borderColor = opts.borderColor || "#dc2626";
     } else {
-      dataset.backgroundColor = opts.backgroundColor || "rgba(37,99,235,.12)";
-      dataset.borderColor = opts.borderColor || "#2563eb";
-      dataset.pointBackgroundColor = opts.borderColor || "#2563eb";
+      dataset.backgroundColor = opts.backgroundColor || "rgba(220,38,38,.12)";
+      dataset.borderColor = opts.borderColor || "#dc2626";
+      dataset.pointBackgroundColor = opts.borderColor || "#dc2626";
     }
 
     new Chart(el, {
       type,
-      data: {
-        labels,
-        datasets: [dataset]
-      },
+      data: { labels, datasets: [dataset] },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: opts.legend !== false
-          }
-        },
-        scales: opts.scales === false ? {} : {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              precision: 0
-            }
-          }
-        }
+        plugins: { legend: { display: opts.legend !== false } },
+        scales: opts.scales === false ? {} : { y: { beginAtZero: true, ticks: { precision: 0 } } }
       }
     });
   }
 
- const analyticsToggleBtn = document.getElementById("analyticsChartsToggle");
+  const analyticsToggleBtn = document.getElementById("analyticsChartsToggle");
   const analyticsChartsBody = document.getElementById("analyticsChartsBody");
-  const analyticsToggleIcon = document.getElementById("analyticsChartsToggleIcon");
 
   if (analyticsToggleBtn && analyticsChartsBody) {
     analyticsToggleBtn.addEventListener("click", () => {
@@ -1136,11 +1199,7 @@ padding: .55rem .65rem;
     "bar",
     Object.keys(deptComparison).map(x => x.charAt(0).toUpperCase() + x.slice(1)),
     Object.values(deptComparison),
-    {
-      label: "Department Comparison",
-      backgroundColor: "rgba(22,163,74,.70)",
-      borderColor: "#16a34a"
-    }
+    { label: "Department Comparison", backgroundColor: "rgba(220,38,38,.70)", borderColor: "#dc2626" }
   );
 
   const statusDist = overviewCharts.statusDistribution || [];
@@ -1149,11 +1208,7 @@ padding: .55rem .65rem;
     "doughnut",
     statusDist.map(x => x.label),
     statusDist.map(x => x.value),
-    {
-      label: "Status Distribution",
-      scales: false,
-      backgroundColor: buildColors(statusDist, ["#2563eb","#16a34a","#f59e0b","#ef4444","#8b5cf6","#06b6d4"])
-    }
+    { label: "Status Distribution", scales: false, backgroundColor: buildColors(statusDist, ["#dc2626", "#111827", "#2563eb", "#16a34a", "#f59e0b", "#8b5cf6"]) }
   );
 
   const feeDist = overviewCharts.feeDistribution || [];
@@ -1162,11 +1217,7 @@ padding: .55rem .65rem;
     "pie",
     feeDist.map(x => x.label),
     feeDist.map(x => x.value),
-    {
-      label: "Fee Distribution",
-      scales: false,
-      backgroundColor: buildColors(feeDist, ["#0ea5e9","#16a34a","#f59e0b","#ef4444","#8b5cf6","#14b8a6"])
-    }
+    { label: "Fee Distribution", scales: false, backgroundColor: buildColors(feeDist, ["#dc2626", "#111827", "#0ea5e9", "#16a34a", "#f59e0b", "#8b5cf6"]) }
   );
 
   function wireTableSearch(inputId, tableId) {
@@ -1185,6 +1236,8 @@ padding: .55rem .65rem;
 
   wireTableSearch("recentAdmissionsSearch", "recentAdmissionsTable");
   wireTableSearch("recentBillingSearch", "recentBillingTable");
+  wireTableSearch("dailyAdmissionsSearch", "dailyAdmissionsTable");
+  wireTableSearch("searchResultsTableSearch", "searchResultsTable");
 </script>
 
 <%- include('partials/bootstrap-footer') %>

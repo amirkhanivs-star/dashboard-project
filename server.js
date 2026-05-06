@@ -557,6 +557,8 @@ const requireDeleteAdmissions = requirePerm("canDeleteAdmissions");
 // ✅ Masking: DB row (for /api/admissions list)
 function maskAdmissionDbRow(row, perms) {
   const out = { ...row };
+  out.isDuplicate = !!row.isDuplicate;
+out.duplicateWithId = row.duplicateWithId || "";
   if (!perms.colStatus) out.status = "";
   if (!perms.colFeeStatus) out.feeStatus = "";
   if (!perms.colDept) out.dept = "";
@@ -680,8 +682,8 @@ function fetchAdmissionsForUser(user) {
       ORDER BY id DESC
     `)
     .all(dept);
-
-  return rows.map((row) => {
+const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
+  return rowsWithDuplicateFlags.map((row) => {
     const mapped = mapAdmissionRow(row);
 
     mapped.latestBillingVerificationNumber =
@@ -879,6 +881,8 @@ function mapAdmissionRow(row) {
   if (!row) return null;
   return {
     id: row.id,
+    isDuplicate: !!row.isDuplicate,
+duplicateWithId: row.duplicateWithId || "",
     status: row.status || "New Admission",
     feeStatus: row.feeStatus || "New Admission",
     statusMeta: resolveOption("status_options", row.status || "New Admission"),
@@ -918,7 +922,62 @@ function mapAdmissionRow(row) {
     },
   };
 }
+function normalizeDuplicateField(v) {
+  return String(v || "").trim().toLowerCase();
+}
 
+function buildAdmissionDuplicateKey(row) {
+  return [
+    row.dept,
+    row.student_name,
+    row.gender,
+    row.dob,
+    row.grade,
+    row.father_name,
+    row.guardian_whatsapp,
+    row.religion,
+    row.father_email,
+    row.father_occupation,
+    row.nationality,
+    row.present_address,
+    row.city,
+    row.state,
+    row.secondary_contact,
+    row.session,
+    row.registration_date,
+    row.processed_by,
+    row.tuition_grade,
+    row.phone,
+    row.currency_code,
+  ].map(normalizeDuplicateField).join("||");
+}
+
+function attachDuplicateFlagsToRawRows(rows = []) {
+  const countMap = new Map();
+  const firstIdMap = new Map();
+
+  for (const row of rows) {
+    const key = buildAdmissionDuplicateKey(row);
+    if (!key.replaceAll("||", "").trim()) continue;
+
+    countMap.set(key, (countMap.get(key) || 0) + 1);
+
+    if (!firstIdMap.has(key)) {
+      firstIdMap.set(key, row.id);
+    }
+  }
+
+  return rows.map((row) => {
+    const key = buildAdmissionDuplicateKey(row);
+    const isDuplicate = (countMap.get(key) || 0) > 1;
+
+    return {
+      ...row,
+      isDuplicate,
+      duplicateWithId: isDuplicate ? firstIdMap.get(key) : "",
+    };
+  });
+}
 function fetchAdmissionsForDept(dept) {
   const rows = dept
     ? db.prepare(`
@@ -934,8 +993,8 @@ function fetchAdmissionsForDept(dept) {
         WHERE COALESCE(is_deleted, 0) = 0
         ORDER BY id DESC
       `).all();
-
-  return rows.map((row) => {
+const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
+  return rowsWithDuplicateFlags.map((row) => {
     const mapped = mapAdmissionRow(row);
 
     mapped.latestBillingVerificationNumber =
@@ -996,8 +1055,8 @@ function fetchAdmissionsPage({ dept = null, page = 1, limit = 200, perms = null 
       `)
       .all(safeLimit, offset);
   }
-
-  const mappedRows = rows.map((row) => {
+const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
+  const mappedRows = rowsWithDuplicateFlags.map((row) => {
     const mapped = mapAdmissionRow(row);
 
     mapped.latestBillingVerificationNumber =
@@ -1034,6 +1093,8 @@ function buildOverviewData(filters = {}) {
     feeStatus: String(filters.feeStatus || "all").trim(),
     billingStatus: String(filters.billingStatus || "all").trim(),
     currency: String(filters.currency || "all").trim(),
+        q: String(filters.q || "").trim(),
+    processedBy: String(filters.processedBy || "all").trim(),
   };
 
   const rows = db.prepare(`
@@ -1164,12 +1225,38 @@ console.log("OVERVIEW filters:", safeFilters);
     const currency = normalizeUpper(row.currency_code || "");
     const invoiceStatus = normalizeText(row.admission_invoice_status || "");
     const paidInvoiceStatus = normalizeText(row.admission_paid_invoice_status || "");
+        const processedBy = normalizeText(row.processed_by || "");
+    const q = safeFilters.q.toLowerCase();
 
     if (safeFilters.department !== "all" && dept !== safeFilters.department) return false;
     if (safeFilters.status !== "all" && status !== safeFilters.status) return false;
     if (safeFilters.feeStatus !== "all" && feeStatus !== safeFilters.feeStatus) return false;
     if (safeFilters.currency.toLowerCase() !== "all" && currency !== normalizeUpper(safeFilters.currency)) return false;
+        if (safeFilters.processedBy !== "all" && processedBy !== safeFilters.processedBy) return false;
 
+    if (q) {
+      const searchableText = [
+        row.id,
+        row.student_name,
+        row.father_name,
+        row.father_email,
+        row.phone,
+        row.guardian_whatsapp,
+        row.accounts_registration_number,
+        row.accounts_family_number,
+        row.dept,
+        row.status,
+        row.feeStatus,
+        row.processed_by,
+        row.registration_date,
+        row.admission_month,
+        row.currency_code,
+        row.admission_invoice_status,
+        row.admission_paid_invoice_status,
+      ].map((x) => String(x || "").toLowerCase()).join(" ");
+
+      if (!searchableText.includes(q)) return false;
+    }
     if (safeFilters.billingStatus !== "all") {
       const wanted = safeFilters.billingStatus;
       const { billingArr } = getBillingSnapshot(row);
@@ -1225,6 +1312,8 @@ console.log("OVERVIEW filters:", safeFilters);
   const feeStatsMap = new Map();
   const currencyStatsMap = new Map();
    const billingSummaryMap = new Map();
+     const processedByMap = new Map();
+  const dailyAdmissionMap = new Map();
   const invoiceStatusMap = new Map();
   const paidInvoiceStatusMap = new Map();
 
@@ -1270,8 +1359,6 @@ console.log("OVERVIEW filters:", safeFilters);
 const limit = 10;
 const offset = (page - 1) * limit;
 
-const recentAdmissionsPageData = recentAdmissions.slice(offset, offset + limit);
-const totalPages = Math.ceil(recentAdmissions.length / limit);
 
   const activeWords = ["active", "running", "enrolled", "paid"];
   const inactiveWords = ["inactive", "closed", "drop", "left", "withdraw"];
@@ -1296,8 +1383,43 @@ const totalPages = Math.ceil(recentAdmissions.length / limit);
 
     const isoMonth = yyyy !== "Unknown" ? `${yyyy}-${mm}` : "Unknown";
     const isoDay = yyyy !== "Unknown" ? `${yyyy}-${mm}-${dd}` : "Unknown";
+        const processedByName = normalizeText(row.processed_by || "") || "Not Set";
 
     totalAdmissions += 1;
+        const processedOld = processedByMap.get(processedByName) || {
+      name: processedByName,
+      total: 0,
+      school: 0,
+      tuition: 0,
+      quran: 0,
+      latestAdmissionDate: "",
+    };
+
+    processedOld.total += 1;
+    if (dept === "school") processedOld.school += 1;
+    if (dept === "tuition") processedOld.tuition += 1;
+    if (dept === "quran") processedOld.quran += 1;
+
+    if (!processedOld.latestAdmissionDate || String(registrationDate || "") > String(processedOld.latestAdmissionDate || "")) {
+      processedOld.latestAdmissionDate = registrationDate || "";
+    }
+
+    processedByMap.set(processedByName, processedOld);
+
+    const dailyOld = dailyAdmissionMap.get(isoDay) || {
+      date: isoDay,
+      total: 0,
+      school: 0,
+      tuition: 0,
+      quran: 0,
+    };
+
+    dailyOld.total += 1;
+    if (dept === "school") dailyOld.school += 1;
+    if (dept === "tuition") dailyOld.tuition += 1;
+    if (dept === "quran") dailyOld.quran += 1;
+
+    dailyAdmissionMap.set(isoDay, dailyOld);
     if (dept === "school") totalSchoolStudents += 1;
     if (dept === "tuition") totalTuitionStudents += 1;
     if (dept === "quran") totalQuranStudents += 1;
@@ -1490,11 +1612,17 @@ const totalPages = Math.ceil(recentAdmissions.length / limit);
     chartAdmissionsTrendMonthly[isoMonth] = (chartAdmissionsTrendMonthly[isoMonth] || 0) + 1;
     chartAdmissionsTrendDaily[isoDay] = (chartAdmissionsTrendDaily[isoDay] || 0) + 1;
 
-    recentAdmissions.push({
+        recentAdmissions.push({
       id: row.id,
       studentName: row.student_name || "",
+      fatherName: row.father_name || "",
+      phone: row.phone || row.guardian_whatsapp || "",
+      registrationNumber: row.accounts_registration_number || "",
+      familyNumber: row.accounts_family_number || "",
+      processedBy: row.processed_by || "Not Set",
       dept: row.dept || "",
       status,
+      feeStatus,
       registration_date: registrationDate || "",
       createdAt: registrationDate || "",
     });
@@ -1604,8 +1732,59 @@ const totalPages = Math.ceil(recentAdmissions.length / limit);
     return tb - ta;
   });
 
+    const processedByStats = Array.from(processedByMap.values())
+    .sort((a, b) => b.total - a.total);
+
+  const dailyAdmissionStats = Array.from(dailyAdmissionMap.values())
+    .filter((x) => x.date && x.date !== "Unknown")
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, 60);
+
+  const searchResults = recentAdmissions.slice(0, 100);
+    const recentAdmissionsPageData = recentAdmissions.slice(offset, offset + limit);
+  const totalPages = Math.max(Math.ceil(recentAdmissions.length / limit), 1);
+
+  const missingInsights = [
+    {
+      label: "Missing Processed By",
+      total: filteredRows.filter((r) => !normalizeText(r.processed_by)).length,
+      hint: "Admissions where processed_by is empty",
+    },
+    {
+      label: "Missing Registration Number",
+      total: filteredRows.filter((r) => !normalizeText(r.accounts_registration_number)).length,
+      hint: "Admissions where registration number is empty",
+    },
+    {
+      label: "Missing Family Number",
+      total: filteredRows.filter((r) => !normalizeText(r.accounts_family_number)).length,
+      hint: "Admissions where family number is empty",
+    },
+    {
+      label: "Missing Phone",
+      total: filteredRows.filter((r) => !normalizeText(r.phone || r.guardian_whatsapp)).length,
+      hint: "Admissions where contact number is empty",
+    },
+    {
+      label: "Missing Fee",
+      total: filteredRows.filter((r) => safeNumber(r.admission_fees) <= 0).length,
+      hint: "Admissions where monthly fee is empty or zero",
+    },
+    {
+      label: "Missing Currency",
+      total: filteredRows.filter((r) => !normalizeText(r.currency_code)).length,
+      hint: "Admissions where currency is empty",
+    },
+  ];
+
   return {
     summaryCards,
+        filters: safeFilters,
+    processedByStats,
+    dailyAdmissionStats,
+    searchResults,
+    missingInsights,
+    recentAdmissions,
     departmentStats,
     statusStats: Array.from(statusStatsMap.values()).sort((a, b) => b.total - a.total),
     feeStats: Array.from(feeStatsMap.values()).sort((a, b) => b.total - a.total),
@@ -4518,16 +4697,15 @@ const insertMany = db.transaction((rowsToInsert) => {
 
     const duplicate = findDuplicateAdmissionFromForm(safeRow);
 
-    if (duplicate) {
-      skippedDuplicates.push({
-        existingId: duplicate.id,
-        studentName: duplicate.student_name || safeRow.student_name,
-      });
-      return;
-    }
+if (duplicate) {
+  skippedDuplicates.push({
+    existingId: duplicate.id,
+    studentName: duplicate.student_name || safeRow.student_name,
+  });
+}
 
-    const info = stmt.run(safeRow);
-    insertedIds.push(Number(info.lastInsertRowid));
+const info = stmt.run(safeRow);
+insertedIds.push(Number(info.lastInsertRowid));
   });
 });
 
@@ -6004,7 +6182,7 @@ app.get("/api/admissions", requireLogin, (req, res) => {
         WHERE COALESCE(is_deleted, 0) = 0
         ORDER BY id DESC
       `).all();
-      return res.json(rows);
+      return res.json(attachDuplicateFlagsToRawRows(rows));
     }
 
     if (!user?.dept) return res.json([]);
@@ -6018,8 +6196,8 @@ app.get("/api/admissions", requireLogin, (req, res) => {
         ORDER BY id DESC
       `)
       .all(user.dept);
-
-    const masked = rows.map((r) => maskAdmissionDbRow(r, perms));
+    const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
+    const masked = rowsWithDuplicateFlags.map((r) => maskAdmissionDbRow(r, perms));;
     return res.json(masked);
   } catch (err) {
     console.error("GET /api/admissions error:", err);
@@ -10047,6 +10225,8 @@ const offset = (page - 1) * limit;
     feeStatus: req.query.feeStatus || "all",
     billingStatus: req.query.billingStatus || "all",
     currency: req.query.currency || "all",
+        q: req.query.q || "",
+    processedBy: req.query.processedBy || "all",
   };
 
   const overviewData = buildOverviewData(filters);

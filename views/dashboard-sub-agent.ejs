@@ -733,7 +733,11 @@ const invoiceStatusTimestampVal = (a.admission && a.admission.invoiceStatusTimes
 const paidInvoiceStatusVal = (a.admission && a.admission.paidInvoiceStatus) || '';
 const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceStatusTimestamp) || '';
             %>
-                            <tr class="admin-row" data-admission-id="<%= a.id %>" data-student-name="<%= a.studentName || a.student || '' %>">
+                           <tr
+  class="admin-row <%= a.isDuplicate ? 'duplicate-admission-row' : '' %>"
+  data-admission-id="<%= a.id %>"
+  data-student-name="<%= a.studentName || a.student || '' %>"
+  title="<%= a.isDuplicate ? 'Duplicate admission detected' : '' %>">
                 <% if (canDeleteAdmissions) { %>
                   <td class="text-center col-select" data-col="select">
                     <input
@@ -2869,6 +2873,42 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 
 #adminAdmissionsTable tbody tr.admin-row:hover td.col-actions{
   z-index: 8 !important;
+}
+
+/* ✅ Duplicate admission row highlight */
+#adminAdmissionsTable tbody tr.duplicate-admission-row,
+#adminAdmissionsTable tbody tr.duplicate-admission-row td{
+  background: #fee2e2 !important;
+}
+
+#adminAdmissionsTable tbody tr.duplicate-admission-row td{
+  border-top-color: #fca5a5 !important;
+  border-bottom-color: #fca5a5 !important;
+}
+
+#adminAdmissionsTable tbody tr.duplicate-admission-row td:first-child{
+  border-left: 5px solid #dc2626 !important;
+}
+
+#adminAdmissionsTable tbody tr.duplicate-admission-row .form-control,
+#adminAdmissionsTable tbody tr.duplicate-admission-row .form-select{
+  background: #fff1f2 !important;
+  border-color: #fca5a5 !important;
+}
+
+/* Sticky columns duplicate color fix */
+#adminAdmissionsTable tbody tr.duplicate-admission-row td[data-col="select"],
+#adminAdmissionsTable tbody tr.duplicate-admission-row td[data-col="rowNumber"],
+#adminAdmissionsTable tbody tr.duplicate-admission-row td[data-col="status"],
+#adminAdmissionsTable tbody tr.duplicate-admission-row td[data-col="feeStatus"],
+#adminAdmissionsTable tbody tr.duplicate-admission-row td.col-actions{
+  background: #fee2e2 !important;
+}
+
+/* Duplicate row hover */
+#adminAdmissionsTable tbody tr.duplicate-admission-row:hover,
+#adminAdmissionsTable tbody tr.duplicate-admission-row:hover td{
+  background: #fecaca !important;
 }
 </style>
 
