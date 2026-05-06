@@ -936,28 +936,49 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 
                   <% if (P.col.month) { %>
   <td data-col="month">
-   <%
-  const nowY = new Date().getFullYear();
-  const years = [];
-  for (let y = nowY + 2; y >= nowY - 5; y--) {
-    years.push(String(y));
-  }
-  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-%>
-<select
-  form="<%= fid %>"
-  name="month"
-  class="form-select form-select-sm"
-  <%= P.edit.month ? '' : 'disabled' %>>
-  <option value="">Select Month/Year</option>
-  <% years.forEach(y => { %>
-    <% months.forEach(m => { const v = `${m} ${y}`; %>
-      <option value="<%= v %>" <%= monthVal === v ? 'selected' : '' %>><%= v %></option>
-    <% }) %>
-  <% }) %>
-</select>
+    <%
+      const monthValSafe = String(monthVal || '').trim();
+      const currentYearOnly = new Date().getFullYear();
+
+      const months = [
+        { full: "January", short: "Jan" },
+        { full: "February", short: "Feb" },
+        { full: "March", short: "Mar" },
+        { full: "April", short: "Apr" },
+        { full: "May", short: "May" },
+        { full: "June", short: "Jun" },
+        { full: "July", short: "Jul" },
+        { full: "August", short: "Aug" },
+        { full: "September", short: "Sep" },
+        { full: "October", short: "Oct" },
+        { full: "November", short: "Nov" },
+        { full: "December", short: "Dec" }
+      ];
+    %>
+
+    <select
+      form="<%= fid %>"
+      name="month"
+      class="form-select form-select-sm"
+      <%= P.edit.month ? '' : 'disabled' %>>
+      <option value="" <%= !monthValSafe ? 'selected' : '' %>>Select Month/Year</option>
+
+      <% months.forEach(m => {
+        const fullValue = `${m.full} ${currentYearOnly}`;
+        const shortValue = `${m.short} ${currentYearOnly}`;
+
+        const isSelected =
+          monthValSafe === fullValue ||
+          monthValSafe === shortValue;
+      %>
+        <option value="<%= shortValue %>" <%= isSelected ? 'selected' : '' %>>
+          <%= shortValue %>
+        </option>
+      <% }) %>
+    </select>
+
     <% if (!P.edit.month) { %>
-      <input form="<%= fid %>" type="hidden" name="month" value="<%= monthVal %>">
+      <input form="<%= fid %>" type="hidden" name="month" value="<%= monthValSafe %>">
     <% } %>
   </td>
 <% } %>

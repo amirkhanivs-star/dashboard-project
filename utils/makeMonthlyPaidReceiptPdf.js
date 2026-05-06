@@ -73,12 +73,19 @@ function billingJsonToArray(billingJson) {
       verification: String(e.verification || "").trim(),
       number: String(e.number || "").trim(),
       receivedOn:
-        e.receivedOn ||
-        e.received_on ||
-        e.paidOn ||
-        e.paid_on ||
-        e.date ||
-        ""
+  e.receivedOn ||
+  e.received_on ||
+  e.paidOn ||
+  e.paid_on ||
+  e.date ||
+  "",
+
+registrationFeeTotal: safeNum(e.registrationFeeTotal || 0),
+registrationFeeReceived: safeNum(e.registrationFeeReceived || 0),
+registrationFeeStatus: String(e.registrationFeeStatus || "").trim(),
+registrationFeeVerification: String(e.registrationFeeVerification || "").trim(),
+registrationFeeBank: String(e.registrationFeeBank || "").trim(),
+registrationFeePaymentDate: String(e.registrationFeePaymentDate || "").trim()
     };
   });
 }
@@ -156,6 +163,10 @@ export default async function makeMonthlyPaidReceiptPdf({
   ) || {};
 
   const receivedAmount = safeNum(curBill?.amount || 0);
+  const registrationFeeTotal = safeNum(curBill?.registrationFeeTotal || 0);
+const registrationFeeReceived = safeNum(curBill?.registrationFeeReceived || 0);
+const hasRegistrationFeePaidForThisMonth =
+  registrationFeeTotal > 0 && registrationFeeReceived > 0;
 
   const baseFee =
     safeNum(curBill?.feeOverride || 0) ||
@@ -178,18 +189,37 @@ export default async function makeMonthlyPaidReceiptPdf({
 
   const receivedOn = receivedOnRaw ? fmtDate(receivedOnRaw) : fmtDate(new Date());
 
-  const rows = [
-    {
-      regNo,
-      description: `Monthly Fee Paid\n${studentName}`,
-      grade,
-      month: monthTitle(mk),
-      amount: baseFee.toFixed(2),
-    },
-  ];
+  const rows = [];
+
+if (receivedAmount > 0) {
+  rows.push({
+    regNo,
+    description: `Monthly Fee Paid\n${studentName}`,
+    grade,
+    month: monthTitle(mk),
+    amount: receivedAmount.toFixed(2),
+  });
+}
+
+if (hasRegistrationFeePaidForThisMonth) {
+  rows.push({
+    regNo,
+    description: `Registration Fee Paid\n${studentName}`,
+    grade,
+    month: monthTitle(mk),
+    amount: registrationFeeReceived.toFixed(2),
+  });
+}
+
+if (!rows.length) {
+  throw new Error("No paid receipt rows to generate for this month");
+}
 
   const rowPages = [rows];
-  const totalText = `${currency} ${receivedAmount.toFixed(2)}`;
+  const totalPaidAmount =
+  Number(receivedAmount || 0) + Number(registrationFeeReceived || 0);
+
+const totalText = `${currency} ${totalPaidAmount.toFixed(2)}`;
 
   const bannerSrcAbs =
     bannerPath && fs.existsSync(bannerPath)

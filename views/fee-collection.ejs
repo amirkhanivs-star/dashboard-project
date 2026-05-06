@@ -12,6 +12,10 @@
 
   const feeRowsSafe = Array.isArray(feeRows) ? feeRows : [];
   const rowsSafe = Array.isArray(rows) ? rows : [];
+  const paidRowsSafe =
+  Array.isArray(paidRows)
+    ? paidRows
+    : (Array.isArray(paidFeeRows) ? paidFeeRows : []);
   const bankOptionsSafe = Array.isArray(bankOptions) ? bankOptions : [];
   const summarySafe = summary || {};
 
@@ -170,6 +174,73 @@
               </div>
             </div>
           <% } %>
+
+                    <div class="card border-0 inner-card mt-3">
+            <div class="card-body p-3">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="sec-title">Paid Months & Registration Fee</div>
+                <div class="text-muted small">
+                  Paid Rows: <b id="fcPaidRowsCount"><%= paidRowsSafe.length %></b>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-sm align-middle paid-table mb-0">
+                  <thead>
+                    <tr>
+                      <th style="width:6%">#</th>
+                      <th style="width:18%">Fee Type</th>
+                      <th style="width:20%">Student</th>
+                      <th style="width:12%">Month</th>
+                      <th style="width:12%">Status</th>
+                      <th style="width:10%">Fee</th>
+                      <th style="width:10%">Received</th>
+                      <th style="width:12%">Verification #</th>
+                    </tr>
+                  </thead>
+
+                  <tbody id="fcPaidTableBody">
+                    <% if (!paidRowsSafe.length) { %>
+                      <tr>
+                        <td colspan="8" class="text-muted small">No paid months or registration fee found.</td>
+                      </tr>
+                    <% } else { %>
+                      <% paidRowsSafe.forEach((r, idx) => { %>
+                        <tr class="<%= r.isRegistrationFee ? 'registration-fee-row' : '' %>">
+                          <td>
+                            <span class="pill-mini"><%= idx + 1 %></span>
+                          </td>
+
+                          <td>
+                            <span class="<%= r.isRegistrationFee ? 'fee-type-chip reg-chip' : 'fee-type-chip paid-chip' %>">
+                              <%= r.feeType || (r.isRegistrationFee ? 'Registration Fee' : 'Monthly Fee') %>
+                            </span>
+                          </td>
+
+                          <td>
+                            <div class="fw-semibold"><%= r.studentName || r.student_name || '-' %></div>
+                            <div class="text-muted tiny"><%= r.registrationNumber || r.registration_number || '-' %></div>
+                          </td>
+
+                          <td>
+                            <span class="pill-month"><%= r.monthLabel || r.monthKey || r.month || '-' %></span>
+                          </td>
+
+                          <td>
+                            <span class="paid-status-chip"><%= r.status || 'Paid' %></span>
+                          </td>
+
+                          <td><span class="num fee-num"><%= fmt(r.fee) %></span></td>
+                          <td><span class="num recv-num"><%= fmt(r.received || r.receivedAmount || r.amount) %></span></td>
+                          <td><span class="text-muted small"><%= r.verificationNumber || r.verification_number || '-' %></span></td>
+                        </tr>
+                      <% }) %>
+                    <% } %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
 
         </div>
       </div>
@@ -437,6 +508,40 @@ placeholder="Enter verification number"
   color: rgba(67,56,202,.95);
 }
 
+.paid-chip{
+  background: rgba(34,197,94,.12);
+  border: 1px solid rgba(34,197,94,.22);
+  color: rgba(21,128,61,.95);
+}
+
+.paid-status-chip{
+  display:inline-flex;
+  align-items:center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  background: rgba(34,197,94,.12);
+  border: 1px solid rgba(34,197,94,.22);
+  color: rgba(21,128,61,.95);
+}
+
+.paid-table thead th{
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: rgba(15,23,42,.55);
+  font-weight: 900;
+  border-bottom: 1px solid rgba(15,23,42,.10);
+}
+
+.paid-table td{
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-color: rgba(15,23,42,.08);
+  vertical-align: middle;
+}
+
 .registration-fee-row{
   background: rgba(16,185,129,.045);
 }
@@ -553,6 +658,8 @@ const registrationAmountInput = document.getElementById('registrationReceivingAm
     const summaryFeeEl = document.getElementById('fcSummaryTotalFee');
     const summaryRecvEl = document.getElementById('fcSummaryTotalReceived');
     const summaryDueEl = document.getElementById('fcSummaryTotalDues');
+    const paidTableBody = document.getElementById('fcPaidTableBody');
+const paidRowsCountEl = document.getElementById('fcPaidRowsCount');
 
     const fmt = (v) => {
       const n = Number(v || 0);
@@ -641,6 +748,48 @@ tableBody.innerHTML = `
 
       if (totalRowsEl) totalRowsEl.textContent = String(rows.length);
     }
+    function renderPaidRows(rows = []) {
+      if (!paidTableBody) return;
+
+      if (!rows.length) {
+        paidTableBody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-muted small">No paid months or registration fee found.</td>
+          </tr>
+        `;
+        if (paidRowsCountEl) paidRowsCountEl.textContent = '0';
+        return;
+      }
+
+      paidTableBody.innerHTML = rows.map((r, idx) => {
+        const isReg = !!r.isRegistrationFee;
+
+        return `
+          <tr class="${isReg ? 'registration-fee-row' : ''}">
+            <td><span class="pill-mini">${idx + 1}</span></td>
+
+            <td>
+              <span class="${isReg ? 'fee-type-chip reg-chip' : 'fee-type-chip paid-chip'}">
+                ${r.feeType || (isReg ? 'Registration Fee' : 'Monthly Fee')}
+              </span>
+            </td>
+
+            <td>
+              <div class="fw-semibold">${r.studentName || r.student_name || '-'}</div>
+              <div class="text-muted tiny">${r.registrationNumber || r.registration_number || '-'}</div>
+            </td>
+
+            <td><span class="pill-month">${r.monthLabel || r.monthKey || r.month || '-'}</span></td>
+            <td><span class="paid-status-chip">${r.status || 'Paid'}</span></td>
+            <td><span class="num fee-num">${fmt(r.fee)}</span></td>
+            <td><span class="num recv-num">${fmt(r.received || r.receivedAmount || r.amount)}</span></td>
+            <td><span class="text-muted small">${r.verificationNumber || r.verification_number || '-'}</span></td>
+          </tr>
+        `;
+      }).join('');
+
+      if (paidRowsCountEl) paidRowsCountEl.textContent = String(rows.length);
+    }
 
     function setSummary(summary = {}) {
   if (summaryFeeEl) summaryFeeEl.textContent = fmt(summary.totalFee);
@@ -697,6 +846,7 @@ payload.selectedNotAdmittedMonths = selectedNotAdmittedMonths;
         showMsg('success', data.message || 'Fee received successfully');
 
         renderRows(Array.isArray(data.feeRows) ? data.feeRows : []);
+        renderPaidRows(Array.isArray(data.paidRows) ? data.paidRows : []);
         setSummary(data.summary || {});
 
         if (resultCard && resultBody) {

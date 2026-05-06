@@ -498,6 +498,14 @@ ensureColumn("admission_billing_yearly", "fee_amount", "TEXT");
 ensureColumn("admission_billing_yearly", "payment_date", "TEXT");
 ensureColumn("admission_billing_yearly", "verification_number", "TEXT");
 ensureColumn("admission_billing_yearly", "bank_name", "TEXT");
+
+ensureColumn("admission_billing_yearly", "registration_fee_total", "TEXT");
+ensureColumn("admission_billing_yearly", "registration_fee_received", "TEXT");
+ensureColumn("admission_billing_yearly", "registration_fee_status", "TEXT");
+ensureColumn("admission_billing_yearly", "registration_fee_verification", "TEXT");
+ensureColumn("admission_billing_yearly", "registration_fee_bank", "TEXT");
+ensureColumn("admission_billing_yearly", "registration_fee_payment_date", "TEXT");
+
 ensureColumn("admission_billing_yearly", "created_at", "TEXT");
 ensureColumn("admission_billing_yearly", "updated_at", "TEXT");
 if (!tableExists("api_settings")) {
@@ -1170,15 +1178,22 @@ export function getAdmissionBillingByYear(admissionId, billingYear) {
   return monthsOrder.map((m) => {
     const x = byMonth[m] || {};
     return {
-      month: m,
-      status: x.status || "",
-      amount: x.amount_received || "",
-      fee: x.fee_amount || "",
-      date: x.payment_date || "",
-      verificationNumber: x.verification_number || "",
-      bank: x.bank_name || "",
-      year: billingYear,
-    };
+  month: m,
+  status: x.status || "",
+  amount: x.amount_received || "",
+  fee: x.fee_amount || "",
+  date: x.payment_date || "",
+  verificationNumber: x.verification_number || "",
+  bank: x.bank_name || "",
+  year: billingYear,
+
+  registrationFeeTotal: x.registration_fee_total || "",
+  registrationFeeReceived: x.registration_fee_received || "",
+  registrationFeeStatus: x.registration_fee_status || "",
+  registrationFeeVerification: x.registration_fee_verification || "",
+  registrationFeeBank: x.registration_fee_bank || "",
+  registrationFeePaymentDate: x.registration_fee_payment_date || "",
+};
   });
 }
 export function saveAdmissionBillingMonthByYear({
@@ -1191,40 +1206,66 @@ export function saveAdmissionBillingMonthByYear({
   paymentDate,
   verificationNumber,
   bankName,
+
+  registrationFeeTotal,
+  registrationFeeReceived,
+  registrationFeeStatus,
+  registrationFeeVerification,
+  registrationFeeBank,
+  registrationFeePaymentDate,
 }) {
   return db.prepare(`
     INSERT INTO admission_billing_yearly (
-      admission_id,
-      billing_year,
-      month_key,
-      status,
-      amount_received,
-      fee_amount,
-      payment_date,
-      verification_number,
-      bank_name,
-      updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(admission_id, billing_year, month_key)
-    DO UPDATE SET
-      status = excluded.status,
-      amount_received = excluded.amount_received,
-      fee_amount = excluded.fee_amount,
-      payment_date = excluded.payment_date,
-      verification_number = excluded.verification_number,
-      bank_name = excluded.bank_name,
-      updated_at = CURRENT_TIMESTAMP
+  admission_id,
+  billing_year,
+  month_key,
+  status,
+  amount_received,
+  fee_amount,
+  payment_date,
+  verification_number,
+  bank_name,
+  registration_fee_total,
+  registration_fee_received,
+  registration_fee_status,
+  registration_fee_verification,
+  registration_fee_bank,
+  registration_fee_payment_date,
+  updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+ON CONFLICT(admission_id, billing_year, month_key)
+DO UPDATE SET
+  status = excluded.status,
+  amount_received = excluded.amount_received,
+  fee_amount = excluded.fee_amount,
+  payment_date = excluded.payment_date,
+  verification_number = excluded.verification_number,
+  bank_name = excluded.bank_name,
+  registration_fee_total = excluded.registration_fee_total,
+  registration_fee_received = excluded.registration_fee_received,
+  registration_fee_status = excluded.registration_fee_status,
+  registration_fee_verification = excluded.registration_fee_verification,
+  registration_fee_bank = excluded.registration_fee_bank,
+  registration_fee_payment_date = excluded.registration_fee_payment_date,
+  updated_at = CURRENT_TIMESTAMP
   `).run(
-    admissionId,
-    billingYear,
-    monthKey,
-    status || "",
-    amountReceived || "",
-    feeAmount || "",
-    paymentDate || "",
-    verificationNumber || "",
-    bankName || ""
-  );
+  admissionId,
+  billingYear,
+  monthKey,
+  status || "",
+  amountReceived || "",
+  feeAmount || "",
+  paymentDate || "",
+  verificationNumber || "",
+  bankName || "",
+
+  registrationFeeTotal || "",
+  registrationFeeReceived || "",
+  registrationFeeStatus || "",
+  registrationFeeVerification || "",
+  registrationFeeBank || "",
+  registrationFeePaymentDate || ""
+);
 }
 
 export function dbGetAdmissionDetailsById(id, billingYear = new Date().getFullYear()) {
@@ -1239,8 +1280,20 @@ export function dbGetAdmissionDetailsById(id, billingYear = new Date().getFullYe
   let billingArr = getAdmissionBillingByYear(id, billingYear);
 
   const hasAnyYearData = Array.isArray(billingArr) && billingArr.some(
-    (x) => x.status || x.amount || x.fee || x.date || x.verificationNumber || x.bank
-  );
+  (x) =>
+    x.status ||
+    x.amount ||
+    x.fee ||
+    x.date ||
+    x.verificationNumber ||
+    x.bank ||
+    x.registrationFeeTotal ||
+    x.registrationFeeReceived ||
+    x.registrationFeeStatus ||
+    x.registrationFeeVerification ||
+    x.registrationFeeBank ||
+    x.registrationFeePaymentDate
+);
 
   if (!hasAnyYearData) {
     let oldBillingArr = parseBillingFromJson(row.billing_json);

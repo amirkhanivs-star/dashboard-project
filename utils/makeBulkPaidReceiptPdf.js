@@ -83,12 +83,19 @@ function billingJsonToArray(billingJson) {
       verification: String(e.verification || "").trim(),
       number: String(e.number || "").trim(),
       receivedOn:
-        e.receivedOn ||
-        e.received_on ||
-        e.paidOn ||
-        e.paid_on ||
-        e.date ||
-        ""
+  e.receivedOn ||
+  e.received_on ||
+  e.paidOn ||
+  e.paid_on ||
+  e.date ||
+  "",
+
+registrationFeeTotal: safeNum(e.registrationFeeTotal || 0),
+registrationFeeReceived: safeNum(e.registrationFeeReceived || 0),
+registrationFeeStatus: String(e.registrationFeeStatus || "").trim(),
+registrationFeeVerification: String(e.registrationFeeVerification || "").trim(),
+registrationFeeBank: String(e.registrationFeeBank || "").trim(),
+registrationFeePaymentDate: String(e.registrationFeePaymentDate || "").trim()
     };
   });
 }
@@ -153,7 +160,9 @@ export default async function makeBulkPaidReceiptPdf({
     .filter(([mk]) => mk)
 );
 
-const rows = monthKeys.map((mk) => {
+const rows = [];
+
+for (const mk of monthKeys) {
   const curBill = billingArr.find(
     (b) => String(b?.month || "").toLowerCase() === mk
   ) || {};
@@ -169,14 +178,33 @@ const rows = monthKeys.map((mk) => {
       0
     );
 
-  return {
-    regNo,
-    description: `Monthly Fee Paid\n${studentName}`,
-    grade,
-    month: monthTitle(mk),
-    amount: receivedAmount.toFixed(2),
-  };
-});
+  if (receivedAmount > 0) {
+    rows.push({
+      regNo,
+      description: `Monthly Fee Paid\n${studentName}`,
+      grade,
+      month: monthTitle(mk),
+      amount: receivedAmount.toFixed(2),
+    });
+  }
+
+  const registrationFeeTotal = safeNum(curBill?.registrationFeeTotal || 0);
+  const registrationFeeReceived = safeNum(curBill?.registrationFeeReceived || 0);
+
+  if (registrationFeeTotal > 0 && registrationFeeReceived > 0) {
+    rows.push({
+      regNo,
+      description: `Registration Fee Paid\n${studentName}`,
+      grade,
+      month: monthTitle(mk),
+      amount: registrationFeeReceived.toFixed(2),
+    });
+  }
+}
+
+if (!rows.length) {
+  throw new Error("No paid receipt rows to generate");
+}
 
   const totalReceived = rows.reduce((sum, r) => sum + safeNum(r.amount), 0);
 
