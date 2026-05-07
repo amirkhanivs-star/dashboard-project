@@ -132,6 +132,12 @@ export default async function makeBulkPaidReceiptPdf({
     full?.accounts_registration_number ||
     full?.accounts?.registration_number ||
     "-";
+    const familyNumber =
+  full?.familyNumber ||
+  full?.accounts?.familyNumber ||
+  full?.accounts_family_number ||
+  full?.accounts?.family_number ||
+  "";
 
   const paidBy =
     full?.father ||
@@ -154,6 +160,12 @@ export default async function makeBulkPaidReceiptPdf({
           String(m?.feeType || "").toLowerCase().includes("registration");
 
         return {
+          admissionId: Number(m?.admissionId || full?.id || 0),
+          studentName: String(m?.studentName || studentName || "-").trim(),
+          grade: String(m?.grade || grade || "-").trim(),
+          registrationNumber: String(m?.registrationNumber || regNo || "-").trim(),
+          familyNumber: String(m?.familyNumber || familyNumber || "").trim(),
+
           monthKey,
           monthLabel: m?.monthLabel || monthTitle(monthKey),
           feeType: isRegistrationFee ? "Registration Fee" : "Monthly Fee",
@@ -165,6 +177,12 @@ export default async function makeBulkPaidReceiptPdf({
   : billingArr
       .filter((b) => safeNum(b?.amount || 0) > 0)
       .map((b) => ({
+        admissionId: Number(full?.id || 0),
+        studentName,
+        grade,
+        registrationNumber: regNo,
+        familyNumber,
+
         monthKey: String(b?.month || "").toLowerCase().trim(),
         monthLabel: monthTitle(b?.month || ""),
         feeType: "Monthly Fee",
@@ -174,9 +192,10 @@ export default async function makeBulkPaidReceiptPdf({
 
 const rows = paidItems.map((item) => {
   return {
-    regNo,
-    description: `${item.feeType} Paid\n${studentName}`,
-    grade,
+    regNo: item.registrationNumber || regNo,
+    familyNumber: item.familyNumber || familyNumber || "",
+    description: `${item.feeType} Paid\n${item.studentName || studentName}`,
+    grade: item.grade || grade,
     month: item.monthLabel || monthTitle(item.monthKey),
     amount: item.received.toFixed(2),
   };
@@ -219,11 +238,12 @@ const receiptSignSrcAbs = publicImg("receipt-sign.jpg");
 bannerSrc: bannerSrcAbs,
     currency,
     receiptNo: full?.receiptNo || full?.receipt_no || full?.id || "",
-    receiptMonth,
-    statusText: "Paid",
-    paidBy,
-    receivedOn,
-    rows,
+receiptMonth,
+statusText: "Paid",
+familyNumber: familyNumber || "N/A",
+paidBy,
+receivedOn,
+rows,
     rowPages,
     totalText,
 

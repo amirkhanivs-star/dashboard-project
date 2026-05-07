@@ -299,6 +299,10 @@
             <span class="lbl">Receipt No:</span>
             <span class="val"><%= receiptNo %></span>
           </div>
+                  <div class="info-row">
+            <span class="lbl">Family No:</span>
+            <span class="val"><%= familyNumber || 'N/A' %></span>
+          </div>
         </div>
 
         <div class="info-col">
@@ -328,10 +332,10 @@
         <thead>
           <tr>
             <th style="width: 14%">Reg No</th>
-            <th style="width: 46%">Description</th>
-            <th style="width: 15%">Grade</th>
-            <th class="center" style="width: 10%">Month</th>
-            <th class="right" style="width: 15%">Amount (<%= currency %>)</th>
+<th style="width: 42%">Description</th>
+<th style="width: 14%">Grade</th>
+<th class="center" style="width: 12%">Month</th>
+<th class="right" style="width: 18%">Amount (<%= currency %>)</th>
           </tr>
         </thead>
         <tbody>
@@ -342,6 +346,9 @@
                 <% const d = String(r.description || '').split('\n'); %>
                 <%= d[0] %>
                 <% if (d[1]) { %><span class="descSmall"><%= d[1] %></span><% } %>
+                <% if (r.familyNumber) { %>
+  <span class="descSmall">Family No: <%= r.familyNumber %></span>
+<% } %>
               </td>
               <td><%= r.grade %></td>
               <td class="center"><%= r.month %></td>

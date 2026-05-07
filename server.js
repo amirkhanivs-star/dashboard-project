@@ -3427,7 +3427,295 @@ const pendingWithRegistration =
     touchedMonths,
   };
 }
+function ensureAppliedEntry(appliedMap, row) {
+  const key = Number(row.id || 0);
 
+  if (!appliedMap.has(key)) {
+    appliedMap.set(key, {
+      admissionId: row.id,
+      studentName: row.student_name || "",
+      grade: row.grade || "",
+      registrationNumber: String(row.accounts_registration_number || "").trim(),
+      familyNumber: String(row.accounts_family_number || "").trim(),
+      usedAmount: 0,
+      remainingAmount: 0,
+      touchedMonths: [],
+      paidUpto: "",
+      receivedPayment: 0,
+    });
+  }
+
+  return appliedMap.get(key);
+}
+
+function applySpecificMonthlyFeeToBilling({
+  row,
+  billingYear,
+  monthKey,
+  receiveAmount,
+  verificationNumber,
+  collectionAccount,
+  receivingDate,
+  note,
+  actorUser,
+}) {
+  let remaining = Number(receiveAmount || 0);
+  const cleanMonthKey = String(monthKey || "").trim().toLowerCase();
+
+  if (!row || remaining <= 0 || !cleanMonthKey) {
+    return {
+      success: false,
+      appliedAmount: 0,
+      remainingAmount: remaining,
+      touchedMonths: [],
+    };
+  }
+
+  const billingJson = getBillingJsonByAdmissionId(row.id, billingYear);
+
+  const oldFeeSnapshot =
+    parseFirstNumber(row?.monthly_fee_current || 0) ||
+    parseFirstNumber(row?.admission_fees || 0) ||
+    inferMonthlyFee(row, billingJson) ||
+    0;
+
+  let feeHistory = ensureInitialFeeHistory(row, getFeeHistory(row), oldFeeSnapshot);
+  const baseFee = baseFeeFromHistoryOrRow(row, feeHistory, oldFeeSnapshot);
+
+  const current = billingJson[cleanMonthKey] || {
+    status: "",
+    amount: "",
+    feeOverride: "",
+    verification: "",
+    bank: "",
+    paymentDate: "",
+  };
+
+  const currentStatus = String(current.status || "").trim().toLowerCase();
+  if (currentStatus === "not admitted") {
+    return {
+      success: true,
+      appliedAmount: 0,
+      remainingAmount: remaining,
+      touchedMonths: [],
+    };
+  }
+
+  const currentReceived = parseFirstNumber(current.amount || 0);
+  const feeOverride =
+    parseFirstNumber(current.feeOverride || 0) ||
+    feeForMonth(feeHistory, baseFee, cleanMonthKey) ||
+    0;
+
+  const currentDue = Math.max(0, feeOverride - currentReceived);
+  if (currentDue <= 0) {
+    return {
+      success: true,
+      appliedAmount: 0,
+      remainingAmount: remaining,
+      touchedMonths: [],
+    };
+  }
+
+  const used = Math.min(remaining, currentDue);
+  const newReceived = currentReceived + used;
+  const balance = Math.max(0, feeOverride - newReceived);
+
+  current.amount = String(newReceived);
+  current.feeOverride = String(feeOverride);
+  current.verification = String(verificationNumber || "").trim();
+  current.bank = String(collectionAccount || "").trim();
+  current.paymentDate = String(receivingDate || "").trim();
+  current.status = balance <= 0 ? "Full payment" : "Partial payment";
+
+  billingJson[cleanMonthKey] = current;
+
+  for (const m of BILLING_MONTHS) {
+    const item = billingJson[m.key] || {};
+
+    saveAdmissionBillingMonthByYear({
+      admissionId: row.id,
+      billingYear,
+      monthKey: m.key,
+      status: String(item.status || ""),
+      amountReceived: String(item.amount || ""),
+      feeAmount: String(item.feeOverride || ""),
+      verificationNumber: String(item.verification || ""),
+      bankName: String(item.bank || ""),
+      paymentDate: String(item.paymentDate || ""),
+
+      registrationFeeTotal: String(item.registrationFeeTotal || ""),
+      registrationFeeReceived: String(item.registrationFeeReceived || ""),
+      registrationFeeStatus: String(item.registrationFeeStatus || ""),
+      registrationFeeVerification: String(item.registrationFeeVerification || ""),
+      registrationFeeBank: String(item.registrationFeeBank || ""),
+      registrationFeePaymentDate: String(item.registrationFeePaymentDate || ""),
+    });
+  }
+
+  const dues = calcPendingDues(baseFee, billingJson, feeHistory);
+  const paidUpto = computePaidUptoFromBillingJson(billingJson);
+  const monthlyReceivedPayment = computeReceivedPaymentFromBillingJson(billingJson);
+
+  const regSnapAfterMonthly = getRegistrationFeeSnapshot(row, billingJson, billingYear);
+
+  const receivedPayment =
+    Number(monthlyReceivedPayment || 0) + Number(regSnapAfterMonthly.received || 0);
+
+  const expectedWithRegistration =
+    Number(dues.expected || 0) + Number(regSnapAfterMonthly.total || 0);
+
+  const pendingWithRegistration =
+    Number(dues.pending || 0) + Number(regSnapAfterMonthly.due || 0);
+
+  db.prepare(`
+    UPDATE admissions
+    SET billing_json = @billing_json,
+        fee_history = @fee_history,
+        monthly_fee_current = @monthly_fee_current,
+        accounts_paid_upto = @accounts_paid_upto,
+        accounts_verification_number = @accounts_verification_number,
+        admission_total_fees = @admission_total_fees,
+        admission_pending_dues = @admission_pending_dues,
+        admission_total_paid = @admission_total_paid
+    WHERE id = @id
+  `).run({
+    id: row.id,
+    billing_json: JSON.stringify(billingJson),
+    fee_history: JSON.stringify(feeHistory),
+    monthly_fee_current: dues.currentFee || baseFee || 0,
+    accounts_paid_upto: paidUpto || "",
+    accounts_verification_number: String(verificationNumber || row.accounts_verification_number || "").trim(),
+    admission_total_fees: String(expectedWithRegistration || 0),
+    admission_pending_dues: String(pendingWithRegistration || 0),
+    admission_total_paid: String(receivedPayment || 0),
+  });
+
+  logAudit("family_month_wise_fee_collection_received", actorUser, {
+    dept: row.dept || "",
+    details: {
+      admissionId: row.id,
+      studentName: row.student_name || "",
+      billingYear,
+      monthKey: cleanMonthKey,
+      collectionAccount,
+      receivingDate,
+      note: String(note || "").trim(),
+      receiveAmount: Number(receiveAmount || 0),
+      appliedAmount: used,
+      remainingAmount: remaining - used,
+      balance,
+    },
+  });
+
+  return {
+    success: true,
+    billingJson,
+    calc: { baseFee, ...dues },
+    paidUpto,
+    receivedPayment,
+    appliedAmount: used,
+    remainingAmount: remaining - used,
+    touchedMonths: [
+      {
+        feeType: "Monthly Fee",
+        isRegistrationFee: false,
+        admissionId: row.id,
+        studentName: row.student_name || "",
+        grade: row.grade || "",
+        registrationNumber: String(row.accounts_registration_number || "").trim(),
+        familyNumber: String(row.accounts_family_number || "").trim(),
+        monthKey: cleanMonthKey,
+        fee: feeOverride,
+        previousReceived: currentReceived,
+        used,
+        newReceived,
+        balance,
+        status: balance <= 0 ? "Full payment" : "Partial payment",
+      },
+    ],
+  };
+}
+
+function applyFamilyMonthlyFeeCollectionMonthWise({
+  rows,
+  billingYear,
+  receiveAmount,
+  verificationNumber,
+  collectionAccount,
+  receivingDate,
+  note,
+  actorUser,
+  appliedMap,
+}) {
+  let remaining = Number(receiveAmount || 0);
+
+  const pendingMonthlyRows = [];
+
+  for (const row of rows || []) {
+    const receivableRows = buildReceivableRowsFromRow(row, billingYear) || [];
+
+    for (const r of receivableRows) {
+      pendingMonthlyRows.push({
+        row,
+        admissionId: row.id,
+        studentName: row.student_name || "",
+        grade: row.grade || "",
+        registrationNumber: String(row.accounts_registration_number || "").trim(),
+        familyNumber: String(row.accounts_family_number || "").trim(),
+        monthKey: String(r.monthKey || "").trim().toLowerCase(),
+        monthLabel: r.monthLabel || "",
+        due: Number(r.due || 0),
+        year: Number(r.year || billingYear),
+      });
+    }
+  }
+
+  pendingMonthlyRows.sort((a, b) => {
+    if (Number(a.year || 0) !== Number(b.year || 0)) {
+      return Number(a.year || 0) - Number(b.year || 0);
+    }
+
+    const monthDiff = monthIndex(a.monthKey) - monthIndex(b.monthKey);
+    if (monthDiff !== 0) return monthDiff;
+
+    return Number(a.admissionId || 0) - Number(b.admissionId || 0);
+  });
+
+  for (const item of pendingMonthlyRows) {
+    if (remaining <= 0) break;
+
+    const result = applySpecificMonthlyFeeToBilling({
+      row: item.row,
+      billingYear,
+      monthKey: item.monthKey,
+      receiveAmount: remaining,
+      verificationNumber,
+      collectionAccount,
+      receivingDate,
+      note,
+      actorUser,
+    });
+
+    const used = Number(result.appliedAmount || 0);
+    remaining = Number(result.remainingAmount || 0);
+
+    if (used > 0) {
+      const entry = ensureAppliedEntry(appliedMap, item.row);
+      entry.usedAmount += used;
+      entry.remainingAmount = remaining;
+      entry.touchedMonths.push(...(result.touchedMonths || []));
+      entry.paidUpto = result.paidUpto || entry.paidUpto || "";
+      entry.receivedPayment = result.receivedPayment || entry.receivedPayment || 0;
+    }
+  }
+
+  return {
+    success: true,
+    appliedAmount: Number(receiveAmount || 0) - remaining,
+    remainingAmount: remaining,
+  };
+}
 function buildBulkWhatsappPayload({ req, user, rows, className, section, monthKey, year, feeType }) {
   return {
     event: "bulk_challan_send_request",
@@ -3462,55 +3750,63 @@ async function generateReceivedPaidReceiptForN8n({
   billingYear,
   paidMonths,
   labelPrefix = "Received Paid Receipt",
+  fullOverride = null,
+  familyNumber = "",
 }) {
   let cleanPaidMonths = (Array.isArray(paidMonths) ? paidMonths : [])
-  .map((x) => {
-    const isRegistrationFee =
-      x?.isRegistrationFee === true ||
-      String(x?.feeType || "").toLowerCase().includes("registration");
+    .map((x) => {
+      const isRegistrationFee =
+        x?.isRegistrationFee === true ||
+        String(x?.feeType || "").toLowerCase().includes("registration");
 
-    return {
-      feeType: isRegistrationFee ? "Registration Fee" : "Monthly Fee",
-      isRegistrationFee,
-      monthKey: String(x.monthKey || "").trim().toLowerCase(),
-      monthLabel:
-        BILLING_MONTHS.find(
-          (m) => String(m.key).toLowerCase() === String(x.monthKey || "").trim().toLowerCase()
-        )?.label || String(x.monthKey || ""),
-      status: String(x.status || "").trim(),
+      const cleanMonthKey = String(x.monthKey || "").trim().toLowerCase();
 
-      // ✅ Sirf current receive amount use hoga
-      received: Number(x.used ?? x.received ?? x.amount ?? 0),
+      return {
+        feeType: isRegistrationFee ? "Registration Fee" : "Monthly Fee",
+        isRegistrationFee,
+        admissionId: Number(x.admissionId || admissionId || 0),
+        studentName: String(x.studentName || "").trim(),
+        grade: String(x.grade || "").trim(),
+        registrationNumber: String(x.registrationNumber || "").trim(),
+        familyNumber: String(x.familyNumber || familyNumber || "").trim(),
+        monthKey: cleanMonthKey,
+        monthLabel:
+          BILLING_MONTHS.find(
+            (m) => String(m.key).toLowerCase() === cleanMonthKey
+          )?.label || String(x.monthKey || ""),
+        status: String(x.status || "").trim(),
 
-      verification: String(x.verification || "").trim(),
-      bank: String(x.bank || "").trim(),
-      year: billingYear,
-    };
-  })
-  .filter((x) => x.monthKey && x.received > 0);
+        // ✅ Sirf current receive amount use hoga
+        received: Number(x.used ?? x.received ?? x.amount ?? 0),
 
-// ✅ Same fee type + same month duplicate ho to merge karo
-// ✅ Registration Fee aur Monthly Fee same month me hon to merge na karo
-const paidMonthMap = new Map();
+        verification: String(x.verification || "").trim(),
+        bank: String(x.bank || "").trim(),
+        year: billingYear,
+      };
+    })
+    .filter((x) => x.monthKey && x.received > 0);
 
-for (const item of cleanPaidMonths) {
-  const key = `${item.year}:${item.monthKey}:${item.feeType}`;
-  const old = paidMonthMap.get(key);
+  // ✅ Same student + same fee type + same month duplicate ho to merge karo
+  // ✅ Registration Fee aur Monthly Fee same month me hon to merge na karo
+  const paidMonthMap = new Map();
 
-  if (!old) {
-    paidMonthMap.set(key, { ...item });
-  } else {
-    old.received = Number(old.received || 0) + Number(item.received || 0);
-    old.status = item.status || old.status;
-    old.verification = item.verification || old.verification;
-    old.bank = item.bank || old.bank;
-    paidMonthMap.set(key, old);
+  for (const item of cleanPaidMonths) {
+    const key = `${item.admissionId}:${item.year}:${item.monthKey}:${item.feeType}`;
+    const old = paidMonthMap.get(key);
+
+    if (!old) {
+      paidMonthMap.set(key, { ...item });
+    } else {
+      old.received = Number(old.received || 0) + Number(item.received || 0);
+      old.status = item.status || old.status;
+      old.verification = item.verification || old.verification;
+      old.bank = item.bank || old.bank;
+      paidMonthMap.set(key, old);
+    }
   }
-}
 
+  cleanPaidMonths = Array.from(paidMonthMap.values());
 
-
-cleanPaidMonths = Array.from(paidMonthMap.values());
   if (!cleanPaidMonths.length) {
     return {
       skipped: true,
@@ -3518,7 +3814,7 @@ cleanPaidMonths = Array.from(paidMonthMap.values());
     };
   }
 
-  const full = dbGetAdmissionDetailsById(admissionId, billingYear);
+  const full = fullOverride || dbGetAdmissionDetailsById(admissionId, billingYear);
   if (!full) {
     throw new Error(`Admission details not found for id ${admissionId}`);
   }
@@ -3526,7 +3822,14 @@ cleanPaidMonths = Array.from(paidMonthMap.values());
   const bannerPath = path.join(__dirname, "public", "img", "ivs-banner.jpg");
 
   const pdfBuffer = await makeBulkPaidReceiptPdf({
-    full,
+    full: {
+      ...full,
+      familyNumber: String(familyNumber || full?.familyNumber || "").trim(),
+      accounts: {
+        ...(full?.accounts || {}),
+        familyNumber: String(familyNumber || full?.accounts?.familyNumber || "").trim(),
+      },
+    },
     paidMonths: cleanPaidMonths,
     bannerPath,
   });
@@ -3544,7 +3847,10 @@ cleanPaidMonths = Array.from(paidMonthMap.values());
   const challanDir = path.join(uploadsDir, "challans", year, month);
   if (!fs.existsSync(challanDir)) fs.mkdirSync(challanDir, { recursive: true });
 
-  const filename = `received-paid-receipt-${admissionId}-${Date.now()}.pdf`;
+  const filename = familyNumber
+    ? `family-received-paid-receipt-${familyNumber}-${Date.now()}.pdf`
+    : `received-paid-receipt-${admissionId}-${Date.now()}.pdf`;
+
   const absPath = path.join(challanDir, filename);
 
   fs.writeFileSync(absPath, pdfBuffer);
@@ -3568,6 +3874,7 @@ cleanPaidMonths = Array.from(paidMonthMap.values());
     skipped: false,
     uploadId: info.lastInsertRowid,
     admissionId,
+    familyNumber: String(familyNumber || "").trim(),
     billingYear,
     paidMonths: cleanPaidMonths,
     fileUrl,
@@ -5921,14 +6228,17 @@ if (!allPendingRows.length && !cleanSelectedNotAdmittedMonths.length) {
 
     let registrationRemaining = registrationAmount;
 let remaining = amount;
-const applied = [];
 
-    const rowsInOrder = [...targetRows].sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
+const appliedMap = new Map();
+const rowsInOrder = [...targetRows].sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
 
-    for (const row of rowsInOrder) {
+// ✅ 1) Not admitted + Registration fee pehle handle hogi
+for (const row of rowsInOrder) {
   const selectedForThisRow = cleanSelectedNotAdmittedMonths.filter(
     (x) => Number(x.admissionId) === Number(row.id)
   );
+
+  const entry = ensureAppliedEntry(appliedMap, row);
 
   if (selectedForThisRow.length) {
     markSelectedMonthsNotAdmitted({
@@ -5936,81 +6246,111 @@ const applied = [];
       billingYear,
       selectedMonths: selectedForThisRow,
     });
+
+    entry.touchedMonths.push(
+      ...selectedForThisRow.map((x) => ({
+        admissionId: row.id,
+        studentName: row.student_name || "",
+        grade: row.grade || "",
+        registrationNumber: String(row.accounts_registration_number || "").trim(),
+        familyNumber: String(row.accounts_family_number || "").trim(),
+        monthKey: x.monthKey,
+        status: "Not admitted",
+      }))
+    );
   }
 
-  let registrationResult = null;
+  if (registrationRemaining > 0) {
+    const registrationResult = applyRegistrationFeeCollectionToBilling({
+      row,
+      billingYear,
+      receiveAmount: registrationRemaining,
+      verificationNumber: cleanVerificationNumber,
+      collectionAccount: cleanCollectionAccount,
+      receivingDate: cleanReceivingDate,
+      note: cleanNote,
+      actorUser: user,
+    });
 
-if (registrationRemaining > 0) {
-  registrationResult = applyRegistrationFeeCollectionToBilling({
-    row,
-    billingYear,
-    receiveAmount: registrationRemaining,
-    verificationNumber: cleanVerificationNumber,
-    collectionAccount: cleanCollectionAccount,
-    receivingDate: cleanReceivingDate,
-    note: cleanNote,
-    actorUser: user,
+    const regUsed = Number(registrationResult?.appliedAmount || 0);
+    registrationRemaining = Number(registrationResult?.remainingAmount || 0);
+
+    if (regUsed > 0) {
+      entry.usedAmount += regUsed;
+      entry.remainingAmount = registrationRemaining + remaining;
+      entry.touchedMonths.push(
+        ...(registrationResult?.touchedMonths || []).map((m) => ({
+          ...m,
+          admissionId: row.id,
+          studentName: row.student_name || "",
+          grade: row.grade || "",
+          registrationNumber: String(row.accounts_registration_number || "").trim(),
+          familyNumber: String(row.accounts_family_number || "").trim(),
+        }))
+      );
+      entry.paidUpto = registrationResult?.paidUpto || entry.paidUpto || "";
+      entry.receivedPayment = registrationResult?.receivedPayment || entry.receivedPayment || 0;
+    }
+  }
+
+  emitAdmissionChanged(req, {
+    type: "fee_collection_received",
+    admissionId: row.id,
+    dept: row.dept || "",
   });
-
-  registrationRemaining = Number(registrationResult.remainingAmount || 0);
 }
 
-  if (remaining <= 0) {
-    applied.push({
-      admissionId: row.id,
-      studentName: row.student_name || "",
-      usedAmount: Number(registrationResult?.appliedAmount || 0),
-remainingAmount: registrationRemaining + remaining,
-      touchedMonths: [
-  ...selectedForThisRow.map((x) => ({
-    monthKey: x.monthKey,
-    status: "Not admitted",
-  })),
-  ...(registrationResult?.touchedMonths || []),
-],
-      paidUpto: "",
-      receivedPayment: 0,
+// ✅ 2) Monthly fee: family mode me month-wise distribute hogi
+if (remaining > 0) {
+  if (mode === "family") {
+    const familyMonthlyResult = applyFamilyMonthlyFeeCollectionMonthWise({
+      rows: rowsInOrder,
+      billingYear,
+      receiveAmount: remaining,
+      verificationNumber: cleanVerificationNumber,
+      collectionAccount: cleanCollectionAccount,
+      receivingDate: cleanReceivingDate,
+      note: cleanNote,
+      actorUser: user,
+      appliedMap,
     });
 
-    emitAdmissionChanged(req, {
-      type: "fee_collection_received",
-      admissionId: row.id,
-      dept: row.dept || "",
-    });
+    remaining = Number(familyMonthlyResult.remainingAmount || 0);
+  } else {
+    for (const row of rowsInOrder) {
+      if (remaining <= 0) break;
 
-    continue;
-  }
-
-  const result = applyFeeCollectionToBilling({
-    row,
-    billingYear,
-    receiveAmount: remaining,
-    verificationNumber: cleanVerificationNumber,
-    collectionAccount: cleanCollectionAccount,
-    receivingDate: cleanReceivingDate,
-    note: cleanNote,
-    actorUser: user,
-  });
+      const result = applyFeeCollectionToBilling({
+        row,
+        billingYear,
+        receiveAmount: remaining,
+        verificationNumber: cleanVerificationNumber,
+        collectionAccount: cleanCollectionAccount,
+        receivingDate: cleanReceivingDate,
+        note: cleanNote,
+        actorUser: user,
+      });
 
       const used = Number(result.appliedAmount || 0);
       remaining = Number(result.remainingAmount || 0);
 
-applied.push({
-  admissionId: row.id,
-  studentName: row.student_name || "",
-  usedAmount: used,
-  remainingAmount: remaining,
-  touchedMonths: [
-  ...selectedForThisRow.map((x) => ({
-    monthKey: x.monthKey,
-    status: "Not admitted",
-  })),
-  ...(registrationResult?.touchedMonths || []),
-  ...(result.touchedMonths || []),
-],
-  paidUpto: result.paidUpto || "",
-  receivedPayment: result.receivedPayment || 0,
-});
+      if (used > 0) {
+        const entry = ensureAppliedEntry(appliedMap, row);
+        entry.usedAmount += used;
+        entry.remainingAmount = remaining;
+        entry.touchedMonths.push(
+          ...(result.touchedMonths || []).map((m) => ({
+            ...m,
+            admissionId: row.id,
+            studentName: row.student_name || "",
+            grade: row.grade || "",
+            registrationNumber: String(row.accounts_registration_number || "").trim(),
+            familyNumber: String(row.accounts_family_number || "").trim(),
+          }))
+        );
+        entry.paidUpto = result.paidUpto || entry.paidUpto || "";
+        entry.receivedPayment = result.receivedPayment || entry.receivedPayment || 0;
+      }
 
       emitAdmissionChanged(req, {
         type: "fee_collection_received",
@@ -6018,6 +6358,19 @@ applied.push({
         dept: row.dept || "",
       });
     }
+  }
+}
+
+const applied = Array.from(appliedMap.values())
+  .filter((x) => {
+    const hasTouched = Array.isArray(x.touchedMonths) && x.touchedMonths.length > 0;
+    const hasAmount = Number(x.usedAmount || 0) > 0;
+    return hasTouched || hasAmount;
+  })
+  .map((x) => ({
+    ...x,
+    remainingAmount: registrationRemaining + remaining,
+  }));
 
     const refreshedRows =
       mode === "family"
@@ -6037,42 +6390,124 @@ applied.push({
     const summary = summarizeFeeCollectionRows(refreshedRows, billingYear, currentMonthKey());
    const receipts = [];
 
-for (const item of applied) {
-  const paidTouchedMonths = (item.touchedMonths || []).filter((m) => {
-    const used = Number(m.used || 0);
-    const status = String(m.status || "").trim().toLowerCase();
+const rowInfoMap = new Map(
+  (refreshedRows || []).map((r) => [Number(r.id || 0), r])
+);
 
-    return used > 0 && status !== "not admitted";
-  });
+if (mode === "family" && cleanFamilyNumber) {
+  const familyPaidTouchedMonths = [];
 
-  if (!paidTouchedMonths.length) continue;
+  for (const item of applied) {
+    const rowInfo = rowInfoMap.get(Number(item.admissionId || 0)) || {};
 
-  try {
-    const receipt = await generateReceivedPaidReceiptForN8n({
-      req,
-      admissionId: item.admissionId,
-      billingYear,
-      paidMonths: paidTouchedMonths.map((m) => ({
+    const paidTouchedMonths = (item.touchedMonths || []).filter((m) => {
+      const used = Number(m.used || 0);
+      const status = String(m.status || "").trim().toLowerCase();
+
+      return used > 0 && status !== "not admitted";
+    });
+
+    familyPaidTouchedMonths.push(
+      ...paidTouchedMonths.map((m) => ({
         ...m,
+        admissionId: item.admissionId,
+        studentName: item.studentName || rowInfo.student_name || "",
+        grade: item.grade || rowInfo.grade || "",
+        registrationNumber:
+          item.registrationNumber ||
+          String(rowInfo.accounts_registration_number || "").trim(),
+        familyNumber:
+          item.familyNumber ||
+          String(rowInfo.accounts_family_number || cleanFamilyNumber || "").trim(),
         verification: cleanVerificationNumber,
         bank: cleanCollectionAccount,
-      })),
-      labelPrefix: mode === "family"
-        ? `Family Received Paid Receipt (${cleanFamilyNumber})`
-        : "Received Paid Receipt",
+      }))
+    );
+  }
+
+  if (familyPaidTouchedMonths.length) {
+    try {
+      const primaryAdmissionId =
+        Number(familyPaidTouchedMonths[0]?.admissionId || 0) ||
+        Number(refreshedRows?.[0]?.id || 0);
+
+      const primaryFull = dbGetAdmissionDetailsById(primaryAdmissionId, billingYear);
+
+      const receipt = await generateReceivedPaidReceiptForN8n({
+        req,
+        admissionId: primaryAdmissionId,
+        billingYear,
+        paidMonths: familyPaidTouchedMonths,
+        fullOverride: {
+          ...(primaryFull || {}),
+          familyNumber: cleanFamilyNumber,
+          accounts: {
+            ...(primaryFull?.accounts || {}),
+            familyNumber: cleanFamilyNumber,
+          },
+        },
+        familyNumber: cleanFamilyNumber,
+        labelPrefix: `Family Received Paid Receipt (${cleanFamilyNumber})`,
+      });
+
+      receipts.push({
+        familyNumber: cleanFamilyNumber,
+        ...receipt,
+      });
+    } catch (receiptErr) {
+      receipts.push({
+        familyNumber: cleanFamilyNumber,
+        error: String(receiptErr?.message || receiptErr),
+      });
+    }
+  }
+} else {
+  for (const item of applied) {
+    const rowInfo = rowInfoMap.get(Number(item.admissionId || 0)) || {};
+
+    const paidTouchedMonths = (item.touchedMonths || []).filter((m) => {
+      const used = Number(m.used || 0);
+      const status = String(m.status || "").trim().toLowerCase();
+
+      return used > 0 && status !== "not admitted";
     });
 
-    receipts.push({
-      admissionId: item.admissionId,
-      studentName: item.studentName || "",
-      ...receipt,
-    });
-  } catch (receiptErr) {
-    receipts.push({
-      admissionId: item.admissionId,
-      studentName: item.studentName || "",
-      error: String(receiptErr?.message || receiptErr),
-    });
+    if (!paidTouchedMonths.length) continue;
+
+    try {
+      const receipt = await generateReceivedPaidReceiptForN8n({
+        req,
+        admissionId: item.admissionId,
+        billingYear,
+        paidMonths: paidTouchedMonths.map((m) => ({
+          ...m,
+          admissionId: item.admissionId,
+          studentName: item.studentName || rowInfo.student_name || "",
+          grade: item.grade || rowInfo.grade || "",
+          registrationNumber:
+            item.registrationNumber ||
+            String(rowInfo.accounts_registration_number || "").trim(),
+          familyNumber:
+            item.familyNumber ||
+            String(rowInfo.accounts_family_number || "").trim(),
+          verification: cleanVerificationNumber,
+          bank: cleanCollectionAccount,
+        })),
+        labelPrefix: "Received Paid Receipt",
+      });
+
+      receipts.push({
+        admissionId: item.admissionId,
+        studentName: item.studentName || "",
+        ...receipt,
+      });
+    } catch (receiptErr) {
+      receipts.push({
+        admissionId: item.admissionId,
+        studentName: item.studentName || "",
+        error: String(receiptErr?.message || receiptErr),
+      });
+    }
   }
 }
 
