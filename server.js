@@ -3463,21 +3463,40 @@ async function generateReceivedPaidReceiptForN8n({
   paidMonths,
   labelPrefix = "Received Paid Receipt",
 }) {
-  const cleanPaidMonths = (Array.isArray(paidMonths) ? paidMonths : [])
-    .map((x) => ({
-      monthKey: String(x.monthKey || "").trim().toLowerCase(),
-      monthLabel:
-        BILLING_MONTHS.find(
-          (m) => String(m.key).toLowerCase() === String(x.monthKey || "").trim().toLowerCase()
-        )?.label || String(x.monthKey || ""),
-      status: String(x.status || "").trim(),
-      received: Number(x.used || x.received || x.amount || 0),
-      verification: String(x.verification || "").trim(),
-      bank: String(x.bank || "").trim(),
-      year: billingYear,
-    }))
-    .filter((x) => x.monthKey && x.received > 0);
+  let cleanPaidMonths = (Array.isArray(paidMonths) ? paidMonths : [])
+  .map((x) => ({
+    monthKey: String(x.monthKey || "").trim().toLowerCase(),
+    monthLabel:
+      BILLING_MONTHS.find(
+        (m) => String(m.key).toLowerCase() === String(x.monthKey || "").trim().toLowerCase()
+      )?.label || String(x.monthKey || ""),
+    status: String(x.status || "").trim(),
+    received: Number(x.used || x.received || x.amount || 0),
+    verification: String(x.verification || "").trim(),
+    bank: String(x.bank || "").trim(),
+    year: billingYear,
+  }))
+  .filter((x) => x.monthKey && x.received > 0);
 
+// ✅ Same month duplicate na ho: registration + monthly same month ko merge karo
+const paidMonthMap = new Map();
+
+for (const item of cleanPaidMonths) {
+  const key = `${item.year}:${item.monthKey}`;
+  const old = paidMonthMap.get(key);
+
+  if (!old) {
+    paidMonthMap.set(key, { ...item });
+  } else {
+    old.received = Number(old.received || 0) + Number(item.received || 0);
+    old.status = item.status || old.status;
+    old.verification = item.verification || old.verification;
+    old.bank = item.bank || old.bank;
+    paidMonthMap.set(key, old);
+  }
+}
+
+cleanPaidMonths = Array.from(paidMonthMap.values());
   if (!cleanPaidMonths.length) {
     return {
       skipped: true,
@@ -5307,7 +5326,7 @@ return res.send(pdfBuffer);
 // URL: /dashboard/super/admission/:id/paid/:monthKey
 // =====================================================
 app.get("/dashboard/super/admission/:id/paid/:monthKey", requireLogin, async (req, res) => {
-  try {
+  try { 
     const user = req.session.user;
     const perms = getPerm(user);
 
