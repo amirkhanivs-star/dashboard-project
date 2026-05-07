@@ -3464,25 +3464,37 @@ async function generateReceivedPaidReceiptForN8n({
   labelPrefix = "Received Paid Receipt",
 }) {
   let cleanPaidMonths = (Array.isArray(paidMonths) ? paidMonths : [])
-  .map((x) => ({
-    monthKey: String(x.monthKey || "").trim().toLowerCase(),
-    monthLabel:
-      BILLING_MONTHS.find(
-        (m) => String(m.key).toLowerCase() === String(x.monthKey || "").trim().toLowerCase()
-      )?.label || String(x.monthKey || ""),
-    status: String(x.status || "").trim(),
-    received: Number(x.used || x.received || x.amount || 0),
-    verification: String(x.verification || "").trim(),
-    bank: String(x.bank || "").trim(),
-    year: billingYear,
-  }))
+  .map((x) => {
+    const isRegistrationFee =
+      x?.isRegistrationFee === true ||
+      String(x?.feeType || "").toLowerCase().includes("registration");
+
+    return {
+      feeType: isRegistrationFee ? "Registration Fee" : "Monthly Fee",
+      isRegistrationFee,
+      monthKey: String(x.monthKey || "").trim().toLowerCase(),
+      monthLabel:
+        BILLING_MONTHS.find(
+          (m) => String(m.key).toLowerCase() === String(x.monthKey || "").trim().toLowerCase()
+        )?.label || String(x.monthKey || ""),
+      status: String(x.status || "").trim(),
+
+      // ✅ Sirf current receive amount use hoga
+      received: Number(x.used ?? x.received ?? x.amount ?? 0),
+
+      verification: String(x.verification || "").trim(),
+      bank: String(x.bank || "").trim(),
+      year: billingYear,
+    };
+  })
   .filter((x) => x.monthKey && x.received > 0);
 
-// ✅ Same month duplicate na ho: registration + monthly same month ko merge karo
+// ✅ Same fee type + same month duplicate ho to merge karo
+// ✅ Registration Fee aur Monthly Fee same month me hon to merge na karo
 const paidMonthMap = new Map();
 
 for (const item of cleanPaidMonths) {
-  const key = `${item.year}:${item.monthKey}`;
+  const key = `${item.year}:${item.monthKey}:${item.feeType}`;
   const old = paidMonthMap.get(key);
 
   if (!old) {
@@ -3495,6 +3507,8 @@ for (const item of cleanPaidMonths) {
     paidMonthMap.set(key, old);
   }
 }
+
+
 
 cleanPaidMonths = Array.from(paidMonthMap.values());
   if (!cleanPaidMonths.length) {

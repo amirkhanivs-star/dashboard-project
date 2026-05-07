@@ -145,81 +145,60 @@ export default async function makeBulkPaidReceiptPdf({
     ? full.billing
     : billingJsonToArray(full?.billingJson || full?.billing_json || full?.billing || {});
 
-  const monthKeys = Array.isArray(paidMonths) && paidMonths.length
-    ? paidMonths.map((m) => String(m?.monthKey || m?.month || "").toLowerCase().trim()).filter(Boolean)
-    : billingArr
-        .filter((b) => safeNum(b?.amount || 0) > 0)
-        .map((b) => String(b?.month || "").toLowerCase().trim());
+  const paidItems = Array.isArray(paidMonths) && paidMonths.length
+  ? paidMonths
+      .map((m) => {
+        const monthKey = String(m?.monthKey || m?.month || "").toLowerCase().trim();
+        const isRegistrationFee =
+          m?.isRegistrationFee === true ||
+          String(m?.feeType || "").toLowerCase().includes("registration");
 
-  const paidMonthsMap = new Map(
-  (Array.isArray(paidMonths) ? paidMonths : [])
-    .map((m) => {
-      const mk = String(m?.monthKey || m?.month || "").toLowerCase().trim();
-      return [mk, m];
-    })
-    .filter(([mk]) => mk)
-);
+        return {
+          monthKey,
+          monthLabel: m?.monthLabel || monthTitle(monthKey),
+          feeType: isRegistrationFee ? "Registration Fee" : "Monthly Fee",
+          isRegistrationFee,
+          received: safeNum(m?.received ?? m?.used ?? m?.amount ?? 0),
+        };
+      })
+      .filter((x) => x.monthKey && x.received > 0)
+  : billingArr
+      .filter((b) => safeNum(b?.amount || 0) > 0)
+      .map((b) => ({
+        monthKey: String(b?.month || "").toLowerCase().trim(),
+        monthLabel: monthTitle(b?.month || ""),
+        feeType: "Monthly Fee",
+        isRegistrationFee: false,
+        received: safeNum(b?.amount || 0),
+      }));
 
-const rows = [];
-
-for (const mk of monthKeys) {
-  const curBill = billingArr.find(
-    (b) => String(b?.month || "").toLowerCase() === mk
-  ) || {};
-
-  const passedMonth = paidMonthsMap.get(mk) || {};
-
-  const receivedAmount =
-    safeNum(
-      passedMonth?.received ||
-      passedMonth?.used ||
-      passedMonth?.amount ||
-      curBill?.amount ||
-      0
-    );
-
-  if (receivedAmount > 0) {
-    rows.push({
-      regNo,
-      description: `Monthly Fee Paid\n${studentName}`,
-      grade,
-      month: monthTitle(mk),
-      amount: receivedAmount.toFixed(2),
-    });
-  }
-
-  const registrationFeeTotal = safeNum(curBill?.registrationFeeTotal || 0);
-  const registrationFeeReceived = safeNum(curBill?.registrationFeeReceived || 0);
-
-  if (registrationFeeTotal > 0 && registrationFeeReceived > 0) {
-    rows.push({
-      regNo,
-      description: `Registration Fee Paid\n${studentName}`,
-      grade,
-      month: monthTitle(mk),
-      amount: registrationFeeReceived.toFixed(2),
-    });
-  }
-}
-
-if (!rows.length) {
-  throw new Error("No paid receipt rows to generate");
-}
+const rows = paidItems.map((item) => {
+  return {
+    regNo,
+    description: `${item.feeType} Paid\n${studentName}`,
+    grade,
+    month: item.monthLabel || monthTitle(item.monthKey),
+    amount: item.received.toFixed(2),
+  };
+});
 
   const totalReceived = rows.reduce((sum, r) => sum + safeNum(r.amount), 0);
 
-  const monthNames = monthKeys.map(monthTitle).filter(Boolean);
+  const monthNames = paidItems.map((x) => x.monthLabel || monthTitle(x.monthKey)).filter(Boolean);
   const receiptMonth =
     monthNames.length === 1
       ? `${monthNames[0]} ${YEAR}`
       : `Bulk Paid Receipt (${YEAR})`;
 
-  const latestReceivedOnRaw = billingArr
-    .filter((b) => monthKeys.includes(String(b?.month || "").toLowerCase().trim()))
-    .map((b) => b?.receivedOn || b?.received_on || b?.paidOn || b?.paid_on || b?.date || "")
-    .filter(Boolean)
-    .pop();
+const paidItemMonthKeys = paidItems
+  .map((x) => String(x.monthKey || "").toLowerCase().trim())
+  .filter(Boolean);
 
+const latestReceivedOnRaw = billingArr
+  .filter((b) => paidItemMonthKeys.includes(String(b?.month || "").toLowerCase().trim()))
+  .map((b) => b?.receivedOn || b?.received_on || b?.paidOn || b?.paid_on || b?.date || "")
+  .filter(Boolean)
+  .pop();
   const receivedOn = latestReceivedOnRaw ? fmtDate(latestReceivedOnRaw) : fmtDate(new Date());
 
   const rowPages = [rows];
