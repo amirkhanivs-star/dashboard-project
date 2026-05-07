@@ -3436,8 +3436,10 @@ function ensureAppliedEntry(appliedMap, row) {
       studentName: row.student_name || "",
       grade: row.grade || "",
       registrationNumber: String(row.accounts_registration_number || "").trim(),
-      familyNumber: String(row.accounts_family_number || "").trim(),
-      usedAmount: 0,
+familyNumber: String(row.accounts_family_number || "").trim(),
+phone: String(row.phone || row.guardian_whatsapp || "").trim(),
+guardianWhatsapp: String(row.guardian_whatsapp || row.phone || "").trim(),
+usedAmount: 0,
       remainingAmount: 0,
       touchedMonths: [],
       paidUpto: "",
@@ -3769,7 +3771,9 @@ async function generateReceivedPaidReceiptForN8n({
         grade: String(x.grade || "").trim(),
         registrationNumber: String(x.registrationNumber || "").trim(),
         familyNumber: String(x.familyNumber || familyNumber || "").trim(),
-        monthKey: cleanMonthKey,
+phone: String(x.phone || x.guardianWhatsapp || "").trim(),
+guardianWhatsapp: String(x.guardianWhatsapp || x.phone || "").trim(),
+monthKey: cleanMonthKey,
         monthLabel:
           BILLING_MONTHS.find(
             (m) => String(m.key).toLowerCase() === cleanMonthKey
@@ -3875,9 +3879,11 @@ async function generateReceivedPaidReceiptForN8n({
     uploadId: info.lastInsertRowid,
     admissionId,
     familyNumber: String(familyNumber || "").trim(),
-    billingYear,
-    paidMonths: cleanPaidMonths,
-    fileUrl,
+phone: String(cleanPaidMonths?.[0]?.phone || cleanPaidMonths?.[0]?.guardianWhatsapp || "").trim(),
+guardianWhatsapp: String(cleanPaidMonths?.[0]?.guardianWhatsapp || cleanPaidMonths?.[0]?.phone || "").trim(),
+billingYear,
+paidMonths: cleanPaidMonths,
+fileUrl,
     storedName: relStored,
     mimeType: "application/pdf",
     size: pdfBuffer.length || 0,
@@ -6248,16 +6254,18 @@ for (const row of rowsInOrder) {
     });
 
     entry.touchedMonths.push(
-      ...selectedForThisRow.map((x) => ({
-        admissionId: row.id,
-        studentName: row.student_name || "",
-        grade: row.grade || "",
-        registrationNumber: String(row.accounts_registration_number || "").trim(),
-        familyNumber: String(row.accounts_family_number || "").trim(),
-        monthKey: x.monthKey,
-        status: "Not admitted",
-      }))
-    );
+  ...selectedForThisRow.map((x) => ({
+    admissionId: row.id,
+    studentName: row.student_name || "",
+    grade: row.grade || "",
+    registrationNumber: String(row.accounts_registration_number || "").trim(),
+    familyNumber: String(row.accounts_family_number || "").trim(),
+    phone: String(row.phone || row.guardian_whatsapp || "").trim(),
+    guardianWhatsapp: String(row.guardian_whatsapp || row.phone || "").trim(),
+    monthKey: x.monthKey,
+    status: "Not admitted",
+  }))
+);
   }
 
   if (registrationRemaining > 0) {
@@ -6286,6 +6294,8 @@ for (const row of rowsInOrder) {
           grade: row.grade || "",
           registrationNumber: String(row.accounts_registration_number || "").trim(),
           familyNumber: String(row.accounts_family_number || "").trim(),
+          phone: String(row.phone || row.guardian_whatsapp || "").trim(),
+guardianWhatsapp: String(row.guardian_whatsapp || row.phone || "").trim(),
         }))
       );
       entry.paidUpto = registrationResult?.paidUpto || entry.paidUpto || "";
@@ -6346,6 +6356,8 @@ if (remaining > 0) {
             grade: row.grade || "",
             registrationNumber: String(row.accounts_registration_number || "").trim(),
             familyNumber: String(row.accounts_family_number || "").trim(),
+            phone: String(row.phone || row.guardian_whatsapp || "").trim(),
+guardianWhatsapp: String(row.guardian_whatsapp || row.phone || "").trim(),
           }))
         );
         entry.paidUpto = result.paidUpto || entry.paidUpto || "";
@@ -6417,9 +6429,15 @@ if (mode === "family" && cleanFamilyNumber) {
           item.registrationNumber ||
           String(rowInfo.accounts_registration_number || "").trim(),
         familyNumber:
-          item.familyNumber ||
-          String(rowInfo.accounts_family_number || cleanFamilyNumber || "").trim(),
-        verification: cleanVerificationNumber,
+  item.familyNumber ||
+  String(rowInfo.accounts_family_number || cleanFamilyNumber || "").trim(),
+phone:
+  item.phone ||
+  String(rowInfo.phone || rowInfo.guardian_whatsapp || "").trim(),
+guardianWhatsapp:
+  item.guardianWhatsapp ||
+  String(rowInfo.guardian_whatsapp || rowInfo.phone || "").trim(),
+verification: cleanVerificationNumber,
         bank: cleanCollectionAccount,
       }))
     );
@@ -6488,9 +6506,15 @@ if (mode === "family" && cleanFamilyNumber) {
             item.registrationNumber ||
             String(rowInfo.accounts_registration_number || "").trim(),
           familyNumber:
-            item.familyNumber ||
-            String(rowInfo.accounts_family_number || "").trim(),
-          verification: cleanVerificationNumber,
+  item.familyNumber ||
+  String(rowInfo.accounts_family_number || "").trim(),
+phone:
+  item.phone ||
+  String(rowInfo.phone || rowInfo.guardian_whatsapp || "").trim(),
+guardianWhatsapp:
+  item.guardianWhatsapp ||
+  String(rowInfo.guardian_whatsapp || rowInfo.phone || "").trim(),
+verification: cleanVerificationNumber,
           bank: cleanCollectionAccount,
         })),
         labelPrefix: "Received Paid Receipt",
