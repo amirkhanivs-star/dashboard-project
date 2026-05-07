@@ -4711,7 +4711,7 @@ insertedIds.push(Number(info.lastInsertRowid));
 
 insertMany(rows);
 
-    const hostBaseUrl = `${req.protocol}://${req.get("host")}/`;
+    const hostBaseUrl = getBaseUrl(req);
     let pdfOk = 0;
     let pdfFail = 0;
 
@@ -4771,7 +4771,7 @@ if (!user?.dept || row.dept !== user.dept) return res.status(403).send("Not allo
 
     }
 
-    const hostBaseUrl = `${req.protocol}://${req.get("host")}/`;
+    const hostBaseUrl = getBaseUrl(req);
 
     let pdfPath = row.pdf_path;
 
@@ -5113,7 +5113,7 @@ const pdfBuffer = await makeMonthlyChallanPdf({
     fs.writeFileSync(absPath, pdfBuffer);
 
     const relStored = toPosix(path.relative(uploadsDir, absPath));
-    const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relStored}`;
+    const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
 
     db.prepare(`
       INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
@@ -5202,7 +5202,7 @@ app.get("/dashboard/super/admission/:id/challan/bulk", requireLogin, async (req,
       fs.writeFileSync(absPath, pdfBuffer);
 
       const relStored = toPosix(path.relative(uploadsDir, absPath));
-      const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relStored}`;
+      const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
 
       ins.run(
         id,
@@ -5276,7 +5276,7 @@ const absPath = path.join(challanDir, filename);
 fs.writeFileSync(absPath, pdfBuffer);
 
 const relStored = toPosix(path.relative(uploadsDir, absPath));
-const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relStored}`;
+const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
 
 db.prepare(`
   INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
@@ -5376,7 +5376,7 @@ if ((!amt || amt <= 0) && (!regFeePaid || regFeePaid <= 0)) {
     fs.writeFileSync(absPath, pdfBuffer);
 
     const relStored = toPosix(path.relative(uploadsDir, absPath));
-    const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relStored}`;
+    const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
 
     db.prepare(`
       INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
@@ -5515,7 +5515,7 @@ const pdfBuffer = await makeFamilyChallanPdf({
     fs.writeFileSync(absPath, pdfBuffer);
 
     const relStored = toPosix(path.relative(uploadsDir, absPath));
-    const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relStored}`;
+    const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
 
     const ins = db.prepare(`
       INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
@@ -5616,7 +5616,7 @@ const pdfBuffer = await makeFamilyChallanPdf({
     fs.writeFileSync(absPath, pdfBuffer);
 
     const relStored = toPosix(path.relative(uploadsDir, absPath));
-    const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relStored}`;
+    const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
 
     const ins = db.prepare(`
       INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
@@ -5701,7 +5701,7 @@ app.get("/dashboard/super/family/:familyNumber/paid/bulk", requireLogin, async (
         fs.writeFileSync(absPath, pdfBuffer);
 
         const relStored = toPosix(path.relative(uploadsDir, absPath));
-        const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relStored}`;
+        const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
 
         ins.run(
           r.id,
@@ -6046,12 +6046,12 @@ for (const item of applied) {
 let n8nStatus = "skipped";
 let n8nResponseText = "";
 
-const whatsappWebhookUrl = getApiSetting(
-  "N8N_WHATSAPP_WEBHOOK_URL",
-  process.env.N8N_WHATSAPP_WEBHOOK_URL || ""
+const billingWebhookUrl = getApiSetting(
+  "N8N_BILLING_WEBHOOK_URL",
+  process.env.N8N_BILLING_WEBHOOK_URL || ""
 );
 
-if (whatsappWebhookUrl && receipts.some((r) => r.fileUrl)) {
+if (billingWebhookUrl) {
   const payload = buildFeeCollectionWhatsappPayload({
     user,
     mode,
@@ -6074,7 +6074,7 @@ verificationNumber: cleanVerificationNumber,
   });
 
   try {
-    const webhookResp = await fetch(whatsappWebhookUrl, {
+    const webhookResp = await fetch(billingWebhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
