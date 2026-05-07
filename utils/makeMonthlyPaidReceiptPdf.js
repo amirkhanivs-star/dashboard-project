@@ -144,6 +144,12 @@ export default async function makeMonthlyPaidReceiptPdf({
     full?.accounts_registration_number ||
     full?.accounts?.registration_number ||
     "-";
+    const familyNumber =
+  full?.familyNumber ||
+  full?.accounts?.familyNumber ||
+  full?.accounts_family_number ||
+  full?.accounts?.family_number ||
+  "";
 
   const paidBy =
     full?.father ||
@@ -233,10 +239,11 @@ const totalText = `${currency} ${totalPaidAmount.toFixed(2)}`;
     currency,
     receiptNo: full?.receiptNo || full?.receipt_no || full?.id || "",
     receiptMonth: `${monthTitle(mk)} ${YEAR}`,
-    statusText,
-    paidBy,
-    receivedOn,
-    rows,
+statusText,
+familyNumber: familyNumber || "N/A",
+paidBy,
+receivedOn,
+rows,
     rowPages,
     totalText,
 
@@ -260,8 +267,18 @@ const totalText = `${currency} ${totalPaidAmount.toFixed(2)}`;
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1600, height: 2200, deviceScaleFactor: 1 });
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    await page.emulateMediaType("print");
+
+page.setDefaultNavigationTimeout(0);
+page.setDefaultTimeout(0);
+
+await page.setContent(html, {
+  waitUntil: "domcontentloaded",
+  timeout: 0,
+});
+
+await page.emulateMediaType("print");
+
+await new Promise((resolve) => setTimeout(resolve, 500));
 
     const pdfUint8 = await page.pdf({
       format: "A4",
