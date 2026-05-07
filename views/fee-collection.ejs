@@ -27,6 +27,9 @@
 
   const familyLabel = familyNumber || '-';
   const currentYear = Number(billingYear || new Date().getFullYear());
+  const hasRegistrationFeeDue = feeRowsSafe.some((r) => {
+  return r && r.isRegistrationFee && Number(r.due || 0) > 0;
+});
 %>
 
 <div class="container-fluid py-3 fee-collection-page">
@@ -267,14 +270,15 @@
     Registration Fee Receiving Amount
   </label>
   <input
-    type="number"
-    step="0.01"
-    min="0"
-    class="form-control premium-input"
-    id="registrationReceivingAmount"
-    name="registrationReceivingAmount"
-    placeholder="Enter registration fee amount"
-  >
+  type="number"
+  step="0.01"
+  min="0"
+  class="form-control premium-input"
+  id="registrationReceivingAmount"
+  name="registrationReceivingAmount"
+  placeholder="<%= hasRegistrationFeeDue ? 'Enter registration fee amount' : 'Registration fee already fully received' %>"
+  <%= hasRegistrationFeeDue ? '' : 'disabled' %>
+>
   <div class="tiny text-muted mt-1">
     Registration fee will only be received in the admission month
   </div>
@@ -667,7 +671,24 @@ const paidRowsCountEl = document.getElementById('fcPaidRowsCount');
     };
 
     const getTotalDues = () => Number((summaryDueEl?.textContent || '0').trim() || 0);
+function syncRegistrationFeeInput(rows = []) {
+  if (!registrationAmountInput) return;
 
+  const hasRegDue = Array.isArray(rows) && rows.some((r) => {
+    return r && r.isRegistrationFee && Number(r.due || 0) > 0;
+  });
+
+  registrationAmountInput.disabled = !hasRegDue;
+
+  if (!hasRegDue) {
+    registrationAmountInput.value = '';
+    registrationAmountInput.placeholder = 'Registration fee already fully received';
+  } else {
+    registrationAmountInput.placeholder = 'Enter registration fee amount';
+  }
+
+  updateRemainingPreview();
+}
     function updateRemainingPreview() {
       const totalDues = getTotalDues();
       const monthlyEntered = Number(amountInput?.value || 0);
@@ -682,8 +703,10 @@ const paidRowsCountEl = document.getElementById('fcPaidRowsCount');
     }
 
     amountInput?.addEventListener('input', updateRemainingPreview);
-    registrationAmountInput?.addEventListener('input', updateRemainingPreview);
-    updateRemainingPreview();
+registrationAmountInput?.addEventListener('input', updateRemainingPreview);
+
+syncRegistrationFeeInput(<%- JSON.stringify(feeRowsSafe) %>);
+updateRemainingPreview();
 
     function renderRows(rows = []) {
       if (!tableBody) return;
@@ -846,8 +869,9 @@ payload.selectedNotAdmittedMonths = selectedNotAdmittedMonths;
         showMsg('success', data.message || 'Fee received successfully');
 
         renderRows(Array.isArray(data.feeRows) ? data.feeRows : []);
-        renderPaidRows(Array.isArray(data.paidRows) ? data.paidRows : []);
-        setSummary(data.summary || {});
+syncRegistrationFeeInput(Array.isArray(data.feeRows) ? data.feeRows : []);
+renderPaidRows(Array.isArray(data.paidRows) ? data.paidRows : []);
+setSummary(data.summary || {});
 
         if (resultCard && resultBody) {
           const applied = Array.isArray(data.applied) ? data.applied : [];
