@@ -203,11 +203,18 @@ const rows = paidItems.map((item) => {
 
   const totalReceived = rows.reduce((sum, r) => sum + safeNum(r.amount), 0);
 
-  const monthNames = paidItems.map((x) => x.monthLabel || monthTitle(x.monthKey)).filter(Boolean);
-  const receiptMonth =
-    monthNames.length === 1
-      ? `${monthNames[0]} ${YEAR}`
-      : `Bulk Paid Receipt (${YEAR})`;
+  const uniqueMonthLabels = [...new Set(
+  paidItems
+    .map((x) => String(x.monthLabel || monthTitle(x.monthKey) || "").trim())
+    .filter(Boolean)
+)];
+
+const receiptMonth =
+  uniqueMonthLabels.length === 1
+    ? `${uniqueMonthLabels[0]} ${YEAR}`
+    : uniqueMonthLabels.length > 1
+      ? `${uniqueMonthLabels.join(", ")} ${YEAR}`
+      : `Paid Receipt (${YEAR})`;
 
 const paidItemMonthKeys = paidItems
   .map((x) => String(x.monthKey || "").toLowerCase().trim())
