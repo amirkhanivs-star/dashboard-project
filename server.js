@@ -3517,7 +3517,7 @@ async function generateReceivedPaidReceiptForN8n({
   fs.writeFileSync(absPath, pdfBuffer);
 
   const relStored = toPosix(path.relative(uploadsDir, absPath));
-  const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+  const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
   const info = db.prepare(`
     INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
@@ -5113,7 +5113,7 @@ const pdfBuffer = await makeMonthlyChallanPdf({
     fs.writeFileSync(absPath, pdfBuffer);
 
     const relStored = toPosix(path.relative(uploadsDir, absPath));
-    const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+    const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
     db.prepare(`
       INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
@@ -5202,7 +5202,7 @@ app.get("/dashboard/super/admission/:id/challan/bulk", requireLogin, async (req,
       fs.writeFileSync(absPath, pdfBuffer);
 
       const relStored = toPosix(path.relative(uploadsDir, absPath));
-      const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+      const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
       ins.run(
         id,
@@ -5276,7 +5276,7 @@ const absPath = path.join(challanDir, filename);
 fs.writeFileSync(absPath, pdfBuffer);
 
 const relStored = toPosix(path.relative(uploadsDir, absPath));
-const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
 db.prepare(`
   INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
@@ -5376,7 +5376,7 @@ if ((!amt || amt <= 0) && (!regFeePaid || regFeePaid <= 0)) {
     fs.writeFileSync(absPath, pdfBuffer);
 
     const relStored = toPosix(path.relative(uploadsDir, absPath));
-    const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+    const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
     db.prepare(`
       INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
@@ -5515,7 +5515,7 @@ const pdfBuffer = await makeFamilyChallanPdf({
     fs.writeFileSync(absPath, pdfBuffer);
 
     const relStored = toPosix(path.relative(uploadsDir, absPath));
-    const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+    const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
     const ins = db.prepare(`
       INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
@@ -5616,7 +5616,7 @@ const pdfBuffer = await makeFamilyChallanPdf({
     fs.writeFileSync(absPath, pdfBuffer);
 
     const relStored = toPosix(path.relative(uploadsDir, absPath));
-    const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+    const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
     const ins = db.prepare(`
       INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
@@ -5701,7 +5701,7 @@ app.get("/dashboard/super/family/:familyNumber/paid/bulk", requireLogin, async (
         fs.writeFileSync(absPath, pdfBuffer);
 
         const relStored = toPosix(path.relative(uploadsDir, absPath));
-        const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+        const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
         ins.run(
           r.id,
@@ -6637,7 +6637,7 @@ async function generateMonthlyChallanForApi({
   fs.writeFileSync(absPath, pdfBuffer);
 
   const relStored = toPosix(path.relative(uploadsDir, absPath));
-  const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+  const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
   const info = db.prepare(`
     INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
@@ -6734,7 +6734,7 @@ if ((!amt || amt <= 0) && (!regFeePaid || regFeePaid <= 0)) {
   fs.writeFileSync(absPath, pdfBuffer);
 
   const relStored = toPosix(path.relative(uploadsDir, absPath));
-  const fileUrl = `${getBaseUrl(req)}uploads/${relStored}`;
+  const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
   const info = db.prepare(`
     INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
