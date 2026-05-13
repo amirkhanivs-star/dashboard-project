@@ -8,17 +8,44 @@
 const roleCircleClass =
   editUser.role === 'super_admin' ? 'bg-danger text-white' :
   editUser.role === 'admin' ? 'bg-success text-white' :
-  editUser.role === 'agent' ? 'bg-warning text-dark' :
+  editUser.role === 'agent' ? 'agent-role-circle' :
   'subagent-role-circle';
 
 const roleBadgeClass =
   editUser.role === 'super_admin' ? 'bg-danger-subtle text-danger' :
   editUser.role === 'admin' ? 'bg-success-subtle text-success' :
-  editUser.role === 'agent' ? 'bg-warning-subtle text-dark' :
-  'subagent-role-badge';
-%>
+  editUser.role === 'agent' ? 'agent-role-badge' :
+  'subagent-role-badge';%>
 
 <style>
+  .agent-role-circle{
+  background: linear-gradient(135deg, #8b5cf6, #5b21b6) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 18px rgba(124, 58, 237, 0.22);
+}
+
+.agent-role-badge{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .22rem;
+  border-radius: 999px;
+  padding: .35em .9em;
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  background: rgba(124, 58, 237, 0.14) !important;
+  color: #5b21b6 !important;
+  border: 1px solid rgba(124, 58, 237, 0.30) !important;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.10);
+}
+
+.agent-role-badge i{
+  font-size: .72rem;
+  line-height: 1;
+  color: #5b21b6 !important;
+}
   .subagent-role-circle{
     background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%) !important;
     color: #fff !important;

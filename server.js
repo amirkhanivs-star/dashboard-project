@@ -46,49 +46,6 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ================== BILLING.JSON (FILE STORE) ==================
-const BILLING_JSON_PATH = path.join(__dirname, "data", "billing.json");
-
-function readBillingStoreSafe() {
-  try {
-    if (!fs.existsSync(BILLING_JSON_PATH)) return null;
-    const raw = fs.readFileSync(BILLING_JSON_PATH, "utf8");
-    if (!raw.trim()) return null;
-    return JSON.parse(raw);
-  } catch (e) {
-    console.error("billing.json read error:", e.message);
-    return null;
-  }
-}
-
-/**
- * Supports multiple shapes:
- * 1) { "53": { billing:{...}, paidUpto:"", calc:{...}, currencyCode:"SAR" }, ... }
- * 2) { data: { "53": {...} } }
- * 3) [ { admissionId:53, billing:{...}, paidUpto:"", calc:{...} }, ... ]
- */
-function getBillingFromStore(store, admissionId) {
-  const idStr = String(admissionId);
-
-  if (!store) return null;
-
-  // case: wrapped
-  if (store.data) store = store.data;
-
-  // case: array
-  if (Array.isArray(store)) {
-    const found = store.find((x) => String(x?.admissionId) === idStr);
-    return found || null;
-  }
-
-  // case: object keyed by id
-  if (store && typeof store === "object") {
-    return store[idStr] || store[admissionId] || null;
-  }
-
-  return null;
-}
-
 // ----------------- Middlewares -----------------
 app.use(cors()); // ✅ admission form (port 5000) se requests allow
 app.use(express.urlencoded({ extended: true }));
@@ -796,6 +753,48 @@ function getBankOptions() {
     return [];
   }
 }
+function makeOptionKey(label) {
+  return String(label || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function ensureBillingStatusOption(label, color = "#e5e7eb") {
+  try {
+    const cleanLabel = String(label || "").trim();
+    const optKey = makeOptionKey(cleanLabel);
+
+    if (!cleanLabel || !optKey) return;
+
+    const exists = db.prepare(`
+      SELECT id
+      FROM billing_status_options
+      WHERE label = ? OR opt_key = ?
+      LIMIT 1
+    `).get(cleanLabel, optKey);
+
+    if (exists) return;
+
+    db.prepare(`
+      INSERT INTO billing_status_options (opt_key, label, color, is_custom)
+      VALUES (?, ?, ?, 0)
+    `).run(optKey, cleanLabel, color);
+  } catch (e) {
+    console.error("ensureBillingStatusOption error:", e.message);
+  }
+}
+
+function ensureRequiredBillingStatusOptions() {
+  ensureBillingStatusOption("Not admitted", "#e5e7eb");
+  ensureBillingStatusOption("No payment", "#fee2e2");
+  ensureBillingStatusOption("Partial payment", "#fef3c7");
+  ensureBillingStatusOption("Full payment", "#dcfce7");
+  ensureBillingStatusOption("Unpaid", "#fee2e2");
+}
+
+ensureRequiredBillingStatusOptions();
 
 function getActiveAdmissionWhereClause(alias = "") {
   const prefix = alias ? `${alias}.` : "";
@@ -3987,23 +3986,56 @@ app.get("/api/billing/:id", requireLogin, requireOpenBilling, (req, res) => {
     }
 
     const billingYear = getBillingYearFromReq(req);
+
+// ✅ First read saved billing_json from admissions table
+const savedBillingJson = safeJsonParse(row.billing_json) || {};
+
+// ✅ Then read month-wise billing table
 const billingArr = getAdmissionBillingByYear(id, billingYear);
 
+// ✅ Always create all 12 months, so Billing Modal never misses old values
 const billingJson = {};
-for (const item of billingArr) {
-  billingJson[item.month] = {
-    status: item.status || "",
-    amount: String(item.amount || ""),
-    feeOverride: String(item.fee || ""),
-    verification: String(item.verificationNumber || ""),
-    bank: String(item.bank || ""),
 
-    registrationFeeTotal: String(item.registrationFeeTotal || ""),
-    registrationFeeReceived: String(item.registrationFeeReceived || ""),
-    registrationFeeStatus: String(item.registrationFeeStatus || ""),
-    registrationFeeVerification: String(item.registrationFeeVerification || ""),
-    registrationFeeBank: String(item.registrationFeeBank || ""),
-    registrationFeePaymentDate: String(item.registrationFeePaymentDate || ""),
+for (const m of BILLING_MONTHS) {
+  const saved = savedBillingJson?.[m.key] || {};
+
+  billingJson[m.key] = {
+    status: String(saved.status || ""),
+    amount: String(saved.amount || ""),
+    feeOverride: String(saved.feeOverride || ""),
+    verification: String(saved.verification || ""),
+    bank: String(saved.bank || ""),
+    paymentDate: String(saved.paymentDate || ""),
+
+    registrationFeeTotal: String(saved.registrationFeeTotal || ""),
+    registrationFeeReceived: String(saved.registrationFeeReceived || ""),
+    registrationFeeStatus: String(saved.registrationFeeStatus || ""),
+    registrationFeeVerification: String(saved.registrationFeeVerification || ""),
+    registrationFeeBank: String(saved.registrationFeeBank || ""),
+    registrationFeePaymentDate: String(saved.registrationFeePaymentDate || ""),
+  };
+}
+
+// ✅ admission_billing table values should override billing_json if present
+for (const item of billingArr) {
+  const monthKey = String(item.month || "").trim().toLowerCase();
+  if (!monthKey) continue;
+
+  billingJson[monthKey] = {
+    ...(billingJson[monthKey] || {}),
+    status: String(item.status || billingJson[monthKey]?.status || ""),
+    amount: String(item.amount || item.amountReceived || billingJson[monthKey]?.amount || ""),
+    feeOverride: String(item.fee || item.feeAmount || billingJson[monthKey]?.feeOverride || ""),
+    verification: String(item.verificationNumber || billingJson[monthKey]?.verification || ""),
+    bank: String(item.bank || item.bankName || billingJson[monthKey]?.bank || ""),
+    paymentDate: String(item.paymentDate || item.paidOn || billingJson[monthKey]?.paymentDate || ""),
+
+    registrationFeeTotal: String(item.registrationFeeTotal || billingJson[monthKey]?.registrationFeeTotal || ""),
+    registrationFeeReceived: String(item.registrationFeeReceived || billingJson[monthKey]?.registrationFeeReceived || ""),
+    registrationFeeStatus: String(item.registrationFeeStatus || billingJson[monthKey]?.registrationFeeStatus || ""),
+    registrationFeeVerification: String(item.registrationFeeVerification || billingJson[monthKey]?.registrationFeeVerification || ""),
+    registrationFeeBank: String(item.registrationFeeBank || billingJson[monthKey]?.registrationFeeBank || ""),
+    registrationFeePaymentDate: String(item.registrationFeePaymentDate || billingJson[monthKey]?.registrationFeePaymentDate || ""),
   };
 }
 
@@ -4592,22 +4624,6 @@ function attachRegistrationFeeToFullForMonth({
       : {},
   };
 }
-function getLastActiveMonthKeyFromBilling(billingJson) {
-  let last = null;
-  for (const m of BILLING_MONTHS) {
-    const e = billingJson?.[m.key] || {};
-    const st = String(e.status || "").trim();
-    const amt = parseFirstNumber(e.amount || "");
-    if (st || amt > 0) last = m.key;
-  }
-  return last; // ex: "june" or null
-}
-
-function nextMonthKeyFromKey(monthKey) {
-  const idx = BILLING_MONTHS.findIndex(x => x.key === monthKey);
-  if (idx < 0) return "january";
-  return BILLING_MONTHS[(idx + 1) % 12].key;
-}
 
 /* Shared handler: Super Admin full pipeline update (DB) */
 function handleSuperFullUpdate(req, res) {
@@ -4771,6 +4787,35 @@ const pendingWithRegistrationAfterAdmissionMonth =
 const billingStringsAfterAdmissionMonth = {};
 for (const m of BILLING_MONTHS) {
   billingStringsAfterAdmissionMonth[m.key] = toMonthString(updatedBillingJson[m.key]);
+}
+// ✅ Sync all updated billing_json months into admission_billing table also
+// This makes Billing Modal show Not admitted immediately after Month/Year update
+const selectedBillingYearForSync = getBillingYearFromAdmissionMonthValue(
+  rowForRegistrationTotals.admission_month,
+  getBillingYearFromReq(req)
+);
+
+for (const m of BILLING_MONTHS) {
+  const item = updatedBillingJson[m.key] || {};
+
+  saveAdmissionBillingMonthByYear({
+    admissionId: id,
+    billingYear: selectedBillingYearForSync,
+    monthKey: m.key,
+    status: String(item.status || ""),
+    amountReceived: String(item.amount || ""),
+    feeAmount: String(item.feeOverride || ""),
+    verificationNumber: String(item.verification || ""),
+    bankName: String(item.bank || ""),
+    paymentDate: String(item.paymentDate || ""),
+
+    registrationFeeTotal: String(item.registrationFeeTotal || ""),
+    registrationFeeReceived: String(item.registrationFeeReceived || ""),
+    registrationFeeStatus: String(item.registrationFeeStatus || ""),
+    registrationFeeVerification: String(item.registrationFeeVerification || ""),
+    registrationFeeBank: String(item.registrationFeeBank || ""),
+    registrationFeePaymentDate: String(item.registrationFeePaymentDate || ""),
+  });
 }
 
 
@@ -5380,6 +5425,21 @@ app.get("/admin/admission/:id", requireLogin, (req, res) => {
 // Optional generic route for future use
 app.get("/dashboard/admission/:id", requireLogin, (req, res) => {
   return renderSharedAdmissionDetails(req, res, "admission-details");
+});
+// =====================================================
+// ✅ EDIT ADMISSION PAGE
+// UI only. Save/update logic remains same.
+// =====================================================
+app.get("/dashboard/super/admission/:id/edit", requireLogin, (req, res) => {
+  return renderSharedAdmissionDetails(req, res, "admission-edit");
+});
+
+app.get("/admin/admission/:id/edit", requireLogin, (req, res) => {
+  return renderSharedAdmissionDetails(req, res, "admission-edit");
+});
+
+app.get("/dashboard/admission/:id/edit", requireLogin, (req, res) => {
+  return renderSharedAdmissionDetails(req, res, "admission-edit");
 });
 
 // =====================================================
@@ -10801,9 +10861,19 @@ app.post("/dashboard/super/update/:id", requireLogin, handleSuperFullUpdate);
 // -------- Admin full pipeline update (DB) --------
 app.post("/admin/update/:id", requireLogin, (req, res) => {
   const user = req.session.user;
-  if (!user || user.role !== "admin") {
-    return res.status(403).send("Not allowed");
-  }
+const perms = getPerm(user);
+
+if (!user) {
+  return res.status(403).send("Not allowed");
+}
+
+if (user.role !== "admin" && user.role !== "agent" && user.role !== "sub_agent") {
+  return res.status(403).send("Not allowed");
+}
+
+if (user.role !== "admin" && !perms.btnUpdateRow) {
+  return res.status(403).send("Not allowed");
+}
 
   const id = parseInt(req.params.id, 10);
   const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
@@ -10862,9 +10932,8 @@ if (resolvedCurrencyCode) {
     });
   }
 
-  const perms = getPerm(user);
   const canAdmissions = !!perms.btnUpdateRow;
-  const canAccounts  = !!perms.btnUpdateRow;
+const canAccounts  = !!perms.btnUpdateRow;
   const billingJson = getBillingJsonFromRow(row);
 
 const oldFeeSnapshot =

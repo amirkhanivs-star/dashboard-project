@@ -125,13 +125,13 @@ const getRoleBadgeClass = (role) => {
 
 .subagent-filter-active{
   background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%) !important;
-  color: #111827 !important;
+  color: #fff !important;
   border: 1px solid #3b82f6 !important;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
 }
 
 .subagent-filter-active i{
-  color: #111827 !important;
+  color: #fff !important;
 }
 
 .subagent-filter-btn{
@@ -156,11 +156,15 @@ const getRoleBadgeClass = (role) => {
     color: #fff !important;
     box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
   }
-  .agent-role-badge-soft{
-  background: rgba(244, 180, 0, 0.14) !important;
-  color: #9a6a00 !important;
-  border: 1px solid rgba(244, 180, 0, 0.30) !important;
-  box-shadow: 0 4px 12px rgba(244, 180, 0, 0.08);
+.agent-role-badge-soft{
+  background: rgba(124, 58, 237, 0.14) !important;
+  color: #5b21b6 !important;
+  border: 1px solid rgba(124, 58, 237, 0.30) !important;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.10);
+}
+
+.agent-role-badge-soft i{
+  color: #5b21b6 !important;
 }
 .all-filter-active{
   background: #198754 !important;
@@ -182,6 +186,47 @@ const getRoleBadgeClass = (role) => {
 .all-filter-btn i{
   color: #198754 !important;
 }
+.agent-filter-active{
+  background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
+  color: #fff !important;
+  border: 1px solid #5b21b6 !important;
+  box-shadow: 0 8px 18px rgba(124, 58, 237, 0.22);
+}
+
+.agent-filter-active i{
+  color: #fff !important;
+}
+
+.agent-filter-btn{
+  background: #fff !important;
+  color: #111827 !important;
+  border: 1px solid rgba(124, 58, 237, 0.45) !important;
+}
+
+.agent-filter-btn i{
+  color: #111827 !important;
+}
+.agent-avatar{
+  background: linear-gradient(135deg, #8b5cf6, #5b21b6) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 18px rgba(124, 58, 237, 0.22);
+}
+.agent-pipeline-badge{
+  background: rgba(124, 58, 237, 0.12) !important;
+  color: #5b21b6 !important;
+  border: 1px solid rgba(124, 58, 237, 0.26) !important;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
+}
+.admin-total-badge{
+  background: rgba(25, 135, 84, 0.12) !important;
+  color: #157347 !important;
+  border: 1px solid rgba(25, 135, 84, 0.26) !important;
+  box-shadow: 0 4px 12px rgba(25, 135, 84, 0.08);
+}
+
+.admin-total-badge i{
+  color: #157347 !important;
+}
 </style>
 <div class="container-fluid py-4">
 
@@ -195,7 +240,7 @@ const getRoleBadgeClass = (role) => {
         <span>Users Directory</span>
       </h4>
       <p class="text-muted small mb-0">
-        <strong class="text-capitalize"><%= deptLabel %></strong> department overview for agents and sub agents only.
+        This page shows only your department users.
       </p>
     </div>
 
@@ -230,18 +275,13 @@ const getRoleBadgeClass = (role) => {
 </a>
 
          <a href="/dashboard/admin/users?role=agent"
-            class="btn btn-sm rounded-pill px-3 <%= roleFilterNorm === 'agent' ? 'btn-warning text-dark border-warning' : 'btn-outline-warning text-dark' %>">
-            <i class="bi bi-person-workspace me-1"></i> Agents
+class="btn btn-sm rounded-pill px-3 <%= roleFilterNorm === 'agent' ? 'agent-filter-active' : 'agent-filter-btn' %>">            <i class="bi bi-person-workspace me-1"></i> Agents
          </a>
 
        <a href="/dashboard/admin/users?role=sub_agent"
    class="btn btn-sm rounded-pill px-3 <%= roleFilterNorm === 'sub_agent' ? 'subagent-filter-active' : 'subagent-filter-btn' %>">
   <i class="bi bi-headset me-1"></i> Sub Agents
 </a>
-        </div>
-
-        <div class="small text-muted">
-          Filter by role to inspect access and pipeline responsibilities inside your department.
         </div>
       </div>
 
@@ -253,9 +293,9 @@ const getRoleBadgeClass = (role) => {
                 <div class="text-muted">Total department users</div>
                 <div class="h5 mb-0"><%= totalDeptUsers %></div>
               </div>
-              <span class="badge rounded-pill bg-light text-muted">
-                <i class="bi bi-people me-1"></i>All
-              </span>
+              <span class="badge rounded-pill admin-total-badge">
+  <i class="bi bi-people me-1"></i>All
+</span>
             </div>
           </div>
         </div>
@@ -267,7 +307,7 @@ const getRoleBadgeClass = (role) => {
                 <div class="text-muted">Agents</div>
                 <div class="h5 mb-0"><%= agentsCount %></div>
               </div>
-              <span class="badge rounded-pill bg-warning-subtle text-dark">
+              <span class="badge rounded-pill agent-pipeline-badge">
                 <i class="bi bi-person-workspace me-1"></i>Pipeline
               </span>
             </div>
@@ -325,7 +365,7 @@ const getRoleBadgeClass = (role) => {
             <div class="card-body d-flex flex-column pt-3">
               <div class="d-flex justify-content-between align-items-start mb-2">
                 <div class="d-flex align-items-center gap-2">
-                 <div class="rounded-circle d-flex align-items-center justify-content-center fw-semibold <%= u.role === 'agent' ? 'bg-warning text-dark' : 'subagent-avatar' %>"
+                <div class="rounded-circle d-flex align-items-center justify-content-center fw-semibold <%= u.role === 'agent' ? 'agent-avatar' : 'subagent-avatar' %>"
      style="width:36px;height:36px;">
                     <%= (u.name || 'U').charAt(0).toUpperCase() %>
                   </div>

@@ -84,10 +84,10 @@
 
 <style>
   .agent-page {
-    --agent-primary: #f4b400;
-    --agent-primary-dark: #d89b00;
-    --agent-soft: #fff7db;
-    --agent-soft-2: #fffaf0;
+    --agent-primary: #7c3aed;
+    --agent-primary-dark: #5b21b6;
+    --agent-soft: #f3e8ff;
+    --agent-soft-2: #faf5ff;
     --agent-border: rgba(15, 23, 42, 0.08);
     --agent-text-muted: #64748b;
     --agent-card-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
@@ -113,8 +113,8 @@
 
   .agent-page .hero-card {
     background:
-      radial-gradient(1000px 280px at 0% 0%, rgba(244, 180, 0, 0.16) 0%, rgba(255,255,255,0) 55%),
-      linear-gradient(135deg, #ffffff 0%, #fffaf0 45%, #f8fafc 100%);
+     radial-gradient(1000px 280px at 0% 0%, rgba(124, 58, 237, 0.16) 0%, rgba(255,255,255,0) 55%),
+      linear-gradient(135deg, #ffffff 0%, #faf5ff 45%, #f8fafc 100%);
     border: 1px solid var(--agent-border);
     padding: 1rem 1.15rem;
   }
@@ -150,29 +150,29 @@
   }
 
   .agent-page .btn-agent {
-    background: var(--agent-primary);
-    border-color: var(--agent-primary);
-    color: #111827;
+    background: linear-gradient(135deg, #7c3aed, #5b21b6);
+    border-color: #5b21b6;
+    color: #ffffff;
     font-weight: 700;
   }
 
   .agent-page .btn-agent:hover,
   .agent-page .btn-agent:focus {
-    background: var(--agent-primary-dark);
-    border-color: var(--agent-primary-dark);
-    color: #111827;
+    background: linear-gradient(135deg, #6d28d9, #4c1d95);
+    border-color: #4c1d95;
+    color: #ffffff;
   }
 
   .agent-page .btn-agent-outline {
-    border-color: rgba(244, 180, 0, 0.45);
-    color: #8a6500;
+    border-color: rgba(124, 58, 237, 0.45);
+    color: #5b21b6;
     background: #fff;
   }
 
   .agent-page .btn-agent-outline:hover {
     background: var(--agent-soft);
-    border-color: rgba(244, 180, 0, 0.65);
-    color: #6f5200;
+    border-color: rgba(124, 58, 237, 0.65);
+    color: #4c1d95;
   }
 
   .agent-page .stats-card {
@@ -215,7 +215,7 @@
 
 .agent-page .search-box i {
   padding: 0 .8rem;
-  color: #f4b400;
+  color: #7c3aed;
 }
 
 .agent-page .search-box input {
@@ -458,250 +458,349 @@
     transform: scale(1);
   }
 }
+/* ✅ Agent Users page same size/layout as Admin Users page */
+.agent-page{
+  padding-top: 1rem !important;
+}
+
+.agent-page .agent-purple-active{
+  background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
+  color: #fff !important;
+  border: 1px solid #5b21b6 !important;
+  box-shadow: 0 6px 14px rgba(124,58,237,.18);
+}
+
+.agent-page .agent-soft-badge{
+  background: rgba(124,58,237,.12) !important;
+  color: #5b21b6 !important;
+  border: 1px solid rgba(124,58,237,.26) !important;
+}
+
+.agent-page .agent-avatar{
+  background: linear-gradient(135deg, #60a5fa, #2563eb) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 18px rgba(59,130,246,.22) !important;
+}
+
+.agent-page .agent-role-badge{
+  background: rgba(59,130,246,.10) !important;
+  color: #2563eb !important;
+  border: 1px solid rgba(59,130,246,.26) !important;
+  box-shadow: 0 4px 12px rgba(59,130,246,.08) !important;
+}
+
+.agent-page .agent-role-badge i{
+  color: #2563eb !important;
+}
+.agent-page .agent-user-card{
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.agent-page .agent-user-card:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 16px 38px rgba(15,23,42,.10) !important;
+}
+
+.agent-page .btn-agent{
+  background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
+  border-color: #5b21b6 !important;
+  color: #fff !important;
+  font-weight: 700 !important;
+}
+
+.agent-page .btn-agent:hover{
+  background: linear-gradient(135deg, #6d28d9, #4c1d95) !important;
+  color: #fff !important;
+}
+
+.agent-page .btn-agent-outline{
+  border-color: rgba(124,58,237,.45) !important;
+  color: #5b21b6 !important;
+  background: #fff !important;
+}
+
+.agent-page .btn-agent-outline:hover,
+.agent-page .btn-agent-outline:focus{
+  background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
+  border-color: #5b21b6 !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 18px rgba(124,58,237,.22) !important;
+}
+.agent-page .btn-agent-outline:hover i,
+.agent-page .btn-agent-outline:focus i{
+  color: #ffffff !important;
+}
+.agent-page .agent-total-badge{
+  background: rgba(124,58,237,.12) !important;
+  color: #5b21b6 !important;
+  border: 1px solid rgba(124,58,237,.26) !important;
+  box-shadow: 0 4px 12px rgba(124,58,237,.08) !important;
+}
+
+.agent-page .agent-total-badge i{
+  color: #5b21b6 !important;
+}
 </style>
 
 <div class="container-fluid py-4 agent-page">
-  <div class="page-shell">
 
-    <div class="hero-card">
-      <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
-        <div>
-          <div class="d-inline-flex align-items-center gap-2 mb-2">
-            <span class="hero-badge">
-              <i class="bi bi-diagram-3"></i>
-              Team Access
-            </span>
-            <span class="hero-mini">
-              Manager: <strong><%= managerName %></strong>
-            </span>
-          </div>
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h4 class="mb-1 d-flex align-items-center">
+        <span class="badge rounded-pill bg-light text-muted border me-2">
+          <i class="bi bi-diagram-3-fill me-1" style="color:#7c3aed;"></i>
+          Team Access
+        </span>
+        <span>My Sub Agents</span>
+      </h4>
+      <p class="text-muted small mb-0">
+        This page shows only the sub agents created under your account.
+      </p>
+    </div>
 
-          <h3 class="hero-title d-flex align-items-center">
-            <i class="bi bi-people-fill me-2" style="color:#f4b400;"></i>
-            My Sub Agents
-          </h3>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <div class="input-group input-group-sm" style="max-width:360px;">
+        <span class="input-group-text bg-white border-end-0">
+          <i class="bi bi-search" style="color:#7c3aed;"></i>
+        </span>
+        <input
+          id="subAgentSearch"
+          type="text"
+          class="form-control border-start-0"
+          placeholder="Search name, email, or id..."
+          autocomplete="off">
+        <button class="btn btn-outline-secondary" type="button" id="subAgentSearchClear">
+          Clear
+        </button>
+      </div>
 
-          <div class="hero-subtitle">
-            This page shows only the sub agents created under your account.
-          </div>
+      <% if (canCreateUsers) { %>
+        <a href="/dashboard/agent/agents/new" class="btn btn-sm btn-agent rounded-pill px-3 shadow-sm">
+          <i class="bi bi-person-plus me-1"></i>
+          Create Sub Agent
+        </a>
+      <% } else { %>
+        <button class="btn btn-sm btn-agent rounded-pill px-3" disabled>
+          <i class="bi bi-person-plus me-1"></i>
+          Create Sub Agent
+        </button>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div class="d-flex flex-wrap gap-2">
+          <span class="btn btn-sm rounded-pill px-3 agent-purple-active">
+            <i class="bi bi-people me-1"></i> My Sub Agents
+          </span>
         </div>
 
-        <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end hero-actions">
-          <span class="soft-badge">
-            <i class="bi bi-buildings"></i>
-            Dept: <span class="text-capitalize"><%= user.dept || 'N/A' %></span>
-          </span>
-
-
-          <% if (canCreateUsers) { %>
-            <a href="/dashboard/agent/agents/new" class="btn btn-sm btn-agent rounded-pill px-3 shadow-sm">
-              <i class="bi bi-person-plus me-1"></i>
-              Create Sub Agent
-            </a>
-          <% } else { %>
-            <button class="btn btn-sm btn-agent rounded-pill px-3" disabled>
-              <i class="bi bi-person-plus me-1"></i>
-              Create Sub Agent
-            </button>
-          <% } %>
+        <div class="small text-muted">
+          Manager: <strong><%= managerName %></strong>
         </div>
       </div>
-    </div>
 
-    <div class="search-toolbar">
-  <div class="search-box">
-    <i class="bi bi-search"></i>
-    <input
-      type="text"
-      id="subAgentSearch"
-      placeholder="Search name, email, or id..."
-      autocomplete="off"
-    >
-    <button type="button" class="search-clear-btn" id="subAgentSearchClear">Clear</button>
-  </div>
-</div>
-
-    <div class="stats-card mb-3" style="max-width: 260px; padding: .85rem 1rem;">
-  <div class="d-flex justify-content-between align-items-center gap-2">
-    <div>
-      <div class="stats-label mb-1">Total sub agents</div>
-      <p class="stats-value mb-0" style="font-size: 1.6rem;"><%= total %></p>
-    </div>
-
-    <span class="soft-badge">
-      <i class="bi bi-people"></i>
-      Total
-    </span>
-  </div>
-</div>
-    
-
-    
-    <div>
-      <% if (total === 0) { %>
-        <div class="empty-box">
-          <i class="bi bi-inboxes-fill"></i>
-          <div class="fw-semibold mb-1">No sub agents found</div>
-          <div class="small">You have not created any sub agents yet.</div>
+      <div class="row g-3 small">
+        <div class="col-md-4">
+          <div class="card border-0 shadow-sm h-100 rounded-3">
+            <div class="card-body py-2 d-flex align-items-center justify-content-between">
+              <div>
+                <div class="text-muted">Total sub agents</div>
+                <div class="h5 mb-0"><%= total %></div>
+              </div>
+              <span class="badge rounded-pill agent-total-badge">
+  <i class="bi bi-people me-1"></i>Total
+</span>
+            </div>
+          </div>
         </div>
-      <% } else { %>
-         <div class="cards-wrap">
-  <div class="row g-3" id="subAgentCards">
-    <% myList.forEach((sa, index) => { 
-      let p = sa.permissions || {};
-      try { if (typeof p === 'string') p = JSON.parse(p); } catch (e) { p = {}; }
+      </div>
 
-      const isColOn = (key, legacy) => {
-        if (typeof p[key] !== 'undefined') return !!p[key];
-        if (legacy && typeof p[legacy] !== 'undefined') return !!p[legacy];
-        return false;
-      };
+    </div>
+  </div>
 
-            const isBtnOn = (key) => !!p[key];
-      const canDeleteAdmissions = !!p.canDeleteAdmissions;
+  <% if (total === 0) { %>
+    <div class="empty-box">
+      <i class="bi bi-inboxes-fill"></i>
+      <div class="fw-semibold mb-1">No sub agents found</div>
+      <div class="small">You have not created any sub agents yet.</div>
+    </div>
+  <% } else { %>
 
-      const enabledCols = ALL_COLS.reduce((acc, c) => acc + (isColOn(c.key, c.legacy) ? 1 : 0), 0);
-      const totalCols = ALL_COLS.length;
-      const typeValue = String(sa.agentType || '').toLowerCase() || 'unknown';
-      const firstLetter = (sa.name && String(sa.name).trim()) ? String(sa.name).trim().charAt(0).toUpperCase() : '#';
-    %>
-      <div
-        class="col-12 col-md-6 col-lg-4 user-item"
-        data-type="<%= typeValue %>"
-        data-search="<%= [
-          sa.name || '',
-          sa.email || '',
-          sa.dept || '',
-          sa.role || '',
-          sa.agentType || '',
-          sa.id || '',
-          sa.lastUpdatedBy || ''
-        ].join(' ').toLowerCase() %>"
-      >
-        <div class="user-card">
-          <div class="user-card-body">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-              <div class="d-flex align-items-center gap-2">
-                <div class="avatar-circle"><%= firstLetter %></div>
-                <div>
-                  <p class="user-name"><%= sa.name || 'Unnamed User' %></p>
-                  <div class="user-email"><%= sa.email || '-' %></div>
+    <div class="cards-wrap">
+      <div class="row g-3" id="subAgentCards">
+        <% myList.forEach((sa, index) => {
+          let p = sa.permissions || {};
+          try { if (typeof p === 'string') p = JSON.parse(p); } catch (e) { p = {}; }
+
+          const isColOn = (key, legacy) => {
+            if (typeof p[key] !== 'undefined') return !!p[key];
+            if (legacy && typeof p[legacy] !== 'undefined') return !!p[legacy];
+            return false;
+          };
+
+          const isBtnOn = (key) => !!p[key];
+          const canDeleteAdmissions = !!p.canDeleteAdmissions;
+
+          const enabledCols = ALL_COLS.reduce((acc, c) => acc + (isColOn(c.key, c.legacy) ? 1 : 0), 0);
+          const totalCols = ALL_COLS.length;
+          const typeValue = String(sa.agentType || '').toLowerCase() || 'unknown';
+          const firstLetter = (sa.name && String(sa.name).trim()) ? String(sa.name).trim().charAt(0).toUpperCase() : '#';
+        %>
+
+          <div
+            class="col-lg-4 col-md-6 user-item"
+            data-type="<%= typeValue %>"
+            data-search="<%= [
+              sa.name || '',
+              sa.email || '',
+              sa.dept || '',
+              sa.role || '',
+              sa.agentType || '',
+              sa.id || '',
+              sa.lastUpdatedBy || ''
+            ].join(' ').toLowerCase() %>">
+
+            <div class="card border-0 shadow-sm h-100 rounded-4 position-relative agent-user-card" style="overflow:hidden;">
+              <div class="position-absolute top-0 start-0 w-100"
+                   style="height:4px; background:linear-gradient(90deg,#7c3aed,#a855f7,#7c3aed); opacity:0.85;"></div>
+
+              <div class="card-body d-flex flex-column pt-3">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center fw-semibold agent-avatar"
+                         style="width:36px;height:36px;">
+                      <%= firstLetter %>
+                    </div>
+
+                    <div>
+                      <div class="fw-semibold d-flex align-items-center gap-2">
+                        <span><%= sa.name || 'Unnamed User' %></span>
+                      </div>
+                      <div class="small text-muted"><%= sa.email || '-' %></div>
+                    </div>
+                  </div>
+
+                  <span class="badge rounded-pill px-3 agent-role-badge">
+                    <i class="bi bi-shield-check me-1"></i>
+                    Sub Agent
+                  </span>
                 </div>
-              </div>
 
-              <span class="agent-role-badge">
-                <i class="bi bi-shield-check me-1"></i>
-                Sub Agent
-              </span>
-            </div>
+                <div class="small mb-2">
+                  <div class="mb-1">
+                    <span class="text-muted">Dept:</span>
+                    <span class="badge rounded-pill bg-light text-dark border text-capitalize ms-1">
+                      <%= sa.dept || '-' %>
+                    </span>
+                  </div>
 
-            <div class="meta-grid">
-              <div class="meta-row">
-                <span class="meta-label">Dept:</span>
-                <span class="soft-tag text-capitalize"><%= sa.dept || '-' %></span>
-              </div>
+                  <div class="mb-1">
+                    <span class="text-muted">Type:</span>
+                    <span class="badge rounded-pill bg-light text-dark border text-capitalize ms-1">
+                      <%= sa.agentType || '-' %>
+                    </span>
+                  </div>
 
-              <div class="meta-row">
-                <span class="meta-label">Type:</span>
-                <span class="soft-tag text-capitalize"><%= sa.agentType || '-' %></span>
-              </div>
+                  <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <span class="text-muted">ID:</span>
+                    <span class="badge rounded-pill bg-light text-dark border">#<%= sa.id %></span>
+                  </div>
+                </div>
 
-              <div class="meta-row">
-                <span class="meta-label">ID:</span>
-                <span class="perm-chip">#<%= sa.id %></span>
-              </div>
-            </div>
+                <div class="small mb-3">
+                  <div class="text-muted mb-1">Access summary</div>
 
-            <div class="access-strip">
-              <div class="access-title">Access summary</div>
+                  <div class="d-flex flex-wrap gap-1">
+                    <span class="badge rounded-pill bg-light text-dark border">
+                      <i class="bi bi-table me-1"></i>
+                      Columns: <strong><%= enabledCols %>/<%= totalCols %></strong>
+                    </span>
 
-              <div class="d-flex flex-wrap gap-1">
-                <span class="badge rounded-pill bg-light text-dark border">
-                  <i class="bi bi-table me-1"></i>
-                  Columns: <strong><%= enabledCols %>/<%= totalCols %></strong>
-                </span>
+                    <span class="badge rounded-pill <%= isBtnOn('btnDetails') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                      <i class="bi bi-eye me-1"></i>Details
+                    </span>
 
-                <span class="badge rounded-pill <%= isBtnOn('btnDetails') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
-                  <i class="bi bi-eye me-1"></i>Details
-                </span>
+                    <span class="badge rounded-pill <%= isBtnOn('btnUpdateRow') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                      <i class="bi bi-check2-circle me-1"></i>Update
+                    </span>
 
-                <span class="badge rounded-pill <%= isBtnOn('btnUpdateRow') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
-                  <i class="bi bi-check2-circle me-1"></i>Update
-                </span>
+                    <span class="badge rounded-pill <%= isBtnOn('btnPdf') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                      <i class="bi bi-filetype-pdf me-1"></i>PDF
+                    </span>
 
-                <span class="badge rounded-pill <%= isBtnOn('btnPdf') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
-                  <i class="bi bi-filetype-pdf me-1"></i>PDF
-                </span>
+                    <span class="badge rounded-pill <%= isBtnOn('btnBilling') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                      <i class="bi bi-receipt me-1"></i>Billing
+                    </span>
 
-                <span class="badge rounded-pill <%= isBtnOn('btnBilling') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
-                  <i class="bi bi-receipt me-1"></i>Billing
-                </span>
+                    <span class="badge rounded-pill <%= isBtnOn('btnWhatsApp') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                      <i class="bi bi-whatsapp me-1"></i>WhatsApp
+                    </span>
 
-                <span class="badge rounded-pill <%= isBtnOn('btnWhatsApp') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
-                  <i class="bi bi-whatsapp me-1"></i>WhatsApp
-                </span>
+                    <span class="badge rounded-pill <%= isBtnOn('btnUpload') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                      <i class="bi bi-cloud-upload me-1"></i>Upload
+                    </span>
 
-                <span class="badge rounded-pill <%= isBtnOn('btnUpload') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
-                  <i class="bi bi-cloud-upload me-1"></i>Upload
-                </span>
+                    <span class="badge rounded-pill <%= isBtnOn('btnFiles') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
+                      <i class="bi bi-folder2-open me-1"></i>Files
+                    </span>
 
-                <span class="badge rounded-pill <%= isBtnOn('btnFiles') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
-                  <i class="bi bi-folder2-open me-1"></i>Files
-                </span>
+                    <span class="badge rounded-pill <%= canDeleteAdmissions ? 'bg-danger-subtle text-danger' : 'bg-light text-muted border' %>">
+                      <i class="bi bi-trash3 me-1"></i>Delete Admissions
+                    </span>
+                  </div>
 
-                                <span class="badge rounded-pill <%= canDeleteAdmissions ? 'bg-danger-subtle text-danger' : 'bg-light text-muted border' %>">
-                  <i class="bi bi-trash3 me-1"></i>Delete Admissions
-                </span>
-              </div>
-
-              <% if (sa.lastUpdatedBy) { %>
-                <div class="text-muted mt-2" style="font-size:.78rem;">
-                  Last updated by: <strong class="text-dark"><%= sa.lastUpdatedBy %></strong>
-                  <% if (sa.lastUpdatedByRole) { %>
-                    <span class="text-muted">(<%= String(sa.lastUpdatedByRole).replace(/_/g, ' ') %>)</span>
+                  <% if (sa.lastUpdatedBy) { %>
+                    <div class="text-muted mt-2" style="font-size:.78rem;">
+                      Last updated by: <strong class="text-dark"><%= sa.lastUpdatedBy %></strong>
+                      <% if (sa.lastUpdatedByRole) { %>
+                        <span class="text-muted">(<%= String(sa.lastUpdatedByRole).replace(/_/g, ' ') %>)</span>
+                      <% } %>
+                    </div>
                   <% } %>
                 </div>
-              <% } %>
-            </div>
 
-            <div class="action-row">
-              <% if (showEdit) { %>
-                <a href="/dashboard/agent/users/<%= sa.id %>/edit"
-                   class="btn btn-sm btn-agent-outline rounded-pill px-3">
-                  <i class="bi bi-pencil-square me-1"></i>
-                  Edit
-                </a>
-              <% } else { %>
-                <span></span>
-              <% } %>
+                <% if (showActions) { %>
+                  <div class="mt-auto d-flex justify-content-between align-items-center pt-2 border-top">
+                    <% if (showEdit) { %>
+                      <a href="/dashboard/agent/users/<%= sa.id %>/edit"
+                         class="btn btn-sm btn-agent-outline rounded-pill px-3">
+                        <i class="bi bi-pencil-square me-1"></i>
+                        Edit
+                      </a>
+                    <% } else { %>
+                      <span class="small text-muted">No edit permission</span>
+                    <% } %>
 
-             <% if (showDelete) { %>
-  <form method="POST"
-        action="/dashboard/agent/users/<%= sa.id %>/delete"
-        class="js-delete-user-form"
-        style="display:inline;">
-    <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3">
-      <i class="bi bi-trash3 me-1"></i>
-      Delete
-    </button>
-  </form>
-<% } %>
+                    <% if (showDelete) { %>
+                      <form method="POST"
+                            action="/dashboard/agent/users/<%= sa.id %>/delete"
+                            class="js-delete-user-form">
+                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill px-3">
+                          <i class="bi bi-trash3 me-1"></i>
+                          Delete
+                        </button>
+                      </form>
+                    <% } %>
+                  </div>
+                <% } %>
+
+              </div>
             </div>
           </div>
-        </div>
+        <% }) %>
       </div>
-    <% }) %>
-  </div>
+    </div>
 
-  <div class="empty-box d-none" id="noSearchResults">
-    <i class="bi bi-search"></i>
-    <div class="fw-semibold mb-1">No matching users found</div>
-    <div class="small">Try another name, email, or id.</div>
-  </div>
-</div>
-<% } %>
-</div>
-</div>
+    <div class="empty-box d-none" id="noSearchResults">
+      <i class="bi bi-search"></i>
+      <div class="fw-semibold mb-1">No matching users found</div>
+      <div class="small">Try another name, email, or id.</div>
+    </div>
+
+  <% } %>
 </div>
 <script>
   (function () {

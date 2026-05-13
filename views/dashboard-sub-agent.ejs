@@ -1,4 +1,4 @@
-<%- include('partials/bootstrap-header', { user, pageTitle: 'Sub Agent Panel' }) %>
+<%- include('partials/bootstrap-header', { user, pageTitle: 'Sub Agent Dashboard' }) %>
 <%- include('partials/flash') %>
 
 <%
@@ -450,45 +450,93 @@ const DEFAULT_FEE_STATUS_OPTIONS =
         "Grade 11 (IGCSE, O / A'Level)",
         'Grade 12 (FBISE)'
       ];
+        function findCardStatusColor(type, value) {
+    const clean = String(value || '').trim().toLowerCase();
+
+    const list =
+      type === 'fee'
+        ? DEFAULT_FEE_STATUS_OPTIONS
+        : DEFAULT_CURRENT_STATUS_OPTIONS;
+
+    const found = (list || []).find(opt =>
+      String(opt.value || opt.label || '').trim().toLowerCase() === clean
+    );
+
+    return found && found.color ? found.color : '';
+  }
+
+  function hexToRgba(hex, alpha) {
+    const clean = String(hex || '').replace('#', '').trim();
+
+    if (clean.length !== 6) return 'rgba(100,116,139,' + alpha + ')';
+
+    const r = parseInt(clean.substring(0, 2), 16);
+    const g = parseInt(clean.substring(2, 4), 16);
+    const b = parseInt(clean.substring(4, 6), 16);
+
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
+  function getCardFieldStyle(field) {
+    if (!field || !field.key) return '';
+
+    let color = '';
+
+    if (field.key === 'status') {
+      color = findCardStatusColor('current', field.value);
+    }
+
+    if (field.key === 'feeStatus') {
+      color = findCardStatusColor('fee', field.value);
+    }
+
+    if (!color) return '';
+
+    return `--chip-color:${color};--chip-bg:${hexToRgba(color, 0.14)};--chip-bd:${hexToRgba(color, 0.34)};`;
+  }
+
+  function getCardFieldClass(field) {
+    if (!field || !field.key) return '';
+
+    if (field.key === 'status') return 'status-card-chip';
+    if (field.key === 'feeStatus') return 'fee-card-chip';
+
+    return '';
+  }
 %>
 
 <div class="admin-shell">
 
   <!-- TOP HERO -->
   <div class="admin-header-card mb-3">
-    <div>
-      <div class="d-flex align-items-center gap-2 mb-1">
-        <span class="badge rounded-pill admin-chip">
-          <i class="bi bi-shield-check me-1"></i> Sub Agent
-        </span>
-        <span class="badge rounded-pill admin-chip">
-          <i class="bi bi-building me-1"></i> <span class="text-capitalize"><%= user.dept %></span> Dept
-        </span>
-        <span class="badge rounded-pill admin-chip">
-          <i class="bi bi-person-badge me-1"></i> <%= agentLabel %>
-        </span>
-        <span class="badge rounded-pill admin-chip">
-          <i class="bi bi-activity me-1"></i> Permission-based live view
-        </span>
-      </div>
+  <div>
+    <div class="d-flex align-items-center gap-2 mb-1">
+      <span class="badge rounded-pill admin-chip">
+        <i class="bi bi-person-badge me-1"></i> Accounts Sub Agent
+      </span>
 
-      <h2 class="h4 fw-bold mb-1 text-admin-heading">
-        <%= deptTitle %> - <%= agentLabel %> Panel
-      </h2>
+      <span class="badge rounded-pill admin-chip">
+        <i class="bi bi-building me-1"></i> <span class="text-capitalize"><%= user.dept %></span> Dept
+      </span>
 
-      <div class="small text-muted">
-        Dept scope:
-        <span class="badge rounded-pill admin-dept-pill ms-1 text-capitalize">
-          <span class="dept-dot me-1"></span>
-          <%= user.dept %>
-        </span>
-      </div>
+      <span class="badge rounded-pill admin-chip">
+        <i class="bi bi-lightning-charge me-1"></i> Live updates
+      </span>
     </div>
 
-    <div class="text-end small text-muted d-none d-md-block">
-      <div>Only allowed columns and actions are shown.</div>
+    <h2 class="h4 fw-bold mb-1 text-admin-heading">
+      <%= deptTitle %> - Accounts Sub Agent Panel
+    </h2>
+
+    <div class="small text-muted">
+      Dept scope:
+      <span class="badge rounded-pill subagent-scope-pill ms-1">
+        <span class="dept-dot"></span>
+        <span class="text-capitalize"><%= user.dept %></span>
+      </span>
     </div>
   </div>
+</div>
 
   <!-- STATS -->
   <div class="row g-3 mb-3 admin-stat-row">
@@ -506,7 +554,7 @@ const DEFAULT_FEE_STATUS_OPTIONS =
           </div>
         </div>
         <div class="card-footer stat-footer">
-          All records visible in your scope
+          Total records in School
         </div>
       </div>
     </div>
@@ -525,7 +573,7 @@ const DEFAULT_FEE_STATUS_OPTIONS =
           </div>
         </div>
         <div class="card-footer stat-footer">
-          Based on visible records
+          Paid ratio in your dept
         </div>
       </div>
     </div>
@@ -550,7 +598,7 @@ const DEFAULT_FEE_STATUS_OPTIONS =
           </div>
         </div>
         <div class="card-footer stat-footer">
-          Based on current table status
+          Based on table status
         </div>
       </div>
     </div>
@@ -580,7 +628,6 @@ const DEFAULT_FEE_STATUS_OPTIONS =
     <div class="card-header d-flex justify-content-between align-items-center">
       <div>
         <strong>Admissions for <%= deptTitle %></strong>
-        <small class="text-muted ms-2">Student details &amp; pipeline status for Sub Agent</small>
       </div>
       <span class="badge text-bg-light text-muted small">
         Dept: <span class="text-capitalize"><%= user.dept %></span> · Sub Agent: <span class="text-capitalize"><%= user.agentType || "accounts" %></span>
@@ -635,594 +682,214 @@ const DEFAULT_FEE_STATUS_OPTIONS =
 </div>
 
     <div class="card-body p-0">
-      <div class="table-responsive pipeline-scroll">
-        <table id="adminAdmissionsTable" class="table table-sm mb-0 align-middle pipeline-table">
-                    <thead class="table-dark">
-            <tr>
-              <% if (canDeleteAdmissions) { %>
-                <th class="text-center col-select" data-col="select">
-                  <input
-                    type="checkbox"
-                    id="selectAllAdmissions"
-                    class="form-check-input bulk-select-all"
-                    title="Select All">
-                </th>
-              <% } %>
-                            <th class="text-center col-row-number" data-col="rowNumber">No.</th>
-              <% if (P.col.status) { %><th data-col="status">Current Status</th><% } %>
-              <% if (P.col.feeStatus) { %><th data-col="feeStatus">Fee Status</th><% } %>
-              <% if (P.col.dept) { %><th data-col="dept">Dept</th><% } %>
-              <% if (P.col.student) { %><th data-col="student">Student</th><% } %>
-              <% if (P.col.father) { %><th data-col="father">Father</th><% } %>
-              <% if (P.col.fatherEmail) { %><th data-col="fatherEmail">Email Address</th><% } %>
-              <% if (P.col.grade) { %><th data-col="grade">Grade</th><% } %>
-              <% if (P.col.tuitionGrade) { %><th data-col="tuitionGrade">Grade Section</th><% } %>
-              <% if (P.col.phone) { %><th data-col="phone">Phone Number</th><% } %>
-              <% if (P.col.processedBy) { %><th data-col="processedBy">Processed By</th><% } %>
-              <% if (P.col.paymentStatus) { %><th data-col="paymentStatus">Payment Status</th><% } %>
-              <% if (P.col.paidUpto) { %><th data-col="paidUpto">Paid Upto</th><% } %>
-              <% if (P.col.verif) { %><th data-col="verificationNumber">Verif #</th><% } %>
-              <% if (P.col.reg) { %><th data-col="registrationNumber">Reg #</th><% } %>
-              <% if (P.col.family) { %><th data-col="familyNumber">Family Num #</th><% } %>
-              <% if (P.col.registrationFee) { %><th data-col="registrationFee">Registration Fee</th><% } %>
-              <% if (P.col.fees) { %><th data-col="fees">Monthly Fees</th><% } %>
-              <% if (P.col.currency) { %><th data-col="currency">Currency</th><% } %>
-              <% if (P.col.month) { %><th data-col="month">Month/Year</th><% } %>
-              <% if (P.col.totalFees) { %><th data-col="totalFees">Total Fees</th><% } %>
-              <% if (P.col.pendingDues) { %><th data-col="pendingDues">Pending Dues</th><% } %>
-              <% if (P.col.receivedPayment) { %><th data-col="receivedPayment">Received Payment</th><% } %>
-              <% if (P.col.invoiceStatus) { %><th data-col="invoiceStatus">Invoice Status</th><% } %>
-<% if (P.col.invoiceStatusTimestamp) { %><th data-col="invoiceStatusTimestamp">Invoice Status Timestamp</th><% } %>
-<% if (P.col.paidInvoiceStatus) { %><th data-col="paidInvoiceStatus">Paid Invoice Status</th><% } %>
-<% if (P.col.paidInvoiceStatusTimestamp) { %><th data-col="paidInvoiceStatusTimestamp">Paid Invoice Status Timestamp</th><% } %>
-              
+  <div class="pipeline-scroll admission-card-scroll">
+    <div class="admission-card-grid">
 
-              <% if (showActions) { %>
-                <th class="text-center col-actions <%= actionColClass %>" data-col="actions">Action Buttons</th>
-              <% } %>
-            </tr>
-          </thead>
+      <% if (!admissions || admissions.length === 0) { %>
+        <div class="text-center small text-muted py-4 w-100">
+          No admissions found for this department.
+        </div>
+      <% } %>
 
-          <tbody>
-            <% if (!admissions || admissions.length === 0) { %>
-              <tr>
-                <td colspan="<%= visibleColCount %>" class="text-center small text-muted py-3">
-                  No admissions found for this department.
-                </td>
-              </tr>
-            <% } %>
+      <% (admissions || []).forEach((a, index) => {
+        const currentStatusVal = (a.status || a.currentStatus || a.current_status || '').trim();
+        const feeStatusVal = (a.feeStatus || a.fee_status || a.feeStatusText || '').trim();
 
-                        <% (admissions || []).forEach((a, index) => {
-                 const fid = `rowForm_${a.id}`;
-                 let formPlaced = false;
+        const studentVal = a.studentName || a.student || '';
+        const fatherVal = a.fatherName || a.father || '';
+        const fatherEmailVal = a.fatherEmail || a.father_email || '';
+        const processedByVal = a.processedBy || a.processed_by || '';
+        const gradeVal = a.grade || '';
+        const tuitionVal = a.tuitionGrade || '';
+        const phoneVal = a.phone || a.contactNumber || '';
 
-                 const deptVal    = a.dept || user.dept || '';
-                 const currentStatusVal = (a.status || a.currentStatus || a.current_status || '').trim();
-                 const feeStatusVal     = (a.feeStatus || a.fee_status || a.feeStatusText || '').trim();
-                 const studentVal = a.studentName || a.student || '';
-                 const fatherVal  = a.fatherName || a.father || '';
-                 const fatherEmailVal = a.fatherEmail || a.father_email || '';
-                 const processedByVal = a.processedBy || a.processed_by || '';
-                 const registrationFeeVal = (a.admission && a.admission.registrationFee) || '';
-                 const gradeVal   = a.grade || '';
-                 const tuitionVal = a.tuitionGrade || '';
+        const registrationFeeVal = (a.admission && a.admission.registrationFee) || '';
+        const feesVal = (a.admission && a.admission.fees) || '';
+        const monthVal = (a.admission && a.admission.month) || '';
+        const totalFeesVal = (a.admission && a.admission.totalFees) || '';
+        const pendingDuesVal = (a.admission && a.admission.pendingDues) || '';
+        const receivedPaymentVal = (a.admission && a.admission.receivedPayment) || '0';
 
-                 const phoneVal   = a.phone || a.contactNumber || '';
-                 const payVal     = (a.accounts && a.accounts.paymentStatus) || '';
-                 const paidUptoVal= (a.accounts && a.accounts.paidUpto) || '';
-                 const verifVal   = a.latestBillingVerificationNumber || '';
-                 const regVal     = (a.accounts && a.accounts.registrationNumber) || '';
-                 const familyVal  = (a.accounts && a.accounts.familyNumber) || '';
+        const currencyVal = (
+          (a.admission && (a.admission.currency || a.admission.currencyCode || a.admission.currency_code)) ||
+          (a.accounts && (a.accounts.currency || a.accounts.currencyCode)) ||
+          a.currency ||
+          a.currencyCode ||
+          ''
+        ).toString().trim().toUpperCase();
 
-                 const feesVal    = (a.admission && a.admission.fees) || '';
-                 const currencyVal = (
-                 (a.admission && (a.admission.currency || a.admission.currencyCode)) ||
-                 (a.accounts && (a.accounts.currency || a.accounts.currencyCode)) ||
-                 a.currency ||
-                 a.currencyCode ||
-                 ''
-                 ).toString().trim().toUpperCase();
+        const invoiceStatusVal = (a.admission && a.admission.invoiceStatus) || '';
+        const invoiceStatusTimestampVal = (a.admission && a.admission.invoiceStatusTimestamp) || '';
+        const paidInvoiceStatusVal = (a.admission && a.admission.paidInvoiceStatus) || '';
+        const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceStatusTimestamp) || '';
 
-                 const monthVal   = (a.admission && a.admission.month) || '';
-
-                 const totalFeesVal      = (a.admission && a.admission.totalFees) || '';
-                 const pendingDuesVal    = (a.admission && a.admission.pendingDues) || '';
-                 const receivedPaymentVal= (a.admission && a.admission.receivedPayment) || '0';
-                 const invoiceStatusVal = (a.admission && a.admission.invoiceStatus) || '';
-const invoiceStatusTimestampVal = (a.admission && a.admission.invoiceStatusTimestamp) || '';
-const paidInvoiceStatusVal = (a.admission && a.admission.paidInvoiceStatus) || '';
-const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceStatusTimestamp) || '';
-            %>
-                           <tr
-  class="admin-row <%= a.isDuplicate ? 'duplicate-admission-row' : '' %>"
-  data-admission-id="<%= a.id %>"
-  data-student-name="<%= a.studentName || a.student || '' %>"
-  title="<%= a.isDuplicate ? 'Duplicate admission detected' : '' %>">
-                <% if (canDeleteAdmissions) { %>
-                  <td class="text-center col-select" data-col="select">
-                    <input
-                      type="checkbox"
-                      class="form-check-input admission-row-checkbox"
-                      value="<%= a.id %>"
-                      data-student-name="<%= a.studentName || a.student || '' %>">
-                  </td>
-                <% } %>
-                                <td class="text-center col-row-number" data-col="rowNumber">
-                  <span class="admission-row-number">
-                    <%= (startRecord || 1) + index %>
-                  </span>
-                </td>
-                <% if (!formPlaced) { %>
-                  <form id="<%= fid %>" action="/pipeline/update/<%= a.id %>" method="POST" class="d-none"></form>
-                  <% formPlaced = true; %>
-                <% } %>
-                
-              <% if (P.col.status) { %>
-  <td data-col="status">
-    <select
-      name="status"
-      form="<%= fid %>"
-      class="form-select form-select-sm status-select js-status-select"
-      data-prev-value="<%= currentStatusVal || 'New Admission' %>"
-      data-option-type="current"
-      <%= P.edit.status ? '' : 'disabled' %>>
-      <% DEFAULT_CURRENT_STATUS_OPTIONS.forEach(opt => { %>
-        <option value="<%= opt.value %>" <%= currentStatusVal === opt.value ? 'selected' : '' %>>
-          <%= opt.value %>
-        </option>
-      <% }) %>
-      <option value="__add_new_status__">+ Add Option</option>
-    </select>
-
-    <% if (!P.edit.status) { %>
-      <input type="hidden" name="status" form="<%= fid %>" value="<%= currentStatusVal %>">
-    <% } %>
-  </td>
-<% } %>
-
-<% if (P.col.feeStatus) { %>
-  <td data-col="feeStatus">
-    <select
-      name="feeStatus"
-      form="<%= fid %>"
-      class="form-select form-select-sm fee-select js-fee-select"
-      data-prev-value="<%= feeStatusVal || 'New Admission' %>"
-      data-option-type="fee"
-      <%= P.edit.feeStatus ? '' : 'disabled' %>>
-      <% DEFAULT_FEE_STATUS_OPTIONS.forEach(opt => { %>
-        <option value="<%= opt.value %>" <%= feeStatusVal === opt.value ? 'selected' : '' %>>
-          <%= opt.value %>
-        </option>
-      <% }) %>
-      <option value="__add_new_fee_status__">+ Add Option</option>
-    </select>
-
-    <% if (!P.edit.feeStatus) { %>
-      <input type="hidden" name="feeStatus" form="<%= fid %>" value="<%= feeStatusVal %>">
-    <% } %>
-  </td>
-<% } %>
-
-                <% if (P.col.dept) { %>
-                  <td data-col="dept">
-                    <span class="badge text-bg-success-subtle border text-success-emphasis text-capitalize">
-                      <%= deptVal %>
-                    </span>
-                  </td>
-                <% } %>
-
-                <% if (P.col.student) { %>
-                  <td data-col="student">
-                    <input
-                      type="text"
-                      name="student"
-                      form="<%= fid %>"
-                      class="form-control form-control-sm"
-                      value="<%= studentVal %>"
-                      <%= P.edit.student ? '' : 'readonly' %>>
-                  </td>
-                <% } %>
-
-                <% if (P.col.father) { %>
-                  <td data-col="father">
-                    <input
-                      type="text"
-                      name="father"
-                      form="<%= fid %>"
-                      class="form-control form-control-sm"
-                      value="<%= fatherVal %>"
-                      <%= P.edit.father ? '' : 'readonly' %>>
-                  </td>
-                <% } %>
-
-                <% if (P.col.fatherEmail) { %>
-                  <td data-col="fatherEmail">
-                   <input
-                   type="email"
-                     name="father_email"
-                   form="<%= fid %>"
-                   class="form-control form-control-sm"
-                  value="<%= fatherEmailVal %>"
-                <%= P.edit.fatherEmail ? '' : 'readonly' %>>
-              </td>
-            <% } %>
-
-                <% if (P.col.grade) { %>
-                  <td data-col="grade">
-                    <input
-                      type="text"
-                      name="grade"
-                      form="<%= fid %>"
-                      class="form-control form-control-sm"
-                      value="<%= gradeVal %>"
-                      <%= P.edit.grade ? '' : 'readonly' %>>
-                  </td>
-                <% } %>
-
-                <% if (P.col.tuitionGrade) { %>
-                  <td data-col="tuitionGrade">
-                    <input
-                      type="text"
-                      name="tuitionGrade"
-                      form="<%= fid %>"
-                      class="form-control form-control-sm"
-                      value="<%= tuitionVal %>"
-                      <%= P.edit.tuitionGrade ? '' : 'readonly' %>>
-                  </td>
-                <% } %>
-
-                <% if (P.col.phone) { %>
-                  <td data-col="phone">
-                    <input
-                      type="text"
-                      name="phone"
-                      form="<%= fid %>"
-                      class="form-control form-control-sm"
-                      value="<%= phoneVal %>"
-                      <%= P.edit.phone ? '' : 'readonly' %>>
-                  </td>
-                <% } %>
-
-                <% if (P.col.processedBy) { %>
-                 <td data-col="processedBy">
-                 <input
-                 type="text"
-                 class="form-control form-control-sm"
-                 value="<%= processedByVal %>"
-                 readonly
-                 tabindex="-1">
-               </td>
-             <% } %>
-
-                <% if (P.col.paymentStatus) { %>
-                  <td data-col="paymentStatus">
-                    <select
-                      name="paymentStatus"
-                      form="<%= fid %>"
-                      class="form-select form-select-sm"
-                      <%= P.edit.paymentStatus ? '' : 'disabled' %>>
-                      <option value="">Paid/Unpaid</option>
-                      <option value="Paid" <%= payVal === 'Paid' ? 'selected' : '' %>>Paid</option>
-                      <option value="Partial" <%= payVal === 'Partial' ? 'selected' : '' %>>Partial</option>
-                      <option value="Unpaid" <%= (!payVal || payVal === 'Unpaid') ? 'selected' : '' %>>Unpaid</option>
-                    </select>
-
-                    <% if (!P.edit.paymentStatus) { %>
-                      <input type="hidden" name="paymentStatus" form="<%= fid %>" value="<%= payVal %>">
-                    <% } %>
-                  </td>
-                <% } %>
-
-                <% if (P.col.paidUpto) { %>
-                  <td data-col="paidUpto">
-                    <input
-                      type="text"
-                      name="paidUpto"
-                      form="<%= fid %>"
-                      class="form-control form-control-sm"
-                      value="<%= paidUptoVal %>"
-                      <%= P.edit.paidUpto ? '' : 'readonly' %>>
-                  </td>
-                <% } %>
-
-               <% if (P.col.verif) { %>
-  <td data-col="verificationNumber">
-    <input
-      type="text"
-      class="form-control form-control-sm"
-      value="<%= verifVal %>"
-      readonly
-      tabindex="-1"
-      title="Auto: latest updated billing verification from Billing">
-  </td>
-<% } %>
-
-                <% if (P.col.reg) { %>
-                  <td data-col="registrationNumber">
-                    <input
-                      type="text"
-                      name="registrationNumber"
-                      form="<%= fid %>"
-                      class="form-control form-control-sm"
-                      value="<%= regVal %>"
-                      <%= P.edit.reg ? '' : 'readonly' %>>
-                  </td>
-                <% } %>
-
-                <% if (P.col.family) { %>
-                  <td data-col="familyNumber">
-                    <input
-                      type="text"
-                      name="familyNumber"
-                      form="<%= fid %>"
-                      class="form-control form-control-sm"
-                      value="<%= familyVal %>"
-                      <%= P.edit.family ? '' : 'readonly' %>>
-                  </td>
-                <% } %>
-
-                <% if (P.col.registrationFee) { %>
-                   <td data-col="registrationFee">
-                   <input
-                   type="text"
-                   name="registrationFee"
-                   form="<%= fid %>"
-                   class="form-control form-control-sm"
-                   value="<%= registrationFeeVal %>"
-                 <%= P.edit.registrationFee ? '' : 'readonly' %>>
-              </td>
-            <% } %>
-
-                <% if (P.col.fees) { %>
-                  <td data-col="fees">
-                    <input
-                      type="text"
-                      name="fees"
-                      form="<%= fid %>"
-                      class="form-control form-control-sm"
-                      value="<%= feesVal %>"
-                      <%= P.edit.fees ? '' : 'readonly' %>>
-                  </td>
-                <% } %>
-            <% if (P.col.currency) { %>
-  <td data-col="currency">
-    <select
-      name="currency_code"
-      form="<%= fid %>"
-      class="form-select form-select-sm js-currency-select"
-      data-prev-value="<%= currencyVal %>"
-      <%= P.edit.currency ? '' : 'disabled' %>>
-      <option value="">Select</option>
-      <% DEFAULT_CURRENCY_OPTIONS.forEach(opt => { %>
-        <option value="<%= opt.value %>" <%= currencyVal === opt.value ? 'selected' : '' %>>
-          <%= opt.value %>
-        </option>
-      <% }) %>
-      <option value="__add_new_currency__">+ Add Option</option>
-    </select>
-
-    <% if (!P.edit.currency) { %>
-      <input type="hidden" name="currency_code" form="<%= fid %>" value="<%= currencyVal %>">
-    <% } %>
-  </td>
-<% } %>
-
-
-              <% if (P.col.month) { %>
-  <td data-col="month">
-    <%
-      const monthValSafe = String(monthVal || '').trim();
-      const currentYearOnly = new Date().getFullYear();
-
-      const monthsList = [
-        { full: "January", short: "Jan" },
-        { full: "February", short: "Feb" },
-        { full: "March", short: "Mar" },
-        { full: "April", short: "Apr" },
-        { full: "May", short: "May" },
-        { full: "June", short: "Jun" },
-        { full: "July", short: "Jul" },
-        { full: "August", short: "Aug" },
-        { full: "September", short: "Sep" },
-        { full: "October", short: "Oct" },
-        { full: "November", short: "Nov" },
-        { full: "December", short: "Dec" }
-      ];
-    %>
-
-    <select
-      name="month"
-      form="<%= fid %>"
-      class="form-select form-select-sm"
-      <%= P.edit.month ? '' : 'disabled' %>>
-      <option value="" <%= !monthValSafe ? 'selected' : '' %>>Select</option>
-
-      <% monthsList.forEach(m => {
-        const fullValue = `${m.full} ${currentYearOnly}`;
-        const shortValue = `${m.short} ${currentYearOnly}`;
-
-        const isSelected =
-          monthValSafe === fullValue ||
-          monthValSafe === shortValue;
+        const cardFields = [
+          { key: 'no', show: true, label: 'No.', value: (startRecord || 1) + index },
+          { key: 'status', show: P.col.status, label: 'Current Status', value: currentStatusVal || '-' },
+          { key: 'feeStatus', show: P.col.feeStatus, label: 'Fee Status', value: feeStatusVal || '-' },
+          { key: 'dept', show: P.col.dept, label: 'Dept', value: a.dept || user.dept || '-' },
+          { key: 'student', show: P.col.student, label: 'Student', value: studentVal || '-' },
+          { key: 'father', show: P.col.father, label: 'Father', value: fatherVal || '-' },
+          { key: 'fatherEmail', show: P.col.fatherEmail, label: 'Email Address', value: fatherEmailVal || '-' },
+          { key: 'grade', show: P.col.grade, label: 'Grade', value: gradeVal || '-' },
+          { key: 'tuitionGrade', show: P.col.tuitionGrade, label: 'Grade Section', value: tuitionVal || '-' },
+          { key: 'phone', show: P.col.phone, label: 'Phone Number', value: phoneVal || '-' },
+          { key: 'processedBy', show: P.col.processedBy, label: 'Processed By', value: processedByVal || '-' },
+          { key: 'paymentStatus', show: P.col.paymentStatus, label: 'Payment Status', value: (a.accounts && a.accounts.paymentStatus) || '-' },
+          { key: 'paidUpto', show: P.col.paidUpto, label: 'Paid Upto', value: (a.accounts && a.accounts.paidUpto) || '-' },
+          { key: 'verificationNumber', show: P.col.verif, label: 'Verif #', value: a.latestBillingVerificationNumber || '-' },
+          { key: 'registrationNumber', show: P.col.reg, label: 'Reg #', value: (a.accounts && a.accounts.registrationNumber) || '-' },
+          { key: 'familyNumber', show: P.col.family, label: 'Family #', value: (a.accounts && a.accounts.familyNumber) || '-' },
+          { key: 'registrationFee', show: P.col.registrationFee, label: 'Registration Fee', value: registrationFeeVal || '-' },
+          { key: 'fees', show: P.col.fees, label: 'Monthly Fees', value: feesVal || '-' },
+          { key: 'currency', show: P.col.currency, label: 'Currency', value: currencyVal || '-' },
+          { key: 'month', show: P.col.month, label: 'Month/Year', value: monthVal || '-' },
+          { key: 'totalFees', show: P.col.totalFees, label: 'Total Fees', value: totalFeesVal || '-' },
+          { key: 'pendingDues', show: P.col.pendingDues, label: 'Pending Dues', value: pendingDuesVal || '-' },
+          { key: 'receivedPayment', show: P.col.receivedPayment, label: 'Received Payment', value: receivedPaymentVal || '0' },
+          { key: 'invoiceStatus', show: P.col.invoiceStatus, label: 'Invoice Status', value: invoiceStatusVal || '-' },
+          { key: 'invoiceStatusTimestamp', show: P.col.invoiceStatusTimestamp, label: 'Invoice Status Timestamp', value: invoiceStatusTimestampVal || '-' },
+          { key: 'paidInvoiceStatus', show: P.col.paidInvoiceStatus, label: 'Paid Invoice Status', value: paidInvoiceStatusVal || '-' },
+          { key: 'paidInvoiceStatusTimestamp', show: P.col.paidInvoiceStatusTimestamp, label: 'Paid Invoice Status Timestamp', value: paidInvoiceStatusTimestampVal || '-' }
+        ];
       %>
-        <option value="<%= shortValue %>" <%= isSelected ? 'selected' : '' %>>
-          <%= shortValue %>
-        </option>
-      <% }) %>
-    </select>
 
-    <% if (!P.edit.month) { %>
-      <input type="hidden" name="month" form="<%= fid %>" value="<%= monthValSafe %>">
-    <% } %>
-  </td>
-<% } %>
+        <div
+          class="admission-card <%= a.isDuplicate ? 'duplicate-admission-card' : '' %>"
+          data-admission-id="<%= a.id %>"
+          data-student-name="<%= studentVal %>">
 
-                <% if (P.col.totalFees) { %>
-                  <td data-col="totalFees">
-                    <input type="text" class="form-control form-control-sm" readonly value="<%= totalFeesVal %>">
-                  </td>
-                <% } %>
+          <div class="admission-card-top">
+            <div class="d-flex align-items-center gap-2">
+              <% if (canDeleteAdmissions) { %>
+                <input
+                  type="checkbox"
+                  class="form-check-input admission-row-checkbox"
+                  value="<%= a.id %>"
+                  data-student-name="<%= studentVal %>">
+              <% } %>
 
-                <% if (P.col.pendingDues) { %>
-                  <td data-col="pendingDues">
-                    <input type="text" class="form-control form-control-sm" readonly value="<%= pendingDuesVal %>">
-                  </td>
-                <% } %>
+              <div class="admission-avatar">
+                <%= String(studentVal || 'A').charAt(0).toUpperCase() %>
+              </div>
 
-                <% if (P.col.receivedPayment) { %>
-                  <td data-col="receivedPayment">
-                    <input type="text" class="form-control form-control-sm" readonly value="<%= receivedPaymentVal %>">
-                  </td>
-                <% } %>
+              <div>
+                <div class="admission-title">
+                  <%= studentVal || 'No Name' %>
+                </div>
+                <div class="admission-subtitle">
+                  <%= fatherVal || '-' %>
+                </div>
+              </div>
+            </div>
 
-                <% if (P.col.invoiceStatus) { %>
-  <td data-col="invoiceStatus">
-    <input type="text" class="form-control form-control-sm" readonly value="<%= invoiceStatusVal %>">
-  </td>
-<% } %>
+            <span class="admission-role-pill">
+              <%= a.dept || user.dept || 'Dept' %>
+            </span>
+          </div>
 
-<% if (P.col.invoiceStatusTimestamp) { %>
-  <td data-col="invoiceStatusTimestamp">
-    <input type="text" class="form-control form-control-sm" readonly value="<%= invoiceStatusTimestampVal %>">
-  </td>
-<% } %>
-
-<% if (P.col.paidInvoiceStatus) { %>
-  <td data-col="paidInvoiceStatus">
-    <input type="text" class="form-control form-control-sm" readonly value="<%= paidInvoiceStatusVal %>">
-  </td>
-<% } %>
-
-<% if (P.col.paidInvoiceStatusTimestamp) { %>
-  <td data-col="paidInvoiceStatusTimestamp">
-    <input type="text" class="form-control form-control-sm" readonly value="<%= paidInvoiceStatusTimestampVal %>">
-  </td>
-<% } %>
-
-                <% if (showActions) { %>
-                  <td data-col="actions" class="col-actions <%= actionColClass %>" style="white-space: nowrap;">
-                   <div class="d-flex align-items-center justify-content-end flex-nowrap action-btns compact-actions">
-
-  <% if (P.btn.details) { %>
-    <a
-      href="/admin/admission/<%= a.id %>"
-      class="action-circle action-details"
-      title="View Details"
-      aria-label="View Details">
-      <i class="bi bi-eye"></i>
-    </a>
-  <% } %>
-
-  <% if (P.btn.update) { %>
-    <button
-      type="submit"
-      form="<%= fid %>"
-      class="action-circle action-update"
-      title="Update"
-      aria-label="Update">
-      <i class="bi bi-check2-circle"></i>
-    </button>
-  <% } %>
-
-  <% if (P.btn.pdf || P.btn.whatsapp || P.btn.billing || P.btn.upload || P.btn.files || canDeleteAdmissions) { %>
-    <div class="inline-more-wrap">
-
-      <button
-        type="button"
-        class="action-circle action-more"
-        title="More Actions"
-        aria-label="More Actions">
-        <i class="bi bi-three-dots-vertical"></i>
-      </button>
-
-      <div class="inline-more-actions">
-
-        <% if (P.btn.whatsapp) { %>
-          <button
-            type="button"
-            class="action-circle action-whatsapp btn-whatsapp"
-            data-admission-id="<%= a.id %>"
-            title="WhatsApp"
-            aria-label="WhatsApp">
-            <i class="bi bi-whatsapp"></i>
-          </button>
-        <% } %>
-
-        <% if (P.btn.pdf) { %>
-          <a
-            href="/admissions/<%= a.id %>/pdf"
-            class="action-circle action-pdf"
-            target="_blank"
-            title="Admission PDF"
-            aria-label="Admission PDF">
-            <i class="bi bi-file-earmark-pdf-fill"></i>
-          </a>
-        <% } %>
-
-        <% if (P.btn.billing) { %>
-          <button
-            type="button"
-            class="action-circle action-billing btn-billing"
-            data-admission-id="<%= a.id %>"
-            title="Billing / Receipt"
-            aria-label="Billing / Receipt">
-            <i class="bi bi-receipt"></i>
-          </button>
-        <% } %>
-
-        <% if (P.btn.upload) { %>
-          <input
-            type="file"
-            id="file_<%= a.id %>"
-            class="d-none"
-            data-admission-id="<%= a.id %>"
-            accept=".png,.jpg,.jpeg,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
-
-          <button
-            type="button"
-            class="action-circle action-upload"
-            onclick="document.getElementById('file_<%= a.id %>').click()"
-            title="Upload File"
-            aria-label="Upload File">
-            <i class="bi bi-upload"></i>
-          </button>
-        <% } %>
-
-        <% if (P.btn.files) { %>
-          <a
-            href="/files?admission_id=<%= a.id %>"
-            class="action-circle action-files"
-            title="View Files"
-            aria-label="View Files">
-            <i class="bi bi-folder2-open"></i>
-          </a>
-        <% } %>
-
-        <% if (canDeleteAdmissions) { %>
-          <button
-            type="button"
-            class="action-circle action-delete btn-delete-admission"
-            data-admission-id="<%= a.id %>"
-            data-student-name="<%= a.studentName || a.student || '' %>"
-            title="Delete Admission"
-            aria-label="Delete Admission">
-            <i class="bi bi-trash3"></i>
-          </button>
-        <% } %>
-
-      </div>
-    </div>
-  <% } %>
-
-</div>
-                  </td>
-                <% } %>
-
-              </tr>
+          <div class="admission-card-fields">
+            <% cardFields.forEach(field => { %>
+              <% if (field.show) { %>
+                <a
+                  href="/admin/admission/<%= a.id %>/edit?focus=<%= encodeURIComponent(field.key || '') %>"
+                  class="admission-field-link <%= getCardFieldClass(field) %>"
+                  style="<%= getCardFieldStyle(field) %>">
+                  <span class="field-label"><%= field.label %></span>
+                  <span class="field-value"><%= field.value %></span>
+                </a>
+              <% } %>
             <% }) %>
-          </tbody>
-                </table>
-      </div>
+          </div>
+
+          <% if (showActions) { %>
+            <div class="admission-card-actions">
+
+              <% if (P.btn.details) { %>
+                <a href="/admin/admission/<%= a.id %>" class="mini-action-btn mini-dark">
+                  <i class="bi bi-eye"></i> Details
+                </a>
+              <% } %>
+
+              <% if (P.btn.update) { %>
+                <a href="/admin/admission/<%= a.id %>/edit" class="mini-action-btn mini-blue">
+                  <i class="bi bi-pencil-square"></i> Edit
+                </a>
+              <% } %>
+
+              <% if (P.btn.pdf) { %>
+                <a href="/admissions/<%= a.id %>/pdf" target="_blank" class="mini-action-btn mini-pdf">
+                  <i class="bi bi-file-earmark-pdf-fill"></i> PDF
+                </a>
+              <% } %>
+
+              <% if (P.btn.billing) { %>
+                <button
+                  type="button"
+                  class="mini-action-btn mini-purple btn-billing"
+                  data-admission-id="<%= a.id %>"
+                  data-student="<%= studentVal %>"
+                  data-grade="<%= gradeVal %>"
+                  data-phone="<%= phoneVal %>"
+                  data-fees="<%= feesVal %>"
+                  data-currency="<%= currencyVal %>">
+                  <i class="bi bi-receipt"></i> Billing
+                </button>
+              <% } %>
+
+              <% if (P.btn.whatsapp) { %>
+                <button
+                  type="button"
+                  class="mini-action-btn mini-whatsapp btn-whatsapp"
+                  data-admission-id="<%= a.id %>"
+                  data-student="<%= studentVal %>"
+                  data-grade="<%= gradeVal %>"
+                  data-phone="<%= phoneVal %>">
+                  <i class="bi bi-whatsapp"></i> WhatsApp
+                </button>
+              <% } %>
+
+              <% if (P.btn.upload) { %>
+                <input
+                  type="file"
+                  id="file_card_<%= a.id %>"
+                  class="d-none"
+                  data-admission-id="<%= a.id %>"
+                  accept=".png,.jpg,.jpeg,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
+
+                <button
+                  type="button"
+                  class="mini-action-btn mini-blue"
+                  onclick="document.getElementById('file_card_<%= a.id %>').click()">
+                  <i class="bi bi-upload"></i> Upload
+                </button>
+              <% } %>
+
+              <% if (P.btn.files) { %>
+                <a href="/admin/files?admission_id=<%= a.id %>" class="mini-action-btn mini-blue">
+                  <i class="bi bi-folder2-open"></i> Files
+                </a>
+              <% } %>
+
+              <% if (canDeleteAdmissions) { %>
+                <button
+                  type="button"
+                  class="mini-action-btn mini-danger btn-delete-admission"
+                  data-admission-id="<%= a.id %>"
+                  data-student-name="<%= studentVal %>">
+                  <i class="bi bi-trash3"></i> Delete
+                </button>
+              <% } %>
+
+            </div>
+          <% } %>
+
+        </div>
+
+      <% }) %>
+
+    </div>
+  </div>
 
       <div class="subagent-pagination-wrap d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 px-3 py-3 border-top">
         <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -2239,34 +1906,84 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     transition: all .15s ease;
   }
 
-  #billingModal .bill-status.status-notadmitted {
-    background: #f1f5f9;
-    border-color: #cbd5e1;
-    color: #334155;
-  }
+ /* ✅ Billing status colors exactly like Super Admin */
+#billingModal .bill-status.status-notadmitted{
+  --dot:#64748b;
+  --bg:#f1f5f9;
+  --bd:#cbd5e1;
+  --tx:#334155;
+}
 
-  #billingModal .bill-status.status-nopayment {
-    background: #fee2e2;
-    border-color: #fecaca;
-    color: #991b1b;
-  }
+#billingModal .bill-status.status-nopayment{
+  --dot:#ef4444;
+  --bg:#fee2e2;
+  --bd:#fecaca;
+  --tx:#991b1b;
+}
 
-  #billingModal .bill-status.status-partial {
-    background: #fef9c3;
-    border-color: #fde68a;
-    color: #854d0e;
-  }
+#billingModal .bill-status.status-partial{
+  --dot:#f59e0b;
+  --bg:#fef9c3;
+  --bd:#fde68a;
+  --tx:#854d0e;
+}
 
-  #billingModal .bill-status.status-full {
-    background: #dcfce7;
-    border-color: #bbf7d0;
-    color: #166534;
-  }
+#billingModal .bill-status.status-full{
+  --dot:#22c55e;
+  --bg:#dcfce7;
+  --bd:#bbf7d0;
+  --tx:#166534;
+}
+
+#billingModal .bill-status.status-unpaid{
+  --dot:#ef4444;
+  --bg:#fee2e2;
+  --bd:#fecaca;
+  --tx:#991b1b;
+}
 
   
 
   /* ===== SUBAGENT LIGHT BLUE OVERRIDES ===== */
+/* ✅ Sub Agent header same as Agent block, blue theme */
+.admin-header-card{
+  border-radius: 18px !important;
+  border: 1px solid rgba(59,130,246,.18) !important;
+  background: linear-gradient(135deg, rgba(59,130,246,.12), rgba(59,130,246,.04)) !important;
+  padding: 18px !important;
+}
 
+.admin-chip{
+  background: rgba(59,130,246,.12) !important;
+  color: #1d4ed8 !important;
+  border: 1px solid rgba(59,130,246,.25) !important;
+  font-weight: 700 !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  padding: 5px 10px !important;
+}
+
+.subagent-scope-pill{
+  background: rgba(59,130,246,.14) !important;
+  color: #1d4ed8 !important;
+  border: 1px solid rgba(59,130,246,.28) !important;
+  font-weight: 700 !important;
+  padding: 3px 9px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+.dept-dot{
+  width: 8px !important;
+  height: 8px !important;
+  display: inline-block !important;
+  border-radius: 999px !important;
+  background: #38bdf8 !important;
+  box-shadow: none !important;
+}
 .admin-shell{
   padding: 18px 18px;
 }
@@ -2910,6 +2627,341 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 #adminAdmissionsTable tbody tr.duplicate-admission-row:hover td{
   background: #fecaca !important;
 }
+/* ✅ Sub Agent Admission Pipeline Card View */
+.admission-card-scroll{
+  padding: 18px;
+  background: #f1f5f9;
+}
+
+.admission-card-grid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(360px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.admission-card{
+  position: relative;
+  border-radius: 20px;
+  background: #ffffff;
+  border: 1px solid rgba(148,163,184,.25);
+  border-top: 4px solid #3b82f6;
+  box-shadow: 0 12px 28px rgba(15,23,42,.08);
+  padding: 14px;
+  transition: transform .14s ease, box-shadow .14s ease;
+}
+
+.admission-card:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 18px 38px rgba(15,23,42,.12);
+}
+
+.admission-card-top{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.admission-avatar{
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #38bdf8, #2563eb);
+  color: #fff;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 22px rgba(59,130,246,.24);
+  flex: 0 0 44px;
+}
+
+.admission-title{
+  font-weight: 900;
+  color: #0f172a;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.admission-subtitle{
+  color: #475569;
+  font-size: 13px;
+  margin-top: 3px;
+}
+
+.admission-role-pill{
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #1d4ed8;
+  background: #dbeafe;
+  border: 1px solid #bfdbfe;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.admission-card-fields{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.admission-field-link{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  text-decoration: none;
+  border-radius: 6px;
+  padding: 4px 7px;
+  background: #ffffff;
+  border: 1px solid rgba(15,23,42,.12);
+  color: #0f172a !important;
+  box-shadow: 0 4px 10px rgba(15,23,42,.06);
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+
+.admission-field-link:hover{
+  transform: translateY(-1px);
+  background: #f8fafc;
+  box-shadow: 0 6px 14px rgba(15,23,42,.10);
+  color: #0f172a !important;
+}
+
+.field-label{
+  display: inline;
+  font-size: 10px;
+  font-weight: 500;
+  color: #111827 !important;
+  text-transform: uppercase;
+  letter-spacing: .25px;
+  margin: 0;
+  line-height: 1;
+}
+
+.field-label::after{
+  content: ":";
+}
+
+.field-value{
+  display: inline-block;
+  color: #000000 !important;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  max-width: 145px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admission-field-link.status-card-chip,
+.admission-field-link.fee-card-chip{
+  background: var(--chip-bg) !important;
+  border-color: var(--chip-bd) !important;
+  color: var(--chip-color) !important;
+}
+
+.admission-field-link.status-card-chip .field-label,
+.admission-field-link.fee-card-chip .field-label{
+  color: #111827 !important;
+}
+
+.admission-field-link.status-card-chip .field-value,
+.admission-field-link.fee-card-chip .field-value{
+  color: #000000 !important;
+}
+
+.admission-field-link.status-card-chip .field-label::before,
+.admission-field-link.fee-card-chip .field-label::before{
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  display: inline-block;
+  background: var(--chip-color);
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.admission-card-actions{
+  border-top: 1px solid rgba(148,163,184,.25);
+  margin-top: 14px;
+  padding-top: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mini-action-btn{
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 8px 16px rgba(15,23,42,.08);
+  transition: transform .12s ease, filter .12s ease;
+}
+
+.mini-action-btn:hover{
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+
+.mini-dark{
+  background: #0f172a;
+  color: #fff;
+}
+
+.mini-blue{
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.mini-pdf{
+  background: #e5e7eb;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.mini-danger{
+  background: #ef4444;
+  color: #fff;
+}
+
+.mini-purple{
+  background: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #ddd6fe;
+}
+
+.mini-whatsapp{
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.duplicate-admission-card{
+  background: #fee2e2;
+  border-color: #fca5a5;
+  border-top-color: #dc2626;
+}
+
+.duplicate-admission-card .admission-field-link{
+  background: #ffffff;
+  border-color: rgba(220,38,38,.28);
+  color: #0f172a !important;
+}
+
+@media (max-width: 1400px){
+  .admission-card-grid{
+    grid-template-columns: repeat(2, minmax(340px, 1fr));
+  }
+}
+
+@media (max-width: 900px){
+  .admission-card-grid{
+    grid-template-columns: 1fr;
+  }
+
+  .admission-card-fields{
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
+/* ✅ WhatsApp modal exactly like Super Admin */
+#waModal .modal-content{
+  border-radius: 24px !important;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.98));
+  box-shadow: 0 24px 80px rgba(2,8,23,.22), 0 8px 24px rgba(15,23,42,.10);
+}
+
+#waModal .modal-header{
+  padding: 18px 22px 10px 22px;
+  border-bottom: 1px solid rgba(15,23,42,.06) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,252,.92));
+}
+
+#waModal .modal-body{
+  padding: 14px 22px 14px 22px !important;
+}
+
+#waModal .modal-footer{
+  padding: 12px 22px 18px 22px;
+  border-top: 1px solid rgba(15,23,42,.06) !important;
+  background: linear-gradient(180deg, rgba(248,250,252,.7), rgba(255,255,255,1));
+}
+
+#waModal .bg-light{
+  background: linear-gradient(180deg, rgba(248,250,252,.95), rgba(241,245,249,.85)) !important;
+  border: 1px solid rgba(15,23,42,.06);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+}
+
+#waModal .form-control{
+  border-radius: 12px;
+  border: 1px solid rgba(15,23,42,.10);
+  background: rgba(255,255,255,.96);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.85);
+}
+
+#waModal .form-control:focus{
+  border-color: rgba(59,130,246,.34);
+  box-shadow: 0 0 0 4px rgba(59,130,246,.12);
+}
+
+#waModal #waOptions label{
+  border: 1px solid rgba(15,23,42,.08) !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  padding: 10px 12px !important;
+}
+
+#waModal .modal-footer button.btn.btn-light{
+  border: 1px solid rgba(15,23,42,.08) !important;
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  color: #111827 !important;
+  transition: all .15s ease;
+}
+
+#waModal .modal-footer button.btn.btn-light:hover,
+#waModal .modal-footer button.btn.btn-light:focus,
+#waModal .modal-footer button.btn.btn-light:active{
+  background-color: #d3d4d5 !important;
+  background: #d3d4d5 !important;
+  border-color: #c6c7c8 !important;
+  color: #000000 !important;
+  box-shadow: none !important;
+}
+
+#waModal .modal-footer .btn-success{
+  background: #198754 !important;
+  border-color: #198754 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+  transition: all .15s ease;
+}
+
+#waModal .modal-footer .btn-success:hover,
+#waModal .modal-footer .btn-success:focus{
+  background: #157347 !important;
+  border-color: #146c43 !important;
+  color: #ffffff !important;
+}
 </style>
 
 <div id="upload-flash-overlay"
@@ -3219,6 +3271,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
           </div>
           <div class="small mt-1"><b>Phone:</b> <span id="billPhone">-</span></div>
           <div class="small mt-1"><b>Admission ID:</b> <span id="billId">-</span></div>
+          <div class="small mt-1"><b>Currency:</b> <span id="billCurrency">-</span></div>
         </div>
 
 
@@ -3230,11 +3283,11 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 
   <div class="d-flex flex-wrap gap-2">
     <button
-      type="button"
-      class="btn btn-outline-dark rounded-pill px-3"
-      id="openBillingStatusManagerBtn">
-      <i class="bi bi-sliders me-1"></i> Manage Billing Statuses
-    </button>
+  type="button"
+  class="btn btn-outline-dark rounded-pill px-3"
+  id="openBillingStatusManagerBtn">
+  <i class="bi bi-sliders me-1"></i> Manage Billing Statuses
+</button>
   </div>
 </div>
 
@@ -3264,11 +3317,6 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     <label class="form-label small text-muted mb-1">Amount received</label>
     <input id="bill_january" type="text" class="form-control bill-input" placeholder="e.g. 500">
 
-    <!-- Current Fee AFTER amount -->
-    <div class="mt-2 d-none" id="bill_fee_wrap_january">
-      <label class="form-label small text-muted mb-1">Current Fee</label>
-      <input id="bill_fee_january" type="text" class="form-control bill-input" placeholder="e.g. 200">
-    </div>
 
   
 
@@ -3312,11 +3360,6 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     <label class="form-label small text-muted mb-1">Amount received</label>
     <input id="bill_february" type="text" class="form-control bill-input" placeholder="e.g. 500">
 
-    <div class="mt-2 d-none" id="bill_fee_wrap_february">
-      <label class="form-label small text-muted mb-1">Current Fee</label>
-      <input id="bill_fee_february" type="text" class="form-control bill-input" placeholder="e.g. 200">
-    </div>
-
    
 
     <div class="row g-2 mt-2">
@@ -3359,10 +3402,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     <label class="form-label small text-muted mb-1">Amount received</label>
     <input id="bill_march" type="text" class="form-control bill-input" placeholder="e.g. 500">
 
-    <div class="mt-2 d-none" id="bill_fee_wrap_march">
-      <label class="form-label small text-muted mb-1">Current Fee</label>
-      <input id="bill_fee_march" type="text" class="form-control bill-input" placeholder="e.g. 200">
-    </div>
+    
 
    
 
@@ -3406,10 +3446,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     <label class="form-label small text-muted mb-1">Amount received</label>
     <input id="bill_april" type="text" class="form-control bill-input" placeholder="e.g. 500">
 
-    <div class="mt-2 d-none" id="bill_fee_wrap_april">
-      <label class="form-label small text-muted mb-1">Current Fee</label>
-      <input id="bill_fee_april" type="text" class="form-control bill-input" placeholder="e.g. 200">
-    </div>
+    
 
    
 
@@ -3453,10 +3490,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     <label class="form-label small text-muted mb-1">Amount received</label>
     <input id="bill_may" type="text" class="form-control bill-input" placeholder="e.g. 500">
 
-    <div class="mt-2 d-none" id="bill_fee_wrap_may">
-      <label class="form-label small text-muted mb-1">Current Fee</label>
-      <input id="bill_fee_may" type="text" class="form-control bill-input" placeholder="e.g. 200">
-    </div>
+    
 
   
 
@@ -3498,10 +3532,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     <label class="form-label small text-muted mb-1">Amount received</label>
     <input id="bill_june" type="text" class="form-control bill-input" placeholder="e.g. 500">
 
-    <div class="mt-2 d-none" id="bill_fee_wrap_june">
-      <label class="form-label small text-muted mb-1">Current Fee</label>
-      <input id="bill_fee_june" type="text" class="form-control bill-input" placeholder="e.g. 200">
-    </div>
+    
 
   
 
@@ -3543,11 +3574,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     <label class="form-label small text-muted mb-1">Amount received</label>
     <input id="bill_july" type="text" class="form-control bill-input" placeholder="e.g. 500">
 
-    <div class="mt-2 d-none" id="bill_fee_wrap_july">
-      <label class="form-label small text-muted mb-1">Current Fee</label>
-      <input id="bill_fee_july" type="text" class="form-control bill-input" placeholder="e.g. 200">
-    </div>
-
+    
    
 
     <div class="row g-2 mt-2">
@@ -3588,10 +3615,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     <label class="form-label small text-muted mb-1">Amount received</label>
     <input id="bill_august" type="text" class="form-control bill-input" placeholder="e.g. 500">
 
-    <div class="mt-2 d-none" id="bill_fee_wrap_august">
-      <label class="form-label small text-muted mb-1">Current Fee</label>
-      <input id="bill_fee_august" type="text" class="form-control bill-input" placeholder="e.g. 200">
-    </div>
+    
 
    
 
@@ -3633,10 +3657,6 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     <label class="form-label small text-muted mb-1">Amount received</label>
     <input id="bill_september" type="text" class="form-control bill-input" placeholder="e.g. 500">
 
-    <div class="mt-2 d-none" id="bill_fee_wrap_september">
-      <label class="form-label small text-muted mb-1">Current Fee</label>
-      <input id="bill_fee_september" type="text" class="form-control bill-input" placeholder="e.g. 200">
-    </div>
 
    
 
@@ -3678,10 +3698,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     <label class="form-label small text-muted mb-1">Amount received</label>
     <input id="bill_october" type="text" class="form-control bill-input" placeholder="e.g. 500">
 
-    <div class="mt-2 d-none" id="bill_fee_wrap_october">
-      <label class="form-label small text-muted mb-1">Current Fee</label>
-      <input id="bill_fee_october" type="text" class="form-control bill-input" placeholder="e.g. 200">
-    </div>
+    
 
    
 
@@ -3723,10 +3740,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     <label class="form-label small text-muted mb-1">Amount received</label>
     <input id="bill_november" type="text" class="form-control bill-input" placeholder="e.g. 500">
 
-    <div class="mt-2 d-none" id="bill_fee_wrap_november">
-      <label class="form-label small text-muted mb-1">Current Fee</label>
-      <input id="bill_fee_november" type="text" class="form-control bill-input" placeholder="e.g. 200">
-    </div>
+    
 
    
 
@@ -3768,10 +3782,6 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     <label class="form-label small text-muted mb-1">Amount received</label>
     <input id="bill_december" type="text" class="form-control bill-input" placeholder="e.g. 500">
 
-    <div class="mt-2 d-none" id="bill_fee_wrap_december">
-      <label class="form-label small text-muted mb-1">Current Fee</label>
-      <input id="bill_fee_december" type="text" class="form-control bill-input" placeholder="e.g. 200">
-    </div>
 
     
 
@@ -3802,8 +3812,8 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
           Cancel
         </button>
         <button type="button" class="btn btn-primary rounded-pill px-4" id="billSaveBtn">
-          <i class="bi bi-save me-1"></i> Save Billing
-        </button>
+  <i class="bi bi-save me-1"></i> Save Billing
+</button>
       </div>
     </div>
   </div>
@@ -5173,7 +5183,35 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
       window.applyDynamicBillingColors();
     }
   }
+function openBillingStatusManagerPopup() {
+  const modalEl = document.getElementById('billingStatusOptionModal');
+  if (!modalEl) return;
 
+  modalEl.classList.remove('d-none');
+  modalEl.setAttribute('aria-hidden', 'false');
+}
+
+document.addEventListener('change', function (e) {
+  const sel = e.target.closest('.bill-status');
+  if (!sel) return;
+
+  if (sel.value === '__add_new_billing_status__') {
+    const prev = sel.getAttribute('data-prev-value') || 'Not admitted';
+
+    sel.value = prev;
+    sel.setAttribute('data-prev-value', prev);
+
+    openBillingStatusManagerPopup();
+
+    if (window.applyDynamicBillingColors) {
+      window.applyDynamicBillingColors();
+    }
+
+    return;
+  }
+
+  sel.setAttribute('data-prev-value', sel.value || '');
+});
   async function loadBillingOptionsAndRefresh() {
     await fetchBillingOptions();
     renderBillingOptionList();
@@ -5350,32 +5388,261 @@ if (editBillingStatusSaveBtn) {
 <script src="/js/user-perms-live.js"></script>
 <script src="/js/admissions.js"></script>
 
+<script>
+  /* ✅ Sub Agent WhatsApp Modal Opener - same as Super Admin */
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.btn-whatsapp');
+    if (!btn) return;
 
+    e.preventDefault();
+
+    const modalEl = document.getElementById('waModal');
+    if (!modalEl || typeof bootstrap === 'undefined') {
+      console.error('WhatsApp modal or Bootstrap not found');
+      return;
+    }
+
+    const admissionId = btn.getAttribute('data-admission-id') || '';
+    const student = btn.getAttribute('data-student') || '-';
+    const grade = btn.getAttribute('data-grade') || '-';
+    const phone = btn.getAttribute('data-phone') || '-';
+
+    modalEl.setAttribute('data-current-admission-id', admissionId);
+    modalEl.setAttribute('data-current-student', student);
+    modalEl.setAttribute('data-current-grade', grade);
+    modalEl.setAttribute('data-current-phone', phone);
+
+    const waId = document.getElementById('waId');
+    const waStudent = document.getElementById('waStudent');
+    const waGrade = document.getElementById('waGrade');
+    const waPhone = document.getElementById('waPhone');
+
+    if (waId) waId.textContent = admissionId;
+    if (waStudent) waStudent.textContent = student;
+    if (waGrade) waGrade.textContent = grade;
+    if (waPhone) waPhone.textContent = phone;
+
+    const waManualMsg = document.getElementById('waManualMsg');
+    if (waManualMsg) waManualMsg.value = '';
+
+    const waCustomText = document.getElementById('waCustomText');
+    if (waCustomText) waCustomText.value = '';
+
+    document.querySelectorAll('.wa-opt').forEach(cb => {
+      cb.checked = false;
+    });
+
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  });
+</script>
 
 <script>
+  /* ✅ Sub Agent Billing Modal Opener - same behavior as Super/Admin */
   (function () {
+    const months = [
+      'january', 'february', 'march', 'april', 'may', 'june',
+      'july', 'august', 'september', 'october', 'november', 'december'
+    ];
+
+    function clean(value) {
+      return String(value || '').trim();
+    }
+
     function syncBillingYearText() {
       const yearSelect = document.getElementById('billingYearSelect');
       const yearText = document.getElementById('billingYearText');
       if (!yearSelect || !yearText) return;
 
-      const y = String(yearSelect.value || '').trim();
+      const y = clean(yearSelect.value);
       yearText.textContent = y ? `Selected: ${y}` : 'Current Year';
     }
 
-    document.addEventListener('change', function (e) {
-      if (e.target && e.target.id === 'billingYearSelect') {
-        syncBillingYearText();
+    function getSelectedBillingYear() {
+      const yearSelect = document.getElementById('billingYearSelect');
+      return clean(yearSelect?.value || new Date().getFullYear());
+    }
+
+    function setInputValue(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.value = value || '';
+    }
+
+    function setFeeLabel(month, fee, currency, statusText) {
+      const feeLabel = document.getElementById('bill_fee_label_' + month);
+      if (!feeLabel) return;
+
+      if (String(statusText || '').trim().toLowerCase() === 'not admitted') {
+        feeLabel.textContent = 'Fee: -';
+        return;
+      }
+
+      const finalFee = clean(fee) || '-';
+      feeLabel.textContent = 'Fee: ' + finalFee + (currency ? ' ' + currency : '');
+    }
+
+    function resetBillingFields(defaultFee) {
+      const modalEl = document.getElementById('billingModal');
+      const currency = modalEl?.getAttribute('data-current-currency') || '';
+
+      months.forEach(month => {
+        const statusEl = document.querySelector(`.bill-status[data-month="${month}"]`);
+        const feeWrap = document.getElementById('bill_fee_wrap_' + month);
+
+        if (statusEl) statusEl.value = 'Not admitted';
+
+        setInputValue('bill_' + month, '');
+        setInputValue('bill_verif_' + month, '');
+
+        const bankEl = document.getElementById('bill_bank_' + month);
+        if (bankEl) bankEl.value = '';
+
+        if (feeWrap) feeWrap.classList.add('d-none');
+
+        setFeeLabel(month, defaultFee, currency, 'Not admitted');
+      });
+
+      if (window.applyDynamicBillingColors) {
+        window.applyDynamicBillingColors();
+      }
+    }
+
+    function normalizeBillingStatusValue(value) {
+      const raw = clean(value);
+      const v = raw.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+
+      if (!v) return 'Not admitted';
+      if (v === 'not admitted' || v === 'notadmitted') return 'Not admitted';
+      if (v === 'no payment' || v === 'nopayment') return 'No payment';
+      if (v === 'partial payment' || v === 'partial') return 'Partial payment';
+      if (v === 'full payment' || v === 'full') return 'Full payment';
+      if (v === 'unpaid') return 'Unpaid';
+
+      return raw;
+    }
+
+    async function loadBillingData(admissionId, defaultFee) {
+      if (!admissionId) return;
+
+      const year = getSelectedBillingYear();
+
+      const res = await fetch(`/api/billing/${admissionId}?year=${encodeURIComponent(year)}`, {
+        headers: { Accept: 'application/json' }
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Billing data load failed');
+      }
+
+      const modalEl = document.getElementById('billingModal');
+      const currency = modalEl?.getAttribute('data-current-currency') || '';
+
+      const billing = data.billing || data.data?.billing || {};
+
+      months.forEach(month => {
+        const row = billing[month] || {};
+        const statusText = normalizeBillingStatusValue(row.status || '');
+        const amount = row.amount || '';
+        const feeOverride = '';
+        const verification = row.verification || row.verif || '';
+        const bank = row.bank || '';
+
+        const statusEl = document.querySelector(`.bill-status[data-month="${month}"]`);
+        if (statusEl) statusEl.value = statusText || 'Not admitted';
+
+        setInputValue('bill_' + month, amount);
+        setInputValue('bill_verif_' + month, verification);
+
+        const bankEl = document.getElementById('bill_bank_' + month);
+        if (bankEl) bankEl.value = bank;
+
+        setFeeLabel(month, defaultFee, currency, statusText);
+      });
+
+      if (window.applyDynamicBillingColors) {
+        window.applyDynamicBillingColors();
+      }
+    }
+
+    document.addEventListener('click', async function (e) {
+      const btn = e.target.closest('.btn-billing');
+      if (!btn) return;
+
+      e.preventDefault();
+
+      const modalEl = document.getElementById('billingModal');
+
+      if (!modalEl || typeof bootstrap === 'undefined') {
+        console.error('Billing modal or Bootstrap not found');
+        alert('Billing modal or Bootstrap not found');
+        return;
+      }
+
+      const admissionId = btn.getAttribute('data-admission-id') || '';
+      const student = btn.getAttribute('data-student') || '-';
+      const grade = btn.getAttribute('data-grade') || '-';
+      const phone = btn.getAttribute('data-phone') || '-';
+      const fees = btn.getAttribute('data-fees') || '-';
+      const currency = btn.getAttribute('data-currency') || '-';
+
+      modalEl.setAttribute('data-current-admission-id', admissionId);
+      modalEl.setAttribute('data-current-fees', fees);
+      modalEl.setAttribute('data-current-currency', currency);
+
+      const billId = document.getElementById('billId');
+      const billStudent = document.getElementById('billStudent');
+      const billGrade = document.getElementById('billGrade');
+      const billPhone = document.getElementById('billPhone');
+      const billCurrency = document.getElementById('billCurrency');
+
+      if (billId) billId.textContent = admissionId;
+      if (billStudent) billStudent.textContent = student;
+      if (billGrade) billGrade.textContent = grade;
+      if (billPhone) billPhone.textContent = phone;
+      if (billCurrency) billCurrency.textContent = currency || '-';
+
+      resetBillingFields(fees);
+      syncBillingYearText();
+
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+      setTimeout(async function () {
+        try {
+          await loadBillingData(admissionId, fees);
+        } catch (err) {
+          console.error(err);
+          alert(err.message || 'Billing data load failed');
+        }
+      }, 150);
+    }, true);
+
+    document.addEventListener('change', async function (e) {
+      if (!e.target || e.target.id !== 'billingYearSelect') return;
+
+      syncBillingYearText();
+
+      const modalEl = document.getElementById('billingModal');
+      if (!modalEl || !modalEl.classList.contains('show')) return;
+
+      const admissionId = modalEl.getAttribute('data-current-admission-id') || '';
+      const fees = modalEl.getAttribute('data-current-fees') || '-';
+
+      resetBillingFields(fees);
+
+      try {
+        await loadBillingData(admissionId, fees);
+      } catch (err) {
+        console.error(err);
+        alert(err.message || 'Billing data load failed');
       }
     });
 
-    document.addEventListener('click', function (e) {
-      const btn = e.target.closest('.btn-billing');
-      if (!btn) return;
-      setTimeout(syncBillingYearText, 50);
-    });
-
     document.addEventListener('DOMContentLoaded', syncBillingYearText);
+
+    window.syncBillingYearText = syncBillingYearText;
+    window.resetBillingFields = resetBillingFields;
+    window.loadBillingData = loadBillingData;
   })();
 </script>
 
@@ -5911,58 +6178,106 @@ if (editBillingStatusSaveBtn) {
 <script>
   (function () {
     document.addEventListener('DOMContentLoaded', function () {
-      const table = document.getElementById('adminAdmissionsTable');
       const modalEl = document.getElementById('subagentSearchModal');
       const openBtn = document.getElementById('openSubagentSearchModalBtn');
       const inputEl = document.getElementById('subagentSearchToolbarInput');
       const clearBtn = document.getElementById('clearSubagentSearchBtn');
       const triggerBadge = document.getElementById('subagentSearchCriterionBadge');
+      const optionButtons = Array.from(document.querySelectorAll('.subagent-search-option'));
 
-      if (!table || !modalEl || !openBtn || !inputEl || typeof bootstrap === 'undefined') return;
+      if (!modalEl || !openBtn || !inputEl || typeof bootstrap === 'undefined') return;
 
       const searchModal = bootstrap.Modal.getOrCreateInstance(modalEl);
-      const optionButtons = Array.from(document.querySelectorAll('.subagent-search-option'));
 
       let activeSearchKey = 'general';
       let activeSearchLabel = 'General';
 
-      function getCellValue(row, colKey) {
-        const cell = row.querySelector(`td[data-col="${colKey}"]`);
-        if (!cell) return '';
-
-        const field = cell.querySelector('input, select, textarea');
-        if (field) return String(field.value || '').toLowerCase().trim();
-
-        return String(cell.textContent || '').toLowerCase().trim();
+      function normalizeText(value) {
+        return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
       }
 
-      function getGeneralRowText(row) {
-        const cells = Array.from(row.querySelectorAll('td'));
-        return cells.map(td => {
-          const field = td.querySelector('input, select, textarea');
-          return field ? String(field.value || '') : String(td.textContent || '');
-        }).join(' ').toLowerCase().trim();
+      function getCards() {
+        return Array.from(document.querySelectorAll('.admission-card'));
+      }
+
+      function getCardFieldValue(card, labelText) {
+        const wanted = normalizeText(labelText).replace(/[:#]/g, '');
+
+        const fields = Array.from(card.querySelectorAll('.admission-field-link'));
+
+        for (const field of fields) {
+          const labelEl = field.querySelector('.field-label');
+          const valueEl = field.querySelector('.field-value');
+
+          const cleanLabel = normalizeText(labelEl ? labelEl.textContent : '').replace(/[:#]/g, '');
+
+          if (cleanLabel === wanted) {
+            return normalizeText(valueEl ? valueEl.textContent : '');
+          }
+        }
+
+        return '';
+      }
+
+      function getValueByKey(card, key) {
+        const map = {
+          registrationNumber: 'Reg #',
+          student: 'Student',
+          father: 'Father',
+          familyNumber: 'Family #',
+          phone: 'Phone Number',
+          fatherEmail: 'Email Address',
+          grade: 'Grade',
+          tuitionGrade: 'Grade Section',
+          dept: 'Dept',
+          status: 'Current Status',
+          feeStatus: 'Fee Status',
+          processedBy: 'Processed By',
+          paymentStatus: 'Payment Status',
+          paidUpto: 'Paid Upto',
+          verificationNumber: 'Verif #',
+          registrationFee: 'Registration Fee',
+          fees: 'Monthly Fees',
+          currency: 'Currency',
+          month: 'Month/Year',
+          totalFees: 'Total Fees',
+          pendingDues: 'Pending Dues',
+          receivedPayment: 'Received Payment',
+          invoiceStatus: 'Invoice Status',
+          invoiceStatusTimestamp: 'Invoice Status Timestamp',
+          paidInvoiceStatus: 'Paid Invoice Status',
+          paidInvoiceStatusTimestamp: 'Paid Invoice Status Timestamp'
+        };
+
+        const label = map[key];
+        if (!label) return '';
+
+        return getCardFieldValue(card, label);
+      }
+
+      function getGeneralCardText(card) {
+        return normalizeText(card.textContent);
       }
 
       function applySearch() {
-        const keyword = String(inputEl.value || '').toLowerCase().trim();
-        const rows = table.querySelectorAll('tbody tr.admin-row');
+        const keyword = normalizeText(inputEl.value);
+        const cards = getCards();
 
-        rows.forEach(row => {
+        cards.forEach(card => {
           if (!keyword) {
-            row.style.display = '';
+            card.style.display = '';
             return;
           }
 
           let matched = false;
 
           if (activeSearchKey === 'general') {
-            matched = getGeneralRowText(row).includes(keyword);
+            matched = getGeneralCardText(card).includes(keyword);
           } else {
-            matched = getCellValue(row, activeSearchKey).includes(keyword);
+            matched = getValueByKey(card, activeSearchKey).includes(keyword);
           }
 
-          row.style.display = matched ? '' : 'none';
+          card.style.display = matched ? '' : 'none';
         });
       }
 
@@ -6003,13 +6318,11 @@ if (editBillingStatusSaveBtn) {
           optionButtons.forEach(b => b.classList.remove('active'));
           updateCriterionUI('General');
           applySearch();
+
           searchModal.hide();
           inputEl.focus();
         });
       }
-
-      updateCriterionUI('General');
-      applySearch();
     });
   })();
 </script>

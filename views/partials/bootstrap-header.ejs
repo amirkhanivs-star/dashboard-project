@@ -31,7 +31,12 @@
     }
 
     [data-theme="admin"]{ --ivs-theme:#28a745; }
-    [data-theme="agent"]{ --ivs-theme:#ffc107; }
+    [data-theme="agent"]{
+  --ivs-theme:#7c3aed;
+  --ivs-sidebar-bg: linear-gradient(180deg, #5b21b6 0%, #7c3aed 45%, #a855f7 100%);
+  --ivs-hover-bg: rgba(255,255,255,0.14);
+  --ivs-active-bg: rgba(255,255,255,0.20);
+}
     [data-theme="sub_agent"]{ --ivs-theme:#0d6efd; }
 
     html, body { height: 100%; }
@@ -81,7 +86,7 @@
       font-weight:800;
       font-size:1.02rem;
       color:#fff;
-      background: linear-gradient(135deg, var(--ivs-theme), #880000);
+      background: linear-gradient(135deg, var(--ivs-theme), #4c1d95);
       flex-shrink:0;
     }
 
@@ -212,7 +217,7 @@
       right: 0;
       height: var(--ivs-topbar-h);
       z-index: 1040;
-      background: var(--ivs-theme);
+      background: linear-gradient(90deg, #5b21b6 0%, #7c3aed 45%, #a855f7 100%);
       box-shadow: 0 2px 12px rgba(0,0,0,0.10);
       transition: left .28s cubic-bezier(.4,0,.2,1);
     }

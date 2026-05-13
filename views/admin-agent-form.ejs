@@ -25,10 +25,10 @@
 const createdRoleLabel = isAdmin ? 'Agent / Sub Agent' : 'Sub Agent';
 
   const usersListPath = isAdmin ? '/dashboard/admin/users' : '/dashboard/agent/users';
-  const themeTextClass = isAdmin ? 'text-success' : 'text-warning';
-const themeBtnClass = isAdmin ? 'btn-success' : 'btn-warning';
-const themeIconClass = isAdmin ? 'text-success' : 'text-warning';
-const roleBadgeClass = isAdmin ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-dark';
+   const themeTextClass = isAdmin ? 'text-success' : 'agent-purple-text';
+const themeBtnClass = isAdmin ? 'btn-success' : 'agent-purple-btn';
+const themeIconClass = isAdmin ? 'text-success' : 'agent-purple-text';
+const roleBadgeClass = isAdmin ? 'bg-success-subtle text-success' : 'agent-purple-badge';
 
  const roleDeptHelpText = isAdmin
   ? 'Department is fixed by Super Admin. You can choose role and pipeline / agent type.'
@@ -46,18 +46,19 @@ const agentTypeFieldHelpText = isAdmin
   ? 'You can choose pipeline / agent type.'
   : 'Pipeline / agent type is fixed for Agent.';
 
-  const step1Class = isAdmin
+    const step1Class = isAdmin
   ? 'bg-success text-white'
-  : 'bg-warning text-dark';
+  : 'agent-step-main';
 
 const step2Class = 'bg-danger-subtle text-danger';
 
 const step3Class = isAdmin
-  ? 'bg-warning-subtle text-warning'
-  : 'bg-success-subtle text-success';
+  ? 'admin-step-purple'
+  : 'agent-step-green';
 
-const step4Class = 'subagent-step-badge';
-
+const step4Class = isAdmin
+  ? 'subagent-step-badge'
+  : 'agent-step-blue';
   // ✅ Use normalized perms coming from server (res.locals.perms OR explicit perms)
   const parentPermRaw = (typeof perms !== 'undefined' && perms) ? perms : (user.permissions || {});
 
@@ -169,7 +170,70 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
 %>
 
 <style>
-  .subagent-step-badge{
+    /* Agent create user page purple theme only */
+  .agent-purple-text{
+    color: #7c3aed !important;
+  }
+
+  .agent-purple-btn{
+    background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
+    border-color: #5b21b6 !important;
+    color: #fff !important;
+    font-weight: 700;
+    box-shadow: 0 8px 18px rgba(124,58,237,.22);
+  }
+
+  .agent-purple-btn:hover,
+  .agent-purple-btn:focus{
+    background: linear-gradient(135deg, #6d28d9, #4c1d95) !important;
+    border-color: #4c1d95 !important;
+    color: #fff !important;
+  }
+
+  .agent-purple-badge{
+    background: rgba(124,58,237,.14) !important;
+    color: #5b21b6 !important;
+    border: 1px solid rgba(124,58,237,.30) !important;
+  }
+  .admin-step-purple{
+  background: rgba(124,58,237,.14) !important;
+  color: #5b21b6 !important;
+  border: 1px solid rgba(124,58,237,.30) !important;
+}
+  .agent-step-main{
+    background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
+    color: #fff !important;
+    border: 1px solid #5b21b6 !important;
+  }
+
+  .agent-step-soft{
+    background: rgba(124,58,237,.14) !important;
+    color: #5b21b6 !important;
+    border: 1px solid rgba(124,58,237,.30) !important;
+  }
+    .agent-step-green{
+    background: rgba(34,197,94,.14) !important;
+    color: #15803d !important;
+    border: 1px solid rgba(34,197,94,.30) !important;
+  }
+
+  .agent-step-blue{
+    background: rgba(59,130,246,.14) !important;
+    color: #1d4ed8 !important;
+    border: 1px solid rgba(59,130,246,.30) !important;
+  }
+
+   
+
+  .agent-create-purple .form-check-input:checked{
+    background-color: #0d6efd !important;
+    border-color: #0d6efd !important;
+  }
+
+  .agent-create-purple .form-check-input:focus{
+    border-color: #86b7fe !important;
+    box-shadow: 0 0 0 .2rem rgba(13,110,253,.25) !important;
+  }  .subagent-step-badge{
     background: rgba(59, 130, 246, 0.14) !important;
     color: #1d4ed8 !important;
     border: 1px solid rgba(59, 130, 246, 0.30) !important;
@@ -177,7 +241,7 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
   }
 </style>
 
-<div class="container-fluid py-4">
+<div class="container-fluid py-4 <%= isAgent ? 'agent-create-purple' : '' %>">
 
   <a href="<%= usersListPath %>" class="small <%= themeTextClass %> text-decoration-none mb-3 d-inline-flex align-items-center fw-semibold">
      <i class="bi bi-arrow-left me-1"></i> Back to Users

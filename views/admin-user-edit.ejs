@@ -62,24 +62,83 @@ const BTN_LABELS = {
   const BTN_KEYS = Object.keys(BTN_LABELS).filter(k => isAllowed(k));
 const isAgentRoute = BASE_PATH.includes('/dashboard/agent');
 
-const themeTextClass = isAgentRoute ? 'text-warning' : 'text-success';
-const themeBtnClass = isAgentRoute ? 'btn-warning' : 'btn-success';
-const themeBackClass = isAgentRoute ? 'text-warning' : 'text-success';
-const themeAccordionBtnIconClass = isAgentRoute ? 'text-warning' : 'text-success';
-const themeButtonsIconClass = isAgentRoute ? 'text-warning' : 'text-success';
+const themeTextClass = isAgentRoute ? 'agent-purple-text' : 'text-success';
+const themeBtnClass = isAgentRoute ? 'agent-purple-btn' : 'btn-success';
+const themeBackClass = isAgentRoute ? 'agent-purple-text' : 'text-success';
+const themeAccordionBtnIconClass = isAgentRoute ? 'agent-purple-text' : 'text-success';
+const themeButtonsIconClass = isAgentRoute ? 'agent-purple-text' : 'text-success';
 
 const roleCircleClass =
   editUser.role === 'admin' ? 'bg-success text-white'
-  : editUser.role === 'agent' ? 'bg-warning text-dark'
+  : editUser.role === 'agent' ? 'agent-role-circle'
   : 'subagent-role-circle';
 
 const roleBadgeClass =
   editUser.role === 'admin' ? 'bg-success-subtle text-success'
-  : editUser.role === 'agent' ? 'bg-warning-subtle text-dark'
+  : editUser.role === 'agent' ? 'agent-role-badge-edit'
   : 'subagent-role-badge';
-%>
+  %>
 
 <style>
+    /* Agent edit user page: only yellow to purple, admin stays same */
+  .agent-purple-text{
+    color: #7c3aed !important;
+  }
+
+  .agent-purple-btn{
+    background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
+    border-color: #5b21b6 !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 8px 18px rgba(124,58,237,.22);
+  }
+
+  .agent-purple-btn:hover,
+  .agent-purple-btn:focus{
+    background: linear-gradient(135deg, #6d28d9, #4c1d95) !important;
+    border-color: #4c1d95 !important;
+    color: #fff !important;
+  }
+
+  .agent-blue-text{
+    color: #0d6efd !important;
+  }
+
+  .agent-edit-purple .form-check-input:checked{
+    background-color: #0d6efd !important;
+    border-color: #0d6efd !important;
+  }
+
+  .agent-edit-purple .form-check-input:focus{
+    border-color: #86b7fe !important;
+    box-shadow: 0 0 0 .2rem rgba(13,110,253,.25) !important;
+  }
+
+  .agent-edit-purple .accordion-button{
+    color: #0f172a !important;
+  }
+
+  .agent-edit-purple .accordion-button:not(.collapsed){
+    background: #cfe2ff !important;
+    color: #084298 !important;
+    box-shadow: none !important;
+  }
+    .agent-role-circle{
+    background: linear-gradient(135deg, #8b5cf6, #5b21b6) !important;
+    color: #fff !important;
+    box-shadow: 0 8px 18px rgba(124, 58, 237, 0.22);
+  }
+
+  .agent-role-badge-edit{
+    background: rgba(124, 58, 237, 0.14) !important;
+    color: #5b21b6 !important;
+    border: 1px solid rgba(124, 58, 237, 0.30) !important;
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.10);
+  }
+
+  .agent-role-badge-edit i{
+    color: #5b21b6 !important;
+  }
   .subagent-role-circle{
     background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%) !important;
     color: #fff !important;
@@ -94,7 +153,7 @@ const roleBadgeClass =
   }
 </style>
 
-<div class="container-fluid py-4">
+<div class="container-fluid py-4 <%= isAgentRoute ? 'agent-edit-purple' : '' %>">
 
   <!-- ✅ FIXED: Back link -->
  <a href="<%= BASE_PATH %>/users" class="small <%= themeBackClass %> text-decoration-none mb-3 d-inline-flex align-items-center fw-semibold">

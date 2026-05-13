@@ -1,4 +1,4 @@
-<%- include('partials/bootstrap-header', { user, pageTitle: 'Agent Panel' }) %>
+<%- include('partials/bootstrap-header', { user, pageTitle: 'Agent Dashboard' }) %>
 
 <%
   const deptTitle = user && user.dept
@@ -352,7 +352,7 @@ const DEFAULT_CURRENT_STATUS_OPTIONS =
     : [
         { value: 'New Admission', label: 'New Admission', color: '#64748b' },
         { value: 'Running', label: 'Running', color: '#22c55e' },
-        { value: 'Leave', label: 'Leave', color: '#f59e0b' },
+        { value: 'Leave', label: 'Leave', color: '#7c3aed' },
         { value: 'Stop', label: 'Stop', color: '#ef4444' },
         { value: 'Left', label: 'Left', color: '#2563eb' },
         { value: 'Freez', label: 'Freez', color: '#94a3b8' }
@@ -431,6 +431,60 @@ const DEFAULT_BANK_OPTIONS =
         'Grade 12 (FBISE)'
       ];
 
+function findCardStatusColor(type, value) {
+  const clean = String(value || '').trim().toLowerCase();
+
+  const list =
+    type === 'fee'
+      ? DEFAULT_FEE_STATUS_OPTIONS
+      : DEFAULT_CURRENT_STATUS_OPTIONS;
+
+  const found = (list || []).find(opt =>
+    String(opt.value || opt.label || '').trim().toLowerCase() === clean
+  );
+
+  return found && found.color ? found.color : '';
+}
+
+function hexToRgba(hex, alpha) {
+  const clean = String(hex || '').replace('#', '').trim();
+
+  if (clean.length !== 6) return 'rgba(100,116,139,' + alpha + ')';
+
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function getCardFieldStyle(field) {
+  if (!field || !field.key) return '';
+
+  let color = '';
+
+  if (field.key === 'status') {
+    color = findCardStatusColor('current', field.value);
+  }
+
+  if (field.key === 'feeStatus') {
+    color = findCardStatusColor('fee', field.value);
+  }
+
+  if (!color) return '';
+
+  return `--chip-color:${color};--chip-bg:${hexToRgba(color, 0.14)};--chip-bd:${hexToRgba(color, 0.34)};`;
+}
+
+function getCardFieldClass(field) {
+  if (!field || !field.key) return '';
+
+  if (field.key === 'status') return 'status-card-chip';
+  if (field.key === 'feeStatus') return 'fee-card-chip';
+
+  return '';
+}
+
 const hasAnyUi = visibleColCount > 0;
 %>
 
@@ -456,13 +510,12 @@ const hasAnyUi = visibleColCount > 0;
       </h2>
 
       <div class="small text-muted">
-        You will only see the columns and actions allowed by permissions.
-      </div>
-    </div>
-
-    <div class="text-end small text-muted d-none d-md-block">
-      <div>Allowed fields fill karo aur Update press karo.</div>
-      <div>Sirf allowed columns visible honge.</div>
+  Dept scope:
+  <span class="badge rounded-pill agent-scope-pill ms-1">
+    <span class="dept-dot"></span>
+    <span class="text-capitalize"><%= user.dept %></span>
+  </span>
+</div>
     </div>
   </div>
 
@@ -542,7 +595,7 @@ const hasAnyUi = visibleColCount > 0;
           </div>
         </div>
         <div class="card-footer stat-footer">
-          Accounts + admission steps done
+          Visible pipeline completion
         </div>
       </div>
     </div>
@@ -559,7 +612,6 @@ const hasAnyUi = visibleColCount > 0;
       <div class="card-header d-flex justify-content-between align-items-center">
         <div>
           <strong>Admissions for <%= deptTitle %></strong>
-          <small class="text-muted ms-2">Allowed fields only</small>
         </div>
         <span class="badge text-bg-light text-muted small">
           Dept: <span class="text-capitalize"><%= user.dept %></span> · <%= roleLabel %>
@@ -614,546 +666,226 @@ const hasAnyUi = visibleColCount > 0;
 </div>
 
       <div class="card-body p-0">
-        <div class="table-responsive pipeline-scroll">
-          <table id="agentAccountsTable" class="table table-sm mb-0 align-middle pipeline-table">
-                        <thead class="table-dark">
-             <tr>
-  <% if (canDeleteAdmissions) { %>
-    <th class="text-center col-select" data-col="select">
-      <input
-        type="checkbox"
-        id="selectAllAdmissions"
-        class="form-check-input bulk-select-all"
-        title="Select All">
-    </th>
-  <% } %>
-    <th class="text-center col-row-number" data-col="rowNumber">No.</th>
-  <% if (P.col.status) { %><th data-col="status">Current Status</th><% } %>
-  <% if (P.col.feeStatus) { %><th data-col="feeStatus">Fee Status</th><% } %>
-  <% if (P.col.dept) { %><th data-col="dept">Dept</th><% } %>
-  <% if (P.col.student) { %><th data-col="student">Student</th><% } %>
-  <% if (P.col.father) { %><th data-col="father">Father</th><% } %>
-  <% if (P.col.fatherEmail) { %><th data-col="fatherEmail">Email Address</th><% } %>
-  <% if (P.col.grade) { %><th data-col="grade">Grade</th><% } %>
-  <% if (P.col.tuitionGrade) { %><th data-col="tuitionGrade">Grade Section</th><% } %>
-  <% if (P.col.phone) { %><th data-col="phone">Phone Number</th><% } %>
-  <% if (P.col.processedBy) { %><th data-col="processedBy">Processed By</th><% } %>
-  <% if (P.col.paymentStatus) { %><th data-col="paymentStatus">Payment Status</th><% } %>
-  <% if (P.col.paidUpto) { %><th data-col="paidUpto">Paid Upto</th><% } %>
-  <% if (P.col.verif) { %><th data-col="verificationNumber">Verif #</th><% } %>
-  <% if (P.col.reg) { %><th data-col="registrationNumber">Reg #</th><% } %>
-  <% if (P.col.family) { %><th data-col="familyNumber">Family Num #</th><% } %>
-  <% if (P.col.registrationFee) { %><th data-col="registrationFee">Registration Fee</th><% } %>
-  <% if (P.col.fees) { %><th data-col="fees">Monthly Fees</th><% } %>
-  <% if (P.col.currency) { %><th data-col="currency">Currency</th><% } %>
-  <% if (P.col.month) { %><th data-col="month">Month/Year</th><% } %>
-  <% if (P.col.totalFees) { %><th data-col="totalFees">Total Fees</th><% } %>
-  <% if (P.col.pendingDues) { %><th data-col="pendingDues">Pending Dues</th><% } %>
-  <% if (P.col.receivedPayment) { %><th data-col="receivedPayment">Received Payment</th><% } %>
-  <% if (P.col.invoiceStatus) { %><th data-col="invoiceStatus">Invoice Status</th><% } %>
-<% if (P.col.invoiceStatusTimestamp) { %><th data-col="invoiceStatusTimestamp">Invoice Status Timestamp</th><% } %>
-<% if (P.col.paidInvoiceStatus) { %><th data-col="paidInvoiceStatus">Paid Invoice Status</th><% } %>
-<% if (P.col.paidInvoiceStatusTimestamp) { %><th data-col="paidInvoiceStatusTimestamp">Paid Invoice Status Timestamp</th><% } %>
-  
+        <div class="pipeline-scroll admission-card-scroll">
+  <div class="admission-card-grid">
 
-  <% if (showActions) { %>
-    <th class="text-center col-actions <%= actionColClass %>" data-col="actions">Action Buttons</th>
-  <% } %>
-</tr>
-
-            </thead>
-
-            <tbody>
-              <% if (!admissionsList || admissionsList.length === 0) { %>
-                <tr>
-                  <td colspan="<%= visibleColCount %>" class="text-center small text-muted py-3">
-                    No admissions found for this department.
-                  </td>
-                </tr>
-              <% } %>
-
-                            <% (admissionsList || []).forEach((a, index) => {
-                   const fid = `rowForm_${a.id}`;
-                   let formPlaced = false;
-
-                   const deptVal    = a.dept || user.dept || '';
-
-                   // ✅ NEW (Status + Fee Status values)
-                   const currentStatusVal = (a.status || a.currentStatus || a.current_status || '').trim();
-                   const feeStatusVal     = (a.feeStatus || a.fee_status || a.feeStatusText || '').trim();
-
-                   const studentVal = a.studentName || a.student || '';
-                   const fatherVal  = a.fatherName || a.father || '';
-                   const fatherEmailVal = a.fatherEmail || a.father_email || '';
-const processedByVal = a.processedBy || a.processed_by || '';
-const registrationFeeVal = (a.admission && a.admission.registrationFee) || '';
-                   const gradeVal   = a.grade || '';
-                   const tuitionVal = a.tuitionGrade || '';
-
-                   const phoneVal   = a.phone || a.contactNumber || '';
-                   const payVal     = (a.accounts && a.accounts.paymentStatus) || '';
-                   const paidUptoVal= (a.accounts && a.accounts.paidUpto) || '';
-                   const verifVal   = a.latestBillingVerificationNumber || '';
-                   const regVal     = (a.accounts && a.accounts.registrationNumber) || '';
-                   const familyVal  = (a.accounts && a.accounts.familyNumber) || '';
-
-                   const feesVal    = (a.admission && a.admission.fees) || '';
-                   const currencyVal = String(
-                   (a.admission && (a.admission.currency || a.admission.currencyCode)) ||
-                   (a.accounts && (a.accounts.currency || a.accounts.currencyCode)) ||
-                   a.currency ||
-                   a.currencyCode ||
-                   ''
-                   ).trim().toUpperCase();
-
-                   const monthVal   = (a.admission && a.admission.month) || '';
-
-                   const totalFeesVal      = (a.admission && a.admission.totalFees) || '';
-                   const pendingDuesVal    = (a.admission && a.admission.pendingDues) || '';
-                   const receivedPaymentVal= (a.admission && a.admission.receivedPayment) || '0';
-                   const invoiceStatusVal = (a.admission && a.admission.invoiceStatus) || '';
-const invoiceStatusTimestampVal = (a.admission && a.admission.invoiceStatusTimestamp) || '';
-const paidInvoiceStatusVal = (a.admission && a.admission.paidInvoiceStatus) || '';
-const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceStatusTimestamp) || '';
-              %>
-                               <tr
-  class="agent-row <%= a.isDuplicate ? 'duplicate-admission-row' : '' %>"
-  data-admission-id="<%= a.id %>"
-  data-student-name="<%= a.studentName || a.student || '' %>"
-  title="<%= a.isDuplicate ? 'Duplicate admission detected' : '' %>">
-                  <% if (canDeleteAdmissions) { %>
-                    <td class="text-center col-select" data-col="select">
-                      <input
-                        type="checkbox"
-                        class="form-check-input admission-row-checkbox"
-                        value="<%= a.id %>"
-                        data-student-name="<%= a.studentName || a.student || '' %>">
-                    </td>
-                  <% } %>
-                                    <td class="text-center col-row-number" data-col="rowNumber">
-                    <span class="admission-row-number">
-                      <%= (startRecord || 1) + index %>
-                    </span>
-                  </td>
-                  <% if (!formPlaced) { %>
-                    <form id="<%= fid %>" action="/pipeline/update/<%= a.id %>" method="POST" class="d-none"></form>
-                    <% formPlaced = true; %>
-                  <% } %>
-
-                 <% if (P.col.status) { %>
-  <td data-col="status">
-    <select
-      name="status"
-      form="<%= fid %>"
-      class="form-select form-select-sm status-select js-status-select"
-      data-prev-value="<%= currentStatusVal || 'New Admission' %>"
-      data-option-type="current"
-      <%= P.edit.status ? '' : 'disabled' %>>
-      <% DEFAULT_CURRENT_STATUS_OPTIONS.forEach(opt => { %>
-        <option value="<%= opt.value %>" <%= currentStatusVal === opt.value ? 'selected' : '' %>>
-          <%= opt.value %>
-        </option>
-      <% }) %>
-      <option value="__add_new_status__">+ Add Option</option>
-    </select>
-
-    <% if (!P.edit.status) { %>
-      <input type="hidden" name="status" form="<%= fid %>" value="<%= currentStatusVal %>">
+    <% if (!admissionsList || admissionsList.length === 0) { %>
+      <div class="text-center small text-muted py-4 w-100">
+        No admissions found for this department.
+      </div>
     <% } %>
-  </td>
-<% } %>
 
-                 <% if (P.col.feeStatus) { %>
-  <td data-col="feeStatus">
-    <select
-      name="feeStatus"
-      form="<%= fid %>"
-      class="form-select form-select-sm fee-select js-fee-select"
-      data-prev-value="<%= feeStatusVal || 'New Admission' %>"
-      data-option-type="fee"
-      <%= P.edit.feeStatus ? '' : 'disabled' %>>
-      <% DEFAULT_FEE_STATUS_OPTIONS.forEach(opt => { %>
-        <option value="<%= opt.value %>" <%= feeStatusVal === opt.value ? 'selected' : '' %>>
-          <%= opt.value %>
-        </option>
-      <% }) %>
-      <option value="__add_new_fee_status__">+ Add Option</option>
-    </select>
+    <% (admissionsList || []).forEach((a, index) => {
+      const fid = `rowForm_${a.id}`;
 
-    <% if (!P.edit.feeStatus) { %>
-      <input type="hidden" name="feeStatus" form="<%= fid %>" value="<%= feeStatusVal %>">
-    <% } %>
-  </td>
-<% } %>
+      const deptVal = a.dept || user.dept || '';
+      const currentStatusVal = (a.status || a.currentStatus || a.current_status || '').trim();
+      const feeStatusVal = (a.feeStatus || a.fee_status || a.feeStatusText || '').trim();
 
-                  <% if (P.col.dept) { %>
-                    <td data-col="dept">
-                      <span class="badge text-bg-warning-subtle border text-warning-emphasis text-capitalize">
-                        <%= deptVal %>
-                      </span>
-                    </td>
-                  <% } %>
+      const studentVal = a.studentName || a.student || '';
+      const fatherVal = a.fatherName || a.father || '';
+      const fatherEmailVal = a.fatherEmail || a.father_email || '';
+      const processedByVal = a.processedBy || a.processed_by || '';
 
-                  <% if (P.col.student) { %>
-                    <td data-col="student">
-                      <input type="text" name="student" form="<%= fid %>" class="form-control form-control-sm"
-                        value="<%= studentVal %>" <%= P.edit.student ? '' : 'readonly' %>>
-                    </td>
-                  <% } %>
+      const gradeVal = a.grade || '';
+      const tuitionVal = a.tuitionGrade || '';
+      const phoneVal = a.phone || a.contactNumber || '';
 
-                  <% if (P.col.father) { %>
-                    <td data-col="father">
-                      <input type="text" name="father" form="<%= fid %>" class="form-control form-control-sm"
-                        value="<%= fatherVal %>" <%= P.edit.father ? '' : 'readonly' %>>
-                    </td>
-                  <% } %>
+      const payVal = (a.accounts && a.accounts.paymentStatus) || '';
+      const paidUptoVal = (a.accounts && a.accounts.paidUpto) || '';
+      const verifVal = a.latestBillingVerificationNumber || '';
+      const regVal = (a.accounts && a.accounts.registrationNumber) || '';
+      const familyVal = (a.accounts && a.accounts.familyNumber) || '';
 
-                  <% if (P.col.fatherEmail) { %>
-                     <td data-col="fatherEmail">
-                       <input
-                       form="<%= fid %>"
-                        type="email"
-                        name="father_email"
-                         value="<%= fatherEmailVal %>"
-                        class="form-control form-control-sm"
-                         <%= P.edit.fatherEmail ? '' : 'readonly' %>>
-                       </td>
-                       <% } %>
+      const registrationFeeVal = (a.admission && a.admission.registrationFee) || '';
+      const feesVal = (a.admission && a.admission.fees) || '';
 
-                  <% if (P.col.grade) { %>
-                    <td data-col="grade">
-                      <input type="text" name="grade" form="<%= fid %>" class="form-control form-control-sm"
-                        value="<%= gradeVal %>" <%= P.edit.grade ? '' : 'readonly' %>>
-                    </td>
-                  <% } %>
+      const currencyVal = String(
+        (a.admission && (a.admission.currency || a.admission.currencyCode || a.admission.currency_code)) ||
+        (a.accounts && (a.accounts.currency || a.accounts.currencyCode || a.accounts.currency_code)) ||
+        a.currency ||
+        a.currencyCode ||
+        a.currency_code ||
+        ''
+      ).trim().toUpperCase();
 
-                  <% if (P.col.tuitionGrade) { %>
-                    <td data-col="tuitionGrade">
-                      <input type="text" name="tuitionGrade" form="<%= fid %>" class="form-control form-control-sm"
-                        value="<%= tuitionVal %>" <%= P.edit.tuitionGrade ? '' : 'readonly' %>>
-                    </td>
-                  <% } %>
+      const monthVal = (a.admission && a.admission.month) || '';
+      const totalFeesVal = (a.admission && a.admission.totalFees) || '';
+      const pendingDuesVal = (a.admission && a.admission.pendingDues) || '';
+      const receivedPaymentVal = (a.admission && a.admission.receivedPayment) || '0';
 
-                  <% if (P.col.phone) { %>
-                    <td data-col="phone">
-                      <input type="text" name="phone" form="<%= fid %>" class="form-control form-control-sm"
-                        value="<%= phoneVal %>" <%= P.edit.phone ? '' : 'readonly' %>>
-                    </td>
-                  <% } %>
+      const invoiceStatusVal = (a.admission && a.admission.invoiceStatus) || '';
+      const invoiceStatusTimestampVal = (a.admission && a.admission.invoiceStatusTimestamp) || '';
+      const paidInvoiceStatusVal = (a.admission && a.admission.paidInvoiceStatus) || '';
+      const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceStatusTimestamp) || '';
 
-                  <% if (P.col.processedBy) { %>
-                   <td data-col="processedBy">
-                   <input
-                   type="text"
-                    value="<%= processedByVal %>"
-                    class="form-control form-control-sm"
-                    readonly>
-                   </td>
-                  <% } %>
-
-                  <% if (P.col.paymentStatus) { %>
-                    <td data-col="paymentStatus">
-                      <select name="paymentStatus" form="<%= fid %>" class="form-select form-select-sm"
-                        <%= P.edit.paymentStatus ? '' : 'disabled' %>>
-                        <option value="">Paid/Unpaid</option>
-                        <option value="Paid" <%= payVal === 'Paid' ? 'selected' : '' %>>Paid</option>
-                        <option value="Partial" <%= payVal === 'Partial' ? 'selected' : '' %>>Partial</option>
-                        <option value="Unpaid" <%= (!payVal || payVal === 'Unpaid') ? 'selected' : '' %>>Unpaid</option>
-                      </select>
-                      <% if (!P.edit.paymentStatus) { %>
-                        <input type="hidden" name="paymentStatus" form="<%= fid %>" value="<%= payVal %>">
-                      <% } %>
-                    </td>
-                  <% } %>
-
-                  <% if (P.col.paidUpto) { %>
-                    <td data-col="paidUpto">
-                      <input type="text" name="paidUpto" form="<%= fid %>" class="form-control form-control-sm"
-                        value="<%= paidUptoVal %>" <%= P.edit.paidUpto ? '' : 'readonly' %>>
-                    </td>
-                  <% } %>
-
-                <% if (P.col.verif) { %>
-  <td data-col="verificationNumber">
-    <input
-      type="text"
-      class="form-control form-control-sm"
-      value="<%= verifVal %>"
-      readonly
-      tabindex="-1"
-      title="Auto: latest updated billing verification from Billing">
-  </td>
-<% } %>
-
-                  <% if (P.col.reg) { %>
-                    <td data-col="registrationNumber">
-                      <input type="text" name="registrationNumber" form="<%= fid %>" class="form-control form-control-sm"
-                        value="<%= regVal %>" <%= P.edit.reg ? '' : 'readonly' %>>
-                    </td>
-                  <% } %>
-
-                  <% if (P.col.family) { %>
-                    <td data-col="familyNumber">
-                      <input type="text" name="familyNumber" form="<%= fid %>" class="form-control form-control-sm"
-                        value="<%= familyVal %>" <%= P.edit.family ? '' : 'readonly' %>>
-                    </td>
-                  <% } %>
-
-                  <% if (P.col.registrationFee) { %>
-                  <td data-col="registrationFee">
-                    <input
-                     form="<%= fid %>"
-                     type="number"
-                     step="0.01"
-                     name="registrationFee"
-                     value="<%= registrationFeeVal %>"
-                     class="form-control form-control-sm"
-                    <%= P.edit.registrationFee ? '' : 'readonly' %>>
-                    </td>
-                   <% } %>
-
-                  <% if (P.col.fees) { %>
-                    <td data-col="fees">
-                      <input type="text" name="fees" form="<%= fid %>" class="form-control form-control-sm"
-                        value="<%= feesVal %>" <%= P.edit.fees ? '' : 'readonly' %>>
-                    </td>
-                  <% } %>
-                 <% if (P.col.currency) { %>
-  <td data-col="currency">
-    <select
-      form="<%= fid %>"
-      name="currency_code"
-      class="form-select form-select-sm js-currency-select"
-      data-prev-value="<%= currencyVal %>"
-      <%= P.edit.currency ? '' : 'disabled' %>>
-      <option value="">Select</option>
-      <% DEFAULT_CURRENCY_OPTIONS.forEach(opt => { %>
-        <option value="<%= opt.value %>" <%= currencyVal === opt.value ? 'selected' : '' %>><%= opt.value %></option>
-      <% }) %>
-      <option value="__add_new_currency__">+ Add Option</option>
-    </select>
-    <% if (!P.edit.currency) { %>
-      <input form="<%= fid %>" type="hidden" name="currency_code" value="<%= currencyVal %>">
-    <% } %>
-  </td>
-<% } %>
-
-                  <% if (P.col.month) { %>
-  <td data-col="month">
-    <%
-      const monthValSafe = String(monthVal || '').trim();
-      const currentYearOnly = new Date().getFullYear();
-
-      const months = [
-        { full: "January", short: "Jan" },
-        { full: "February", short: "Feb" },
-        { full: "March", short: "Mar" },
-        { full: "April", short: "Apr" },
-        { full: "May", short: "May" },
-        { full: "June", short: "Jun" },
-        { full: "July", short: "Jul" },
-        { full: "August", short: "Aug" },
-        { full: "September", short: "Sep" },
-        { full: "October", short: "Oct" },
-        { full: "November", short: "Nov" },
-        { full: "December", short: "Dec" }
+      const cardFields = [
+        { key: 'no', show: true, label: 'No.', value: (startRecord || 1) + index },
+        { key: 'status', show: P.col.status, label: 'Current Status', value: currentStatusVal || '-' },
+        { key: 'feeStatus', show: P.col.feeStatus, label: 'Fee Status', value: feeStatusVal || '-' },
+        { key: 'dept', show: P.col.dept, label: 'Dept', value: deptVal || '-' },
+        { key: 'student', show: P.col.student, label: 'Student', value: studentVal || '-' },
+        { key: 'father', show: P.col.father, label: 'Father', value: fatherVal || '-' },
+        { key: 'grade', show: P.col.grade, label: 'Grade', value: gradeVal || '-' },
+        { key: 'tuitionGrade', show: P.col.tuitionGrade, label: 'Grade Section', value: tuitionVal || '-' },
+        { key: 'fatherEmail', show: P.col.fatherEmail, label: 'Email Address', value: fatherEmailVal || '-' },
+        { key: 'phone', show: P.col.phone, label: 'Phone Number', value: phoneVal || '-' },
+        { key: 'processedBy', show: P.col.processedBy, label: 'Processed By', value: processedByVal || '-' },
+        { key: 'paymentStatus', show: P.col.paymentStatus, label: 'Payment Status', value: payVal || '-' },
+        { key: 'paidUpto', show: P.col.paidUpto, label: 'Paid Upto', value: paidUptoVal || '-' },
+        { key: 'verificationNumber', show: P.col.verif, label: 'Verif #', value: verifVal || '-' },
+        { key: 'registrationNumber', show: P.col.reg, label: 'Reg #', value: regVal || '-' },
+        { key: 'familyNumber', show: P.col.family, label: 'Family #', value: familyVal || '-' },
+        { key: 'registrationFee', show: P.col.registrationFee, label: 'Registration Fee', value: registrationFeeVal || '-' },
+        { key: 'fees', show: P.col.fees, label: 'Monthly Fees', value: feesVal || '-' },
+        { key: 'currency', show: P.col.currency, label: 'Currency', value: currencyVal || '-' },
+        { key: 'month', show: P.col.month, label: 'Month/Year', value: monthVal || '-' },
+        { key: 'totalFees', show: P.col.totalFees, label: 'Total Fees', value: totalFeesVal || '-' },
+        { key: 'pendingDues', show: P.col.pendingDues, label: 'Pending Dues', value: pendingDuesVal || '-' },
+        { key: 'receivedPayment', show: P.col.receivedPayment, label: 'Received Payment', value: receivedPaymentVal || '0' },
+        { key: 'invoiceStatus', show: P.col.invoiceStatus, label: 'Invoice Status', value: invoiceStatusVal || '-' },
+        { key: 'invoiceStatusTimestamp', show: P.col.invoiceStatusTimestamp, label: 'Invoice Status Timestamp', value: invoiceStatusTimestampVal || '-' },
+        { key: 'paidInvoiceStatus', show: P.col.paidInvoiceStatus, label: 'Paid Invoice Status', value: paidInvoiceStatusVal || '-' },
+        { key: 'paidInvoiceStatusTimestamp', show: P.col.paidInvoiceStatusTimestamp, label: 'Paid Invoice Status Timestamp', value: paidInvoiceStatusTimestampVal || '-' }
       ];
     %>
 
-    <select
-      form="<%= fid %>"
-      name="month"
-      class="form-select form-select-sm"
-      <%= P.edit.month ? '' : 'disabled' %>>
-      <option value="" <%= !monthValSafe ? 'selected' : '' %>>Select Month/Year</option>
+      <form id="<%= fid %>" action="/pipeline/update/<%= a.id %>" method="POST" class="d-none"></form>
 
-      <% months.forEach(m => {
-        const fullValue = `${m.full} ${currentYearOnly}`;
-        const shortValue = `${m.short} ${currentYearOnly}`;
+      <div
+        class="admission-card agent-admission-card <%= a.isDuplicate ? 'duplicate-admission-card' : '' %>"
+        data-admission-id="<%= a.id %>">
 
-        const isSelected =
-          monthValSafe === fullValue ||
-          monthValSafe === shortValue;
-      %>
-        <option value="<%= shortValue %>" <%= isSelected ? 'selected' : '' %>>
-          <%= shortValue %>
-        </option>
-      <% }) %>
-    </select>
+        <div class="admission-card-top">
+          <div class="d-flex align-items-center gap-2">
+            <% if (canDeleteAdmissions) { %>
+              <input
+                type="checkbox"
+                class="form-check-input admission-row-checkbox"
+                value="<%= a.id %>"
+                data-student-name="<%= studentVal %>">
+            <% } %>
 
-    <% if (!P.edit.month) { %>
-      <input form="<%= fid %>" type="hidden" name="month" value="<%= monthValSafe %>">
-    <% } %>
-  </td>
-<% } %>
+            <div class="admission-avatar agent-admission-avatar">
+              <%= String(studentVal || 'A').charAt(0).toUpperCase() %>
+            </div>
 
-                  <% if (P.col.totalFees) { %>
-                    <td data-col="totalFees">
-                      <input type="text" class="form-control form-control-sm" readonly value="<%= totalFeesVal %>">
-                    </td>
-                  <% } %>
+            <div>
+              <div class="admission-title">
+                <%= studentVal || 'No Name' %>
+              </div>
+              <div class="admission-subtitle">
+                <%= fatherVal || '-' %>
+              </div>
+            </div>
+          </div>
 
-                  <% if (P.col.pendingDues) { %>
-                    <td data-col="pendingDues">
-                      <input type="text" class="form-control form-control-sm" readonly value="<%= pendingDuesVal %>">
-                    </td>
-                  <% } %>
+          <span class="admission-role-pill agent-role-pill">
+            <%= deptVal || 'Dept' %>
+          </span>
+        </div>
 
-                  <% if (P.col.receivedPayment) { %>
-                    <td data-col="receivedPayment">
-                      <input type="text" class="form-control form-control-sm" readonly value="<%= receivedPaymentVal %>">
-                    </td>
-                  <% } %>
+        <div class="admission-card-fields">
+          <% cardFields.forEach(field => { %>
+            <% if (field.show) { %>
+              <a
+                href="/admin/admission/<%= a.id %>/edit?focus=<%= encodeURIComponent(field.key || '') %>"
+                class="admission-field-link <%= getCardFieldClass(field) %>"
+                style="<%= getCardFieldStyle(field) %>">
+                <span class="field-label"><%= field.label %></span>
+                <span class="field-value"><%= field.value %></span>
+              </a>
+            <% } %>
+          <% }) %>
+        </div>
 
-                  <% if (P.col.invoiceStatus) { %>
-  <td data-col="invoiceStatus">
-    <input type="text" class="form-control form-control-sm" readonly value="<%= invoiceStatusVal %>">
-  </td>
-<% } %>
+        <% if (showActions) { %>
+          <div class="admission-card-actions">
 
-<% if (P.col.invoiceStatusTimestamp) { %>
-  <td data-col="invoiceStatusTimestamp">
-    <input type="text" class="form-control form-control-sm" readonly value="<%= invoiceStatusTimestampVal %>">
-  </td>
-<% } %>
+            <% if (P.btn.details) { %>
+              <a href="/admin/admission/<%= a.id %>" class="mini-action-btn mini-dark">
+                <i class="bi bi-eye"></i> Details
+              </a>
+            <% } %>
 
-<% if (P.col.paidInvoiceStatus) { %>
-  <td data-col="paidInvoiceStatus">
-    <input type="text" class="form-control form-control-sm" readonly value="<%= paidInvoiceStatusVal %>">
-  </td>
-<% } %>
+            <% if (P.btn.update) { %>
+              <a href="/admin/admission/<%= a.id %>/edit" class="mini-action-btn mini-purple-edit">
+                <i class="bi bi-pencil-square"></i> Edit
+              </a>
+            <% } %>
 
-<% if (P.col.paidInvoiceStatusTimestamp) { %>
-  <td data-col="paidInvoiceStatusTimestamp">
-    <input type="text" class="form-control form-control-sm" readonly value="<%= paidInvoiceStatusTimestampVal %>">
-  </td>
-<% } %>
+            <% if (P.btn.pdf) { %>
+              <a href="/admissions/<%= a.id %>/pdf" target="_blank" class="mini-action-btn mini-pdf">
+                <i class="bi bi-file-earmark-pdf-fill"></i> PDF
+              </a>
+            <% } %>
 
+            <% if (P.btn.billing) { %>
+              <button
+                type="button"
+                class="mini-action-btn mini-purple btn-billing"
+                data-admission-id="<%= a.id %>"
+                data-student="<%= studentVal %>"
+                data-grade="<%= gradeVal %>"
+                data-phone="<%= phoneVal %>"
+                data-fees="<%= feesVal %>"
+                data-currency="<%= currencyVal || '-' %>">
+                <i class="bi bi-receipt"></i> Billing
+              </button>
+            <% } %>
 
-                  <% if (showActions) { %>
-                    <td data-col="actions" class="col-actions <%= actionColClass %>" style="white-space: nowrap;">
-                      <div class="d-flex align-items-center justify-content-end flex-nowrap action-btns compact-actions">
+            <% if (P.btn.whatsapp) { %>
+              <button
+                type="button"
+                class="mini-action-btn mini-whatsapp btn-whatsapp"
+                data-admission-id="<%= a.id %>"
+                data-student="<%= studentVal %>"
+                data-grade="<%= gradeVal %>"
+                data-phone="<%= phoneVal %>">
+                <i class="bi bi-whatsapp"></i> WhatsApp
+              </button>
+            <% } %>
 
-  <% if (P.btn.details) { %>
-    <a
-      href="/admin/admission/<%= a.id %>"
-      class="action-circle action-details"
-      title="View Details"
-      aria-label="View Details">
-      <i class="bi bi-eye"></i>
-    </a>
-  <% } %>
+            <% if (P.btn.upload) { %>
+              <input
+                type="file"
+                id="file_card_<%= a.id %>"
+                class="d-none"
+                data-admission-id="<%= a.id %>"
+                accept=".png,.jpg,.jpeg,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
 
-  <% if (P.btn.update) { %>
-    <button
-      type="submit"
-      form="<%= fid %>"
-      class="action-circle action-update"
-      title="Update"
-      aria-label="Update">
-      <i class="bi bi-check2-circle"></i>
-    </button>
-  <% } %>
+              <button
+                type="button"
+                class="mini-action-btn mini-blue"
+                onclick="document.getElementById('file_card_<%= a.id %>').click()">
+                <i class="bi bi-upload"></i> Upload
+              </button>
+            <% } %>
 
-  <% if (P.btn.pdf || P.btn.whatsapp || P.btn.billing || P.btn.upload || P.btn.files || canDeleteAdmissions) { %>
-    <div class="inline-more-wrap">
+            <% if (P.btn.files) { %>
+              <a href="/admin/files?admission_id=<%= a.id %>" class="mini-action-btn mini-blue">
+                <i class="bi bi-folder2-open"></i> Files
+              </a>
+            <% } %>
 
-      <button
-        type="button"
-        class="action-circle action-more"
-        title="More Actions"
-        aria-label="More Actions">
-        <i class="bi bi-three-dots-vertical"></i>
-      </button>
+            <% if (canDeleteAdmissions) { %>
+              <button
+                type="button"
+                class="mini-action-btn mini-danger btn-delete-admission"
+                data-admission-id="<%= a.id %>"
+                data-student-name="<%= studentVal %>">
+                <i class="bi bi-trash3"></i> Delete
+              </button>
+            <% } %>
 
-      <div class="inline-more-actions">
-
-        <% if (P.btn.whatsapp) { %>
-          <button
-            type="button"
-            class="action-circle action-whatsapp btn-whatsapp"
-            data-admission-id="<%= a.id %>"
-            title="WhatsApp"
-            aria-label="WhatsApp">
-            <i class="bi bi-whatsapp"></i>
-          </button>
-        <% } %>
-
-        <% if (P.btn.pdf) { %>
-          <a
-            href="/admissions/<%= a.id %>/pdf"
-            class="action-circle action-pdf"
-            target="_blank"
-            title="Admission PDF"
-            aria-label="Admission PDF">
-            <i class="bi bi-file-earmark-pdf-fill"></i>
-          </a>
-        <% } %>
-
-        <% if (P.btn.billing) { %>
-          <button
-            type="button"
-            class="action-circle action-billing btn-billing"
-            data-admission-id="<%= a.id %>"
-            title="Billing / Receipt"
-            aria-label="Billing / Receipt">
-            <i class="bi bi-receipt"></i>
-          </button>
-        <% } %>
-
-        <% if (P.btn.upload) { %>
-          <input
-            type="file"
-            id="file_<%= a.id %>"
-            class="d-none"
-            data-admission-id="<%= a.id %>"
-            accept=".png,.jpg,.jpeg,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
-
-          <button
-            type="button"
-            class="action-circle action-upload"
-            onclick="document.getElementById('file_<%= a.id %>').click()"
-            title="Upload File"
-            aria-label="Upload File">
-            <i class="bi bi-upload"></i>
-          </button>
-        <% } %>
-
-        <% if (P.btn.files) { %>
-          <a
-            href="/admin/files?admission_id=<%= a.id %>"
-            class="action-circle action-files btn-files"
-            title="View Files"
-            aria-label="View Files">
-            <i class="bi bi-folder2-open"></i>
-          </a>
-        <% } %>
-
-        <% if (canDeleteAdmissions) { %>
-          <button
-            type="button"
-            class="action-circle action-delete btn-delete-admission"
-            data-admission-id="<%= a.id %>"
-            data-student-name="<%= a.studentName || a.student || '' %>"
-            title="Delete Admission"
-            aria-label="Delete Admission">
-            <i class="bi bi-trash3"></i>
-          </button>
+          </div>
         <% } %>
 
       </div>
-    </div>
-  <% } %>
+    <% }) %>
 
+  </div>
 </div>
-                    </td>
-                  <% } %>
-
-                </tr>
-              <% }) %>
-            </tbody>
-                    </table>
-        </div>
 
         <div class="agent-pagination-wrap d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 px-3 py-3 border-top">
           <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -1454,11 +1186,11 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   }
 
   #agentAccountsTable .form-control:focus,
-  #agentAccountsTable .form-select:focus {
-    border-color: rgba(245, 158, 11, .55);
-    box-shadow: 0 0 0 4px rgba(245, 158, 11, .18);
-    background: #fff;
-  }
+#agentAccountsTable .form-select:focus {
+  border-color: rgba(124, 58, 237, .55);
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, .18);
+  background: #fff;
+}
 
   #agentAccountsTable .form-control::placeholder {
     color: rgba(15, 23, 42, .45);
@@ -1476,11 +1208,28 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     color: #0f172a !important;
     text-indent: 0 !important;
   }
+  .agent-scope-pill{
+  background: rgba(124,58,237,.14) !important;
+  color: #4c1d95 !important;
+  border: 1px solid rgba(124,58,237,.28) !important;
+  font-weight: 700 !important;
+  padding: 3px 9px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+}
 
+.dept-dot{
+  width: 8px !important;
+  height: 8px !important;
+  display: inline-block !important;
+  border-radius: 999px !important;
+  background: #7c3aed !important;
+}
   .agent-header-card {
     border-radius: 18px;
     border: 1px solid rgba(15, 23, 42, .08);
-    background: linear-gradient(135deg, rgba(245,158,11,.14), rgba(245,158,11,.04));
+    background: linear-gradient(135deg, rgba(124,58,237,.14), rgba(124,58,237,.04));
     padding: 18px;
     display: flex;
     justify-content: space-between;
@@ -1489,9 +1238,9 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   }
 
   .agent-chip {
-    background: rgba(245,158,11,.16);
-    color: #92400e;
-    border: 1px solid rgba(245,158,11,.28);
+    background: rgba(124,58,237,.16);
+    color: #4c1d95;
+    border: 1px solid rgba(124,58,237,.28);
     font-weight: 700;
   }
 
@@ -1499,20 +1248,39 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     color: #0f172a;
   }
 
-  .agent-stat-card {
-    border-radius: 18px;
-    overflow: hidden;
-    border: 1px solid rgba(15,23,42,.08);
-    background: #fff;
-    box-shadow: 0 10px 18px rgba(2,8,23,.06);
-  }
+  .agent-stat-row > [class*="col-"]{
+  display: flex;
+}
 
-  .agent-stat-card .card-footer {
-    background: rgba(15,23,42,.03);
-    border-top: 1px solid rgba(15,23,42,.06);
-    font-size: 12px;
-    color: rgba(15,23,42,.65);
-  }
+.agent-stat-card {
+  width: 100%;
+  height: 118px;
+  min-height: 118px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(15,23,42,.08);
+  background: #fff;
+  box-shadow: 0 10px 18px rgba(2,8,23,.06);
+  display: flex;
+  flex-direction: column;
+}
+
+  .agent-stat-card .card-body{
+  flex: 1 1 auto;
+  min-height: 76px;
+  padding: 16px 18px;
+}
+
+.agent-stat-card .card-footer {
+  height: 34px;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  background: rgba(15,23,42,.03);
+  border-top: 1px solid rgba(15,23,42,.06);
+  font-size: 12px;
+  color: rgba(15,23,42,.65);
+}
 
   .stat-label {
     font-size: 12px;
@@ -1538,13 +1306,13 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(245,158,11,.16);
-    border: 1px solid rgba(245,158,11,.28);
+    background: rgba(124,58,237,.16);
+    border: 1px solid rgba(124,58,237,.28);
   }
 
   .stat-icon {
     font-size: 18px;
-    color: #92400e;
+    color: #4c1d95;
   }
 
 
@@ -1556,7 +1324,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   }
 
   .agent-table-card .card-header {
-    background: linear-gradient(135deg, rgba(245,158,11,.14), rgba(245,158,11,.04));
+    background: linear-gradient(135deg, rgba(124,58,237,.14), rgba(124,58,237,.04));
     border-bottom: 1px solid rgba(15,23,42,.08);
   }
 
@@ -1564,7 +1332,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   position: sticky;
   top: 0;
   z-index: 12;
-  background: linear-gradient(180deg, #f59e0b, #d97706);
+  background: linear-gradient(180deg, #7c3aed, #5b21b6);
   border-bottom: 1px solid rgba(255,255,255,.10);
   padding: 10px;
   font-weight: 650;
@@ -1645,7 +1413,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 #agentAccountsTable thead.table-dark th[data-col="status"],
 #agentAccountsTable thead.table-dark th[data-col="feeStatus"]{
   z-index: 70 !important;
-  background: linear-gradient(180deg, #f59e0b, #d97706);
+  background: linear-gradient(180deg, #7c3aed, #5b21b6);
 }
 
 
@@ -1665,7 +1433,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   position: sticky;
   right: 0;
   z-index: 60 !important;
-  background: linear-gradient(180deg, #f59e0b, #d97706);
+  background: linear-gradient(180deg, #7c3aed, #5b21b6);
 }
 
   #agentAccountsTable td.col-actions {
@@ -1726,10 +1494,12 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   }
 
   .action-update {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #111827;
-  }
-
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
+  color: #fff !important;
+}
+.action-update i {
+  color: #fff !important;
+}
   .action-whatsapp {
     background: linear-gradient(135deg, #22c55e, #16a34a);
     color: #fff;
@@ -1791,7 +1561,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   }
 
   .status-running { --dot:#22c55e; --bg:#dcfce7; --bd:#bbf7d0; --tx:#166534; }
-  .status-leave   { --dot:#f59e0b; --bg:#fffbeb; --bd:#fde68a; --tx:#92400e; }
+  .status-leave   { --dot:#7c3aed; --bg:#fffbeb; --bd:#fde68a; --tx:#4c1d95; }
   .status-stop    { --dot:#ef4444; --bg:#fee2e2; --bd:#fecaca; --tx:#991b1b; }
   .status-left    { --dot:#2563eb; --bg:#dbeafe; --bd:#bfdbfe; --tx:#1d4ed8; }
   .status-freez   { --dot:#94a3b8; --bg:#f1f5f9; --bd:#cbd5e1; --tx:#334155; }
@@ -2182,54 +1952,72 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     background: #fff;
   }
 
-  #billingModal .bill-status,
-  #billingModal .bill-status-chip {
-    --dot: #cbd5e1;
-    --bg: rgba(241, 245, 249, .95);
-    --bd: rgba(203, 213, 225, .9);
-    --tx: #334155;
-    border-radius: 999px;
-    font-weight: 700;
-    border: 1px solid var(--bd) !important;
-    color: var(--tx) !important;
-    background-color: var(--bg) !important;
-    padding-left: 2.2rem !important;
-    padding-right: 2.2rem !important;
-    background-image:
-      radial-gradient(circle, var(--dot) 6px, transparent 7px),
-      var(--bs-form-select-bg-img) !important;
-    background-repeat: no-repeat !important;
-    background-position: 12px center, right .75rem center !important;
-    background-size: 12px 12px, 16px 12px !important;
-    -webkit-appearance: none !important;
-    -moz-appearance: none !important;
-    appearance: none !important;
-    transition: all .15s ease;
-  }
+  /* ✅ Billing status colored chips */
+#billingModal .bill-status,
+#billingModal .bill-status-chip{
+  --dot: #cbd5e1;
+  --bg: rgba(241,245,249,.95);
+  --bd: rgba(203,213,225,.9);
+  --tx: #334155;
 
-  #billingModal .bill-status.status-notadmitted {
-    background: #f1f5f9 !important;
-    border-color: #cbd5e1 !important;
-    color: #334155 !important;
-  }
+  border-radius: 999px;
+  font-weight: 700;
+  border: 1px solid var(--bd) !important;
+  color: var(--tx) !important;
+  background-color: var(--bg) !important;
 
-  #billingModal .bill-status.status-nopayment {
-    background: #fee2e2 !important;
-    border-color: #fecaca !important;
-    color: #991b1b !important;
-  }
+  padding-left: 2.2rem !important;
+  padding-right: 2.2rem !important;
 
-  #billingModal .bill-status.status-partial {
-    background: #fef9c3 !important;
-    border-color: #fde68a !important;
-    color: #854d0e !important;
-  }
+  background-image:
+    radial-gradient(circle, var(--dot) 6px, transparent 7px),
+    var(--bs-form-select-bg-img) !important;
+  background-repeat: no-repeat !important;
+  background-position: 12px center, right .75rem center !important;
+  background-size: 12px 12px, 16px 12px !important;
 
-  #billingModal .bill-status.status-full {
-    background: #dcfce7 !important;
-    border-color: #bbf7d0 !important;
-    color: #166534 !important;
-  }
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+
+  transition: all .15s ease;
+}
+
+#billingModal .bill-status.status-notadmitted{
+  --dot:#64748b;
+  --bg:#f1f5f9;
+  --bd:#cbd5e1;
+  --tx:#334155;
+}
+
+#billingModal .bill-status.status-nopayment{
+  --dot:#ef4444;
+  --bg:#fee2e2;
+  --bd:#fecaca;
+  --tx:#991b1b;
+}
+
+#billingModal .bill-status.status-partial{
+  --dot:#f59e0b;
+  --bg:#fef9c3;
+  --bd:#fde68a;
+  --tx:#854d0e;
+}
+
+#billingModal .bill-status.status-full{
+  --dot:#22c55e;
+  --bg:#dcfce7;
+  --bd:#bbf7d0;
+  --tx:#166534;
+}
+
+#billingModal .bill-status.status-unpaid{
+  --dot:#ef4444;
+  --bg:#fee2e2;
+  --bd:#fecaca;
+  --tx:#991b1b;
+}
+
 
 
   /* WhatsApp modal like Super Admin */
@@ -2284,16 +2072,39 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   padding: 10px 12px;
 }
 
-#waModal .btn-success{
-  background: linear-gradient(135deg, #16a34a, #15803d);
-  border: none;
-  box-shadow: 0 10px 20px rgba(22,163,74,.22);
+/* ✅ WhatsApp modal footer buttons same as Super Admin / Bootstrap */
+#waModal .modal-footer .btn-light{
+  border: 1px solid rgba(15,23,42,.08);
+  background: #ffffff;
+  color: #111827;
+  transition: all .15s ease;
 }
 
-#waModal .btn-light{
-  border: 1px solid rgba(15,23,42,.08);
-  background: #fff;
+#waModal .modal-footer .btn-light:hover,
+#waModal .modal-footer .btn-light:focus,
+#waModal .modal-footer .btn-light:active{
+  background: #d3d4d5 !important;
+  border-color: #c6c7c8 !important;
+  color: #000000 !important;
+  box-shadow: none !important;
 }
+
+#waModal .modal-footer .btn-success{
+  background: #198754 !important;
+  border-color: #198754 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+  transition: all .15s ease;
+}
+
+#waModal .modal-footer .btn-success:hover,
+#waModal .modal-footer .btn-success:focus{
+  background: #157347 !important;
+  border-color: #146c43 !important;
+  color: #ffffff !important;
+}
+
+
 .upload-flash-card{
   overflow: hidden;
 }
@@ -2320,14 +2131,14 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   border: none;
   color: #fff;
   font-weight: 700;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  box-shadow: 0 12px 24px rgba(245,158,11,.22);
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
+  box-shadow: 0 12px 24px rgba(124,58,237,.22);
   transition: transform .14s ease, box-shadow .14s ease, filter .14s ease;
 }
 
 .bulk-challan-open-btn:hover{
   transform: translateY(-1px);
-  box-shadow: 0 16px 30px rgba(245,158,11,.28);
+  box-shadow: 0 16px 30px rgba(124,58,237,.28);
   filter: brightness(1.02);
   color: #fff;
 }
@@ -2406,10 +2217,10 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 .bulk-month-chip.active,
 .bulk-fee-chip.active,
 .bulk-class-chip.active{
-  background: #f59e0b;
+  background: #7c3aed;
   color: #fff;
-  border-color: #f59e0b;
-  box-shadow: 0 8px 16px rgba(245,158,11,.18);
+  border-color: #7c3aed;
+  box-shadow: 0 8px 16px rgba(124,58,237,.18);
 }
 
 .bulk-challan-select{
@@ -2421,14 +2232,14 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 }
 
 .bulk-challan-select:focus{
-  border-color: rgba(245,158,11,.45);
-  box-shadow: 0 0 0 4px rgba(245,158,11,.12);
+  border-color: rgba(124,58,237,.45);
+  box-shadow: 0 0 0 4px rgba(124,58,237,.12);
   background: #fff;
 }
 
 .bulk-create-btn{
   min-width: 150px;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
   color: #fff;
   font-weight: 700;
   border: none;
@@ -2441,7 +2252,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 
 .bulk-whatsapp-btn{
   min-width: 220px;
-  background: linear-gradient(135deg, #f59e0b, #b45309);
+  background: linear-gradient(135deg, #7c3aed, #4c1d95);
   color: #fff;
   font-weight: 700;
   border: none;
@@ -2486,9 +2297,9 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 }
 
 .agent-page-btn.active{
-  background: linear-gradient(135deg, #f59e0b, #d97706);
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
   color: #fff;
-  border-color: #d97706;
+  border-color: #5b21b6;
 }
 
 .agent-page-btn.disabled{
@@ -2541,23 +2352,23 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   height: 46px;
   padding: 0 10px 0 12px;
   border-radius: 14px;
-  border: 1px solid rgba(245,158,11,.18);
-  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,251,235,.98));
+  border: 1px solid rgba(124,58,237,.18);
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(250,245,255,.98));
   display: flex;
   align-items: center;
   gap: 10px;
-  box-shadow: 0 10px 22px rgba(245,158,11,.10);
+  box-shadow: 0 10px 22px rgba(124,58,237,.10);
 }
 
 .agent-search-toolbar-icon{
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  background: rgba(245,158,11,.12);
+  background: rgba(124,58,237,.12);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #d97706;
+  color: #5b21b6;
   flex: 0 0 28px;
 }
 
@@ -2580,7 +2391,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   flex: 0 0 auto;
   border: 0;
   outline: none;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
   color: #fff;
   border-radius: 999px;
   padding: 6px 12px;
@@ -2595,7 +2406,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 
 .agent-search-modal{
   border-radius: 24px !important;
-  background: linear-gradient(180deg, rgba(255,255,255,.99), rgba(255,251,235,.98));
+  background: linear-gradient(180deg, rgba(255,255,255,.99), rgba(250,245,255,.98));
   box-shadow: 0 24px 70px rgba(146,64,14,.16);
 }
 
@@ -2616,7 +2427,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 }
 
 .agent-search-criteria-wrap{
-  border: 1px solid rgba(245,158,11,.10);
+  border: 1px solid rgba(124,58,237,.10);
   border-radius: 18px;
   background: rgba(255,255,255,.88);
   overflow: hidden;
@@ -2626,8 +2437,8 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   padding: 14px 16px 10px 16px;
   font-size: 18px;
   font-weight: 700;
-  color: #92400e;
-  border-bottom: 1px solid rgba(245,158,11,.08);
+  color: #4c1d95;
+  border-bottom: 1px solid rgba(124,58,237,.08);
 }
 
 .agent-search-criteria-group{
@@ -2641,7 +2452,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 }
 
 .agent-search-criteria-group::-webkit-scrollbar-thumb{
-  background: rgba(245,158,11,.28);
+  background: rgba(124,58,237,.28);
   border-radius: 999px;
 }
 
@@ -2653,7 +2464,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   position: sticky;
   top: 0;
   z-index: 2;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
   color: #fff;
   font-weight: 700;
   padding: 10px 16px;
@@ -2672,13 +2483,13 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 }
 
 .agent-search-option:hover{
-  background: rgba(254,243,199,.8);
-  color: #92400e;
+  background: rgba(243,232,255,.8);
+  color: #4c1d95;
 }
 
 .agent-search-option.active{
-  background: rgba(245,158,11,.12);
-  color: #d97706;
+  background: rgba(124,58,237,.12);
+  color: #5b21b6;
   font-weight: 700;
 }
 
@@ -2806,6 +2617,282 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 #agentAccountsTable tbody tr.duplicate-admission-row:hover td{
   background: #fecaca !important;
 }
+/* ✅ Agent card pipeline layout, same as Super/Admin but purple theme */
+.admission-card-scroll{
+  padding: 18px;
+  background: #f1f5f9;
+}
+
+.admission-card-grid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(360px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.admission-card{
+  position: relative;
+  border-radius: 20px;
+  background: #ffffff;
+  border: 1px solid rgba(148,163,184,.25);
+  border-top: 4px solid #7c3aed;
+  box-shadow: 0 12px 28px rgba(15,23,42,.08);
+  padding: 14px;
+  transition: transform .14s ease, box-shadow .14s ease;
+}
+
+.admission-card:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 18px 38px rgba(15,23,42,.12);
+}
+
+.admission-card-top{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.admission-avatar{
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
+  color: #fff;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 22px rgba(124,58,237,.22);
+  flex: 0 0 44px;
+}
+
+.admission-title{
+  font-weight: 900;
+  color: #0f172a;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.admission-subtitle{
+  color: #475569;
+  font-size: 13px;
+  margin-top: 3px;
+}
+
+.admission-role-pill{
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #4c1d95;
+  background: #f3e8ff;
+  border: 1px solid #ddd6fe;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.admission-card-fields{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.admission-field-link{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  text-decoration: none;
+  border-radius: 6px;
+  padding: 4px 7px;
+  background: #ffffff;
+  border: 1px solid rgba(15,23,42,.12);
+  color: #0f172a !important;
+  box-shadow: 0 4px 10px rgba(15,23,42,.06);
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+
+.admission-field-link:hover{
+  transform: translateY(-1px);
+  background: #faf5ff;
+  box-shadow: 0 6px 14px rgba(124,58,237,.12);
+  color: #0f172a !important;
+}
+
+.field-label{
+  display: inline;
+  font-size: 10px;
+  font-weight: 500;
+  color: #111827 !important;
+  text-transform: uppercase;
+  letter-spacing: .25px;
+  margin: 0;
+  line-height: 1;
+}
+
+.field-label::after{
+  content: ":";
+}
+
+.field-value{
+  display: inline-block;
+  color: #000000 !important;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  max-width: 145px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admission-field-link.status-card-chip,
+.admission-field-link.fee-card-chip{
+  background: var(--chip-bg) !important;
+  border-color: var(--chip-bd) !important;
+  color: var(--chip-color) !important;
+}
+
+.admission-field-link.status-card-chip .field-label,
+.admission-field-link.fee-card-chip .field-label{
+  color: #111827 !important;
+}
+
+.admission-field-link.status-card-chip .field-value,
+.admission-field-link.fee-card-chip .field-value{
+  color: #000000 !important;
+}
+
+.admission-field-link.status-card-chip .field-label::before,
+.admission-field-link.fee-card-chip .field-label::before{
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  display: inline-block;
+  background: var(--chip-color);
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.admission-card-actions{
+  border-top: 1px solid rgba(148,163,184,.25);
+  margin-top: 14px;
+  padding-top: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mini-action-btn{
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 8px 16px rgba(15,23,42,.08);
+  transition: transform .12s ease, filter .12s ease;
+}
+
+.mini-action-btn:hover{
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+
+.mini-dark{
+  background: #0f172a;
+  color: #fff;
+}
+
+.mini-purple-edit{
+  background: #f3e8ff;
+  color: #5b21b6;
+  border: 1px solid #ddd6fe;
+}
+
+.mini-pdf{
+  background: #e5e7eb;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.mini-danger{
+  background: #ef4444;
+  color: #fff;
+}
+
+.mini-purple{
+  background: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #ddd6fe;
+}
+
+.mini-whatsapp{
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.mini-blue{
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.duplicate-admission-card{
+  background: #fee2e2;
+  border-color: #fca5a5;
+  border-top-color: #dc2626;
+}
+
+.duplicate-admission-card .admission-field-link{
+  background: #ffffff;
+  border-color: rgba(220,38,38,.28);
+  color: #0f172a !important;
+}
+
+@media (max-width: 1400px){
+  .admission-card-grid{
+    grid-template-columns: repeat(2, minmax(340px, 1fr));
+  }
+}
+
+@media (max-width: 900px){
+  .admission-card-grid{
+    grid-template-columns: 1fr;
+  }
+
+  .admission-card-fields{
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
+
+
+
+.agent-modal-close-btn{
+  background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
+  color: #fff !important;
+  border: none !important;
+  font-weight: 700 !important;
+  box-shadow: 0 10px 20px rgba(124,58,237,.22) !important;
+}
+
+.agent-modal-close-btn:hover{
+  color: #fff !important;
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+}
 </style>
 
 <!-- ✅ Upload Flash Overlay -->
@@ -2897,7 +2984,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 
       <div class="modal-footer border-0 pt-2">
         <button type="button" class="btn btn-light rounded-pill px-4" id="clearAgentSearchBtn">Clear Search</button>
-        <button type="button" class="btn btn-warning rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn agent-modal-close-btn rounded-pill px-4" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
@@ -3002,7 +3089,6 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     </div>
   </div>
 </div>
-
 <!-- ✅ WhatsApp Modal (IDs exactly as admissions.js expects) -->
 <div class="modal fade" id="waModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -3025,8 +3111,21 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
           <div class="small mt-1"><b>Admission ID:</b> <span id="waId">-</span></div>
         </div>
 
-        <div class="fw-semibold mb-2">Quick options</div>
-        <div id="waOptions" class="d-grid gap-2"></div>
+        <div class="mb-2 fw-semibold">Quick options</div>
+
+        <div id="waOptions" class="d-grid gap-2">
+          <label class="border rounded-3 p-2 bg-white">
+            <input type="checkbox" class="wa-opt me-2" value="send_fee_payment"> Send fee payment
+          </label>
+
+          <label class="border rounded-3 p-2 bg-white">
+            <input type="checkbox" class="wa-opt me-2" value="send_invoice"> Send invoice
+          </label>
+
+          <label class="border rounded-3 p-2 bg-white">
+            <input type="checkbox" class="wa-opt me-2" value="send_fee_reminder"> Send fee reminder
+          </label>
+        </div>
 
         <hr>
 
@@ -3100,6 +3199,7 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
           </div>
           <div class="small mt-1"><b>Phone:</b> <span id="billPhone">-</span></div>
           <div class="small mt-1"><b>Admission ID:</b> <span id="billId">-</span></div>
+          <div class="small mt-1"><b>Currency:</b> <span id="billCurrency">-</span></div>
         </div>
 
 
@@ -4061,6 +4161,463 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
 
 <script src="/js/user-perms-live.js"></script>
 <script src="/js/admissions.js"></script>
+<script>
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.btn-whatsapp');
+    if (!btn) return;
+
+    e.preventDefault();
+
+    const modalEl = document.getElementById('waModal');
+    if (!modalEl || typeof bootstrap === 'undefined') {
+      console.error('WhatsApp modal or Bootstrap not found');
+      return;
+    }
+
+    const admissionId = btn.getAttribute('data-admission-id') || '';
+    const student = btn.getAttribute('data-student') || '-';
+    const grade = btn.getAttribute('data-grade') || '-';
+    const phone = btn.getAttribute('data-phone') || '-';
+
+    modalEl.setAttribute('data-current-admission-id', admissionId);
+    modalEl.setAttribute('data-current-student', student);
+    modalEl.setAttribute('data-current-grade', grade);
+    modalEl.setAttribute('data-current-phone', phone);
+
+    const waId = document.getElementById('waId');
+    const waStudent = document.getElementById('waStudent');
+    const waGrade = document.getElementById('waGrade');
+    const waPhone = document.getElementById('waPhone');
+
+    if (waId) waId.textContent = admissionId;
+    if (waStudent) waStudent.textContent = student;
+    if (waGrade) waGrade.textContent = grade;
+    if (waPhone) waPhone.textContent = phone;
+
+    const waManualMsg = document.getElementById('waManualMsg');
+    if (waManualMsg) waManualMsg.value = '';
+
+    const waCustomText = document.getElementById('waCustomText');
+    if (waCustomText) waCustomText.value = '';
+
+    document.querySelectorAll('.wa-opt').forEach(cb => {
+      cb.checked = false;
+    });
+
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  });
+</script>
+<script>
+  /* ✅ Agent Billing Modal Opener - same as Admin */
+  (function () {
+    const months = [
+      'january', 'february', 'march', 'april', 'may', 'june',
+      'july', 'august', 'september', 'october', 'november', 'december'
+    ];
+
+    function clean(value) {
+      return String(value || '').trim();
+    }
+
+    function normalizeBillingStatusValue(value) {
+      const raw = clean(value);
+      const v = raw.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+
+      if (!v) return '';
+      if (v === 'not admitted' || v === 'notadmitted') return 'Not admitted';
+      if (v === 'no payment' || v === 'nopayment') return 'No payment';
+      if (v === 'partial payment' || v === 'partial') return 'Partial payment';
+      if (v === 'full payment' || v === 'full') return 'Full payment';
+      if (v === 'unpaid') return 'Unpaid';
+
+      return raw;
+    }
+
+    function ensureSelectOption(selectEl, value) {
+      if (!selectEl || !value) return;
+
+      const exists = Array.from(selectEl.options).some(opt =>
+        clean(opt.value).toLowerCase() === clean(value).toLowerCase()
+      );
+
+      if (exists) return;
+
+      const addOption = Array.from(selectEl.options).find(opt =>
+        opt.value === '__add_new_billing_status__'
+      );
+
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = value;
+
+      if (addOption) {
+        selectEl.insertBefore(option, addOption);
+      } else {
+        selectEl.appendChild(option);
+      }
+    }
+
+    function setSelectValueSafe(selectEl, value) {
+      if (!selectEl) return;
+
+      const finalValue = normalizeBillingStatusValue(value);
+
+      if (!finalValue) {
+        selectEl.value = '';
+        return;
+      }
+
+      ensureSelectOption(selectEl, finalValue);
+      selectEl.value = finalValue;
+      selectEl.setAttribute('data-prev-value', finalValue);
+    }
+
+    function setBankValueSafe(selectEl, value) {
+      if (!selectEl) return;
+
+      const finalValue = clean(value);
+
+      if (!finalValue) {
+        selectEl.value = '';
+        return;
+      }
+
+      const exists = Array.from(selectEl.options).some(opt =>
+        clean(opt.value).toLowerCase() === finalValue.toLowerCase()
+      );
+
+      if (!exists) {
+        const addOption = Array.from(selectEl.options).find(opt => opt.value === '__add_new_bank__');
+
+        const option = document.createElement('option');
+        option.value = finalValue;
+        option.textContent = finalValue;
+
+        if (addOption) {
+          selectEl.insertBefore(option, addOption);
+        } else {
+          selectEl.appendChild(option);
+        }
+      }
+
+      selectEl.value = finalValue;
+      selectEl.setAttribute('data-prev-value', finalValue);
+    }
+
+    function syncAgentBillingYearText() {
+      const yearSelect = document.getElementById('billingYearSelect');
+      const yearText = document.getElementById('billingYearText');
+
+      if (!yearSelect || !yearText) return;
+
+      const y = clean(yearSelect.value);
+      yearText.textContent = y ? `Selected: ${y}` : 'Current Year';
+    }
+
+    function resetBillingFields(defaultFee) {
+      months.forEach(month => {
+        const statusEl = document.querySelector(`.bill-status[data-month="${month}"]`);
+        const amountEl = document.getElementById('bill_' + month);
+        const feeEl = document.getElementById('bill_fee_' + month);
+        const feeLabel = document.getElementById('bill_fee_label_' + month);
+        const verifEl = document.getElementById('bill_verif_' + month);
+        const bankEl = document.getElementById('bill_bank_' + month);
+
+        if (statusEl) statusEl.value = '';
+        if (amountEl) amountEl.value = '';
+        if (feeEl) feeEl.value = '';
+        if (verifEl) verifEl.value = '';
+        if (bankEl) bankEl.value = '';
+
+        if (feeLabel) {
+          feeLabel.textContent = 'Fee: ' + (defaultFee || '-');
+        }
+      });
+
+      if (window.applyDynamicBillingColors) {
+        window.applyDynamicBillingColors();
+      }
+      setTimeout(function () {
+  if (window.applyDynamicBillingColors) {
+    window.applyDynamicBillingColors();
+  }
+}, 100);
+
+setTimeout(function () {
+  if (window.applyDynamicBillingColors) {
+    window.applyDynamicBillingColors();
+  }
+}, 500);
+    }
+
+    async function loadBillingData(admissionId, defaultFee) {
+      if (!admissionId) return;
+
+      const yearSelect = document.getElementById('billingYearSelect');
+      const year = clean(yearSelect?.value || new Date().getFullYear());
+
+      const res = await fetch(`/api/billing/${admissionId}?year=${encodeURIComponent(year)}`, {
+        headers: { Accept: 'application/json' }
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Billing data load failed');
+      }
+
+      const billing = data.billing || {};
+
+      months.forEach(month => {
+        const row = billing[month] || {};
+
+        const statusEl = document.querySelector(`.bill-status[data-month="${month}"]`);
+        const amountEl = document.getElementById('bill_' + month);
+        const feeEl = document.getElementById('bill_fee_' + month);
+        const feeLabel = document.getElementById('bill_fee_label_' + month);
+        const verifEl = document.getElementById('bill_verif_' + month);
+        const bankEl = document.getElementById('bill_bank_' + month);
+
+        setSelectValueSafe(statusEl, row.status || '');
+
+        if (amountEl) amountEl.value = row.amount || '';
+        if (feeEl) feeEl.value = row.feeOverride || '';
+        if (verifEl) verifEl.value = row.verification || '';
+        setBankValueSafe(bankEl, row.bank || '');
+
+        const statusText = clean(row.status).toLowerCase();
+        const finalFee = row.feeOverride || defaultFee || data.calc?.baseFee || '-';
+
+        if (feeLabel) {
+          if (statusText === 'not admitted') {
+            feeLabel.textContent = 'Fee: -';
+          } else {
+            const modalEl = document.getElementById('billingModal');
+            const currency = modalEl?.getAttribute('data-current-currency') || '';
+            feeLabel.textContent = 'Fee: ' + finalFee + (currency ? ' ' + currency : '');
+          }
+        }
+      });
+
+      if (window.applyDynamicBillingColors) {
+        window.applyDynamicBillingColors();
+      }
+      setTimeout(function () {
+  if (window.applyDynamicBillingColors) {
+    window.applyDynamicBillingColors();
+  }
+}, 100);
+
+setTimeout(function () {
+  if (window.applyDynamicBillingColors) {
+    window.applyDynamicBillingColors();
+  }
+}, 500);
+    }
+
+    document.addEventListener('click', async function (e) {
+      const btn = e.target.closest('.btn-billing');
+      if (!btn) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const modalEl = document.getElementById('billingModal');
+
+      if (!modalEl || typeof bootstrap === 'undefined') {
+        console.error('Billing modal or Bootstrap not found');
+        alert('Billing modal or Bootstrap not found');
+        return;
+      }
+
+      const admissionId = btn.getAttribute('data-admission-id') || '';
+      const student = btn.getAttribute('data-student') || '-';
+      const grade = btn.getAttribute('data-grade') || '-';
+      const phone = btn.getAttribute('data-phone') || '-';
+      const fees = btn.getAttribute('data-fees') || '-';
+      const currency = btn.getAttribute('data-currency') || '-';
+
+      modalEl.setAttribute('data-current-admission-id', admissionId);
+      modalEl.setAttribute('data-current-fees', fees);
+      modalEl.setAttribute('data-current-currency', currency);
+
+      const billId = document.getElementById('billId');
+      const billStudent = document.getElementById('billStudent');
+      const billGrade = document.getElementById('billGrade');
+      const billPhone = document.getElementById('billPhone');
+      const billCurrency = document.getElementById('billCurrency');
+
+      if (billId) billId.textContent = admissionId;
+      if (billStudent) billStudent.textContent = student;
+      if (billGrade) billGrade.textContent = grade;
+      if (billPhone) billPhone.textContent = phone;
+      if (billCurrency) billCurrency.textContent = currency || '-';
+
+      resetBillingFields(fees);
+      syncAgentBillingYearText();
+
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+      setTimeout(async function () {
+        try {
+          await loadBillingData(admissionId, fees);
+        } catch (err) {
+          console.error(err);
+          alert(err.message || 'Billing data load failed');
+        }
+      }, 150);
+    }, true);
+
+    document.addEventListener('change', async function (e) {
+      if (!e.target || e.target.id !== 'billingYearSelect') return;
+
+      syncAgentBillingYearText();
+
+      const modalEl = document.getElementById('billingModal');
+      if (!modalEl || !modalEl.classList.contains('show')) return;
+
+      const admissionId = modalEl.getAttribute('data-current-admission-id') || '';
+      const fees = modalEl.getAttribute('data-current-fees') || '-';
+
+      resetBillingFields(fees);
+
+      try {
+        await loadBillingData(admissionId, fees);
+      } catch (err) {
+        console.error(err);
+        alert(err.message || 'Billing data load failed');
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', syncAgentBillingYearText);
+
+    window.syncAgentBillingYearText = syncAgentBillingYearText;
+  })();
+</script>
+
+<script>
+  /* ✅ Agent Billing Save: same behavior as Super/Admin */
+  (function () {
+    const months = [
+      'january', 'february', 'march', 'april', 'may', 'june',
+      'july', 'august', 'september', 'october', 'november', 'december'
+    ];
+
+    function clean(value) {
+      return String(value || '').trim();
+    }
+
+    function showBillingMessage(type, title, message) {
+      if (typeof window.showUploadFlash === 'function') {
+        window.showUploadFlash(type, title, message);
+      } else {
+        alert(message || title || 'Notification');
+      }
+    }
+
+    function getBillingPayload() {
+      const modalEl = document.getElementById('billingModal');
+      const yearSelect = document.getElementById('billingYearSelect');
+
+      const admissionId = clean(modalEl?.getAttribute('data-current-admission-id'));
+      const year = clean(yearSelect?.value || new Date().getFullYear());
+
+      const billing = {};
+
+      months.forEach(month => {
+        const statusEl = document.querySelector(`.bill-status[data-month="${month}"]`);
+        const amountEl = document.getElementById('bill_' + month);
+        const feeEl = document.getElementById('bill_fee_' + month);
+        const verifEl = document.getElementById('bill_verif_' + month);
+        const bankEl = document.getElementById('bill_bank_' + month);
+
+        billing[month] = {
+          status: clean(statusEl?.value),
+          amount: clean(amountEl?.value),
+          feeOverride: clean(feeEl?.value),
+          verification: clean(verifEl?.value),
+          bank: clean(bankEl?.value)
+        };
+      });
+
+      return { admissionId, year, billing };
+    }
+
+    async function saveBillingData(payload) {
+      const res = await fetch(`/api/billing/${payload.admissionId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          year: payload.year,
+          billing: payload.billing
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Billing save failed');
+      }
+
+      return data;
+    }
+
+    document.addEventListener('click', async function (e) {
+      const btn = e.target.closest('#billSaveBtn');
+      if (!btn) return;
+
+      e.preventDefault();
+
+      const payload = getBillingPayload();
+
+      if (!payload.admissionId) {
+        showBillingMessage('error', 'Missing Admission', 'Admission ID missing. Please close billing and open again.');
+        return;
+      }
+
+      try {
+  btn.disabled = true;
+
+  await saveBillingData(payload);
+
+        const modalEl = document.getElementById('billingModal');
+        if (modalEl && typeof bootstrap !== 'undefined') {
+          const modal = bootstrap.Modal.getInstance(modalEl);
+          if (modal) modal.hide();
+        }
+
+        setTimeout(function () {
+          showBillingMessage('success', 'Saved', 'Data has been saved.');
+
+          const okBtn = document.getElementById('upload-flash-close-btn');
+          const xBtn = document.getElementById('upload-flash-x-btn');
+
+          function reloadAfterPopupClose() {
+            if (typeof window.saveViewportState === 'function') {
+              window.saveViewportState();
+            }
+
+            setTimeout(function () {
+              window.location.reload();
+            }, 250);
+          }
+
+          if (okBtn) okBtn.onclick = reloadAfterPopupClose;
+          if (xBtn) xBtn.onclick = reloadAfterPopupClose;
+        }, 250);
+
+      } catch (err) {
+        console.error(err);
+        showBillingMessage('error', 'Save Failed', err.message || 'Billing save failed.');
+      } finally {
+  btn.disabled = false;
+}
+    });
+  })();
+</script>
 
 
 
@@ -4103,9 +4660,9 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
     if (!sel) return;
     const c = color || '#64748b';
     sel.style.setProperty('--dot', c);
-    sel.style.setProperty('--bd', c + '33');
-    sel.style.setProperty('--tx', '#0f172a');
-    sel.style.setProperty('--bg', c + '18');
+    sel.style.setProperty('--bd', c + '26');
+sel.style.setProperty('--tx', '#000000');
+sel.style.setProperty('--bg', c + '12');
   }
 
   function getCachedOptions(type) {
@@ -4138,44 +4695,85 @@ const paidInvoiceStatusTimestampVal = (a.admission && a.admission.paidInvoiceSta
   window.applyDynamicDropdownColors = applyDynamicColors;
 
   function applyDynamicBillingColors() {
-    const billingItems = getCachedOptions('billing');
+  const billingItems = getCachedOptions('billing');
 
-    document.querySelectorAll('.bill-status').forEach(sel => {
-      const val = String(sel.value || '').trim();
-      if (!val || val === '__add_new_billing_status__') {
-        setSelectVisual(sel, '#64748b');
+  document.querySelectorAll('.bill-status').forEach(sel => {
+    const val = String(sel.value || '').trim();
+    const clean = val.toLowerCase();
+
+    sel.classList.remove(
+      'status-notadmitted',
+      'status-nopayment',
+      'status-partial',
+      'status-full',
+      'status-unpaid'
+    );
+
+    if (clean === 'not admitted') sel.classList.add('status-notadmitted');
+    if (clean === 'no payment') sel.classList.add('status-nopayment');
+    if (clean === 'partial payment') sel.classList.add('status-partial');
+    if (clean === 'full payment') sel.classList.add('status-full');
+    if (clean === 'unpaid') sel.classList.add('status-unpaid');
+
+    if (!val || val === '__add_new_billing_status__') {
+      setSelectVisual(sel, '#64748b');
+      return;
+    }
+
+    setSelectVisual(sel, findColor(billingItems, val));
+  });
+}
+
+window.applyDynamicBillingColors = applyDynamicBillingColors;
+
+    function openBillingStatusManager() {
+  const billingModalEl = document.getElementById('billingStatusOptionModal');
+  if (!billingModalEl) return;
+
+  billingModalEl.classList.remove('d-none');
+  billingModalEl.setAttribute('aria-hidden', 'false');
+}
+
+function init() {
+  document.addEventListener('change', function (e) {
+    if (e.target.matches('.js-status-select, .js-fee-select')) {
+      applyDynamicColors();
+    }
+
+    if (e.target.matches('.bill-status')) {
+      const sel = e.target;
+
+      if (sel.value === '__add_new_billing_status__') {
+        const prev = sel.getAttribute('data-prev-value') || '';
+
+        sel.value = prev;
+        openBillingStatusManager();
+
+        if (window.applyDynamicBillingColors) {
+          window.applyDynamicBillingColors();
+        }
+
         return;
       }
-      setSelectVisual(sel, findColor(billingItems, val));
-    });
-  }
 
-  window.applyDynamicBillingColors = applyDynamicBillingColors;
+      sel.setAttribute('data-prev-value', sel.value || '');
 
-    function init() {
-    document.addEventListener('change', function (e) {
-      if (e.target.matches('.js-status-select, .js-fee-select')) {
-        applyDynamicColors();
+      if (window.applyDynamicBillingColors) {
+        window.applyDynamicBillingColors();
       }
-      if (e.target.matches('.bill-status')) {
-        applyDynamicBillingColors();
-      }
-    });
+    }
+  });
 
-    applyDynamicColors();
-    applyDynamicBillingColors();
-  }
+  applyDynamicColors();
+  applyDynamicBillingColors();
+}
 
   document.addEventListener('click', function (e) {
-    const btn = e.target.closest('#openBillingStatusManagerBtn');
-    if (!btn) return;
+  const btn = e.target.closest('#openBillingStatusManagerBtn');
+  if (!btn) return;
 
-    const billingModalEl = document.getElementById('billingStatusOptionModal');
-    if (!billingModalEl) return;
-
-    billingModalEl.classList.remove('d-none');
-    billingModalEl.setAttribute('aria-hidden', 'false');
-  });
+  openBillingStatusManager();
+});
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -5180,7 +5778,161 @@ editingBillingStatusOldValue = String(nameEl.textContent || '').trim();
     });
   })();
 </script>
+<script>
+  /* ✅ Agent card search/filter */
+  (function () {
+    document.addEventListener('DOMContentLoaded', function () {
+      const modalEl = document.getElementById('agentSearchModal');
+      const openBtn = document.getElementById('openAgentSearchModalBtn');
+      const inputEl = document.getElementById('agentSearchToolbarInput');
+      const clearBtn = document.getElementById('clearAgentSearchBtn');
+      const triggerBadge = document.getElementById('agentSearchCriterionBadge');
+      const optionButtons = document.querySelectorAll('.agent-search-option');
 
+      if (!modalEl || !openBtn || !inputEl || typeof bootstrap === 'undefined') return;
+
+      const searchModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+      let activeSearchKey = 'general';
+      let activeSearchLabel = 'General';
+
+      function normalizeText(value) {
+        return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      }
+
+      function getCards() {
+        return Array.from(document.querySelectorAll('.admission-card'));
+      }
+
+      function getCardFieldValue(card, label) {
+        const wanted = normalizeText(label).replace(':', '');
+
+        const fields = Array.from(card.querySelectorAll('.admission-field-link'));
+
+        for (const field of fields) {
+          const labelEl = field.querySelector('.field-label');
+          const valueEl = field.querySelector('.field-value');
+
+          const currentLabel = normalizeText(labelEl ? labelEl.textContent : '').replace(':', '');
+
+          if (currentLabel === wanted) {
+            return normalizeText(valueEl ? valueEl.textContent : '');
+          }
+        }
+
+        return '';
+      }
+
+      function getValueByKey(card, key) {
+        const map = {
+          registrationNumber: 'Reg #',
+          student: 'Student',
+          father: 'Father',
+          familyNumber: 'Family #',
+          phone: 'Phone Number',
+          fatherEmail: 'Email Address',
+          grade: 'Grade',
+          tuitionGrade: 'Grade Section',
+          dept: 'Dept',
+          status: 'Current Status',
+          feeStatus: 'Fee Status',
+          processedBy: 'Processed By',
+          paymentStatus: 'Payment Status',
+          paidUpto: 'Paid Upto',
+          verificationNumber: 'Verif #',
+          registrationFee: 'Registration Fee',
+          fees: 'Monthly Fees',
+          currency: 'Currency',
+          month: 'Month/Year',
+          totalFees: 'Total Fees',
+          pendingDues: 'Pending Dues',
+          receivedPayment: 'Received Payment',
+          invoiceStatus: 'Invoice Status',
+          invoiceStatusTimestamp: 'Invoice Status Timestamp',
+          paidInvoiceStatus: 'Paid Invoice Status',
+          paidInvoiceStatusTimestamp: 'Paid Invoice Status Timestamp'
+        };
+
+        const label = map[key];
+        if (!label) return '';
+
+        return getCardFieldValue(card, label);
+      }
+
+      function getGeneralCardText(card) {
+        return normalizeText(card.textContent);
+      }
+
+      function applySearch() {
+        const keyword = normalizeText(inputEl.value);
+        const cards = getCards();
+
+        cards.forEach(card => {
+          if (!keyword) {
+            card.style.display = '';
+            return;
+          }
+
+          let matched = false;
+
+          if (activeSearchKey === 'general') {
+            matched = getGeneralCardText(card).includes(keyword);
+          } else {
+            matched = getValueByKey(card, activeSearchKey).includes(keyword);
+          }
+
+          card.style.display = matched ? '' : 'none';
+        });
+      }
+
+      function updateCriterionUI(label) {
+        activeSearchLabel = label || 'General';
+        if (triggerBadge) triggerBadge.textContent = activeSearchLabel;
+      }
+
+      optionButtons.forEach(btn => {
+        btn.addEventListener('click', function () {
+          optionButtons.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+
+          activeSearchKey = btn.getAttribute('data-search-key') || 'general';
+          const label = btn.getAttribute('data-search-label') || 'General';
+
+          updateCriterionUI(label);
+          applySearch();
+          searchModal.hide();
+          inputEl.focus();
+        });
+      });
+
+      openBtn.addEventListener('click', function () {
+        searchModal.show();
+      });
+
+      inputEl.addEventListener('input', function () {
+        applySearch();
+      });
+
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+          inputEl.value = '';
+          activeSearchKey = 'general';
+          activeSearchLabel = 'General';
+
+          optionButtons.forEach(b => b.classList.remove('active'));
+
+          updateCriterionUI('General');
+          applySearch();
+          searchModal.hide();
+          inputEl.focus();
+        });
+      }
+
+      updateCriterionUI('General');
+      applySearch();
+    });
+  })();
+</script>
 <%- include('partials/bootstrap-footer') %>
 
 <script>

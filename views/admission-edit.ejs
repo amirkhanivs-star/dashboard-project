@@ -1,0 +1,1710 @@
+<%- include('partials/bootstrap-header', { user, pageTitle: 'Edit Admission' }) %>
+<%- include('partials/flash') %>
+
+<%
+  const A = admission || {};
+  const acc = A.accounts || {};
+  const adm = A.admission || A.admissionPanel || {};
+  const roleKey = String(user?.role || user?.agentType || '').toLowerCase();
+
+let themeClass = 'theme-super';
+
+if (roleKey === 'admin') {
+  themeClass = 'theme-admin';
+} else if (roleKey === 'agent') {
+  themeClass = 'theme-agent';
+} else if (
+  roleKey === 'sub_agent' ||
+  roleKey === 'subagent' ||
+  roleKey === 'sub-agent'
+) {
+  themeClass = 'theme-subagent';
+}
+
+  const isSuper = !!(user && (
+    user.role === 'super_admin' ||
+    user.role === 'superadmin' ||
+    user.agentType === 'super_admin' ||
+    user.agentType === 'superadmin' ||
+    user.isSuperAdmin === true ||
+    user.is_super_admin === true
+  ));
+
+  const rawPerms = perms || (user && (user.permissions || user.perms || user.permission || user.permissionMap)) || {};
+
+  function hasPerm(keys) {
+    if (isSuper) return true;
+    if (!rawPerms) return false;
+    if (rawPerms === true) return true;
+    if (Array.isArray(rawPerms)) return keys.some(k => rawPerms.includes(k) || rawPerms.includes('*') || rawPerms.includes('all'));
+    if (typeof rawPerms === 'object') {
+      return keys.some(k => {
+        if (rawPerms[k] === true) return true;
+        const alt = k.replace(/\./g, '_');
+        if (rawPerms[alt] === true) return true;
+        return false;
+      });
+    }
+    return false;
+  }
+
+  function canCol(key, normalizedKey) {
+    if (isSuper) return true;
+    if (normalizedKey && rawPerms && rawPerms[normalizedKey] === true) return true;
+    return hasPerm([
+      `super.col.${key}`,
+      `super.column.${key}`,
+      `dashboard_super.col.${key}`,
+      `dashboard-super.col.${key}`,
+      `perm.super.col.${key}`,
+      normalizedKey || ''
+    ]);
+  }
+
+  function canBtn(key, normalizedKey) {
+    if (isSuper) return true;
+    if (normalizedKey && rawPerms && rawPerms[normalizedKey] === true) return true;
+    return hasPerm([
+      `super.btn.${key}`,
+      `super.button.${key}`,
+      `dashboard_super.btn.${key}`,
+      `dashboard-super.btn.${key}`,
+      `perm.super.btn.${key}`,
+      normalizedKey || ''
+    ]);
+  }
+
+  const P = {
+    col: {
+      status: canCol('status', 'colStatus'),
+      feeStatus: canCol('feeStatus', 'colFeeStatus'),
+      dept: canCol('dept', 'colDept'),
+      student: canCol('student', 'colStudentName'),
+      father: canCol('father', 'colFatherName'),
+      fatherEmail: canCol('fatherEmail', 'colFatherEmail'),
+      grade: canCol('grade', 'colGrade'),
+      tuitionGrade: canCol('tuitionGrade', 'colTuitionGrade'),
+      phone: canCol('phone', 'colPhone'),
+      processedBy: canCol('processedBy', 'colProcessedBy'),
+      paymentStatus: canCol('paymentStatus', 'colPaymentStatus'),
+      paidUpto: canCol('paidUpto', 'colPaidUpto'),
+      verif: canCol('verificationNumber', 'colVerificationNumber'),
+      reg: canCol('registrationNumber', 'colRegistrationNumber'),
+      family: canCol('familyNumber', 'colFamilyNumber'),
+      registrationFee: canCol('registrationFee', 'colRegistrationFee'),
+      fees: canCol('fees', 'colFees'),
+      currency: canCol('currency', 'colCurrency'),
+      month: canCol('month', 'colMonth'),
+      totalFees: canCol('totalFees', 'colTotalFees'),
+      pendingDues: canCol('pendingDues', 'colPendingDues'),
+      receivedPayment: canCol('receivedPayment', 'colReceivedPayment'),
+      invoiceStatus: canCol('invoiceStatus', 'colInvoiceStatus'),
+      invoiceStatusTimestamp: canCol('invoiceStatusTimestamp', 'colInvoiceStatusTimestamp'),
+      paidInvoiceStatus: canCol('paidInvoiceStatus', 'colPaidInvoiceStatus'),
+      paidInvoiceStatusTimestamp: canCol('paidInvoiceStatusTimestamp', 'colPaidInvoiceStatusTimestamp')
+    },
+    btn: {
+      update: canBtn('update', 'btnUpdateRow'),
+      details: canBtn('details', 'btnDetails')
+    }
+  };
+
+  const DEFAULT_CURRENT_STATUS_OPTIONS =
+    (typeof statusOptionsCurrent !== 'undefined' && Array.isArray(statusOptionsCurrent) && statusOptionsCurrent.length)
+      ? statusOptionsCurrent
+      : [
+          { value: 'New Admission', color: '#64748b' },
+          { value: 'Running', color: '#22c55e' },
+          { value: 'Leave', color: '#f59e0b' },
+          { value: 'Stop', color: '#ef4444' },
+          { value: 'Left', color: '#2563eb' },
+          { value: 'Freez', color: '#94a3b8' }
+        ];
+
+  const DEFAULT_FEE_STATUS_OPTIONS =
+    (typeof statusOptionsFee !== 'undefined' && Array.isArray(statusOptionsFee) && statusOptionsFee.length)
+      ? statusOptionsFee
+      : [
+          { value: 'New Admission', color: '#64748b' },
+          { value: 'Present + Dues', color: '#ef4444' },
+          { value: 'Present + No Dues', color: '#22c55e' }
+        ];
+
+  const DEFAULT_CURRENCY_OPTIONS =
+    (typeof currencyOptions !== 'undefined' && Array.isArray(currencyOptions) && currencyOptions.length)
+      ? currencyOptions.map(opt => ({
+          value: opt.value || opt.label || opt.opt_key || '',
+          label: opt.label || opt.value || opt.opt_key || ''
+        })).filter(opt => opt.value)
+      : [
+          { value: 'AED', label: 'AED' },
+          { value: 'SAR', label: 'SAR' },
+          { value: 'PKR', label: 'PKR' },
+          { value: 'USD', label: 'USD' },
+          { value: 'GBP', label: 'GBP' }
+        ];
+
+  const editAction = isSuper ? `/dashboard/super/update/${A.id}` : `/admin/update/${A.id}`;
+  const detailsUrl = isSuper ? `/dashboard/super/admission/${A.id}` : `/admin/admission/${A.id}`;
+  const backUrl = detailsUrl;
+
+  const currentStatusVal = String(A.status || A.currentStatus || A.current_status || 'New Admission').trim();
+  const feeStatusVal = String(A.feeStatus || A.fee_status || A.feeStatusText || 'New Admission').trim();
+  const currencyVal = String(A.currency_code || A.currencyCode || adm.currencyCode || adm.currency_code || '').trim().toUpperCase();
+  const monthVal = String(adm.month || A.admission_month || '').trim();
+  const currentYearOnly = new Date().getFullYear();
+  const months = [
+    { full: 'January', short: 'Jan' },
+    { full: 'February', short: 'Feb' },
+    { full: 'March', short: 'Mar' },
+    { full: 'April', short: 'Apr' },
+    { full: 'May', short: 'May' },
+    { full: 'June', short: 'Jun' },
+    { full: 'July', short: 'Jul' },
+    { full: 'August', short: 'Aug' },
+    { full: 'September', short: 'Sep' },
+    { full: 'October', short: 'Oct' },
+    { full: 'November', short: 'Nov' },
+    { full: 'December', short: 'Dec' }
+  ];
+%>
+
+<%
+  const activeAdmissionId = Number(A.id || 0);
+
+const rawEditAdmissions =
+  (typeof admissions !== 'undefined' && Array.isArray(admissions) && admissions.length)
+    ? admissions
+    : [A];
+
+const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
+  const xActive = Number(x && x.id || 0) === activeAdmissionId ? 0 : 1;
+  const yActive = Number(y && y.id || 0) === activeAdmissionId ? 0 : 1;
+  return xActive - yActive;
+});
+%>
+
+<div class="compact-edit-page <%= themeClass %>">
+
+  <% if (familyNumber && editAdmissions.length > 1) { %>
+    <div class="family-edit-banner">
+      <div>
+        <div class="family-title">
+          <i class="bi bi-people-fill me-1"></i>
+          Family Admissions
+        </div>
+        <div class="family-subtitle">
+          Family # <strong><%= familyNumber %></strong> | <%= editAdmissions.length %> admissions found
+        </div>
+      </div>
+    </div>
+  <% } %>
+
+  <% editAdmissions.forEach((item, idx) => {
+    const E = item || {};
+    const eAcc = E.accounts || {};
+    const eAdm = E.admission || E.admissionPanel || {};
+
+    const eEditAction = isSuper ? `/dashboard/super/update/${E.id}` : `/admin/update/${E.id}`;
+    const eDetailsUrl = isSuper ? `/dashboard/super/admission/${E.id}` : `/admin/admission/${E.id}`;
+
+    const eCurrentStatusVal = String(E.status || E.currentStatus || E.current_status || 'New Admission').trim();
+    const eFeeStatusVal = String(E.feeStatus || E.fee_status || E.feeStatusText || 'New Admission').trim();
+    const eCurrencyVal = String(E.currency_code || E.currencyCode || eAdm.currencyCode || eAdm.currency_code || '').trim().toUpperCase();
+    const eMonthVal = String(eAdm.month || E.admission_month || '').trim();
+
+    const isActiveCard = Number(E.id || 0) === activeAdmissionId;
+  %>
+
+  <form class="admission-edit-form" action="<%= eEditAction %>" method="POST">
+    <div class="compact-card <%= isActiveCard ? 'active-edit-card' : '' %>">
+      <div class="compact-head">
+        <div class="student-mini">
+          <div class="student-avatar">
+            <%= String(E.student || E.studentName || 'S').trim().charAt(0).toUpperCase() || 'S' %>
+          </div>
+
+          <div>
+            <div class="chip-row">
+              <span class="mini-chip danger">
+                <i class="bi bi-pencil-square me-1"></i>Edit Admission
+              </span>
+
+              <span class="mini-chip text-capitalize">
+                <%= E.dept || 'Admission' %>
+              </span>
+
+              <% if (E.id) { %>
+                <span class="mini-chip">ID #<%= E.id %></span>
+              <% } %>
+
+              <% if (eAcc.familyNumber) { %>
+                <span class="mini-chip">Family #<%= eAcc.familyNumber %></span>
+              <% } %>
+
+              <% if (isActiveCard) { %>
+                <span class="mini-chip active-chip">Selected</span>
+              <% } %>
+            </div>
+
+            <h3><%= E.student || E.studentName || 'Student Admission' %></h3>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Student & Admission</div>
+
+      <div class="compact-grid">
+        <% if (P.col.status) { %>
+          <div class="field-box">
+            <label>Current Status</label>
+            <select
+  name="status"
+  class="form-select form-select-sm compact-input status-select js-status-select"
+  data-prev-value="<%= eCurrentStatusVal %>">
+              <% DEFAULT_CURRENT_STATUS_OPTIONS.forEach(opt => { %>
+                <option value="<%= opt.value %>" <%= eCurrentStatusVal === opt.value ? 'selected' : '' %>>
+                  <%= opt.value %>
+                </option>
+                <% }) %>
+                <option value="__add_new_status__">+ Add Option</option>
+             </select>
+          </div>
+        <% } %>
+
+        <% if (P.col.feeStatus) { %>
+          <div class="field-box">
+            <label>Fee Status</label>
+            <select
+  name="feeStatus"
+  class="form-select form-select-sm compact-input fee-select js-fee-select"
+  data-prev-value="<%= eFeeStatusVal %>">
+              <% DEFAULT_FEE_STATUS_OPTIONS.forEach(opt => { %>
+                <option value="<%= opt.value %>" <%= eFeeStatusVal === opt.value ? 'selected' : '' %>>
+                  <%= opt.value %>
+                </option>
+              <% }) %>
+              <option value="__add_new_fee_status__">+ Add Option</option>
+            </select>
+          </div>
+        <% } %>
+
+        <% if (P.col.dept) { %>
+          <div class="field-box">
+            <label>Department</label>
+            <select name="dept" class="form-select form-select-sm compact-input text-capitalize">
+              <option value="quran" <%= E.dept === 'quran' ? 'selected' : '' %>>Quran</option>
+              <option value="tuition" <%= E.dept === 'tuition' ? 'selected' : '' %>>Tuition</option>
+              <option value="school" <%= E.dept === 'school' ? 'selected' : '' %>>School</option>
+            </select>
+          </div>
+        <% } %>
+
+        <% if (P.col.student) { %>
+          <div class="field-box">
+            <label>Student Name</label>
+            <input type="text" name="student" class="form-control form-control-sm compact-input" value="<%= E.student || E.studentName || '' %>">
+          </div>
+        <% } %>
+
+        <% if (P.col.father) { %>
+          <div class="field-box">
+            <label>Father Name</label>
+            <input type="text" name="father" class="form-control form-control-sm compact-input" value="<%= E.father || E.fatherName || '' %>">
+          </div>
+        <% } %>
+
+        <% if (P.col.fatherEmail) { %>
+          <div class="field-box">
+            <label>Email Address</label>
+            <input type="email" name="father_email" class="form-control form-control-sm compact-input" value="<%= E.fatherEmail || E.father_email || '' %>">
+          </div>
+        <% } %>
+
+        <% if (P.col.phone) { %>
+          <div class="field-box">
+            <label>Phone Number</label>
+            <input type="text" name="phone" class="form-control form-control-sm compact-input" value="<%= E.phone || E.contactNumber || '' %>">
+          </div>
+        <% } %>
+
+        <% if (P.col.grade) { %>
+          <div class="field-box">
+            <label>Grade</label>
+            <input type="text" name="grade" class="form-control form-control-sm compact-input" value="<%= E.grade || '' %>">
+          </div>
+        <% } %>
+
+        <% if (P.col.tuitionGrade) { %>
+          <div class="field-box">
+            <label>Grade Section</label>
+            <input type="text" name="tuitionGrade" class="form-control form-control-sm compact-input" value="<%= E.tuitionGrade || '' %>">
+          </div>
+        <% } %>
+
+        <% if (P.col.processedBy) { %>
+          <div class="field-box">
+            <label>Processed By</label>
+            <input type="text" class="form-control form-control-sm compact-input readonly-field" value="<%= E.processedBy || E.processed_by || '' %>" readonly tabindex="-1">
+          </div>
+        <% } %>
+      </div>
+
+      <div class="section-title">Accounts & Fee</div>
+
+      <div class="compact-grid">
+        <% if (P.col.paymentStatus) { %>
+          <div class="field-box">
+            <label>Payment Status</label>
+            <select name="paymentStatus" class="form-select form-select-sm compact-input">
+              <option value="">Select</option>
+              <option value="Paid" <%= eAcc.paymentStatus === 'Paid' ? 'selected' : '' %>>Paid</option>
+              <option value="Partial" <%= eAcc.paymentStatus === 'Partial' ? 'selected' : '' %>>Partial</option>
+              <option value="Unpaid" <%= eAcc.paymentStatus === 'Unpaid' ? 'selected' : '' %>>Unpaid</option>
+            </select>
+          </div>
+        <% } %>
+
+        <% if (P.col.paidUpto) { %>
+          <div class="field-box">
+            <label>Paid Upto</label>
+            <input type="text" name="paidUpto" class="form-control form-control-sm compact-input" value="<%= eAcc.paidUpto || '' %>">
+          </div>
+        <% } %>
+
+        <% if (P.col.verif) { %>
+          <div class="field-box">
+            <label>Verification #</label>
+            <input type="text" class="form-control form-control-sm compact-input readonly-field" value="<%= E.latestBillingVerificationNumber || eAcc.verificationNumber || '' %>" readonly tabindex="-1">
+          </div>
+        <% } %>
+
+        <% if (P.col.reg) { %>
+          <div class="field-box">
+            <label>Registration #</label>
+            <input type="text" name="registrationNumber" class="form-control form-control-sm compact-input" value="<%= eAcc.registrationNumber || '' %>">
+          </div>
+        <% } %>
+
+        <% if (P.col.family) { %>
+          <div class="field-box">
+            <label>Family #</label>
+            <input type="text" name="familyNumber" class="form-control form-control-sm compact-input" value="<%= eAcc.familyNumber || '' %>">
+          </div>
+        <% } %>
+
+        <% if (P.col.registrationFee) { %>
+          <div class="field-box">
+            <label>Registration Fee</label>
+            <input type="text" name="registrationFee" class="form-control form-control-sm compact-input" value="<%= eAdm.registrationFee || '' %>">
+          </div>
+        <% } %>
+
+        <% if (P.col.fees) { %>
+          <div class="field-box">
+            <label>Monthly Fees</label>
+            <input type="text" name="fees" class="form-control form-control-sm compact-input" value="<%= eAdm.fees || '' %>">
+          </div>
+        <% } %>
+
+        <% if (P.col.currency) { %>
+          <div class="field-box">
+            <label>Currency</label>
+            <select
+  name="currency_code"
+  class="form-select form-select-sm compact-input js-currency-select"
+  data-prev-value="<%= eCurrencyVal %>">
+              <option value="" <%= !eCurrencyVal ? 'selected' : '' %>>Select</option>
+             <% DEFAULT_CURRENCY_OPTIONS.forEach(opt => { %>
+  <option value="<%= opt.value %>" <%= eCurrencyVal === String(opt.value).toUpperCase() ? 'selected' : '' %>>
+    <%= opt.label || opt.value %>
+  </option>
+<% }) %>
+
+<option value="__add_new_currency__">+ Add Option</option>
+</select>
+          </div>
+        <% } %>
+
+        <% if (P.col.month) { %>
+          <div class="field-box">
+            <label>Month/Year</label>
+            <select name="month" class="form-select form-select-sm compact-input">
+              <option value="" <%= !eMonthVal ? 'selected' : '' %>>Select</option>
+              <% months.forEach(m => {
+                const fullValue = `${m.full} ${currentYearOnly}`;
+                const shortValue = `${m.short} ${currentYearOnly}`;
+                const isSelected = eMonthVal === fullValue || eMonthVal === shortValue;
+              %>
+                <option value="<%= shortValue %>" <%= isSelected ? 'selected' : '' %>>
+                  <%= shortValue %>
+                </option>
+              <% }) %>
+            </select>
+          </div>
+        <% } %>
+
+        <% if (P.col.totalFees) { %>
+          <div class="field-box">
+            <label>Total Fees</label>
+            <input type="text" name="totalFees" class="form-control form-control-sm compact-input readonly-field" value="<%= eAdm.totalFees || '' %>" readonly tabindex="-1">
+          </div>
+        <% } %>
+
+        <% if (P.col.pendingDues) { %>
+          <div class="field-box">
+            <label>Pending Dues</label>
+            <input type="text" name="pendingDues" class="form-control form-control-sm compact-input readonly-field" value="<%= eAdm.pendingDues || '' %>" readonly tabindex="-1">
+          </div>
+        <% } %>
+
+        <% if (P.col.receivedPayment) { %>
+          <div class="field-box">
+            <label>Received Payment</label>
+            <input type="text" name="receivedPayment" class="form-control form-control-sm compact-input readonly-field" value="<%= eAdm.receivedPayment || '0' %>" readonly tabindex="-1">
+          </div>
+        <% } %>
+      </div>
+
+      <div class="section-title">Invoice Fields</div>
+
+      <div class="compact-grid invoice-grid">
+        <% if (P.col.invoiceStatus) { %>
+          <div class="field-box">
+            <label>Invoice Status</label>
+            <input type="text" class="form-control form-control-sm compact-input readonly-field" value="<%= eAdm.invoiceStatus || '' %>" readonly tabindex="-1">
+          </div>
+        <% } %>
+
+        <% if (P.col.invoiceStatusTimestamp) { %>
+          <div class="field-box">
+            <label>Invoice Status Timestamp</label>
+            <input type="text" class="form-control form-control-sm compact-input readonly-field" value="<%= eAdm.invoiceStatusTimestamp || '' %>" readonly tabindex="-1">
+          </div>
+        <% } %>
+
+        <% if (P.col.paidInvoiceStatus) { %>
+          <div class="field-box">
+            <label>Paid Invoice Status</label>
+            <input type="text" class="form-control form-control-sm compact-input readonly-field" value="<%= eAdm.paidInvoiceStatus || '' %>" readonly tabindex="-1">
+          </div>
+        <% } %>
+
+        <% if (P.col.paidInvoiceStatusTimestamp) { %>
+          <div class="field-box">
+            <label>Paid Invoice Status Timestamp</label>
+            <input type="text" class="form-control form-control-sm compact-input readonly-field" value="<%= eAdm.paidInvoiceStatusTimestamp || '' %>" readonly tabindex="-1">
+          </div>
+        <% } %>
+      </div>
+
+      <div class="compact-footer">
+        <div></div>
+
+        <div class="footer-actions">
+          <a href="<%= eDetailsUrl %>" class="btn btn-light rounded-pill px-4">
+            Cancel
+          </a>
+
+          <% if (P.btn.update) { %>
+            <button type="submit" class="btn btn-danger rounded-pill px-5 save-btn">
+              <i class="bi bi-check2-circle me-1"></i> Update Admission
+            </button>
+          <% } else { %>
+            <span class="text-muted small align-self-center">No update permission</span>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <% }) %>
+</div>
+
+<style>
+  body{ background:#f8fafc; }
+   .theme-super{
+  --theme-main:#ef4444;
+  --theme-dark:#b91c1c;
+  --theme-soft:#fff7f7;
+  --theme-glow:rgba(239,68,68,.18);
+  --theme-focus:rgba(239,68,68,.12);
+}
+
+.theme-admin{
+  --theme-main:#22c55e;
+  --theme-dark:#15803d;
+  --theme-soft:#f0fdf4;
+  --theme-glow:rgba(34,197,94,.18);
+  --theme-focus:rgba(34,197,94,.12);
+}
+
+.theme-agent{
+  --theme-main:#7c3aed;
+  --theme-dark:#5b21b6;
+  --theme-soft:#faf5ff;
+  --theme-glow:rgba(124,58,237,.18);
+  --theme-focus:rgba(124,58,237,.12);
+}
+
+.theme-subagent{
+  --theme-main:#2563eb;
+  --theme-dark:#1d4ed8;
+  --theme-soft:#eff6ff;
+  --theme-glow:rgba(37,99,235,.18);
+  --theme-focus:rgba(37,99,235,.12);
+}
+  .compact-edit-page{
+    min-height: calc(100vh - 85px);
+    padding: 14px;
+    background:
+  radial-gradient(circle at top left, var(--theme-focus), transparent 34%),
+  linear-gradient(180deg, var(--theme-soft), #f8fafc);
+  }
+.family-edit-banner{
+  max-width:1500px;
+  margin:0 auto 12px;
+  background:#fff;
+  border:1px solid rgba(148,163,184,.24);
+  border-radius:16px;
+  padding:12px 16px;
+  box-shadow:0 10px 24px rgba(15,23,42,.06);
+}
+
+.family-title{
+  font-size:15px;
+  font-weight:900;
+  color:#0f172a;
+}
+
+.family-subtitle{
+  margin-top:2px;
+  font-size:12px;
+  color:#64748b;
+}
+
+.admission-edit-form{
+  margin-bottom:14px;
+}
+
+.active-edit-card{
+  border-color:rgba(239,68,68,.35) !important;
+  box-shadow:
+    0 16px 38px rgba(239,68,68,.10),
+    0 14px 35px rgba(15,23,42,.08) !important;
+}
+
+.active-chip{
+  color:#166534 !important;
+  background:#dcfce7 !important;
+  border-color:#bbf7d0 !important;
+}
+  .compact-card{
+    max-width: 1500px;
+    margin: 0 auto;
+    background:#fff;
+    border:1px solid rgba(148,163,184,.24);
+    border-radius:18px;
+    box-shadow:0 14px 35px rgba(15,23,42,.08);
+    padding:14px 16px 12px;
+  }
+
+  .compact-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    padding-bottom:10px;
+    border-bottom:1px solid rgba(148,163,184,.20);
+    margin-bottom:10px;
+  }
+
+  .student-mini{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    min-width:0;
+  }
+
+  .student-avatar{
+    width:58px;
+    height:58px;
+    border-radius:18px;
+    background:linear-gradient(135deg,#111827,var(--theme-main));
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:24px;
+    font-weight:900;
+    box-shadow:0 12px 24px var(--theme-glow);
+    flex:0 0 auto;
+  }
+
+  .compact-head h3{
+    margin:4px 0 0;
+    font-size:24px;
+    line-height:1;
+    font-weight:900;
+    color:#0f172a;
+  }
+
+  .compact-head p{
+    margin:4px 0 0;
+    color:#64748b;
+    font-size:12px;
+  }
+
+  .chip-row{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+  }
+
+  .mini-chip{
+    display:inline-flex;
+    align-items:center;
+    border-radius:999px;
+    padding:3px 9px;
+    background:#fff;
+    color:#475569;
+    border:1px solid rgba(148,163,184,.35);
+    font-size:11px;
+    font-weight:800;
+    line-height:1.1;
+  }
+
+  .mini-chip.danger{
+    color:#fff;
+    border-color:transparent;
+    background:linear-gradient(135deg,var(--theme-main),var(--theme-dark));
+  }
+
+  .head-actions{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+
+  .section-title{
+    margin:10px 0 7px;
+    color:#0f172a;
+    font-size:13px;
+    font-weight:900;
+    letter-spacing:.2px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+
+  .section-title:before{
+    content:"";
+    width:8px;
+    height:8px;
+    border-radius:999px;
+    background:var(--theme-main);
+    display:inline-block;
+  }
+
+  .compact-grid{
+    display:grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap:8px 10px;
+  }
+
+  .field-box{
+    min-width:0;
+  }
+
+  .field-box label{
+    display:block;
+    margin:0 0 3px;
+    font-size:11px;
+    color:#334155;
+    font-weight:900;
+  }
+
+  .compact-input{
+    height:34px;
+    min-height:34px;
+    border-radius:9px;
+    border:1px solid rgba(15,23,42,.14);
+    background:#fff;
+    font-size:13px;
+    color:#0f172a;
+    box-shadow:none;
+  }
+
+  .compact-input:focus{
+  border-color:var(--theme-main);
+  box-shadow:0 0 0 3px var(--theme-focus);
+}
+.status-select,
+.fee-select{
+  font-weight: 700;
+  padding-left: 2.1rem !important;
+  padding-right: 2.2rem !important;
+  background-repeat: no-repeat !important;
+  background-position: 12px center, right .75rem center !important;
+  background-size: 12px 12px, 16px 12px !important;
+
+  --dot: #cbd5e1;
+  --bg: rgba(241,245,249,.95);
+  --bd: rgba(203,213,225,.9);
+  --tx: #0f172a;
+
+  background-image:
+    radial-gradient(circle, var(--dot) 6px, transparent 7px),
+    var(--bs-form-select-bg-img) !important;
+  background-color: var(--bg) !important;
+  border-color: var(--bd) !important;
+  color: #0f172a !important;
+
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+}
+
+  .readonly-field{
+    background:#f1f5f9 !important;
+    color:#64748b !important;
+  }
+
+  .compact-footer{
+    margin-top:12px;
+    padding-top:10px;
+    border-top:1px solid rgba(148,163,184,.20);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  .footer-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+  flex-wrap:wrap;
+  width:100%;
+}
+
+  .save-btn{
+  border:0;
+  font-weight:900;
+  background:linear-gradient(135deg,var(--theme-main),var(--theme-dark)) !important;
+  box-shadow:0 10px 20px var(--theme-glow);
+}
+
+  @media (max-width: 1199.98px){
+    .compact-grid{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 991.98px){
+    .compact-head{ align-items:flex-start; flex-direction:column; }
+    .head-actions{ justify-content:flex-start; }
+    .compact-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 575.98px){
+    .compact-edit-page{ padding:10px; }
+    .compact-card{ padding:12px; }
+    .compact-grid{ grid-template-columns: 1fr; }
+    .compact-footer{ align-items:stretch; }
+    .footer-actions{
+  width:100%;
+  justify-content:flex-end;
+}
+  }
+  .billing-status-overlay{
+  position: fixed;
+  inset: 0;
+  z-index: 1060;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: rgba(15,23,42,.48);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.billing-status-dialog{
+  width: min(720px, 100%);
+  max-width: 720px;
+  max-height: calc(100vh - 56px);
+}
+
+.billing-status-dialog .modal-content{
+  border-radius: 28px !important;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98));
+  box-shadow: 0 24px 80px rgba(2,8,23,.24);
+  max-height: calc(100vh - 56px);
+  display: flex;
+  flex-direction: column;
+}
+
+.billing-status-dialog .modal-header{
+  padding: 18px 22px 12px;
+  border-bottom: 1px solid rgba(15,23,42,.06) !important;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.billing-status-dialog .modal-body{
+  padding: 16px 22px 14px !important;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.billing-status-dialog .modal-footer{
+  padding: 14px 22px 18px;
+  border-top: 1px solid rgba(15,23,42,.06) !important;
+}
+
+.billing-option-scroll-list{
+  max-height: 330px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+}
+
+.status-option-item{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:10px 12px;
+  border:1px solid rgba(15,23,42,.08);
+  border-radius:12px;
+  background:#fff;
+  box-shadow:0 6px 14px rgba(2,8,23,.05);
+}
+
+.status-option-left{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+}
+
+.status-option-dot{
+  width:14px;
+  height:14px;
+  border-radius:999px;
+  flex:0 0 14px;
+  border:2px solid rgba(255,255,255,.85);
+  box-shadow:0 0 0 1px rgba(15,23,42,.12);
+}
+
+.status-option-name{
+  font-weight:700;
+  color:#0f172a;
+  font-size:14px;
+}
+
+.status-option-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-shrink:0;
+}
+
+.status-option-empty{
+  padding:18px;
+  text-align:center;
+  border:1px dashed rgba(15,23,42,.15);
+  border-radius:14px;
+  color:#64748b;
+  background:rgba(248,250,252,.7);
+}
+</style>
+<!-- Currency Option Manager Popup -->
+<div id="currencyOptionModal" class="billing-status-overlay d-none" aria-hidden="true">
+  <div class="billing-status-dialog">
+    <div class="modal-content border-0 shadow-lg rounded-4">
+      <div class="modal-header border-0">
+        <div>
+          <h5 class="modal-title mb-0">Manage Currency Options</h5>
+          <div class="small text-muted">Add new currency and delete custom ones.</div>
+        </div>
+        <button type="button" class="btn-close currency-option-close-btn" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body pt-0">
+        <div class="p-3 rounded-4 bg-light-subtle mb-3">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-8">
+              <label class="form-label small text-muted mb-1">Currency Name</label>
+              <input type="text" id="currencyOptionInput" class="form-control" placeholder="e.g. EUR">
+            </div>
+            <div class="col-md-4">
+              <button type="button" id="currencyOptionSaveBtn" class="btn btn-dark w-100 rounded-pill">
+                <i class="bi bi-plus-circle me-1"></i> Save Option
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">Saved Currency Options</div>
+        </div>
+
+        <div id="currencyOptionList" class="d-grid gap-2 billing-option-scroll-list"></div>
+      </div>
+
+      <div class="modal-footer border-0 justify-content-end">
+        <button type="button" class="btn btn-light rounded-pill px-4 currency-option-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="statusOptionModal" class="billing-status-overlay d-none" aria-hidden="true">
+  <div class="billing-status-dialog">
+    <div class="modal-content border-0 shadow-lg rounded-4">
+      <div class="modal-header border-0">
+        <div>
+          <h5 class="modal-title mb-0" id="statusOptionModalTitle">Manage Options</h5>
+          <div class="small text-muted">Add new option, choose color, and delete existing ones.</div>
+        </div>
+        <button type="button" class="btn-close status-option-close-btn" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body pt-0">
+        <div class="p-3 rounded-4 bg-light-subtle mb-3">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-6">
+              <label class="form-label small text-muted mb-1">Option Name</label>
+              <input type="text" id="statusOptionInput" class="form-control" placeholder="e.g. Hold / Suspended / Waiting">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small text-muted mb-1">Color</label>
+              <input type="color" id="statusOptionColor" class="form-control form-control-color w-100" value="#64748b">
+            </div>
+            <div class="col-md-3">
+              <button type="button" id="statusOptionSaveBtn" class="btn btn-dark w-100 rounded-pill">
+                <i class="bi bi-plus-circle me-1"></i> Save Option
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold" id="statusOptionListTitle">Saved Options</div>
+        </div>
+
+        <div id="statusOptionList" class="d-grid gap-2 billing-option-scroll-list"></div>
+      </div>
+
+      <div class="modal-footer border-0 justify-content-end">
+        <button type="button" class="btn btn-light rounded-pill px-4 status-option-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const forms = document.querySelectorAll('.admission-edit-form');
+if (!forms.length) return;
+
+forms.forEach(function (form) {
+  form.addEventListener('submit', function () {
+    try {
+      sessionStorage.setItem('super_dashboard_recent_submit', '1');
+    } catch (e) {}
+  });
+});
+  })();
+</script>
+<script>
+  (function () {
+    document.addEventListener('DOMContentLoaded', function () {
+      const params = new URLSearchParams(window.location.search);
+      const focusKey = params.get('focus');
+
+      if (!focusKey) return;
+
+      const fieldMap = {
+        status: ['[name="status"]'],
+        feeStatus: ['[name="feeStatus"]'],
+        dept: ['[name="dept"]'],
+        student: ['[name="student"]'],
+        father: ['[name="father"]'],
+        fatherEmail: ['[name="father_email"]'],
+        phone: ['[name="phone"]'],
+        grade: ['[name="grade"]'],
+        tuitionGrade: ['[name="tuitionGrade"]'],
+        paymentStatus: ['[name="paymentStatus"]'],
+        paidUpto: ['[name="paidUpto"]'],
+        registrationNumber: ['[name="registrationNumber"]'],
+        familyNumber: ['[name="familyNumber"]'],
+        registrationFee: ['[name="registrationFee"]'],
+        fees: ['[name="fees"]'],
+        currency: ['[name="currency_code"]'],
+        month: ['[name="month"]'],
+        totalFees: ['[name="totalFees"]'],
+        pendingDues: ['[name="pendingDues"]'],
+        receivedPayment: ['[name="receivedPayment"]']
+      };
+
+      const labelMap = {
+        no: '',
+        processedBy: 'Processed By',
+        verificationNumber: 'Verification #',
+        invoiceStatus: 'Invoice Status',
+        invoiceStatusTimestamp: 'Invoice Status Timestamp',
+        paidInvoiceStatus: 'Paid Invoice Status',
+        paidInvoiceStatusTimestamp: 'Paid Invoice Status Timestamp'
+      };
+
+      function getActiveScope() {
+  const activeCard = document.querySelector('.active-edit-card');
+  if (activeCard) return activeCard;
+
+  return document;
+}
+
+function findBySelectors(selectors) {
+  const scope = getActiveScope();
+
+  for (const selector of selectors || []) {
+    const el = scope.querySelector(selector);
+    if (el) return el;
+  }
+
+  return null;
+}
+
+      function findByLabel(labelText) {
+        if (!labelText) return null;
+
+        const wanted = String(labelText).toLowerCase().trim();
+
+        const scope = getActiveScope();
+const boxes = Array.from(scope.querySelectorAll('.field-box'));
+        for (const box of boxes) {
+          const label = box.querySelector('label');
+          if (!label) continue;
+
+          const current = String(label.textContent || '').toLowerCase().trim();
+          if (current === wanted) {
+            return box.querySelector('input, select, textarea') || box;
+          }
+        }
+
+        return null;
+      }
+
+      let target = findBySelectors(fieldMap[focusKey]);
+
+      if (!target) {
+        target = findByLabel(labelMap[focusKey]);
+      }
+
+      if (!target) return;
+
+      setTimeout(function () {
+        target.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+
+        if (!target.readOnly && !target.disabled && typeof target.focus === 'function') {
+          target.focus();
+        }
+
+        target.classList.add('chip-focus-highlight');
+
+        const box = target.closest('.field-box');
+        if (box) box.classList.add('chip-focus-box');
+
+        setTimeout(function () {
+          target.classList.remove('chip-focus-highlight');
+          if (box) box.classList.remove('chip-focus-box');
+        }, 3500);
+      }, 250);
+    });
+  })();
+</script>
+
+<style>
+  .chip-focus-highlight {
+    border-color: var(--theme-main) !important;
+    box-shadow: 0 0 0 4px var(--theme-focus) !important;
+    background: #fffafa !important;
+  }
+
+  .chip-focus-box label {
+    color: var(--theme-main) !important;
+  }
+</style>
+<script>
+(function () {
+  window.STATUS_OPTION_CACHE = {
+    current: [],
+    fee: []
+  };
+
+  function setSelectVisual(sel, color) {
+    if (!sel) return;
+    const c = color || '#64748b';
+    sel.style.setProperty('--dot', c);
+    sel.style.setProperty('--bd', c + '55');
+    sel.style.setProperty('--tx', '#0f172a');
+    sel.style.setProperty('--bg', c + '18');
+  }
+
+  function findColor(items, value) {
+    const v = String(value || '').trim().toLowerCase();
+    const found = (items || []).find(x => String(x.value || '').trim().toLowerCase() === v);
+    return found ? found.color : '#64748b';
+  }
+
+  function applyDynamicColors() {
+    const currentItems = window.STATUS_OPTION_CACHE.current || [];
+    const feeItems = window.STATUS_OPTION_CACHE.fee || [];
+
+    document.querySelectorAll('.js-status-select').forEach(sel => {
+      if ((sel.value || '') === '__add_new_status__') return;
+      setSelectVisual(sel, findColor(currentItems, sel.value));
+    });
+
+    document.querySelectorAll('.js-fee-select').forEach(sel => {
+      if ((sel.value || '') === '__add_new_fee_status__') return;
+      setSelectVisual(sel, findColor(feeItems, sel.value));
+    });
+  }
+
+  function apiBase(type) {
+    return type === 'current'
+      ? '/api/options/status'
+      : '/api/options/fee-status';
+  }
+
+  function normalizeRows(rows) {
+    return (rows || []).map(row => ({
+      id: row.id,
+      value: row.value || row.label || row.opt_key || '',
+      color: row.color || '#64748b',
+      is_custom: Number(row.is_custom || 0)
+    })).filter(x => x.value);
+  }
+
+  async function fetchOptions(type) {
+    const res = await fetch(apiBase(type), {
+      headers: { 'Accept': 'application/json' }
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to load options');
+    }
+
+    const items = normalizeRows(data.data || []);
+    window.STATUS_OPTION_CACHE[type] = items;
+    return items;
+  }
+
+  async function createOption(type, value, color) {
+    const res = await fetch(apiBase(type), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ label: value, color })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to save option');
+    }
+
+    return data.data;
+  }
+
+  async function updateColor(type, id, color) {
+    const res = await fetch(`${apiBase(type)}/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ color })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to update color');
+    }
+
+    return data;
+  }
+
+  async function deleteOption(type, id) {
+    const res = await fetch(`${apiBase(type)}/${id}`, {
+      method: 'DELETE',
+      headers: { 'Accept': 'application/json' }
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to delete option');
+    }
+
+    return true;
+  }
+
+  function rebuildSelect(selectEl, items, selectedValue, addValue) {
+    if (!selectEl) return;
+
+    let html = '';
+
+    html += items.map(item => {
+      const selected = String(selectedValue || '') === String(item.value) ? 'selected' : '';
+      return `<option value="${item.value}" ${selected}>${item.value}</option>`;
+    }).join('');
+
+    html += `<option value="${addValue}">+ Add Option</option>`;
+
+    selectEl.innerHTML = html;
+    selectEl.value = selectedValue || 'New Admission';
+  }
+
+  function refreshDropdowns() {
+    const currentItems = window.STATUS_OPTION_CACHE.current || [];
+    const feeItems = window.STATUS_OPTION_CACHE.fee || [];
+
+    document.querySelectorAll('.js-status-select').forEach(sel => {
+      const selected = sel.getAttribute('data-prev-value') || sel.value || 'New Admission';
+      rebuildSelect(sel, currentItems, selected, '__add_new_status__');
+      sel.value = selected;
+    });
+
+    document.querySelectorAll('.js-fee-select').forEach(sel => {
+      const selected = sel.getAttribute('data-prev-value') || sel.value || 'New Admission';
+      rebuildSelect(sel, feeItems, selected, '__add_new_fee_status__');
+      sel.value = selected;
+    });
+
+    applyDynamicColors();
+  }
+
+  let activeType = 'current';
+  let pendingSelect = null;
+
+  const modalEl = document.getElementById('statusOptionModal');
+  const titleEl = document.getElementById('statusOptionModalTitle');
+  const inputEl = document.getElementById('statusOptionInput');
+  const colorEl = document.getElementById('statusOptionColor');
+  const saveBtn = document.getElementById('statusOptionSaveBtn');
+  const listEl = document.getElementById('statusOptionList');
+  const listTitleEl = document.getElementById('statusOptionListTitle');
+
+  function optionLabel(type) {
+    return type === 'current' ? 'Current Status' : 'Fee Status';
+  }
+
+  function renderList() {
+    const items = window.STATUS_OPTION_CACHE[activeType] || [];
+
+    titleEl.textContent = `Manage ${optionLabel(activeType)} Options`;
+    listTitleEl.textContent = `${optionLabel(activeType)} Options`;
+
+    if (!items.length) {
+      listEl.innerHTML = '<div class="status-option-empty">No options available.</div>';
+      return;
+    }
+
+    listEl.innerHTML = items.map(item => `
+      <div class="status-option-item">
+        <div class="status-option-left">
+          <span class="status-option-dot" style="background:${item.color || '#64748b'}"></span>
+          <div class="status-option-name">${item.value}</div>
+        </div>
+        <div class="status-option-actions">
+          <input
+            type="color"
+            class="form-control form-control-color status-option-color-input"
+            value="${item.color || '#64748b'}"
+            data-id="${item.id}"
+            style="width:48px;min-width:48px;">
+          ${item.is_custom ? `
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-danger rounded-pill status-option-delete-btn"
+              data-id="${item.id}">
+              Delete
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function openModal(type, selectEl) {
+    activeType = type;
+    pendingSelect = selectEl || null;
+    inputEl.value = '';
+    colorEl.value = '#64748b';
+    renderList();
+
+    modalEl.classList.remove('d-none');
+    modalEl.setAttribute('aria-hidden', 'false');
+  }
+
+  document.addEventListener('change', function (e) {
+    const el = e.target;
+
+    if (el.matches('.js-status-select')) {
+      if (el.value === '__add_new_status__') {
+        const prev = el.getAttribute('data-prev-value') || 'New Admission';
+        el.value = prev;
+        openModal('current', el);
+        return;
+      }
+
+      el.setAttribute('data-prev-value', el.value || '');
+      applyDynamicColors();
+    }
+
+    if (el.matches('.js-fee-select')) {
+      if (el.value === '__add_new_fee_status__') {
+        const prev = el.getAttribute('data-prev-value') || 'New Admission';
+        el.value = prev;
+        openModal('fee', el);
+        return;
+      }
+
+      el.setAttribute('data-prev-value', el.value || '');
+      applyDynamicColors();
+    }
+  });
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async function () {
+      try {
+        const val = String(inputEl.value || '').trim();
+        const color = colorEl.value || '#64748b';
+
+        if (!val) {
+          alert('Option name required');
+          return;
+        }
+
+        const items = window.STATUS_OPTION_CACHE[activeType] || [];
+        const exists = items.some(x => String(x.value || '').trim().toLowerCase() === val.toLowerCase());
+
+        if (exists) {
+          alert('Ye option pehle se mojood hai');
+          return;
+        }
+
+        const created = await createOption(activeType, val, color);
+        await fetchOptions(activeType);
+        refreshDropdowns();
+        renderList();
+
+        if (pendingSelect) {
+          const newVal = created.value || created.label || val;
+          pendingSelect.value = newVal;
+          pendingSelect.setAttribute('data-prev-value', newVal);
+          applyDynamicColors();
+        }
+
+        inputEl.value = '';
+        colorEl.value = '#64748b';
+      } catch (err) {
+        alert(err.message || 'Save failed');
+      }
+    });
+  }
+
+  if (listEl) {
+    listEl.addEventListener('change', async function (e) {
+      const input = e.target.closest('.status-option-color-input');
+      if (!input) return;
+
+      try {
+        const id = Number(input.getAttribute('data-id'));
+        if (!id) return;
+
+        await updateColor(activeType, id, input.value || '#64748b');
+        await fetchOptions(activeType);
+        refreshDropdowns();
+        renderList();
+      } catch (err) {
+        alert(err.message || 'Color update failed');
+      }
+    });
+
+    listEl.addEventListener('click', async function (e) {
+      const btn = e.target.closest('.status-option-delete-btn');
+      if (!btn) return;
+
+      try {
+        const id = Number(btn.getAttribute('data-id'));
+        if (!id) return;
+
+        await deleteOption(activeType, id);
+        await fetchOptions(activeType);
+        refreshDropdowns();
+        renderList();
+      } catch (err) {
+        alert(err.message || 'Delete failed');
+      }
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('.status-option-close-btn') || e.target === modalEl) {
+      modalEl.classList.add('d-none');
+      modalEl.setAttribute('aria-hidden', 'true');
+    }
+  });
+
+  Promise.all([
+    fetchOptions('current'),
+    fetchOptions('fee')
+  ])
+    .then(function () {
+      refreshDropdowns();
+      renderList();
+    })
+    .catch(function (err) {
+      console.error('Options load error:', err);
+      applyDynamicColors();
+    });
+})();
+</script>
+<script>
+(function () {
+  const currencyModalEl = document.getElementById('currencyOptionModal');
+  if (!currencyModalEl) return;
+
+  const inputEl = document.getElementById('currencyOptionInput');
+  const saveBtn = document.getElementById('currencyOptionSaveBtn');
+  const listEl = document.getElementById('currencyOptionList');
+
+  let pendingSelect = null;
+
+  function normalizeCurrencyRows(rows) {
+    return (rows || []).map(row => ({
+      id: row.id,
+      value: row.value || row.label || row.opt_key || '',
+      label: row.label || row.value || row.opt_key || '',
+      is_custom: Number(row.is_custom || 0)
+    })).filter(x => x.value);
+  }
+
+  async function fetchCurrencyOptions() {
+    const res = await fetch('/api/options/currency', {
+      headers: { Accept: 'application/json' }
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to load currency options');
+    }
+
+    window.CURRENCY_OPTION_CACHE = normalizeCurrencyRows(data.data || []);
+    return window.CURRENCY_OPTION_CACHE;
+  }
+
+  async function createCurrencyOption(value) {
+    const res = await fetch('/api/options/currency', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({ label: value })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to save currency option');
+    }
+
+    return data.data;
+  }
+
+  async function deleteCurrencyOption(id) {
+    const res = await fetch(`/api/options/currency/${id}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' }
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to delete currency option');
+    }
+
+    return true;
+  }
+
+  function renderCurrencyList() {
+    const items = Array.isArray(window.CURRENCY_OPTION_CACHE)
+      ? window.CURRENCY_OPTION_CACHE
+      : [];
+
+    if (!items.length) {
+      listEl.innerHTML = '<div class="status-option-empty">No currency options available.</div>';
+      return;
+    }
+
+    listEl.innerHTML = items.map(item => `
+      <div class="status-option-item">
+        <div class="status-option-left">
+          <div class="status-option-name">${item.label}</div>
+        </div>
+
+        <div class="status-option-actions">
+          ${item.is_custom ? `
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-danger rounded-pill currency-option-delete-btn"
+              data-id="${item.id}">
+              Delete
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function rebuildCurrencySelect(selectEl, items, selectedValue, includeAdd) {
+    if (!selectEl) return;
+
+    let html = '<option value="">Select</option>';
+
+    html += items.map(item => {
+      const selected = String(selectedValue || '') === String(item.value) ? 'selected' : '';
+      return `<option value="${item.value}" ${selected}>${item.label}</option>`;
+    }).join('');
+
+    if (includeAdd) {
+      html += '<option value="__add_new_currency__">+ Add Option</option>';
+    }
+
+    selectEl.innerHTML = html;
+    selectEl.value = selectedValue || '';
+  }
+
+  function refreshCurrencyDropdowns() {
+    const items = Array.isArray(window.CURRENCY_OPTION_CACHE)
+      ? window.CURRENCY_OPTION_CACHE
+      : [];
+
+    document.querySelectorAll('.js-currency-select').forEach(sel => {
+      const selected = sel.getAttribute('data-prev-value') || sel.value || '';
+      rebuildCurrencySelect(sel, items, selected, true);
+      sel.value = selected || '';
+    });
+  }
+
+  async function loadCurrencyOptionsAndRefresh() {
+    await fetchCurrencyOptions();
+    renderCurrencyList();
+    refreshCurrencyDropdowns();
+  }
+
+  function openCurrencyModal(selectEl) {
+    pendingSelect = selectEl || null;
+    currencyModalEl.classList.remove('d-none');
+    currencyModalEl.setAttribute('aria-hidden', 'false');
+  }
+
+  document.addEventListener('change', function (e) {
+    const el = e.target;
+    if (!el) return;
+
+    if (el.matches('.js-currency-select')) {
+      if (el.value === '__add_new_currency__') {
+        const prev = el.getAttribute('data-prev-value') || '';
+        el.value = prev;
+        openCurrencyModal(el);
+        return;
+      }
+
+      el.setAttribute('data-prev-value', el.value || '');
+    }
+  });
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async function () {
+      try {
+        const val = String(inputEl.value || '').trim().toUpperCase();
+
+        if (!val) {
+          alert('Currency name required');
+          return;
+        }
+
+        const existing = window.CURRENCY_OPTION_CACHE || [];
+        const duplicate = existing.some(x =>
+          String(x.value || '').trim().toLowerCase() === val.toLowerCase()
+        );
+
+        if (duplicate) {
+          alert('Ye currency pehle se mojood hai');
+          return;
+        }
+
+        const created = await createCurrencyOption(val);
+        await loadCurrencyOptionsAndRefresh();
+
+        if (pendingSelect) {
+          const newVal = created.value || created.label || created.opt_key || val;
+          pendingSelect.value = newVal;
+          pendingSelect.setAttribute('data-prev-value', newVal);
+        }
+
+        inputEl.value = '';
+      } catch (err) {
+        alert(err.message || 'Currency save failed');
+      }
+    });
+  }
+
+  if (listEl) {
+    listEl.addEventListener('click', async function (e) {
+      const btn = e.target.closest('.currency-option-delete-btn');
+      if (!btn) return;
+
+      try {
+        const id = Number(btn.getAttribute('data-id'));
+        if (!id) return;
+
+        await deleteCurrencyOption(id);
+        await loadCurrencyOptionsAndRefresh();
+      } catch (err) {
+        alert(err.message || 'Delete failed');
+      }
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('.currency-option-close-btn') || e.target === currencyModalEl) {
+      currencyModalEl.classList.add('d-none');
+      currencyModalEl.setAttribute('aria-hidden', 'true');
+    }
+  });
+
+  loadCurrencyOptionsAndRefresh().catch(function (err) {
+    console.error('Currency options load error:', err);
+  });
+})();
+</script>
+<%- include('partials/bootstrap-footer') %>

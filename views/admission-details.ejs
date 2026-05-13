@@ -688,9 +688,11 @@ if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; f
       </div>
     </div>
 
-    <a href="<%= backUrl %>" class="btn rounded-pill btn-premium-back btn-sm">
-      <i class="bi bi-arrow-left"></i> Back
-    </a>
+    <div class="d-flex align-items-center gap-2">
+  <a href="<%= backUrl %>" class="btn rounded-pill btn-premium-back btn-sm">
+    <i class="bi bi-arrow-left"></i> Back
+  </a>
+</div>
   </div>
 
   <div class="card border-0 inner-card mb-3">
@@ -927,7 +929,6 @@ if (regInfo.enabled) {
                       <% } %>
                     </span>
                   </div>
-
                   <div class="drow">
                     <span class="k">Pending Due:</span>
                     <span class="v">
@@ -937,6 +938,13 @@ if (regInfo.enabled) {
                       <% } %>
                     </span>
                   </div>
+                  <div class="profile-edit-center">
+  <a
+    href="<%= (role === 'admin') ? ('/admin/admission/' + X.id + '/edit') : ('/dashboard/super/admission/' + X.id + '/edit') %>"
+    class="btn btn-sm btn-premium-edit px-4 rounded-3">
+    <i class="bi bi-pencil-square me-1"></i> Edit
+  </a>
+</div>
                 </div>
 
               </div>
@@ -1690,6 +1698,29 @@ const canPrintPaid =
     box-shadow: 0 18px 34px rgba(124,58,237,.24);
     filter: brightness(1.03);
   }
+  .profile-edit-center{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding-top: 18px;
+  margin-top: 8px;
+}
+  .btn-premium-edit{
+  color: #fff !important;
+  border: 1px solid rgba(124,58,237,.24) !important;
+  background: linear-gradient(135deg, #7c3aed, #6366f1) !important;
+  box-shadow: 0 12px 22px rgba(124,58,237,.18);
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+  font-weight: 800;
+}
+
+.btn-premium-edit:hover,
+.btn-premium-edit:focus{
+  color: #fff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 18px 34px rgba(124,58,237,.24);
+  filter: brightness(1.03);
+}
 
   .btn-premium-back{
     color: rgba(15,23,42,.86) !important;

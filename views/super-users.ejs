@@ -49,13 +49,13 @@
 
 .subagent-filter-active{
   background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%) !important;
-  color: #000 !important;
+  color: #fff !important;
   border: 1px solid #3b82f6 !important;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
 }
 
 .subagent-filter-active i{
-  color: #000 !important;
+  color: #fff !important;
 }
 
 .subagent-filter-btn{
@@ -82,15 +82,14 @@
 }
 .super-filter-active{
   background: #dc3545 !important;
-  color: #000 !important;
+  color: #fff !important;
   border: 1px solid #dc3545 !important;
   box-shadow: 0 6px 14px rgba(220, 53, 69, 0.16);
 }
 
 .super-filter-active i{
-  color: #000 !important;
+  color: #fff !important;
 }
-
 .super-filter-btn{
   background: #fff !important;
   color: #000 !important;
@@ -103,13 +102,13 @@
 
 .admin-filter-active{
   background: #198754 !important;
-  color: #000 !important;
+  color: #fff !important;
   border: 1px solid #198754 !important;
   box-shadow: 0 6px 14px rgba(25, 135, 84, 0.16);
 }
 
 .admin-filter-active i{
-  color: #000 !important;
+  color: #fff !important;
 }
 
 .admin-filter-btn{
@@ -136,10 +135,69 @@
 }
 
 .agent-role-badge-soft{
-  background: rgba(244, 180, 0, 0.12) !important;
-  color: #9a6a00 !important;
-  border: 1px solid rgba(244, 180, 0, 0.28) !important;
-  box-shadow: 0 4px 12px rgba(244, 180, 0, 0.08);
+  background: rgba(124, 58, 237, 0.14) !important;
+  color: #5b21b6 !important;
+  border: 1px solid rgba(124, 58, 237, 0.30) !important;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.10);
+}
+
+.agent-role-badge-soft i{
+  color: #5b21b6 !important;
+}
+.agent-filter-active{
+  background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
+  color: #fff !important;
+  border: 1px solid #5b21b6 !important;
+  box-shadow: 0 8px 18px rgba(124, 58, 237, 0.22);
+}
+
+.agent-filter-active i{
+  color: #fff !important;
+}
+
+.agent-filter-btn{
+  background: #fff !important;
+  color: #111827 !important;
+  border: 1px solid rgba(124, 58, 237, 0.45) !important;
+}
+
+.agent-filter-btn i{
+  color: #111827 !important;
+}
+.agent-avatar{
+  background: linear-gradient(135deg, #8b5cf6, #5b21b6) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 18px rgba(124, 58, 237, 0.22);
+}
+.agent-pipeline-badge{
+  background: rgba(124, 58, 237, 0.12) !important;
+  color: #5b21b6 !important;
+  border: 1px solid rgba(124, 58, 237, 0.26) !important;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
+}
+
+.agent-pipeline-badge i{
+  color: #5b21b6 !important;
+}
+.admin-pipeline-badge{
+  background: rgba(25, 135, 84, 0.12) !important;
+  color: #157347 !important;
+  border: 1px solid rgba(25, 135, 84, 0.26) !important;
+  box-shadow: 0 4px 12px rgba(25, 135, 84, 0.08);
+}
+
+.admin-pipeline-badge i{
+  color: #157347 !important;
+}
+.total-users-badge{
+  background: rgba(220, 53, 69, 0.12) !important;
+  color: #b42318 !important;
+  border: 1px solid rgba(220, 53, 69, 0.26) !important;
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.08);
+}
+
+.total-users-badge i{
+  color: #b42318 !important;
 }
 </style>
 
@@ -199,9 +257,9 @@
 </a>
 
         <a href="/dashboard/super/users?role=agent"
-           class="btn btn-sm rounded-pill px-3 <%= roleFilterNorm === 'agent' ? 'btn-warning text-dark border-warning' : 'btn-outline-warning text-dark' %>">
-         <i class="bi bi-person-workspace me-1"></i> Agents
-        </a>
+   class="btn btn-sm rounded-pill px-3 <%= roleFilterNorm === 'agent' ? 'agent-filter-active' : 'agent-filter-btn' %>">
+ <i class="bi bi-person-workspace me-1"></i> Agents
+</a>
 
        <a href="/dashboard/super/users?role=sub_agent"
    class="btn btn-sm rounded-pill px-3 <%= roleFilterNorm === 'sub_agent' ? 'subagent-filter-active' : 'subagent-filter-btn' %>">
@@ -222,9 +280,9 @@
                 <div class="text-muted">Total users</div>
                 <div class="h5 mb-0"><%= counts.total %></div>
               </div>
-              <span class="badge rounded-pill bg-light text-muted">
-                <i class="bi bi-people me-1"></i>All
-              </span>
+              <span class="badge rounded-pill total-users-badge">
+  <i class="bi bi-people me-1"></i>All
+</span>
             </div>
           </div>
         </div>
@@ -236,9 +294,9 @@
                 <div class="text-muted">Admins (incl. Super)</div>
                 <div class="h5 mb-0"><%= counts.admins %></div>
               </div>
-           <span class="badge rounded-pill bg-warning-subtle text-dark">
-            <i class="bi bi-person-workspace me-1"></i>Pipeline
-          </span>
+           <span class="badge rounded-pill admin-pipeline-badge">
+  <i class="bi bi-person-workspace me-1"></i>Pipeline
+</span>
             </div>
           </div>
         </div>
@@ -250,9 +308,9 @@
                 <div class="text-muted">Agents</div>
                 <div class="h5 mb-0"><%= counts.agents %></div>
               </div>
-              <span class="badge rounded-pill bg-success-subtle text-success">
-                <i class="bi bi-person-workspace me-1"></i>Pipeline
-              </span>
+              <span class="badge rounded-pill agent-pipeline-badge">
+  <i class="bi bi-person-workspace me-1"></i>Pipeline
+</span>
             </div>
           </div>
         </div>
@@ -352,7 +410,7 @@
        : (u.role === 'admin'
        ? 'bg-success text-white'
        : (u.role === 'agent'
-       ? 'bg-warning text-dark'
+       ? 'agent-avatar'
        : 'subagent-avatar')) %>"
   style="width:36px;height:36px;">
                     <%= (u.name || 'U').charAt(0).toUpperCase() %>
