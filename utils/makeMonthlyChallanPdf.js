@@ -423,9 +423,18 @@ const monthStrip = sixMonthsHistory.map((item) => {
 
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width: 1600, height: 2200, deviceScaleFactor: 1 });
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    await page.emulateMediaType("print");
+
+page.setDefaultNavigationTimeout(0);
+page.setDefaultTimeout(0);
+
+await page.setViewport({ width: 1600, height: 2200, deviceScaleFactor: 1 });
+
+await page.setContent(html, {
+  waitUntil: "domcontentloaded",
+  timeout: 0
+});
+
+await page.emulateMediaType("print");
 
     const pdfUint8 = await page.pdf({
       format: "A4",
