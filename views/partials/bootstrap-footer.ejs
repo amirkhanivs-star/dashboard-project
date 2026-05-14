@@ -10,7 +10,6 @@
     </div> <!-- /d-flex -->
 <script>
   (function () {
-    // Smooth page change, refresh, logout, sidebar links, dashboard links
     document.addEventListener("click", function (e) {
       const link = e.target.closest("a[href]");
       if (!link) return;
@@ -26,14 +25,25 @@
         return;
       }
 
+      e.preventDefault();
+
       document.documentElement.classList.add("ivs-page-leaving");
+      document.documentElement.classList.add("ivs-loading");
+
+      setTimeout(function () {
+        window.location.href = href;
+      }, 1000);
     });
 
-    // Browser back/forward cache fix
-    window.addEventListener("pageshow", function () {
-      document.documentElement.classList.remove("ivs-page-leaving");
-      document.documentElement.classList.remove("ivs-preload");
-    });
+    window.addEventListener("pageshow", function (event) {
+  document.documentElement.classList.remove("ivs-page-leaving");
+
+  // Browser back/forward cache case only
+  if (event.persisted) {
+    document.documentElement.classList.remove("ivs-preload");
+    document.documentElement.classList.remove("ivs-loading");
+  }
+});
   })();
 </script>
 

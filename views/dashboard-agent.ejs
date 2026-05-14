@@ -893,7 +893,7 @@ const hasAnyUi = visibleColCount > 0;
 
             <select
               class="form-select form-select-sm agent-pagination-limit"
-              onchange="document.documentElement.classList.add('ivs-page-leaving'); setTimeout(() => { window.location.href=this.value; }, 120);">
+              onchange="document.documentElement.classList.add('ivs-page-leaving'); document.documentElement.classList.add('ivs-loading'); setTimeout(() => { window.location.href=this.value; }, 1000);">
               <option value="<%= buildPageUrl(1, 50) %>" <%= pageLimit === 50 ? 'selected' : '' %>>50</option>
               <option value="<%= buildPageUrl(1, 100) %>" <%= pageLimit === 100 ? 'selected' : '' %>>100</option>
               <option value="<%= buildPageUrl(1, 200) %>" <%= pageLimit === 200 ? 'selected' : '' %>>200</option>
@@ -4192,10 +4192,11 @@ const hasAnyUi = visibleColCount > 0;
   }
 
   document.documentElement.classList.add("ivs-page-leaving");
+  document.documentElement.classList.add("ivs-loading");
 
   setTimeout(function () {
     window.location.reload();
-  }, Number(delay || 120));
+  }, Number(delay || 2000));
 };
 
     function restoreViewportState() {
@@ -4721,7 +4722,7 @@ setTimeout(function () {
 
             setTimeout(function () {
   if (typeof window.smoothDashboardReload === "function") {
-    window.smoothDashboardReload(120);
+    window.smoothDashboardReload(1000);
   } else {
     window.location.reload();
   }
@@ -5756,7 +5757,7 @@ editingBillingStatusOldValue = String(nameEl.textContent || '').trim();
 
       setTimeout(function () {
   if (typeof window.smoothDashboardReload === "function") {
-    window.smoothDashboardReload(120);
+    window.smoothDashboardReload(1000);
   } else {
     window.location.reload();
   }
@@ -5786,7 +5787,7 @@ editingBillingStatusOldValue = String(nameEl.textContent || '').trim();
 
       setTimeout(function () {
   if (typeof window.smoothDashboardReload === "function") {
-    window.smoothDashboardReload(120);
+    window.smoothDashboardReload(1000);
   } else {
     window.location.reload();
   }
@@ -6116,7 +6117,7 @@ editingBillingStatusOldValue = String(nameEl.textContent || '').trim();
 
               setTimeout(() => {
   if (typeof window.smoothDashboardReload === "function") {
-    window.smoothDashboardReload(120);
+    window.smoothDashboardReload(1000);
   } else {
     window.location.reload();
   }
@@ -6139,7 +6140,7 @@ editingBillingStatusOldValue = String(nameEl.textContent || '').trim();
 
               setTimeout(() => {
   if (typeof window.smoothDashboardReload === "function") {
-    window.smoothDashboardReload(120);
+    window.smoothDashboardReload(1000);
   } else {
     window.location.reload();
   }
@@ -6305,7 +6306,7 @@ editingBillingStatusOldValue = String(nameEl.textContent || '').trim();
 
           setTimeout(() => {
   if (typeof window.smoothDashboardReload === "function") {
-    window.smoothDashboardReload(120);
+    window.smoothDashboardReload(1000);
   } else {
     window.location.reload();
   }

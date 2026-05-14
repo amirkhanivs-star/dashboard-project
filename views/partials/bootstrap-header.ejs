@@ -19,21 +19,299 @@
     }
 
     html.ivs-preload body{
-      opacity:0;
-      visibility:hidden;
-    }
+  opacity:1;
+  visibility:visible;
+}
 
     html.ivs-ready body{
-      opacity:1;
-      visibility:visible;
-      transition:opacity 160ms ease-in;
-    }
+  opacity:1;
+  visibility:visible;
+}
 
-    html.ivs-preload *,
-    html.ivs-page-leaving *{
-      transition:none !important;
-      animation:none !important;
-    }
+    html.ivs-preload *:not(#ivsGlobalLoader):not(#ivsGlobalLoader *),
+html.ivs-page-leaving *:not(#ivsGlobalLoader):not(#ivsGlobalLoader *){
+  transition:none !important;
+  animation:none !important;
+}
+   /* ✅ Luxury global loading screen */
+#ivsGlobalLoader {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.98), rgba(248,250,252,.94)),
+    radial-gradient(circle at 15% 20%, rgba(179,0,0,.22), transparent 34%),
+    radial-gradient(circle at 85% 25%, rgba(37,99,235,.20), transparent 34%),
+    radial-gradient(circle at 50% 90%, rgba(124,58,237,.18), transparent 38%);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 220ms ease, visibility 220ms ease;
+}
+
+html.ivs-loading #ivsGlobalLoader,
+html.ivs-preload #ivsGlobalLoader {
+  display: flex;
+  opacity: 1;
+  visibility: visible;
+}
+
+
+
+#ivsGlobalLoader::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at center, transparent 0%, rgba(255,255,255,.25) 42%, rgba(15,23,42,.045) 100%);
+  pointer-events: none;
+}
+
+.ivs-luxury-orb {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  border-radius: 999px;
+  filter: blur(22px);
+  opacity: .22;
+  animation: none;
+}
+
+.orb-red {
+  left: -140px;
+  top: -110px;
+  background: rgba(220,38,38,.42);
+}
+
+.orb-blue {
+  right: -150px;
+  top: 120px;
+  background: rgba(37,99,235,.36);
+  animation-delay: 1s;
+}
+
+.orb-purple {
+  left: 38%;
+  bottom: -180px;
+  background: rgba(124,58,237,.34);
+  animation-delay: 1.8s;
+}
+
+.ivs-loader-stage {
+  position: relative;
+  z-index: 2;
+  width: min(430px, calc(100vw - 34px));
+  padding: 0;
+  border-radius: 0;
+  text-align: center;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: ivsStageEnter .45s cubic-bezier(.2,.8,.2,1) both;
+}
+
+
+.ivs-loader-brand {
+  position: relative;
+  width: 116px;
+  height: 116px;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ivs-loader-logo-box {
+  width: 74px;
+  height: 74px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #b30000, #ef4444 48%, #7c3aed);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 950;
+  letter-spacing: .6px;
+  box-shadow:
+    0 18px 35px rgba(179,0,0,.26),
+    inset 0 1px 0 rgba(255,255,255,.28);
+  animation: none;
+}
+
+.ivs-loader-logo-box span {
+  font-size: 18px;
+}
+
+.ivs-loader-orbit,
+.ivs-loader-orbit.orbit-two {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  border-top-color: rgba(179,0,0,.92);
+  border-right-color: rgba(37,99,235,.82);
+  animation: ivsOrbitSpin 1.4s linear infinite;
+}
+
+.ivs-loader-orbit.orbit-two {
+  inset: 13px;
+  border-top-color: rgba(124,58,237,.82);
+  border-right-color: rgba(239,68,68,.80);
+  animation-duration: 1.95s;
+  animation-direction: reverse;
+}
+
+.ivs-loader-badge {
+  display: inline-flex;
+  padding: 7px 15px;
+  border-radius: 999px;
+  background: rgba(179,0,0,.08);
+  border: 1px solid rgba(179,0,0,.16);
+  color: #b30000;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: .55px;
+  margin-bottom: 14px;
+  box-shadow: 0 8px 18px rgba(179,0,0,.06);
+}
+
+.ivs-loader-title {
+  margin: 0;
+  font-size: clamp(34px, 4vw, 48px);
+  font-weight: 950;
+  letter-spacing: -1.4px;
+  line-height: 1.05;
+  color: #0f172a;
+}
+
+.ivs-loader-subtitle {
+  margin: 13px auto 0;
+  max-width: 360px;
+  color: #64748b;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.ivs-loader-line {
+  position: relative;
+  width: 310px;
+max-width: 80%;
+  height: 11px;
+  margin: 30px auto 22px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(148,163,184,.18);
+  box-shadow:
+    inset 0 1px 2px rgba(15,23,42,.08),
+    0 10px 20px rgba(15,23,42,.04);
+}
+
+.ivs-loader-line span {
+  position: absolute;
+  inset: 0;
+  width: 44%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #b30000, #ef4444, #7c3aed, #2563eb);
+  box-shadow: 0 0 22px rgba(239,68,68,.34);
+  animation: ivsLuxuryProgress 1.25s ease-in-out infinite;
+}
+
+.ivs-loader-mini {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.ivs-loader-mini span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #b30000;
+  animation: ivsMiniWave 1s ease-in-out infinite;
+}
+
+.ivs-loader-mini span:nth-child(2) {
+  background: #7c3aed;
+  animation-delay: .14s;
+}
+
+.ivs-loader-mini span:nth-child(3) {
+  background: #2563eb;
+  animation-delay: .28s;
+}
+
+@keyframes ivsStageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(.94);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes ivsLuxuryFloat {
+  0%, 100% {
+    transform: translate3d(0,0,0) scale(1);
+  }
+  50% {
+    transform: translate3d(32px,22px,0) scale(1.08);
+  }
+}
+
+@keyframes ivsOrbitSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ivsLuxuryProgress {
+  0% {
+    transform: translateX(-120%);
+  }
+  55% {
+    transform: translateX(82%);
+  }
+  100% {
+    transform: translateX(235%);
+  }
+}
+
+@keyframes ivsMiniWave {
+  0%, 100% {
+    transform: translateY(0) scale(.82);
+    opacity: .45;
+  }
+  50% {
+    transform: translateY(-8px) scale(1);
+    opacity: 1;
+  }
+}
+
+html.ivs-preload .ivs-sidebar,
+html.ivs-preload .ivs-main,
+html.ivs-preload .ivs-topbar,
+html.ivs-loading .ivs-sidebar,
+html.ivs-loading .ivs-main,
+html.ivs-loading .ivs-topbar {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+html.ivs-ready .ivs-sidebar,
+html.ivs-ready .ivs-main,
+html.ivs-ready .ivs-topbar {
+  opacity: 1;
+  visibility: visible;
+}
 
     :root{
       --ivs-sidebar-w: 260px;
@@ -342,27 +620,58 @@
 %>
 
 <body class="layout-dashboard" data-theme="<%= themeClass %>">
+ <div id="ivsGlobalLoader" aria-hidden="true">
+  <div class="ivs-luxury-orb orb-red"></div>
+  <div class="ivs-luxury-orb orb-blue"></div>
+  <div class="ivs-luxury-orb orb-purple"></div>
+
+  <div class="ivs-loader-stage">
+    <div class="ivs-loader-brand">
+      <div class="ivs-loader-logo-box">
+        <span>IVS</span>
+      </div>
+      <div class="ivs-loader-orbit"></div>
+      <div class="ivs-loader-orbit orbit-two"></div>
+    </div>
+
+    <p class="ivs-loader-subtitle">
+      Please wait, your live workspace is getting ready
+    </p>
+
+    <div class="ivs-loader-line">
+      <span></span>
+    </div>
+
+    <div class="ivs-loader-mini">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+  </div>
+</div>
     <script>
-    (function () {
-      function showDashboardSmoothly() {
-        const html = document.documentElement;
+  (function () {
+    function showDashboardSmoothly() {
+      const html = document.documentElement;
+
+      setTimeout(function () {
         html.classList.remove("ivs-preload");
+        html.classList.remove("ivs-loading");
         html.classList.add("ivs-ready");
 
         setTimeout(function () {
           html.classList.remove("ivs-ready");
         }, 400);
-      }
+     }, 1000);
+    }
 
-      if (document.readyState === "complete") {
-        showDashboardSmoothly();
-      } else {
-        window.addEventListener("load", showDashboardSmoothly, { once: true });
-      }
-
-      setTimeout(showDashboardSmoothly, 1200);
-    })();
-  </script>
+    if (document.readyState === "complete") {
+      showDashboardSmoothly();
+    } else {
+      window.addEventListener("load", showDashboardSmoothly, { once: true });
+    }
+  })();
+</script>
   <script>
     try{
       if (localStorage.getItem("ivs_sidebar_collapsed") === "1") {
