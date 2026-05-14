@@ -928,7 +928,7 @@ function escHtml(value) {
 
           <select
             class="form-select form-select-sm admin-pagination-limit"
-            onchange="window.location.href=this.value">
+            onchange="document.documentElement.classList.add('ivs-page-leaving'); setTimeout(() => { window.location.href=this.value; }, 120);">
             <option value="<%= buildPageUrl(1, 50) %>" <%= pageLimit === 50 ? 'selected' : '' %>>50</option>
             <option value="<%= buildPageUrl(1, 100) %>" <%= pageLimit === 100 ? 'selected' : '' %>>100</option>
             <option value="<%= buildPageUrl(1, 200) %>" <%= pageLimit === 200 ? 'selected' : '' %>>200</option>
@@ -5835,8 +5835,12 @@ if (editBillingStatusSaveBtn) {
       }
 
       setTimeout(function () {
-        window.location.reload();
-      }, 250);
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 250);
     }
 
     if (okBtn) okBtn.onclick = reloadAfterPopupClose;
@@ -5945,11 +5949,12 @@ if (editBillingStatusSaveBtn) {
       pending = true;
 
       setTimeout(function () {
-        if (typeof saveViewportState === "function") {
-          saveViewportState();
-        }
-        window.location.reload();
-      }, 4200);
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 4200);
     });
 
     socket.on("user:updated", function (payload) {
@@ -5974,11 +5979,12 @@ if (editBillingStatusSaveBtn) {
       pending = true;
 
       setTimeout(function () {
-        if (typeof saveViewportState === "function") {
-          saveViewportState();
-        }
-        window.location.reload();
-      }, 300);
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 300);
     });
   })();
 </script>
@@ -6018,6 +6024,18 @@ if (editBillingStatusSaveBtn) {
 
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     };
+
+    window.smoothDashboardReload = function (delay) {
+  if (typeof window.saveViewportState === "function") {
+    window.saveViewportState();
+  }
+
+  document.documentElement.classList.add("ivs-page-leaving");
+
+  setTimeout(function () {
+    window.location.reload();
+  }, Number(delay || 120));
+};
 
     function restoreViewportState() {
       const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -6252,7 +6270,13 @@ if (editBillingStatusSaveBtn) {
                 window.saveViewportState();
               }
 
-              setTimeout(() => window.location.reload(), 500);
+              setTimeout(() => {
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 500);
               return;
             }
 
@@ -6269,7 +6293,13 @@ if (editBillingStatusSaveBtn) {
                 window.saveViewportState();
               }
 
-              setTimeout(() => window.location.reload(), 500);
+              setTimeout(() => {
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 500);
               return;
             }
           } catch (err) {
@@ -6430,7 +6460,13 @@ if (editBillingStatusSaveBtn) {
             window.saveViewportState();
           }
 
-          setTimeout(() => window.location.reload(), 900);
+          setTimeout(() => {
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 900);
         } catch (err) {
           console.error(err);
           showPopup('error', 'Update Failed', 'Invoice status update failed.');

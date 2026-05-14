@@ -685,13 +685,13 @@
           <span class="small text-muted">Rows per page</span>
 
           <select
-            class="form-select form-select-sm super-pagination-limit"
-            onchange="window.location.href=this.value">
-            <option value="<%= buildPageUrl(1, 50) %>" <%= pageLimit === 50 ? 'selected' : '' %>>50</option>
-            <option value="<%= buildPageUrl(1, 100) %>" <%= pageLimit === 100 ? 'selected' : '' %>>100</option>
-            <option value="<%= buildPageUrl(1, 200) %>" <%= pageLimit === 200 ? 'selected' : '' %>>200</option>
-            <option value="<%= buildPageUrl(1, 500) %>" <%= pageLimit === 500 ? 'selected' : '' %>>500</option>
-          </select>
+  class="form-select form-select-sm super-pagination-limit"
+  onchange="document.documentElement.classList.add('ivs-page-leaving'); setTimeout(() => { window.location.href=this.value; }, 120);">
+  <option value="<%= buildPageUrl(1, 50) %>" <%= pageLimit === 50 ? 'selected' : '' %>>50</option>
+  <option value="<%= buildPageUrl(1, 100) %>" <%= pageLimit === 100 ? 'selected' : '' %>>100</option>
+  <option value="<%= buildPageUrl(1, 200) %>" <%= pageLimit === 200 ? 'selected' : '' %>>200</option>
+  <option value="<%= buildPageUrl(1, 500) %>" <%= pageLimit === 500 ? 'selected' : '' %>>500</option>
+</select>
 
           <span class="small text-muted">
             <%= startRecord %> - <%= endRecord %> of <%= totalRecords %>
@@ -4584,11 +4584,12 @@ if (feeLabel) {
   pending = true;
 
   setTimeout(function () {
-    if (typeof saveViewportState === "function") {
-      saveViewportState();
-    }
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
     window.location.reload();
-  }, 4200);
+  }
+}, 4200);
 });
 
 socket.on("user:updated", function (payload) {
@@ -4613,11 +4614,12 @@ socket.on("user:updated", function (payload) {
   pending = true;
 
   setTimeout(function () {
-    if (typeof saveViewportState === "function") {
-      saveViewportState();
-    }
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
     window.location.reload();
-  }, 300);
+  }
+}, 300);
 });
   })();
 
@@ -5109,6 +5111,18 @@ document.addEventListener("click", function (e) {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     };
 
+    window.smoothDashboardReload = function (delay) {
+  if (typeof window.saveViewportState === "function") {
+    window.saveViewportState();
+  }
+
+  document.documentElement.classList.add("ivs-page-leaving");
+
+  setTimeout(function () {
+    window.location.reload();
+  }, Number(delay || 120));
+};
+
     function restoreViewportState() {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       if (!raw) return;
@@ -5329,7 +5343,13 @@ document.addEventListener("click", function (e) {
                 window.saveViewportState();
               }
 
-              setTimeout(() => window.location.reload(), 500);
+              setTimeout(() => {
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 500);
               return;
             }
 
@@ -5346,7 +5366,13 @@ document.addEventListener("click", function (e) {
                 window.saveViewportState();
               }
 
-              setTimeout(() => window.location.reload(), 500);
+              setTimeout(() => {
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 500);
               return;
             }
           } catch (err) {
@@ -5502,7 +5528,13 @@ document.addEventListener("click", function (e) {
           window.saveViewportState();
         }
 
-        setTimeout(() => window.location.reload(), 900);
+       setTimeout(() => {
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 900);
       } catch (err) {
         console.error(err);
         showPopup('error', 'Update Failed', 'Invoice status update failed.');

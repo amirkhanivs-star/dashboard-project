@@ -2,12 +2,40 @@
         </div> <!-- /page content wrapper -->
 
         <!-- FOOTER -->
-       <footer class="bg-white border-top py-2 text-center small text-muted mt-auto">
+       <footer class="border-top py-2 text-center small text-muted mt-auto ivs-footer">
   © <%= new Date().getFullYear() %>  MAK
 </footer>
 
       </main>
     </div> <!-- /d-flex -->
+<script>
+  (function () {
+    // Smooth page change, refresh, logout, sidebar links, dashboard links
+    document.addEventListener("click", function (e) {
+      const link = e.target.closest("a[href]");
+      if (!link) return;
+
+      const href = link.getAttribute("href") || "";
+
+      if (
+        href.startsWith("#") ||
+        href.startsWith("javascript:") ||
+        link.target === "_blank" ||
+        link.hasAttribute("download")
+      ) {
+        return;
+      }
+
+      document.documentElement.classList.add("ivs-page-leaving");
+    });
+
+    // Browser back/forward cache fix
+    window.addEventListener("pageshow", function () {
+      document.documentElement.classList.remove("ivs-page-leaving");
+      document.documentElement.classList.remove("ivs-preload");
+    });
+  })();
+</script>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

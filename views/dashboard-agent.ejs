@@ -893,7 +893,7 @@ const hasAnyUi = visibleColCount > 0;
 
             <select
               class="form-select form-select-sm agent-pagination-limit"
-              onchange="window.location.href=this.value">
+              onchange="document.documentElement.classList.add('ivs-page-leaving'); setTimeout(() => { window.location.href=this.value; }, 120);">
               <option value="<%= buildPageUrl(1, 50) %>" <%= pageLimit === 50 ? 'selected' : '' %>>50</option>
               <option value="<%= buildPageUrl(1, 100) %>" <%= pageLimit === 100 ? 'selected' : '' %>>100</option>
               <option value="<%= buildPageUrl(1, 200) %>" <%= pageLimit === 200 ? 'selected' : '' %>>200</option>
@@ -4150,7 +4150,126 @@ const hasAnyUi = visibleColCount > 0;
     }
   })();
 </script>
+<script>
+  (function () {
+    const STORAGE_KEY = "agent_dashboard_viewport";
+    const RECENT_KEY = "agent_dashboard_recent_submit";
 
+    function getPipelineScroll() {
+      return document.querySelector(".pipeline-scroll");
+    }
+
+    function getMainScrollTop() {
+      return (
+        window.pageYOffset ||
+        document.documentElement.scrollTop ||
+        document.body.scrollTop ||
+        0
+      );
+    }
+
+    function setMainScrollTop(value) {
+      window.scrollTo(0, Number(value || 0));
+      document.documentElement.scrollTop = Number(value || 0);
+      document.body.scrollTop = Number(value || 0);
+    }
+
+    window.saveViewportState = function () {
+      const wrap = getPipelineScroll();
+
+      const state = {
+        pageY: getMainScrollTop(),
+        tableLeft: wrap ? wrap.scrollLeft : 0,
+        tableTop: wrap ? wrap.scrollTop : 0
+      };
+
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    };
+
+    window.smoothDashboardReload = function (delay) {
+  if (typeof window.saveViewportState === "function") {
+    window.saveViewportState();
+  }
+
+  document.documentElement.classList.add("ivs-page-leaving");
+
+  setTimeout(function () {
+    window.location.reload();
+  }, Number(delay || 120));
+};
+
+    function restoreViewportState() {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+
+      try {
+        const state = JSON.parse(raw);
+        const wrap = getPipelineScroll();
+
+        const applyRestore = function () {
+          setMainScrollTop(state.pageY || 0);
+
+          if (wrap) {
+            wrap.scrollLeft = Number(state.tableLeft || 0);
+            wrap.scrollTop = Number(state.tableTop || 0);
+          }
+        };
+
+        applyRestore();
+
+        requestAnimationFrame(() => {
+          applyRestore();
+
+          requestAnimationFrame(() => {
+            applyRestore();
+
+            setTimeout(() => {
+              applyRestore();
+            }, 120);
+          });
+        });
+      } catch (err) {
+        console.error("Viewport restore failed:", err);
+      }
+
+      sessionStorage.removeItem(STORAGE_KEY);
+    }
+
+    function bindSaveEvents() {
+      document.querySelectorAll('form[id^="rowForm_"]').forEach(form => {
+        if (form.dataset.viewportBound === "1") return;
+        form.dataset.viewportBound = "1";
+
+        form.addEventListener("submit", function () {
+          window.saveViewportState();
+          sessionStorage.setItem(RECENT_KEY, "1");
+        });
+      });
+
+      document.querySelectorAll(".action-update").forEach(btn => {
+        if (btn.dataset.viewportBound === "1") return;
+        btn.dataset.viewportBound = "1";
+
+        btn.addEventListener("click", function () {
+          window.saveViewportState();
+          sessionStorage.setItem(RECENT_KEY, "1");
+        });
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      bindSaveEvents();
+    });
+
+    window.addEventListener("load", function () {
+      restoreViewportState();
+
+      setTimeout(function () {
+        sessionStorage.removeItem(RECENT_KEY);
+      }, 8000);
+    });
+  })();
+</script>
 <!-- Socket.IO -->
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -4601,8 +4720,12 @@ setTimeout(function () {
             }
 
             setTimeout(function () {
-              window.location.reload();
-            }, 250);
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 250);
           }
 
           if (okBtn) okBtn.onclick = reloadAfterPopupClose;
@@ -5632,11 +5755,12 @@ editingBillingStatusOldValue = String(nameEl.textContent || '').trim();
       pending = true;
 
       setTimeout(function () {
-        if (typeof saveViewportState === "function") {
-          saveViewportState();
-        }
-        window.location.reload();
-      }, 4200);
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 4200);
     });
 
     socket.on("user:updated", function (payload) {
@@ -5661,123 +5785,17 @@ editingBillingStatusOldValue = String(nameEl.textContent || '').trim();
       pending = true;
 
       setTimeout(function () {
-        if (typeof saveViewportState === "function") {
-          saveViewportState();
-        }
-        window.location.reload();
-      }, 300);
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 300);
     });
   })();
 </script>
 
-<script>
-  (function () {
-    const STORAGE_KEY = "agent_dashboard_viewport";
-    const RECENT_KEY = "agent_dashboard_recent_submit";
 
-    function getPipelineScroll() {
-      return document.querySelector(".pipeline-scroll");
-    }
-
-    function getMainScrollTop() {
-      return (
-        window.pageYOffset ||
-        document.documentElement.scrollTop ||
-        document.body.scrollTop ||
-        0
-      );
-    }
-
-    function setMainScrollTop(value) {
-      window.scrollTo(0, Number(value || 0));
-      document.documentElement.scrollTop = Number(value || 0);
-      document.body.scrollTop = Number(value || 0);
-    }
-
-    window.saveViewportState = function () {
-      const wrap = getPipelineScroll();
-
-      const state = {
-        pageY: getMainScrollTop(),
-        tableLeft: wrap ? wrap.scrollLeft : 0,
-        tableTop: wrap ? wrap.scrollTop : 0
-      };
-
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    };
-
-    function restoreViewportState() {
-      const raw = sessionStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-
-      try {
-        const state = JSON.parse(raw);
-        const wrap = getPipelineScroll();
-
-        const applyRestore = function () {
-          setMainScrollTop(state.pageY || 0);
-
-          if (wrap) {
-            wrap.scrollLeft = Number(state.tableLeft || 0);
-            wrap.scrollTop = Number(state.tableTop || 0);
-          }
-        };
-
-        applyRestore();
-
-        requestAnimationFrame(() => {
-          applyRestore();
-
-          requestAnimationFrame(() => {
-            applyRestore();
-
-            setTimeout(() => {
-              applyRestore();
-            }, 120);
-          });
-        });
-      } catch (err) {
-        console.error("Viewport restore failed:", err);
-      }
-
-      sessionStorage.removeItem(STORAGE_KEY);
-    }
-
-    function bindSaveEvents() {
-      document.querySelectorAll('form[id^="rowForm_"]').forEach(form => {
-        if (form.dataset.viewportBound === "1") return;
-        form.dataset.viewportBound = "1";
-
-        form.addEventListener("submit", function () {
-          window.saveViewportState();
-          sessionStorage.setItem(RECENT_KEY, "1");
-        });
-      });
-
-      document.querySelectorAll(".action-update").forEach(btn => {
-        if (btn.dataset.viewportBound === "1") return;
-        btn.dataset.viewportBound = "1";
-
-        btn.addEventListener("click", function () {
-          window.saveViewportState();
-          sessionStorage.setItem(RECENT_KEY, "1");
-        });
-      });
-    }
-
-    document.addEventListener("DOMContentLoaded", function () {
-      bindSaveEvents();
-    });
-
-    window.addEventListener("load", function () {
-      restoreViewportState();
-
-      setTimeout(function () {
-        sessionStorage.removeItem(RECENT_KEY);
-      }, 8000);
-    });
-  })();
-</script>
 <script>
   /* ✅ Agent card search/filter */
   (function () {
@@ -6096,7 +6114,13 @@ editingBillingStatusOldValue = String(nameEl.textContent || '').trim();
                 window.saveViewportState();
               }
 
-              setTimeout(() => window.location.reload(), 500);
+              setTimeout(() => {
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 500);
               return;
             }
 
@@ -6113,7 +6137,13 @@ editingBillingStatusOldValue = String(nameEl.textContent || '').trim();
                 window.saveViewportState();
               }
 
-              setTimeout(() => window.location.reload(), 500);
+              setTimeout(() => {
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 500);
               return;
             }
           } catch (err) {
@@ -6273,7 +6303,13 @@ editingBillingStatusOldValue = String(nameEl.textContent || '').trim();
             window.saveViewportState();
           }
 
-          setTimeout(() => window.location.reload(), 900);
+          setTimeout(() => {
+  if (typeof window.smoothDashboardReload === "function") {
+    window.smoothDashboardReload(120);
+  } else {
+    window.location.reload();
+  }
+}, 900);
         } catch (err) {
           console.error(err);
           showPopup('error', 'Update Failed', 'Invoice status update failed.');

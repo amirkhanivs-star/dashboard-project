@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="ivs-preload">
 <head>
   <meta charset="UTF-8" />
   <title><%= pageTitle || 'IQRA Virtual School - Dashboard' %></title>
@@ -12,6 +12,29 @@
   <link rel="stylesheet" href="/css/custom.css">
 
   <style>
+        /* ✅ Anti flicker / stop old colors on refresh */
+    html.ivs-preload,
+    html.ivs-preload body{
+      background:#fff7f7 !important;
+    }
+
+    html.ivs-preload body{
+      opacity:0;
+      visibility:hidden;
+    }
+
+    html.ivs-ready body{
+      opacity:1;
+      visibility:visible;
+      transition:opacity 160ms ease-in;
+    }
+
+    html.ivs-preload *,
+    html.ivs-page-leaving *{
+      transition:none !important;
+      animation:none !important;
+    }
+
     :root{
       --ivs-sidebar-w: 260px;
       --ivs-sidebar-w-collapsed: 72px; /* (kept for reference) */
@@ -217,7 +240,7 @@
       right: 0;
       height: var(--ivs-topbar-h);
       z-index: 1040;
-      background: linear-gradient(90deg, #5b21b6 0%, #7c3aed 45%, #a855f7 100%);
+            background: linear-gradient(90deg, var(--ivs-theme) 0%, var(--ivs-theme) 45%, var(--ivs-theme) 100%);
       box-shadow: 0 2px 12px rgba(0,0,0,0.10);
       transition: left .28s cubic-bezier(.4,0,.2,1);
     }
@@ -319,6 +342,27 @@
 %>
 
 <body class="layout-dashboard" data-theme="<%= themeClass %>">
+    <script>
+    (function () {
+      function showDashboardSmoothly() {
+        const html = document.documentElement;
+        html.classList.remove("ivs-preload");
+        html.classList.add("ivs-ready");
+
+        setTimeout(function () {
+          html.classList.remove("ivs-ready");
+        }, 400);
+      }
+
+      if (document.readyState === "complete") {
+        showDashboardSmoothly();
+      } else {
+        window.addEventListener("load", showDashboardSmoothly, { once: true });
+      }
+
+      setTimeout(showDashboardSmoothly, 1200);
+    })();
+  </script>
   <script>
     try{
       if (localStorage.getItem("ivs_sidebar_collapsed") === "1") {
