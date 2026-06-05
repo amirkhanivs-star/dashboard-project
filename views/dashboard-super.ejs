@@ -637,13 +637,6 @@
     target="_blank"
     class="admission-file-bill-icon <%= a.latestUpload.seenByCurrentUser ? 'seen-file-icon' : 'new-file-icon' %>"
     data-upload-id="<%= a.latestUpload.id %>"
-    data-admission-id="<%= a.id %>"
-    data-student="<%= a.student || a.studentName || 'No Name' %>"
-    data-father="<%= a.father || a.fatherName || '-' %>"
-    data-added-by="<%= a.latestUpload.addedBy || 'System / Old Record' %>"
-    data-added-by-role="<%= a.latestUpload.addedByRole || '' %>"
-    data-file-name="<%= a.latestUpload.fileName || 'File' %>"
-    data-uploaded-at="<%= a.latestUpload.uploadedAt || '' %>"
     title="Open file">
     <i class="bi bi-receipt-cutoff"></i>
 
@@ -2702,6 +2695,132 @@
   border: 1px solid #fecaca;
   text-transform: capitalize;
   white-space: nowrap;
+}
+.admission-card-top-right{
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.admission-file-bill-icon{
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  cursor: pointer;
+  z-index: 30;
+  transition: transform .14s ease, background .14s ease, box-shadow .14s ease;
+}
+
+.admission-file-bill-icon:hover{
+  transform: translateY(-1px) scale(1.03);
+}
+
+.admission-file-bill-icon i{
+  font-size: 15px;
+  line-height: 1;
+}
+
+.new-file-icon{
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  box-shadow: 0 8px 18px rgba(220,38,38,.18);
+}
+
+.new-file-icon:hover{
+  background: #fecaca;
+  color: #b91c1c;
+  box-shadow: 0 12px 24px rgba(220,38,38,.24);
+}
+
+.seen-file-icon{
+  background: #dcfce7;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  box-shadow: 0 8px 18px rgba(22,163,74,.16);
+}
+
+.seen-file-icon:hover{
+  background: #bbf7d0;
+  color: #15803d;
+  box-shadow: 0 12px 24px rgba(22,163,74,.22);
+}
+
+.admission-file-tooltip{
+  position: absolute;
+  top: 38px;
+  right: 0;
+  width: 245px;
+  padding: 12px 13px;
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(15,23,42,.18);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition: all .16s ease;
+  z-index: 9999;
+  pointer-events: none;
+  white-space: normal;
+}
+
+.admission-file-bill-icon:hover .admission-file-tooltip{
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.new-file-tooltip{
+  background: #fff1f2;
+  color: #7f1d1d;
+  border: 1px solid #fecaca;
+}
+
+.seen-file-tooltip{
+  background: #f0fdf4;
+  color: #14532d;
+  border: 1px solid #bbf7d0;
+}
+
+.file-tooltip-title{
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+  margin-bottom: 7px;
+}
+
+.new-file-tooltip .file-tooltip-title{
+  color: #991b1b;
+}
+
+.seen-file-tooltip .file-tooltip-title{
+  color: #166534;
+}
+
+.file-tooltip-row{
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.new-file-tooltip .file-tooltip-row{
+  color: #7f1d1d;
+}
+
+.seen-file-tooltip .file-tooltip-row{
+  color: #14532d;
+}
+
+.file-tooltip-row b{
+  color: inherit;
 }
 .admission-card-top-right{
   display: inline-flex;
@@ -4989,6 +5108,53 @@ if (editBillingStatusSaveBtn) {
 </script>
 <!-- ✅ WhatsApp + Billing logic file -->
 <script src="/js/admissions.js"></script>
+<script>
+  document.addEventListener('click', async function (e) {
+    const fileIcon = e.target.closest('.admission-file-bill-icon');
+    if (!fileIcon) return;
+
+    e.preventDefault();
+
+    const uploadId = fileIcon.getAttribute('data-upload-id');
+    const fileUrl = fileIcon.getAttribute('href');
+
+    if (!uploadId) return;
+
+    try {
+      const res = await fetch(`/api/uploads/${encodeURIComponent(uploadId)}/seen`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data.success === false) {
+        console.error('Mark upload seen failed:', data.message || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('Mark upload seen failed:', err);
+    }
+
+    fileIcon.classList.remove('new-file-icon');
+    fileIcon.classList.add('seen-file-icon');
+
+    const tooltip = fileIcon.querySelector('.admission-file-tooltip');
+    if (tooltip) {
+      tooltip.classList.remove('new-file-tooltip');
+      tooltip.classList.add('seen-file-tooltip');
+
+      const title = tooltip.querySelector('.file-tooltip-title');
+      if (title) title.textContent = 'File Seen';
+    }
+
+    if (fileUrl && fileUrl !== '#') {
+      window.open(fileUrl, '_blank');
+    }
+  });
+</script>
 <script>
   (function () {
     async function copyTextToClipboard(text) {

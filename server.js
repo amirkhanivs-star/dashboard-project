@@ -857,12 +857,7 @@ function fetchAdmissionsForUser(user) {
   const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
 
   return rowsWithDuplicateFlags.map((row) => {
-    const latestUpload = getLatestUploadForAdmission(row.id, user);
-
-    const mapped = mapAdmissionRow({
-      ...row,
-      latestUpload,
-    });
+    const mapped = mapAdmissionRow(row);
 
     mapped.latestBillingVerificationNumber =
       String(row.accounts_verification_number || "").trim();
@@ -1031,6 +1026,159 @@ function getActiveAdmissionById(id) {
   `).get(id);
 }
 // ================== UPLOAD NOTIFICATION HELPERS ==================
+function ensureUploadsNotificationColumns() {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(uploads)`).all();
+    const existing = new Set(cols.map((c) => String(c.name || "").trim()));
+
+    const addColumn = (name, type) => {
+      if (!existing.has(name)) {
+        db.prepare(`ALTER TABLE uploads ADD COLUMN ${name} ${type}`).run();
+      }
+    };
+
+    addColumn("uploaded_by_id", "INTEGER");
+    addColumn("uploaded_by_name", "TEXT");
+    addColumn("uploaded_by_role", "TEXT");
+    addColumn("uploaded_at", "TEXT");
+  } catch (e) {
+    console.error("ensureUploadsNotificationColumns error:", e.message);
+  }
+}
+
+ensureUploadsNotificationColumns();
+function ensureUploadSeenTable() {
+  try {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS upload_seen_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        upload_id INTEGER NOT NULL,
+        admission_id INTEGER,
+        user_id INTEGER NOT NULL,
+        seen_at TEXT NOT NULL,
+        UNIQUE(upload_id, user_id)
+      )
+    `).run();
+  } catch (e) {
+    console.error("ensureUploadSeenTable error:", e.message);
+  }
+}
+
+ensureUploadSeenTable();
+
+function hasUserSeenUpload(uploadId, userId) {
+  try {
+    if (!uploadId || !userId) return false;
+
+    const row = db.prepare(`
+      SELECT id
+      FROM upload_seen_logs
+      WHERE upload_id = ?
+        AND user_id = ?
+      LIMIT 1
+    `).get(uploadId, userId);
+
+    return !!row;
+  } catch (e) {
+    console.error("hasUserSeenUpload error:", e.message);
+    return false;
+  }
+}
+
+function getUploadActor(user) {
+  return {
+    uploadedById: user?.id || null,
+    uploadedByName: user?.name || user?.email || "Unknown User",
+    uploadedByRole: user?.role || "",
+    uploadedAt: new Date().toISOString(),
+  };
+}
+
+function getLatestUploadForAdmission(admissionId, viewerUser = null) {
+  try {
+    if (!admissionId) return null;
+
+    const row = db.prepare(`
+      SELECT
+        id,
+        admission_id,
+        original_name,
+        stored_name,
+        file_url,
+        mime_type,
+        size,
+        uploaded_by_id,
+        uploaded_by_name,
+        uploaded_by_role,
+        uploaded_at
+      FROM uploads
+      WHERE admission_id = ?
+      ORDER BY
+        datetime(COALESCE(uploaded_at, '1970-01-01')) DESC,
+        id DESC
+      LIMIT 1
+    `).get(admissionId);
+
+    if (!row) return null;
+
+    const seenByCurrentUser = hasUserSeenUpload(row.id, viewerUser?.id);
+
+return {
+  id: row.id,
+  admissionId: row.admission_id,
+  fileName: row.original_name || row.stored_name || "File",
+  fileUrl: row.file_url || "",
+  mimeType: row.mime_type || "",
+  size: row.size || 0,
+  addedBy: row.uploaded_by_name || row.uploaded_by_role || "System / Old Record",
+  addedByRole: row.uploaded_by_role || (row.uploaded_by_name ? "" : "Old file record"),
+  uploadedAt: row.uploaded_at || "",
+  isUrl: row.mime_type === "text/url",
+  seenByCurrentUser,
+};
+  } catch (e) {
+    console.error("getLatestUploadForAdmission error:", e.message);
+    return null;
+  }
+}
+function insertUploadRecord({
+  admissionId,
+  originalName,
+  storedName,
+  fileUrl,
+  mimeType,
+  size,
+  user,
+}) {
+  const actor = getUploadActor(user);
+
+  return db.prepare(`
+    INSERT INTO uploads (
+      admission_id,
+      original_name,
+      stored_name,
+      file_url,
+      mime_type,
+      size,
+      uploaded_by_id,
+      uploaded_by_name,
+      uploaded_by_role,
+      uploaded_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    admissionId || null,
+    originalName || "",
+    storedName || "",
+    fileUrl || "",
+    mimeType || "",
+    size || 0,
+    actor.uploadedById,
+    actor.uploadedByName,
+    actor.uploadedByRole,
+    actor.uploadedAt
+  );
+}// ================== UPLOAD NOTIFICATION HELPERS ==================
 function ensureUploadsNotificationColumns() {
   try {
     const cols = db.prepare(`PRAGMA table_info(uploads)`).all();
@@ -4665,7 +4813,55 @@ for (const item of billingArr) {
     return res.status(500).json({ success: false, message: "DB error" });
   }
 });
-// ================== EXTERNAL UPLOAD PUBLIC ROUTES ==================
+app.post("/api/uploads/:uploadId/seen", requireLogin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const uploadId = Number(req.params.uploadId || 0);
+
+    if (!uploadId || !user?.id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid upload or user",
+      });
+    }
+
+    const uploadRow = db.prepare(`
+      SELECT id, admission_id
+      FROM uploads
+      WHERE id = ?
+      LIMIT 1
+    `).get(uploadId);
+
+    if (!uploadRow) {
+      return res.status(404).json({
+        success: false,
+        message: "Upload not found",
+      });
+    }
+
+    db.prepare(`
+      INSERT OR IGNORE INTO upload_seen_logs
+        (upload_id, admission_id, user_id, seen_at)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      uploadRow.id,
+      uploadRow.admission_id || null,
+      user.id,
+      new Date().toISOString()
+    );
+
+    return res.json({
+      success: true,
+      message: "Marked as seen",
+    });
+  } catch (err) {
+    console.error("POST /api/uploads/:uploadId/seen error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+});// ================== EXTERNAL UPLOAD PUBLIC ROUTES ==================
 
 // ✅ Generate / get external upload link
 app.post("/api/admissions/:id/external-upload-link", requireLogin, requirePerm("btnUpload"), (req, res) => {
@@ -9983,21 +10179,13 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
   });
 }
 
-    const accessibleAdmissions = fetchAdmissionsForUser(user);
-
-  const totalRecords = accessibleAdmissions.length;
-  const totalPages = Math.max(Math.ceil(totalRecords / limit), 1);
-  const offset = (page - 1) * limit;
-
-  const deptAdmissionsPage = {
-    rows: accessibleAdmissions.slice(offset, offset + limit),
-    page,
-    limit,
-    totalRecords,
-    totalPages,
-    startRecord: totalRecords === 0 ? 0 : offset + 1,
-    endRecord: totalRecords === 0 ? 0 : Math.min(offset + limit, totalRecords),
-  };
+  const deptAdmissionsPage = fetchAdmissionsPage({
+  dept: user.dept || null,
+  page,
+  limit,
+  perms: null,
+  viewerUser: user,
+});
 
 if (user.role === "admin") {
   return res.render("dashboard-admin", {
@@ -11063,6 +11251,8 @@ app.post( "/dashboard/super/uploads",
       }
       const relPath = toPosix(path.relative(uploadsDir, f.path));
 const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relPath}`;
+
+const actor = getUploadActor(req.session.user);
 
 insertUploadRecord({
   admissionId,
