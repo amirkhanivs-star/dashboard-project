@@ -641,7 +641,12 @@ function fetchAdmissionsForUser(user) {
     .all(dept);
 const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
   return rowsWithDuplicateFlags.map((row) => {
-    const mapped = mapAdmissionRow(row);
+    const latestUpload = getLatestUploadForAdmission(row.id, user);
+
+    const mapped = mapAdmissionRow({
+      ...row,
+      latestUpload,
+    });
 
     mapped.latestBillingVerificationNumber =
       String(row.accounts_verification_number || "").trim();
@@ -809,7 +814,160 @@ function getActiveAdmissionById(id) {
       AND COALESCE(is_deleted, 0) = 0
   `).get(id);
 }
+// ================== UPLOAD NOTIFICATION HELPERS ==================
+function ensureUploadsNotificationColumns() {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(uploads)`).all();
+    const existing = new Set(cols.map((c) => String(c.name || "").trim()));
 
+    const addColumn = (name, type) => {
+      if (!existing.has(name)) {
+        db.prepare(`ALTER TABLE uploads ADD COLUMN ${name} ${type}`).run();
+      }
+    };
+
+    addColumn("uploaded_by_id", "INTEGER");
+    addColumn("uploaded_by_name", "TEXT");
+    addColumn("uploaded_by_role", "TEXT");
+    addColumn("uploaded_at", "TEXT");
+  } catch (e) {
+    console.error("ensureUploadsNotificationColumns error:", e.message);
+  }
+}
+
+ensureUploadsNotificationColumns();
+function ensureUploadSeenTable() {
+  try {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS upload_seen_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        upload_id INTEGER NOT NULL,
+        admission_id INTEGER,
+        user_id INTEGER NOT NULL,
+        seen_at TEXT NOT NULL,
+        UNIQUE(upload_id, user_id)
+      )
+    `).run();
+  } catch (e) {
+    console.error("ensureUploadSeenTable error:", e.message);
+  }
+}
+
+ensureUploadSeenTable();
+
+function hasUserSeenUpload(uploadId, userId) {
+  try {
+    if (!uploadId || !userId) return false;
+
+    const row = db.prepare(`
+      SELECT id
+      FROM upload_seen_logs
+      WHERE upload_id = ?
+        AND user_id = ?
+      LIMIT 1
+    `).get(uploadId, userId);
+
+    return !!row;
+  } catch (e) {
+    console.error("hasUserSeenUpload error:", e.message);
+    return false;
+  }
+}
+
+function getUploadActor(user) {
+  return {
+    uploadedById: user?.id || null,
+    uploadedByName: user?.name || user?.email || "Unknown User",
+    uploadedByRole: user?.role || "",
+    uploadedAt: new Date().toISOString(),
+  };
+}
+
+function getLatestUploadForAdmission(admissionId, viewerUser = null) {
+  try {
+    if (!admissionId) return null;
+
+    const row = db.prepare(`
+      SELECT
+        id,
+        admission_id,
+        original_name,
+        stored_name,
+        file_url,
+        mime_type,
+        size,
+        uploaded_by_id,
+        uploaded_by_name,
+        uploaded_by_role,
+        uploaded_at
+      FROM uploads
+      WHERE admission_id = ?
+      ORDER BY
+        datetime(COALESCE(uploaded_at, '1970-01-01')) DESC,
+        id DESC
+      LIMIT 1
+    `).get(admissionId);
+
+    if (!row) return null;
+
+    const seenByCurrentUser = hasUserSeenUpload(row.id, viewerUser?.id);
+
+return {
+  id: row.id,
+  admissionId: row.admission_id,
+  fileName: row.original_name || row.stored_name || "File",
+  fileUrl: row.file_url || "",
+  mimeType: row.mime_type || "",
+  size: row.size || 0,
+  addedBy: row.uploaded_by_name || row.uploaded_by_role || "System / Old Record",
+  addedByRole: row.uploaded_by_role || (row.uploaded_by_name ? "" : "Old file record"),
+  uploadedAt: row.uploaded_at || "",
+  isUrl: row.mime_type === "text/url",
+  seenByCurrentUser,
+};
+  } catch (e) {
+    console.error("getLatestUploadForAdmission error:", e.message);
+    return null;
+  }
+}
+function insertUploadRecord({
+  admissionId,
+  originalName,
+  storedName,
+  fileUrl,
+  mimeType,
+  size,
+  user,
+}) {
+  const actor = getUploadActor(user);
+
+  return db.prepare(`
+    INSERT INTO uploads (
+      admission_id,
+      original_name,
+      stored_name,
+      file_url,
+      mime_type,
+      size,
+      uploaded_by_id,
+      uploaded_by_name,
+      uploaded_by_role,
+      uploaded_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    admissionId || null,
+    originalName || "",
+    storedName || "",
+    fileUrl || "",
+    mimeType || "",
+    size || 0,
+    actor.uploadedById,
+    actor.uploadedByName,
+    actor.uploadedByRole,
+    actor.uploadedAt
+  );
+}
 function getDeleteAdmissionAccess(user, row) {
   if (!user || !row) return false;
   if (user.role === "super_admin") return true;
@@ -899,6 +1057,8 @@ duplicateWithId: row.duplicateWithId || "",
     contactNumber: row.phone || row.guardian_whatsapp || "",
     processedBy: row.processed_by || "",
     processed_by: row.processed_by || "",
+        latestUpload: row.latestUpload || null,
+    hasLatestUpload: !!row.latestUpload,
    accounts: {
      paymentStatus: row.accounts_payment_status || "",
      paidUpto: row.accounts_paid_upto || "",
@@ -977,7 +1137,7 @@ function attachDuplicateFlagsToRawRows(rows = []) {
     };
   });
 }
-function fetchAdmissionsForDept(dept) {
+function fetchAdmissionsForDept(dept, viewerUser = null) {
   const rows = dept
     ? db.prepare(`
         SELECT *
@@ -994,7 +1154,12 @@ function fetchAdmissionsForDept(dept) {
       `).all();
 const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
   return rowsWithDuplicateFlags.map((row) => {
-    const mapped = mapAdmissionRow(row);
+    const latestUpload = getLatestUploadForAdmission(row.id, viewerUser);
+
+    const mapped = mapAdmissionRow({
+      ...row,
+      latestUpload,
+    });
 
     mapped.latestBillingVerificationNumber =
       String(row.accounts_verification_number || "").trim();
@@ -1003,7 +1168,7 @@ const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
   });
 }
 
-function fetchAdmissionsPage({ dept = null, page = 1, limit = 200, perms = null }) {
+function fetchAdmissionsPage({ dept = null, page = 1, limit = 200, perms = null, viewerUser = null }) {
   const safePage = Math.max(parseInt(page, 10) || 1, 1);
   const safeLimit = Math.max(parseInt(limit, 10) || 200, 1);
   const offset = (safePage - 1) * safeLimit;
@@ -1056,7 +1221,12 @@ function fetchAdmissionsPage({ dept = null, page = 1, limit = 200, perms = null 
   }
 const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
   const mappedRows = rowsWithDuplicateFlags.map((row) => {
-    const mapped = mapAdmissionRow(row);
+    const latestUpload = getLatestUploadForAdmission(row.id, viewerUser);
+
+    const mapped = mapAdmissionRow({
+      ...row,
+      latestUpload,
+    });
 
     mapped.latestBillingVerificationNumber =
       String(row.accounts_verification_number || "").trim();
@@ -3861,17 +4031,15 @@ monthKey: cleanMonthKey,
   const relStored = toPosix(path.relative(uploadsDir, absPath));
   const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
-  const info = db.prepare(`
-    INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
-    admissionId,
-    labelPrefix,
-    relStored,
-    fileUrl,
-    "application/pdf",
-    pdfBuffer.length || 0
-  );
+  const info = insertUploadRecord({
+  admissionId,
+  originalName: labelPrefix,
+  storedName: relStored,
+  fileUrl,
+  mimeType: "application/pdf",
+  size: pdfBuffer.length || 0,
+  user: req.session.user,
+});
 
   return {
     skipped: false,
@@ -4089,7 +4257,55 @@ for (const item of billingArr) {
     return res.status(500).json({ success: false, message: "DB error" });
   }
 });
+app.post("/api/uploads/:uploadId/seen", requireLogin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const uploadId = Number(req.params.uploadId || 0);
 
+    if (!uploadId || !user?.id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid upload or user",
+      });
+    }
+
+    const uploadRow = db.prepare(`
+      SELECT id, admission_id
+      FROM uploads
+      WHERE id = ?
+      LIMIT 1
+    `).get(uploadId);
+
+    if (!uploadRow) {
+      return res.status(404).json({
+        success: false,
+        message: "Upload not found",
+      });
+    }
+
+    db.prepare(`
+      INSERT OR IGNORE INTO upload_seen_logs
+        (upload_id, admission_id, user_id, seen_at)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      uploadRow.id,
+      uploadRow.admission_id || null,
+      user.id,
+      new Date().toISOString()
+    );
+
+    return res.json({
+      success: true,
+      message: "Marked as seen",
+    });
+  } catch (err) {
+    console.error("POST /api/uploads/:uploadId/seen error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+});
 app.post("/api/billing/:id", requireLogin, requireSaveBilling, async (req, res) => {
   const user = req.session.user;
 
@@ -5521,17 +5737,15 @@ const pdfBuffer = await makeMonthlyChallanPdf({
     const relStored = toPosix(path.relative(uploadsDir, absPath));
     const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
-    db.prepare(`
-      INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      `Challan (${monthKey})`,
-      relStored,
-      fileUrl,
-      "application/pdf",
-      pdfBuffer.length || 0
-    );
+    insertUploadRecord({
+  admissionId: id,
+  originalName: `Challan (${monthKey})`,
+  storedName: relStored,
+  fileUrl,
+  mimeType: "application/pdf",
+  size: pdfBuffer.length || 0,
+  user,
+});
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Length", pdfBuffer.length);
@@ -5582,10 +5796,18 @@ app.get("/dashboard/super/admission/:id/challan/bulk", requireLogin, async (req,
     const challanDir = path.join(uploadsDir, "challans", year, month);
     if (!fs.existsSync(challanDir)) fs.mkdirSync(challanDir, { recursive: true });
 
-    const ins = db.prepare(`
-      INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
+    const ins = {
+  run: (admissionId, originalName, storedName, fileUrl, mimeType, size) =>
+    insertUploadRecord({
+      admissionId,
+      originalName,
+      storedName,
+      fileUrl,
+      mimeType,
+      size,
+      user,
+    }),
+};
 
     let made = 0;
 
@@ -5684,17 +5906,15 @@ fs.writeFileSync(absPath, pdfBuffer);
 const relStored = toPosix(path.relative(uploadsDir, absPath));
 const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
-db.prepare(`
-  INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-  VALUES (?, ?, ?, ?, ?, ?)
-`).run(
-  id,
-  `All Paid Receipts`,
-  relStored,
+insertUploadRecord({
+  admissionId: id,
+  originalName: `All Paid Receipts`,
+  storedName: relStored,
   fileUrl,
-  "application/pdf",
-  pdfBuffer.length || 0
-);
+  mimeType: "application/pdf",
+  size: pdfBuffer.length || 0,
+  user,
+});
 
 emitAdmissionChanged(req, { type: "paid_bulk_generated", admissionId: id });
 
@@ -5784,17 +6004,15 @@ if ((!amt || amt <= 0) && (!regFeePaid || regFeePaid <= 0)) {
     const relStored = toPosix(path.relative(uploadsDir, absPath));
     const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
-    db.prepare(`
-      INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      `Paid Challan (${monthKey})`,
-      relStored,
-      fileUrl,
-      "application/pdf",
-      pdfBuffer.length || 0
-    );
+    insertUploadRecord({
+  admissionId: id,
+  originalName: `Challan (${monthKey})`,
+  storedName: relStored,
+  fileUrl,
+  mimeType: "application/pdf",
+  size: pdfBuffer.length || 0,
+  user,
+});
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Length", pdfBuffer.length);
@@ -5923,10 +6141,18 @@ const pdfBuffer = await makeFamilyChallanPdf({
     const relStored = toPosix(path.relative(uploadsDir, absPath));
     const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
-    const ins = db.prepare(`
-      INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
+    const ins = {
+  run: (admissionId, originalName, storedName, fileUrl, mimeType, size) =>
+    insertUploadRecord({
+      admissionId,
+      originalName,
+      storedName,
+      fileUrl,
+      mimeType,
+      size,
+      user,
+    }),
+};
 
     for (const adm of admissionsFull) {
       const admissionId = adm?.id || null;
@@ -6024,10 +6250,18 @@ const pdfBuffer = await makeFamilyChallanPdf({
     const relStored = toPosix(path.relative(uploadsDir, absPath));
     const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
-    const ins = db.prepare(`
-      INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
+    const ins = {
+  run: (admissionId, originalName, storedName, fileUrl, mimeType, size) =>
+    insertUploadRecord({
+      admissionId,
+      originalName,
+      storedName,
+      fileUrl,
+      mimeType,
+      size,
+      user,
+    }),
+};
 
     for (const a of admissionsFull) {
       ins.run(
@@ -6075,10 +6309,18 @@ app.get("/dashboard/super/family/:familyNumber/paid/bulk", requireLogin, async (
     const challanDir = path.join(uploadsDir, "challans", year, month);
     if (!fs.existsSync(challanDir)) fs.mkdirSync(challanDir, { recursive: true });
 
-    const ins = db.prepare(`
-      INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
+    const ins = {
+  run: (admissionId, originalName, storedName, fileUrl, mimeType, size) =>
+    insertUploadRecord({
+      admissionId,
+      originalName,
+      storedName,
+      fileUrl,
+      mimeType,
+      size,
+      user,
+    }),
+};
 
     let totalMade = 0;
     const billingYear = getBillingYearFromReq(req);
@@ -7191,17 +7433,15 @@ async function generateMonthlyChallanForApi({
   const relStored = toPosix(path.relative(uploadsDir, absPath));
   const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
-  const info = db.prepare(`
-    INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
-    admissionId,
-    `${labelPrefix} (${cleanMonthKey})`,
-    relStored,
-    fileUrl,
-    "application/pdf",
-    pdfBuffer.length || 0
-  );
+  const info = insertUploadRecord({
+  admissionId,
+  originalName: `${labelPrefix} (${cleanMonthKey})`,
+  storedName: relStored,
+  fileUrl,
+  mimeType: "application/pdf",
+  size: pdfBuffer.length || 0,
+  user: req.session.user,
+});
 
   return {
     skipped: false,
@@ -7288,10 +7528,15 @@ if ((!amt || amt <= 0) && (!regFeePaid || regFeePaid <= 0)) {
   const relStored = toPosix(path.relative(uploadsDir, absPath));
   const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
-  const info = db.prepare(`
-    INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
+  const info = insertUploadRecord({
+  admissionId,
+  originalName: `${labelPrefix} (${monthKey})`,
+  storedName: relStored,
+  fileUrl,
+  mimeType: "application/pdf",
+  size: pdfBuffer.length || 0,
+  user: req.session.user,
+}).run(
     admissionId,
     `${labelPrefix} (${monthKey})`,
     relStored,
@@ -9127,11 +9372,12 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
   const users = rows.map(mapUserRow);
 
   const admissionsPage = fetchAdmissionsPage({
-    dept: null,
-    page,
-    limit,
-    perms: null,
-  });
+  dept: null,
+  page,
+  limit,
+  perms: null,
+  viewerUser: user,
+});
 
   return res.render("dashboard-super", {
     user,
@@ -9159,13 +9405,15 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
   dept: user.dept || null,
   page,
   limit,
-  perms,
+  perms: null,
+  viewerUser: user,
 });
 
 if (user.role === "admin") {
   return res.render("dashboard-admin", {
     user,
-    perms,
+    perms: null,
+    viewerUser: user,
     admissions: deptAdmissionsPage.rows,
     statusOptionsCurrent,
     statusOptionsFee,
@@ -9186,7 +9434,8 @@ if (user.role === "admin") {
 if (user.role === "sub_agent") {
   return res.render("dashboard-sub-agent", {
     user,
-    perms,
+    perms: null,
+    viewerUser: user,
     admissions: deptAdmissionsPage.rows,
     statusOptionsCurrent,
     statusOptionsFee,
@@ -9207,7 +9456,8 @@ if (user.role === "sub_agent") {
 if (user.role === "agent") {
   return res.render("dashboard-agent", {
     user,
-    perms,
+    perms: null,
+    viewerUser: user,
     admissions: deptAdmissionsPage.rows,
     statusOptionsCurrent,
     statusOptionsFee,
@@ -9712,17 +9962,21 @@ app.post("/admin/uploads",
     const relPath = toPosix(path.relative(uploadsDir, f.path));
 const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relPath}`;
 
-db.prepare(`
-  INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-  VALUES (?, ?, ?, ?, ?, ?)
-`).run(
-  admissionId || null,
-  f.originalname || "",
-  relPath,          // ✅ stored_name = "YYYY/MM/filename.ext"
-  fileUrl,          // ✅ /uploads/YYYY/MM/filename.ext
-  f.mimetype || "",
-  f.size || 0
-);
+insertUploadRecord({
+  admissionId,
+  originalName: f.originalname,
+  storedName: relPath,
+  fileUrl,
+  mimeType: f.mimetype,
+  size: f.size || 0,
+  user,
+});
+
+emitAdmissionChanged(req, {
+  type: "upload_added",
+  admissionId,
+  dept: user?.dept || "",
+});
 
 
       return res.json({ success: true, message: "Uploaded" });
@@ -9920,10 +10174,34 @@ app.post("/dashboard/super/files/link", requireLogin, requireSuperAdmin, (req, r
     const adm = db.prepare("SELECT id, dept FROM admissions WHERE id = ?").get(admissionId);
     if (!adm) return res.status(404).json({ success:false, message:"Admission not found" });
 
-    db.prepare(`
-      INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(admissionId, cleanName, cleanSummary, cleanLink, "text/url", 0);
+    const actor = getUploadActor(user);
+
+db.prepare(`
+  INSERT INTO uploads (
+    admission_id,
+    original_name,
+    stored_name,
+    file_url,
+    mime_type,
+    size,
+    uploaded_by_id,
+    uploaded_by_name,
+    uploaded_by_role,
+    uploaded_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  admissionId,
+  cleanName,
+  cleanSummary,
+  cleanLink,
+  "text/url",
+  0,
+  actor.uploadedById,
+  actor.uploadedByName,
+  actor.uploadedByRole,
+  actor.uploadedAt
+);
 
     return res.json({ success:true, message:"URL saved" });
   } catch (err) {
@@ -9972,10 +10250,34 @@ function saveUrlToUploads(req, res, role) {
     const { year, month } = getYearMonthParts();
 const groupedSummary = `[${year}-${month}] ${cleanSummary || ""}`.trim();
 
+const actor = getUploadActor(user);
+
 db.prepare(`
-  INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-  VALUES (?, ?, ?, ?, ?, ?)
-`).run(admissionId, cleanName, groupedSummary, cleanLink, "text/url", 0);
+  INSERT INTO uploads (
+    admission_id,
+    original_name,
+    stored_name,
+    file_url,
+    mime_type,
+    size,
+    uploaded_by_id,
+    uploaded_by_name,
+    uploaded_by_role,
+    uploaded_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  admissionId,
+  cleanName,
+  groupedSummary,
+  cleanLink,
+  "text/url",
+  0,
+  actor.uploadedById,
+  actor.uploadedByName,
+  actor.uploadedByRole,
+  actor.uploadedAt
+);
 
 
     return res.json({ success: true, message: "URL saved" });
@@ -10127,16 +10429,33 @@ app.post( "/dashboard/super/uploads",
       const relPath = toPosix(path.relative(uploadsDir, f.path));
 const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relPath}`;
 
+const actor = getUploadActor(req.session.user);
+
 db.prepare(`
-  INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-  VALUES (?, ?, ?, ?, ?, ?)
+  INSERT INTO uploads (
+    admission_id,
+    original_name,
+    stored_name,
+    file_url,
+    mime_type,
+    size,
+    uploaded_by_id,
+    uploaded_by_name,
+    uploaded_by_role,
+    uploaded_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `).run(
-  admissionId || null,
-  f.originalname || "",
-  relPath,          // ✅ stored_name = "YYYY/MM/filename.ext"
-  fileUrl,          // ✅ /uploads/YYYY/MM/filename.ext
-  f.mimetype || "",
-  f.size || 0
+  admissionId,
+  f.originalname,
+  relStored,
+  fileUrl,
+  f.mimetype,
+  f.size,
+  actor.uploadedById,
+  actor.uploadedByName,
+  actor.uploadedByRole,
+  actor.uploadedAt
 );
       return res.json({ success: true, message: "Uploaded" });
     } catch (err) {
@@ -10827,6 +11146,7 @@ const classOptions = getBulkChallanClassOptions();
   page,
   limit,
   perms: null,
+  viewerUser: user,
 });
 
   const rows = db.prepare("SELECT * FROM users ORDER BY id ASC").all();
@@ -11363,18 +11683,20 @@ app.post("/uploads", requireLogin, requirePerm("btnUpload"), upload.single("file
    const relPath = toPosix(path.relative(uploadsDir, f.path));
    const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relPath}`;
 
-  db.prepare(`
-  INSERT INTO uploads (admission_id, original_name, stored_name, file_url, mime_type, size)
-  VALUES (?, ?, ?, ?, ?, ?)
-`).run(
-  admissionId || null,
-  f.originalname || "",
-  relPath,
+  insertUploadRecord({
+  admissionId,
+  originalName: f.originalname,
+  storedName: relPath,
   fileUrl,
-  f.mimetype || "",
-  f.size || 0
-);
-
+  mimeType: f.mimetype,
+  size: f.size || 0,
+  user,
+});
+emitAdmissionChanged(req, {
+  type: "upload_added",
+  admissionId,
+  dept: user?.dept || "",
+});
 
     return res.json({ success: true, message: "Uploaded" });
   } catch (err) {
