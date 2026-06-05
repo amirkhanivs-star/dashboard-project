@@ -17,6 +17,7 @@
     "express": "^4.19.0",
     "express-session": "^1.17.3",
     "multer": "^2.0.2",
+    "openai": "^6.42.0",
     "pdfkit": "^0.17.2",
     "puppeteer": "^24.34.0",
     "socket.io": "^4.8.1"

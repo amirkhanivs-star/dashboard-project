@@ -499,29 +499,30 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
           </div>
         <% } %>
       </div>
-        <% if (!(familyNumber && editAdmissions.length > 1)) { %>
-      <div class="compact-footer">
-        <div></div>
+           <% if (!(familyNumber && editAdmissions.length > 1)) { %>
+        <div class="compact-footer">
+          <div></div>
 
-        <div class="footer-actions">
-          <a href="<%= dashboardUrl %>" class="btn btn-light rounded-pill px-4">
-            Cancel
-          </a>
+          <div class="footer-actions">
+            <a href="<%= dashboardUrl %>" class="btn btn-light rounded-pill px-4">
+              Cancel
+            </a>
 
-          <% if (P.btn.update) { %>
-            <button type="button" class="btn btn-danger rounded-pill px-5 save-btn js-update-admission-btn">
-  <i class="bi bi-check2-circle me-1"></i> Update Admission
-</button>
-          <% } else { %>
-            <span class="text-muted small align-self-center">No update permission</span>
-          <% } %>
+            <% if (P.btn.update) { %>
+              <button type="button" class="btn btn-danger rounded-pill px-5 save-btn js-update-admission-btn">
+                <i class="bi bi-check2-circle me-1"></i> Update Admission
+              </button>
+            <% } else { %>
+              <span class="text-muted small align-self-center">No update permission</span>
+            <% } %>
+          </div>
         </div>
-      </div>
       <% } %>
+
     </div>
   </form>
 
- <% }) %>
+  <% }) %>
 
 <% if (familyNumber && editAdmissions.length > 1) { %>
   <div class="compact-family-footer">
@@ -540,6 +541,7 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
     </div>
   </div>
 <% } %>
+
 </div>
 
 <style>
@@ -1080,54 +1082,61 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
 
     if (!forms.length || !updateButtons.length) return;
 
-    function showUpdateModal(items, titleText) {
-      if (!modalEl || !listEl) return;
+    function escapeHtml(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
 
-      const titleEl = modalEl.querySelector('.modal-title');
-      const subTitleEl = modalEl.querySelector('.modal-header .small');
+function showUpdateModal(items, titleText) {
+  if (!modalEl || !listEl) return;
 
-      if (titleEl && titleText) {
-        titleEl.innerHTML = titleText;
+  const titleEl = modalEl.querySelector('.modal-title');
+  const subTitleEl = modalEl.querySelector('.modal-header .small');
+
+  if (titleEl && titleText) {
+    titleEl.innerHTML = titleText;
+  }
+
+  if (subTitleEl) {
+    subTitleEl.textContent = 'The selected admission fields were updated successfully.';
+  }
+
+  let html = '';
+
+  items.forEach(function (item) {
+    html += '<div class="mb-3">';
+    html += '<div class="fw-bold mb-2">' + escapeHtml(item.student) + '</div>';
+    html += '<div class="d-grid gap-2">';
+
+    (item.fields || []).forEach(function (f) {
+      if (typeof f === 'string') {
+        html += '<div class="small">• ' + escapeHtml(f) + '</div>';
+        return;
       }
 
-      if (subTitleEl) {
-        subTitleEl.textContent = 'The selected admission fields were updated successfully.';
-      }
+      const oldText = String(f.oldValue || '').trim();
+      const newText = String(f.newValue || '').trim();
 
-      listEl.innerHTML = items.map(function (item) {
-  return `
-    <div class="mb-3">
-      <div class="fw-bold mb-2">${item.student}</div>
+      html += '<div class="p-2 rounded-3 border bg-white">';
+      html += '<div class="fw-bold small mb-1">' + escapeHtml(f.label) + '</div>';
+      html += '<div class="small text-muted">Old: <span class="fw-semibold text-dark">' + escapeHtml(oldText || 'Empty') + '</span></div>';
+      html += '<div class="small text-muted">New: <span class="fw-semibold text-success">' + escapeHtml(newText || 'Empty') + '</span></div>';
+      html += '</div>';
+    });
 
-      <div class="d-grid gap-2">
-        ${item.fields.map(function (f) {
-          if (typeof f === 'string') {
-            return `<div class="small">• ${f}</div>`;
-          }
+    html += '</div>';
+    html += '</div>';
+  });
 
-          const oldText = String(f.oldValue || '').trim();
-          const newText = String(f.newValue || '').trim();
+  listEl.innerHTML = html;
 
-          return `
-            <div class="p-2 rounded-3 border bg-white">
-              <div class="fw-bold small mb-1">${f.label}</div>
-              ${
-                oldText
-                  ? `<div class="small text-muted">Old: <span class="fw-semibold text-dark">${oldText}</span></div>`
-                  : `<div class="small text-muted">Old: <span class="fw-semibold text-dark">Empty</span></div>`
-              }
-              <div class="small text-muted">New: <span class="fw-semibold text-success">${newText || 'Empty'}</span></div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </div>
-  `;
-}).join('');
-
-      modalEl.classList.remove('d-none');
-      modalEl.setAttribute('aria-hidden', 'false');
-    }
+  modalEl.classList.remove('d-none');
+  modalEl.setAttribute('aria-hidden', 'false');
+}
 
     document.addEventListener('click', function (e) {
       if (

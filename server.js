@@ -857,7 +857,12 @@ function fetchAdmissionsForUser(user) {
   const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
 
   return rowsWithDuplicateFlags.map((row) => {
-    const mapped = mapAdmissionRow(row);
+    const latestUpload = getLatestUploadForAdmission(row.id, user);
+
+    const mapped = mapAdmissionRow({
+      ...row,
+      latestUpload,
+    });
 
     mapped.latestBillingVerificationNumber =
       String(row.accounts_verification_number || "").trim();
@@ -1065,120 +1070,6 @@ function ensureUploadSeenTable() {
 }
 
 ensureUploadSeenTable();
-
-function hasUserSeenUpload(uploadId, userId) {
-  try {
-    if (!uploadId || !userId) return false;
-
-    const row = db.prepare(`
-      SELECT id
-      FROM upload_seen_logs
-      WHERE upload_id = ?
-        AND user_id = ?
-      LIMIT 1
-    `).get(uploadId, userId);
-
-    return !!row;
-  } catch (e) {
-    console.error("hasUserSeenUpload error:", e.message);
-    return false;
-  }
-}
-
-function getUploadActor(user) {
-  return {
-    uploadedById: user?.id || null,
-    uploadedByName: user?.name || user?.email || "Unknown User",
-    uploadedByRole: user?.role || "",
-    uploadedAt: new Date().toISOString(),
-  };
-}
-
-function getLatestUploadForAdmission(admissionId, viewerUser = null) {
-  try {
-    if (!admissionId) return null;
-
-    const row = db.prepare(`
-      SELECT
-        id,
-        admission_id,
-        original_name,
-        stored_name,
-        file_url,
-        mime_type,
-        size,
-        uploaded_by_id,
-        uploaded_by_name,
-        uploaded_by_role,
-        uploaded_at
-      FROM uploads
-      WHERE admission_id = ?
-      ORDER BY
-        datetime(COALESCE(uploaded_at, '1970-01-01')) DESC,
-        id DESC
-      LIMIT 1
-    `).get(admissionId);
-
-    if (!row) return null;
-
-    const seenByCurrentUser = hasUserSeenUpload(row.id, viewerUser?.id);
-
-return {
-  id: row.id,
-  admissionId: row.admission_id,
-  fileName: row.original_name || row.stored_name || "File",
-  fileUrl: row.file_url || "",
-  mimeType: row.mime_type || "",
-  size: row.size || 0,
-  addedBy: row.uploaded_by_name || row.uploaded_by_role || "System / Old Record",
-  addedByRole: row.uploaded_by_role || (row.uploaded_by_name ? "" : "Old file record"),
-  uploadedAt: row.uploaded_at || "",
-  isUrl: row.mime_type === "text/url",
-  seenByCurrentUser,
-};
-  } catch (e) {
-    console.error("getLatestUploadForAdmission error:", e.message);
-    return null;
-  }
-}
-function insertUploadRecord({
-  admissionId,
-  originalName,
-  storedName,
-  fileUrl,
-  mimeType,
-  size,
-  user,
-}) {
-  const actor = getUploadActor(user);
-
-  return db.prepare(`
-    INSERT INTO uploads (
-      admission_id,
-      original_name,
-      stored_name,
-      file_url,
-      mime_type,
-      size,
-      uploaded_by_id,
-      uploaded_by_name,
-      uploaded_by_role,
-      uploaded_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    admissionId || null,
-    originalName || "",
-    storedName || "",
-    fileUrl || "",
-    mimeType || "",
-    size || 0,
-    actor.uploadedById,
-    actor.uploadedByName,
-    actor.uploadedByRole,
-    actor.uploadedAt
-  );
-}
 // ================== EXTERNAL UPLOAD LINK HELPERS ==================
 function ensureExternalUploadLinksTable() {
   try {
@@ -1287,7 +1178,224 @@ function isSafeExternalLink(value) {
     return false;
   }
 }
+function hasUserSeenUpload(uploadId, userId) {
+  try {
+    if (!uploadId || !userId) return false;
 
+    const row = db.prepare(`
+      SELECT id
+      FROM upload_seen_logs
+      WHERE upload_id = ?
+        AND user_id = ?
+      LIMIT 1
+    `).get(uploadId, userId);
+
+    return !!row;
+  } catch (e) {
+    console.error("hasUserSeenUpload error:", e.message);
+    return false;
+  }
+}
+
+function getUploadActor(user) {
+  return {
+    uploadedById: user?.id || null,
+    uploadedByName: user?.name || user?.email || "Unknown User",
+    uploadedByRole: user?.role || "",
+    uploadedAt: new Date().toISOString(),
+  };
+}
+
+function getLatestUploadForAdmission(admissionId, viewerUser = null) {
+  try {
+    if (!admissionId) return null;
+
+    const row = db.prepare(`
+      SELECT
+        id,
+        admission_id,
+        original_name,
+        stored_name,
+        file_url,
+        mime_type,
+        size,
+        uploaded_by_id,
+        uploaded_by_name,
+        uploaded_by_role,
+        uploaded_at
+      FROM uploads
+      WHERE admission_id = ?
+      ORDER BY
+        datetime(COALESCE(uploaded_at, '1970-01-01')) DESC,
+        id DESC
+      LIMIT 1
+    `).get(admissionId);
+
+    if (!row) return null;
+
+    const seenByCurrentUser = hasUserSeenUpload(row.id, viewerUser?.id);
+
+return {
+  id: row.id,
+  admissionId: row.admission_id,
+  fileName: row.original_name || row.stored_name || "File",
+  fileUrl: row.file_url || "",
+  mimeType: row.mime_type || "",
+  size: row.size || 0,
+  addedBy: row.uploaded_by_name || row.uploaded_by_role || "System / Old Record",
+  addedByRole: row.uploaded_by_role || (row.uploaded_by_name ? "" : "Old file record"),
+  uploadedAt: row.uploaded_at || "",
+  isUrl: row.mime_type === "text/url",
+  seenByCurrentUser,
+};
+  } catch (e) {
+    console.error("getLatestUploadForAdmission error:", e.message);
+    return null;
+  }
+}
+function getAdmissionUploadsForViewer(viewerUser = null, filter = "all") {
+  try {
+    const userId = Number(viewerUser?.id || 0);
+    const userRole = String(viewerUser?.role || "").trim();
+    const userDept = String(viewerUser?.dept || "").trim().toLowerCase();
+
+    const cleanFilter = String(filter || "all").trim().toLowerCase();
+
+    const rows = db.prepare(`
+      SELECT
+        u.id,
+        u.admission_id,
+        u.original_name,
+        u.stored_name,
+        u.file_url,
+        u.mime_type,
+        u.size,
+        u.uploaded_by_id,
+        u.uploaded_by_name,
+        u.uploaded_by_role,
+        u.uploaded_at,
+
+        a.id AS adm_id,
+        a.dept,
+        a.student_name,
+        a.father_name,
+        a.grade,
+        a.tuition_grade,
+        a.phone,
+                a.guardian_whatsapp,
+        a.processed_by,
+        a.accounts_registration_number,
+        a.accounts_family_number,
+
+        CASE
+          WHEN us.id IS NULL THEN 0
+          ELSE 1
+        END AS seen_by_current_user
+
+      FROM uploads u
+      LEFT JOIN admissions a
+        ON a.id = u.admission_id
+      LEFT JOIN upload_seen_logs us
+        ON us.upload_id = u.id
+       AND us.user_id = ?
+
+      WHERE u.admission_id IS NOT NULL
+        AND a.id IS NOT NULL
+        AND COALESCE(a.is_deleted, 0) = 0
+
+      ORDER BY
+        datetime(COALESCE(u.uploaded_at, '1970-01-01')) DESC,
+        u.id DESC
+    `).all(userId);
+
+    let safeRows = rows;
+
+        if (userRole !== "super_admin") {
+      safeRows = safeRows.filter((r) => {
+        return canAccessAdmissionRow(viewerUser, {
+          id: r.adm_id || r.admission_id,
+          dept: r.dept,
+          processed_by: r.processed_by || "",
+        });
+      });
+    }
+
+    if (cleanFilter === "seen") {
+      safeRows = safeRows.filter((r) => Number(r.seen_by_current_user || 0) === 1);
+    }
+
+    if (cleanFilter === "unseen") {
+      safeRows = safeRows.filter((r) => Number(r.seen_by_current_user || 0) !== 1);
+    }
+
+    return safeRows.map((r) => ({
+      id: r.id,
+      uploadId: r.id,
+      admissionId: r.admission_id,
+
+      fileName: r.original_name || r.stored_name || "File",
+      fileUrl: r.file_url || "",
+      mimeType: r.mime_type || "",
+      size: r.size || 0,
+
+      addedBy: r.uploaded_by_name || r.uploaded_by_role || "System / Old Record",
+      addedByRole: r.uploaded_by_role || (r.uploaded_by_name ? "" : "Old file record"),
+      uploadedAt: r.uploaded_at || "",
+
+      seen: Number(r.seen_by_current_user || 0) === 1,
+      seenByCurrentUser: Number(r.seen_by_current_user || 0) === 1,
+
+      student: r.student_name || "No Name",
+      father: r.father_name || "-",
+      dept: r.dept || "",
+      grade: r.grade || r.tuition_grade || "",
+      phone: r.phone || r.guardian_whatsapp || "",
+      registrationNumber: r.accounts_registration_number || "",
+      familyNumber: r.accounts_family_number || "",
+    }));
+  } catch (e) {
+    console.error("getAdmissionUploadsForViewer error:", e.message);
+    return [];
+  }
+}
+function insertUploadRecord({
+  admissionId,
+  originalName,
+  storedName,
+  fileUrl,
+  mimeType,
+  size,
+  user,
+}) {
+  const actor = getUploadActor(user);
+
+  return db.prepare(`
+    INSERT INTO uploads (
+      admission_id,
+      original_name,
+      stored_name,
+      file_url,
+      mime_type,
+      size,
+      uploaded_by_id,
+      uploaded_by_name,
+      uploaded_by_role,
+      uploaded_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    admissionId || null,
+    originalName || "",
+    storedName || "",
+    fileUrl || "",
+    mimeType || "",
+    size || 0,
+    actor.uploadedById,
+    actor.uploadedByName,
+    actor.uploadedByRole,
+    actor.uploadedAt
+  );
+}
 function getDeleteAdmissionAccess(user, row) {
   if (!user || !row) return false;
   if (user.role === "super_admin") return true;
@@ -9682,7 +9790,70 @@ app.use((err, req, res, next) => {
 
   return next(err);
 });
+/* ==================== API SETTINGS ROUTES ==================== */
 
+app.get("/api-settings", requireLogin, requireSuperAdmin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const settings = getAllApiSettings();
+
+    return res.render("api-settings", {
+      user,
+      perms: getPerm(user),
+      pageTitle: "API Settings",
+      settings,
+    });
+  } catch (err) {
+    console.error("GET /api-settings error:", err);
+    return res.status(500).send("Server error");
+  }
+});
+
+app.post("/api-settings/update", requireLogin, requireSuperAdmin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const body = req.body || {};
+
+    const allowedKeys = [
+      "APP_BASE_URL",
+      "ADMISSIONS_API_KEY",
+      "N8N_WHATSAPP_WEBHOOK_URL",
+      "N8N_BILLING_WEBHOOK_URL",
+    ];
+
+    for (const key of allowedKeys) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) {
+        updateApiSetting(key, body[key], user?.name || "Super Admin");
+      }
+    }
+
+    logAudit("api_settings_updated", user, {
+      details: {
+        updatedKeys: allowedKeys.filter((key) =>
+          Object.prototype.hasOwnProperty.call(body, key)
+        ),
+      },
+    });
+
+    req.session.flash = {
+      type: "success",
+      title: "API Settings Updated",
+      message: "API settings have been updated successfully.",
+    };
+
+    return res.redirect("/api-settings");
+  } catch (err) {
+    console.error("POST /api-settings/update error:", err);
+
+    req.session.flash = {
+      type: "danger",
+      title: "Update Failed",
+      message: "API settings could not be updated.",
+    };
+
+    return res.redirect("/api-settings");
+  }
+});
 /* ==================== Auth Routes ==================== */
 
 // Login page (with role boxes)
@@ -9812,13 +9983,21 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
   });
 }
 
-  const deptAdmissionsPage = fetchAdmissionsPage({
-  dept: user.dept || null,
-  page,
-  limit,
-  perms: null,
-  viewerUser: user,
-});
+    const accessibleAdmissions = fetchAdmissionsForUser(user);
+
+  const totalRecords = accessibleAdmissions.length;
+  const totalPages = Math.max(Math.ceil(totalRecords / limit), 1);
+  const offset = (page - 1) * limit;
+
+  const deptAdmissionsPage = {
+    rows: accessibleAdmissions.slice(offset, offset + limit),
+    page,
+    limit,
+    totalRecords,
+    totalPages,
+    startRecord: totalRecords === 0 ? 0 : offset + 1,
+    endRecord: totalRecords === 0 ? 0 : Math.min(offset + limit, totalRecords),
+  };
 
 if (user.role === "admin") {
   return res.render("dashboard-admin", {
@@ -10884,8 +11063,6 @@ app.post( "/dashboard/super/uploads",
       }
       const relPath = toPosix(path.relative(uploadsDir, f.path));
 const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relPath}`;
-
-const actor = getUploadActor(req.session.user);
 
 insertUploadRecord({
   admissionId,
