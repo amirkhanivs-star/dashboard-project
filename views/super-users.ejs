@@ -223,7 +223,7 @@
           <i class="bi bi-search text-danger"></i>
         </span>
         <input id="userSearch" type="text" class="form-control border-start-0"
-               placeholder="Search name, email, or id...">
+               placeholder="Search name, email, id, assigned admin...">
         <button class="btn btn-outline-secondary" type="button" id="clearSearch">
           Clear
         </button>
@@ -343,7 +343,12 @@
           const p = (u.permissions || {});
           // ✅ replace all underscores
           const roleLabel = String(u.role || '').replace(/_/g, ' ');
-          const isSuper = (u.role === 'super_admin');
+const isSuper = (u.role === 'super_admin');
+
+const deptDisplay =
+  String(u.dept || '').trim().toLowerCase() === 'accounts'
+    ? 'School Accounts'
+    : (u.dept || '—');
 
           const ALL_COLS = [
             { key:'colStatus', label:'Current Status' },
@@ -391,12 +396,32 @@
           };
 
           const canDeleteAdmissions = isSuper || !!p.canDeleteAdmissions;
+                    const assignedAdminDisplay =
+            u.assignedAdminName ||
+            u.assigned_admin_name ||
+            u.assignedAdmin ||
+            u.assigned_admin ||
+            (u.assigned_admin_id ? ('Admin ID #' + u.assigned_admin_id) : '—');
+
+          const createdByDisplay =
+            u.createdByName ||
+            u.created_by_name ||
+            u.createdBy ||
+            u.created_by_user ||
+            (u.created_by ? ('User ID #' + u.created_by) : '—');
+
+          const accessScopeLabel =
+            String(u.access_scope || '').trim() === 'all' ? 'All Admissions' :
+            String(u.access_scope || '').trim() === 'team' ? 'Team Admissions' :
+            String(u.access_scope || '').trim() === 'department' ? 'Department Admissions' :
+            String(u.access_scope || '').trim() === 'own' ? 'Own Admissions' :
+            (isSuper ? 'Full Access' : '—');
 
           const enabledCols = ALL_COLS.reduce((acc, c) => acc + (isColOn(c.key, c.legacy) ? 1 : 0), 0);
           const totalCols = ALL_COLS.length;
       %>
         <div class="col-lg-4 col-md-6 user-card"
-             data-search="<%= String([u.id, u.name, u.email, u.role, u.dept, u.agentType].filter(Boolean).join(' ')).toLowerCase() %>">
+            data-search="<%= String([u.id, u.name, u.email, u.role, u.dept, u.agentType, u.assignedAdminName, u.assigned_admin_name, u.assigned_admin_id, u.access_scope, u.createdByName, u.created_by_name, u.created_by].filter(Boolean).join(' ')).toLowerCase() %>">
           <div class="card border-0 shadow-sm h-100 rounded-4 position-relative" style="overflow:hidden;">
             <div class="position-absolute top-0 start-0 w-100"
                  style="height:4px; background:linear-gradient(90deg,#ef4444,#f97316,#22c55e,#0ea5e9); opacity:0.7;"></div>
@@ -446,7 +471,7 @@
                 <div class="mb-1">
                   <span class="text-muted">Dept:</span>
                   <span class="badge rounded-pill bg-light text-dark border text-capitalize ms-1">
-                    <%= u.dept || '—' %>
+                    <%= deptDisplay %>
                   </span>
                 </div>
 
@@ -460,6 +485,20 @@
                 <div class="d-flex flex-wrap gap-2 align-items-center">
                   <span class="text-muted">ID:</span>
                   <span class="badge rounded-pill bg-light text-dark border">#<%= u.id %></span>
+                                    <span class="badge rounded-pill bg-light text-dark border">
+                    <i class="bi bi-diagram-3 me-1 text-danger"></i>
+                    Assigned: <strong><%= assignedAdminDisplay %></strong>
+                  </span>
+
+                  <span class="badge rounded-pill bg-light text-dark border">
+                    <i class="bi bi-shield-check me-1 text-success"></i>
+                    Scope: <strong><%= accessScopeLabel %></strong>
+                  </span>
+
+                  <span class="badge rounded-pill bg-light text-dark border">
+                    <i class="bi bi-person-plus me-1 text-primary"></i>
+                    Created By: <strong><%= createdByDisplay %></strong>
+                  </span>
 
                   <% if (u.lastUpdatedAt) { %>
                     <span class="badge rounded-pill bg-light text-muted border">

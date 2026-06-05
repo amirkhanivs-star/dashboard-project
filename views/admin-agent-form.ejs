@@ -5,7 +5,10 @@
   const isAgent = user.role === 'agent';
 
   const cap = (txt) => txt ? txt.charAt(0).toUpperCase() + txt.slice(1) : '';
-  const deptLabel = cap(user.dept || 'Department');
+  const deptLabel =
+  String(user.dept || '').trim().toLowerCase() === 'accounts'
+    ? 'School Accounts'
+    : cap(user.dept || 'Department');
 
   const currentAgentType = user.agentType || 'accounts';
 
@@ -25,6 +28,7 @@
 const createdRoleLabel = isAdmin ? 'Agent / Sub Agent' : 'Sub Agent';
 
   const usersListPath = isAdmin ? '/dashboard/admin/users' : '/dashboard/agent/users';
+    const createUserPostPath = isAdmin ? '/dashboard/admin/agents' : '/dashboard/agent/agents';
    const themeTextClass = isAdmin ? 'text-success' : 'agent-purple-text';
 const themeBtnClass = isAdmin ? 'btn-success' : 'agent-purple-btn';
 const themeIconClass = isAdmin ? 'text-success' : 'agent-purple-text';
@@ -32,7 +36,7 @@ const roleBadgeClass = isAdmin ? 'bg-success-subtle text-success' : 'agent-purpl
 
  const roleDeptHelpText = isAdmin
   ? 'Department is fixed by Super Admin. You can choose role and pipeline / agent type.'
-  : 'Department, role, and pipeline / agent type are fixed for Agent and cannot be changed here.';
+   : 'Department, role, and pipeline / agent type are fixed. You can assign only your own allowed permissions to Sub Agent.';
 
   const deptFieldHelpText = isAdmin
   ? 'Users can be created only within the assigned department.'
@@ -65,10 +69,9 @@ const step4Class = isAdmin
   // ✅ who can create users (same as your server route)
   const canCreateUsers = (user.role === "admin" || user.role === "agent");
 
-  // ✅ IMPORTANT FIX:
-  // Admin ko apni allowed permissions me se choose karne do (checkboxes visible)
-  // Agent ko manual choose nahi karna (agent ke liye auto inherit via hidden inputs)
-  const canEditPerms = (isAdmin || isAgent);
+   // ✅ Admin aur Agent dono apni allowed permissions me se choose kar sakte hain.
+  // Agent ko sirf wahi permissions show hongi jo uske apne account me allowed hain.
+  const canEditPerms = isAdmin || isAgent;
 
 
   // helper: read bool with legacy support (default false)
@@ -263,7 +266,7 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
         <div class="d-flex align-items-center gap-2">
          <span class="d-inline-flex align-items-center justify-content-center rounded-circle <%= step2Class %>"
       style="width:22px;height:22px;font-size:.75rem;">2</span>
-          <span>Role &amp; department</span>
+          <span>Role, department &amp; assignment</span>
         </div>
         <div class="d-flex align-items-center gap-2">
          <span class="d-inline-flex align-items-center justify-content-center rounded-circle <%= step3Class %>"
@@ -289,13 +292,13 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
           </h6>
 
           <p class="text-muted mb-3">
-         From here, you can create Users for the School department.
+         From here, you can create users for the <%= deptLabel %> department.
             <strong><%= createdRoleLabel %></strong> 
           </p>
 
           <ol class="ps-3 mb-0">
             <li class="mb-1">Set basic information.</li>
-            <li class="mb-1">Only admin can choose role & type.</li>
+            <li class="mb-1">Admin can choose role & type. Agent can create only Sub Agent.</li>
             <li class="mb-1">Select allowed columns.</li>
             <li class="mb-1">Select allowed buttons/panels.</li>
           </ol>
@@ -329,7 +332,7 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
         <div class="card-header border-0 bg-white bg-opacity-75">
           <h5 class="mb-0 d-flex align-items-center">
             <i class="bi bi-person-plus me-2 <%= themeIconClass %>"></i>
-            Create <%= createdRoleLabel %> (Dept: <span class="text-capitalize"><%= user.dept || 'N/A' %></span>)
+           Create <%= createdRoleLabel %> (Dept: <span><%= deptLabel || 'N/A' %></span>)
           </h5>
           <small class="text-muted">
              Keep a strong password. The users & you cannot change it later, Only Super Admin can change it.
@@ -342,8 +345,7 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
             <div class="alert alert-danger py-2 small"><%= error %></div>
           <% } %>
 
-          <form method="POST" action="/dashboard/admin/agents">
-
+         <form method="POST" action="<%= createUserPostPath %>">
             <div class="row g-3">
               <div class="col-12">
                 <h6 class="mb-1">1. Basic information</h6>
@@ -372,7 +374,7 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
               </div>
 
               <div class="col-12 mt-3">
-                <h6 class="mb-1">2. Role &amp; Department</h6>
+                <h6 class="mb-1">2. Role, Department &amp; Assignment</h6>
                <p class="text-muted small mb-2">
                 <%= roleDeptHelpText %>
                </p>
@@ -423,10 +425,33 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
                   <%= agentTypeFieldHelpText %>
                  </small>
               </div>
+              <div class="col-12 mt-2">
+                <div class="rounded-4 border bg-light p-3">
+                  <div class="d-flex align-items-start gap-2">
+                    <div class="mt-1">
+                      <i class="bi bi-diagram-3 <%= themeIconClass %>"></i>
+                    </div>
+                    <div>
+                      <h6 class="mb-1">Assignment & Data Access</h6>
+
+                      <% if (isAdmin) { %>
+                        <p class="text-muted small mb-0">
+                          This user will be automatically assigned to you. You will see this user's admissions in your department dashboard.
+                        </p>
+                      <% } else { %>
+                        <p class="text-muted small mb-0">
+                          This Sub Agent will remain under your assigned Admin team. The Admin will be able to see this Sub Agent's admissions.
+                        </p>
+                      <% } %>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <div class="col-12 mt-3">
                 <div class="d-flex flex-wrap gap-2 align-items-center">
                   <span class="small text-muted">Quick:</span>
+
                   <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btnSelectAll">
                     Select all
                   </button>
@@ -503,9 +528,9 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
                          aria-labelledby="headingBtns" data-bs-parent="#permAccordion">
                       <div class="accordion-body">
 
-                        <% if (!canEditPerms) { %>
+                                                <% if (isAgent) { %>
                           <div class="alert alert-light border small mb-2">
-                            Agent ke liye buttons/panels auto-inherit honge. Admin hi manually choose kar sakta hai.
+                            Only your allowed buttons/panels are visible here. You can assign selected permissions to your Sub Agent.
                           </div>
                         <% } %>
 

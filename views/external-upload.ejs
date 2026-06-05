@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title><%= pageTitle || 'External Upload' %></title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, Helvetica, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(239, 68, 68, 0.14), transparent 32%),
+        radial-gradient(circle at bottom right, rgba(59, 130, 246, 0.14), transparent 32%),
+        linear-gradient(135deg, #f8fafc, #fff7f7);
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 22px;
+    }
+
+    .upload-shell {
+      width: 100%;
+      max-width: 760px;
+    }
+
+    .brand-card {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 28px;
+      box-shadow:
+        0 26px 70px rgba(15, 23, 42, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      overflow: hidden;
+    }
+
+    .header {
+      padding: 28px 30px 20px;
+      background:
+        radial-gradient(circle at top right, rgba(239, 68, 68, 0.12), transparent 36%),
+        linear-gradient(135deg, #ffffff, #f8fafc);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .logo-circle {
+      width: 52px;
+      height: 52px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 20px;
+      box-shadow: 0 12px 24px rgba(239, 68, 68, 0.25);
+      flex: 0 0 52px;
+    }
+
+    .brand-title {
+      font-size: 22px;
+      line-height: 1.2;
+      font-weight: 900;
+      margin: 0;
+      color: #0f172a;
+    }
+
+    .brand-subtitle {
+      margin: 4px 0 0;
+      color: #64748b;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .student-box {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .info-item {
+      background: #ffffff;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 16px;
+      padding: 12px 14px;
+    }
+
+    .info-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 800;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 4px;
+    }
+
+    .info-value {
+      font-size: 14px;
+      font-weight: 800;
+      color: #0f172a;
+      word-break: break-word;
+    }
+
+    .body {
+      padding: 26px 30px 30px;
+    }
+
+    .notice {
+      padding: 14px 16px;
+      border-radius: 18px;
+      margin-bottom: 18px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .notice-success {
+      background: #dcfce7;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+    }
+
+    .notice-error {
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+    }
+
+    .form-section {
+      background: #ffffff;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 22px;
+      padding: 20px;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    }
+
+    .section-title {
+      margin: 0 0 6px;
+      font-size: 18px;
+      font-weight: 900;
+      color: #0f172a;
+    }
+
+    .section-text {
+      margin: 0 0 18px;
+      color: #64748b;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .field-group {
+      margin-bottom: 18px;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 800;
+      color: #334155;
+      margin-bottom: 8px;
+    }
+
+    .file-input,
+    .text-input {
+      width: 100%;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      border-radius: 16px;
+      padding: 13px 14px;
+      font-size: 15px;
+      outline: none;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+
+    .file-input:focus,
+    .text-input:focus {
+      border-color: rgba(239, 68, 68, 0.5);
+      box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12);
+      background: #ffffff;
+    }
+
+    .help-text {
+      margin-top: 7px;
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+      margin: 18px 0;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: "";
+      height: 1px;
+      background: rgba(148, 163, 184, 0.35);
+      flex: 1;
+    }
+
+    .submit-btn {
+      width: 100%;
+      border: 0;
+      border-radius: 999px;
+      padding: 14px 20px;
+      font-size: 15px;
+      font-weight: 900;
+      color: #ffffff;
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      cursor: pointer;
+      box-shadow: 0 14px 28px rgba(239, 68, 68, 0.25);
+      transition: transform 0.14s ease, filter 0.14s ease;
+    }
+
+    .submit-btn:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.03);
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .footer-note {
+      text-align: center;
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.6;
+      margin-top: 18px;
+    }
+
+    .success-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .secondary-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      border-radius: 999px;
+      padding: 11px 16px;
+      font-size: 13px;
+      font-weight: 900;
+      color: #0f172a;
+      background: #ffffff;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 14px;
+        align-items: flex-start;
+      }
+
+      .header,
+      .body {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+
+      .student-box {
+        grid-template-columns: 1fr;
+      }
+
+      .brand-title {
+        font-size: 19px;
+      }
+
+      .logo-circle {
+        width: 46px;
+        height: 46px;
+        flex-basis: 46px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="upload-shell">
+    <div class="brand-card">
+
+      <div class="header">
+        <div class="brand-row">
+          <div class="logo-circle">IVS</div>
+
+          <div>
+            <h1 class="brand-title">Secure Document Upload</h1>
+            <p class="brand-subtitle">
+              Please upload your required file or paste a valid document/payment link.
+            </p>
+          </div>
+        </div>
+
+        <div class="student-box">
+          <div class="info-item">
+            <span class="info-label">Student</span>
+            <span class="info-value">
+              <%= admission.student_name || admission.student || 'Student' %>
+            </span>
+          </div>
+
+          <div class="info-item">
+            <span class="info-label">Father Name</span>
+            <span class="info-value">
+              <%= admission.father_name || admission.father || '-' %>
+            </span>
+          </div>
+
+          <div class="info-item">
+            <span class="info-label">Grade</span>
+            <span class="info-value">
+              <%= admission.grade || admission.tuition_grade || '-' %>
+            </span>
+          </div>
+
+          <div class="info-item">
+            <span class="info-label">Department</span>
+            <span class="info-value">
+              <%= admission.dept || '-' %>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="body">
+
+        <% if (success) { %>
+          <div class="notice notice-success">
+            <strong>Uploaded successfully.</strong><br>
+            Thank you. Your file/link has been submitted and will now appear in the admission files section.
+          </div>
+
+          <div class="success-actions">
+            <a class="secondary-btn" href="/external-upload/<%= encodeURIComponent(token) %>">
+              Upload Another File / Link
+            </a>
+          </div>
+        <% } %>
+
+        <% if (error) { %>
+          <div class="notice notice-error">
+            <strong>Upload failed.</strong><br>
+            <%= error %>
+          </div>
+        <% } %>
+
+        <% if (!success) { %>
+          <form
+            class="form-section"
+            action="/external-upload/<%= encodeURIComponent(token) %>"
+            method="POST"
+            enctype="multipart/form-data"
+            id="externalUploadForm">
+
+            <h2 class="section-title">Upload File or Paste Link</h2>
+
+            <p class="section-text">
+              You can upload a file, paste a link, or do both. Please make sure the uploaded document is clear.
+            </p>
+
+            <div class="field-group">
+              <label class="field-label" for="file">Upload File</label>
+
+              <input
+                class="file-input"
+                type="file"
+                id="file"
+                name="file"
+                accept=".png,.jpg,.jpeg,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+
+              <div class="help-text">
+                Allowed file types: JPG, PNG, WEBP, PDF, DOC, DOCX, XLS, XLSX, TXT.
+              </div>
+            </div>
+
+            <div class="divider">or</div>
+
+            <div class="field-group">
+              <label class="field-label" for="external_link">Paste Link</label>
+
+              <input
+                class="text-input"
+                type="url"
+                id="external_link"
+                name="external_link"
+                placeholder="https://drive.google.com/...">
+
+              <div class="help-text">
+                You can paste Google Drive, payment proof, document, or any valid http/https link.
+              </div>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn">
+              Submit Upload
+            </button>
+          </form>
+        <% } %>
+
+        <div class="footer-note">
+          This is a secure upload page for Iqra Virtual School. Please do not share this link with unrelated people.
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const form = document.getElementById('externalUploadForm');
+      const submitBtn = document.getElementById('submitBtn');
+
+      if (!form || !submitBtn) return;
+
+      form.addEventListener('submit', function (e) {
+        const fileInput = document.getElementById('file');
+        const linkInput = document.getElementById('external_link');
+
+        const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+        const hasLink = linkInput && String(linkInput.value || '').trim();
+
+        if (!hasFile && !hasLink) {
+          e.preventDefault();
+          alert('Please upload a file or paste a valid link.');
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Uploading...';
+      });
+    })();
+  </script>
+</body>
+</html>

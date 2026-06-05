@@ -519,8 +519,16 @@
       return 'Used when WhatsApp actions, bulk challans, or receipt messages are sent.';
     }
 
-    if (key === 'N8N_BILLING_WEBHOOK_URL') {
-      return 'Used when billing data is saved and sent to automation.';
+      if (key === 'N8N_BILLING_WEBHOOK_URL') {
+       return 'Used when billing data is saved and sent to automation.';
+    }
+
+    if (key === 'GEMINI_API_KEY') {
+      return 'Used by the Super Admin AI Assistant to answer questions from dashboard database records.';
+    }
+
+    if (key === 'GEMINI_MODEL') {
+      return 'Controls which Gemini model is used by the Super Admin AI Assistant. Example: gemini-2.5-flash-lite.';
     }
 
     return 'System integration setting.';
@@ -537,7 +545,7 @@
 
       <h1 class="api-title">API Settings</h1>
       <p class="api-subtitle">
-        Manage application base URL, API keys, and n8n webhook URLs from one secure place.
+       Manage application base URL, API keys, Gemini AI settings, and n8n webhook URLs from one secure place.
         These values can override the matching values from your environment file.
       </p>
 
@@ -583,8 +591,8 @@
         <i class="bi bi-exclamation-triangle-fill mt-1"></i>
         <div>
           <strong>Important:</strong>
-          Keep webhook URLs and API keys private. After changing these values, test n8n, admission form API,
-          PDF links, and WhatsApp sending once.
+          Keep webhook URLs, API keys, and Gemini keys private. After changing these values, test n8n, admission form API,
+          PDF links, WhatsApp sending, and the Super Admin AI Assistant once.
         </div>
       </div>
 

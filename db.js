@@ -979,6 +979,22 @@ try {
       "webhook",
       0
     );
+    
+        ins.run(
+      "GEMINI_API_KEY",
+      "Gemini API Key",
+      process.env.GEMINI_API_KEY || "",
+      "secret",
+      1
+    );
+
+    ins.run(
+      "GEMINI_MODEL",
+      "Gemini Model",
+      process.env.GEMINI_MODEL || "gemini-2.5-flash-lite",
+      "text",
+      0
+    );
   });
 
   seed();

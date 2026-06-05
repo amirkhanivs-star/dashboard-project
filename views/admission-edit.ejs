@@ -145,8 +145,10 @@ if (roleKey === 'admin') {
         ];
 
   const editAction = isSuper ? `/dashboard/super/update/${A.id}` : `/admin/update/${A.id}`;
-  const detailsUrl = isSuper ? `/dashboard/super/admission/${A.id}` : `/admin/admission/${A.id}`;
-  const backUrl = detailsUrl;
+const detailsUrl = isSuper ? `/dashboard/super/admission/${A.id}` : `/admin/admission/${A.id}`;
+
+const dashboardUrl = '/dashboard';
+const backUrl = dashboardUrl;
 
   const currentStatusVal = String(A.status || A.currentStatus || A.current_status || 'New Admission').trim();
   const feeStatusVal = String(A.feeStatus || A.fee_status || A.feeStatusText || 'New Admission').trim();
@@ -497,28 +499,47 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
           </div>
         <% } %>
       </div>
-
+        <% if (!(familyNumber && editAdmissions.length > 1)) { %>
       <div class="compact-footer">
         <div></div>
 
         <div class="footer-actions">
-          <a href="<%= eDetailsUrl %>" class="btn btn-light rounded-pill px-4">
+          <a href="<%= dashboardUrl %>" class="btn btn-light rounded-pill px-4">
             Cancel
           </a>
 
           <% if (P.btn.update) { %>
-            <button type="submit" class="btn btn-danger rounded-pill px-5 save-btn">
-              <i class="bi bi-check2-circle me-1"></i> Update Admission
-            </button>
+            <button type="button" class="btn btn-danger rounded-pill px-5 save-btn js-update-admission-btn">
+  <i class="bi bi-check2-circle me-1"></i> Update Admission
+</button>
           <% } else { %>
             <span class="text-muted small align-self-center">No update permission</span>
           <% } %>
         </div>
       </div>
+      <% } %>
     </div>
   </form>
 
-  <% }) %>
+ <% }) %>
+
+<% if (familyNumber && editAdmissions.length > 1) { %>
+  <div class="compact-family-footer">
+    <div class="footer-actions">
+      <a href="<%= dashboardUrl %>" class="btn btn-light rounded-pill px-4">
+  Cancel
+</a>
+
+      <% if (P.btn.update) { %>
+        <button type="button" id="updateAllAdmissionsBtn" class="btn btn-danger rounded-pill px-5 save-btn js-update-admission-btn">
+  <i class="bi bi-check2-circle me-1"></i> Update Admission
+</button>
+      <% } else { %>
+        <span class="text-muted small align-self-center">No update permission</span>
+      <% } %>
+    </div>
+  </div>
+<% } %>
 </div>
 
 <style>
@@ -586,7 +607,15 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
 .admission-edit-form{
   margin-bottom:14px;
 }
-
+.compact-family-footer{
+  max-width:1500px;
+  margin:0 auto 14px;
+  background:#fff;
+  border:1px solid rgba(148,163,184,.24);
+  border-radius:18px;
+  box-shadow:0 14px 35px rgba(15,23,42,.08);
+  padding:12px 16px;
+}
 .active-edit-card{
   border-color:rgba(239,68,68,.35) !important;
   box-shadow:
@@ -1010,18 +1039,240 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
   </div>
 </div>
 
+<!-- Admission Update Success Modal -->
+<div id="admissionUpdateModal" class="billing-status-overlay d-none" aria-hidden="true">
+  <div class="billing-status-dialog">
+    <div class="modal-content border-0 shadow-lg rounded-4">
+      <div class="modal-header border-0">
+        <div>
+          <h5 class="modal-title mb-0">
+            <i class="bi bi-check-circle-fill text-success me-1"></i>
+            Admission Updated
+          </h5>
+          <div class="small text-muted">The selected admission fields were updated successfully.</div>
+        </div>
+        <button type="button" class="btn-close admission-update-close-btn" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body pt-0">
+        <div class="p-3 rounded-4 bg-light-subtle">
+          <div class="fw-bold mb-2">Updated Columns</div>
+          <div id="admissionUpdateList" class="small text-dark"></div>
+        </div>
+      </div>
+
+      <div class="modal-footer border-0 justify-content-end">
+        <button type="button" class="btn btn-danger rounded-pill px-4 admission-update-close-btn">
+          OK
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   (function () {
-    const forms = document.querySelectorAll('.admission-edit-form');
-if (!forms.length) return;
+    const forms = Array.from(document.querySelectorAll('.admission-edit-form'));
+    const updateButtons = Array.from(document.querySelectorAll('.js-update-admission-btn'));
 
-forms.forEach(function (form) {
-  form.addEventListener('submit', function () {
-    try {
-      sessionStorage.setItem('super_dashboard_recent_submit', '1');
-    } catch (e) {}
+    const modalEl = document.getElementById('admissionUpdateModal');
+    const listEl = document.getElementById('admissionUpdateList');
+
+    if (!forms.length || !updateButtons.length) return;
+
+    function showUpdateModal(items, titleText) {
+      if (!modalEl || !listEl) return;
+
+      const titleEl = modalEl.querySelector('.modal-title');
+      const subTitleEl = modalEl.querySelector('.modal-header .small');
+
+      if (titleEl && titleText) {
+        titleEl.innerHTML = titleText;
+      }
+
+      if (subTitleEl) {
+        subTitleEl.textContent = 'The selected admission fields were updated successfully.';
+      }
+
+      listEl.innerHTML = items.map(function (item) {
+  return `
+    <div class="mb-3">
+      <div class="fw-bold mb-2">${item.student}</div>
+
+      <div class="d-grid gap-2">
+        ${item.fields.map(function (f) {
+          if (typeof f === 'string') {
+            return `<div class="small">• ${f}</div>`;
+          }
+
+          const oldText = String(f.oldValue || '').trim();
+          const newText = String(f.newValue || '').trim();
+
+          return `
+            <div class="p-2 rounded-3 border bg-white">
+              <div class="fw-bold small mb-1">${f.label}</div>
+              ${
+                oldText
+                  ? `<div class="small text-muted">Old: <span class="fw-semibold text-dark">${oldText}</span></div>`
+                  : `<div class="small text-muted">Old: <span class="fw-semibold text-dark">Empty</span></div>`
+              }
+              <div class="small text-muted">New: <span class="fw-semibold text-success">${newText || 'Empty'}</span></div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}).join('');
+
+      modalEl.classList.remove('d-none');
+      modalEl.setAttribute('aria-hidden', 'false');
+    }
+
+    document.addEventListener('click', function (e) {
+      if (
+        e.target.closest('.admission-update-close-btn') ||
+        e.target === modalEl
+      ) {
+        if (modalEl) {
+          modalEl.classList.add('d-none');
+          modalEl.setAttribute('aria-hidden', 'true');
+        }
+      }
+    });
+
+    function getFieldLabel(field) {
+      const box = field.closest('.field-box');
+      const label = box ? box.querySelector('label') : null;
+      return label ? String(label.textContent || '').trim() : field.name || 'Field';
+    }
+
+    function readFormSnapshot(form) {
+      const data = {};
+
+      form.querySelectorAll('input[name], select[name], textarea[name]').forEach(function (field) {
+        data[field.name] = {
+          value: String(field.value || '').trim(),
+          label: getFieldLabel(field)
+        };
+      });
+
+      return data;
+    }
+
+    forms.forEach(function (form) {
+      form.__initialSnapshot = readFormSnapshot(form);
+    });
+
+    function getChangedFields(form) {
+  const before = form.__initialSnapshot || {};
+  const changed = [];
+
+  form.querySelectorAll('input[name], select[name], textarea[name]').forEach(function (field) {
+    const name = field.name;
+    const oldValue = before[name] ? before[name].value : '';
+    const newValue = String(field.value || '').trim();
+    const label = before[name] ? before[name].label : getFieldLabel(field);
+
+    if (oldValue !== newValue) {
+      changed.push({
+        label,
+        oldValue,
+        newValue
+      });
+    }
   });
-});
+
+  return changed;
+}
+
+    async function submitFormAjax(form) {
+  const formData = new FormData(form);
+  const encodedData = new URLSearchParams();
+
+  for (const [key, value] of formData.entries()) {
+    encodedData.append(key, value);
+  }
+
+  const response = await fetch(form.action, {
+    method: form.method || 'POST',
+    body: encodedData,
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'Accept': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+    }
+  });
+
+      let data = null;
+
+      try {
+        data = await response.json();
+      } catch (e) {
+        data = null;
+      }
+
+      if (!response.ok || !data || data.success !== true) {
+        throw new Error((data && data.message) || 'Update failed');
+      }
+
+      return data;
+    }
+
+    function getStudentName(form, index) {
+      return form.querySelector('[name="student"]')?.value || ('Admission ' + (index + 1));
+    }
+
+    updateButtons.forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        const isFamilyBtn = btn.id === 'updateAllAdmissionsBtn';
+
+        const targetForms = isFamilyBtn
+          ? forms
+          : [btn.closest('form')].filter(Boolean);
+
+        const changedRows = targetForms.map(function (form, index) {
+          const changed = getChangedFields(form);
+
+          return {
+            form,
+            student: getStudentName(form, index),
+            fields: changed.length ? changed : ['Updated successfully']
+          };
+        });
+
+        btn.disabled = true;
+        const oldText = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Updating...';
+
+        try {
+          for (const item of changedRows) {
+            await submitFormAjax(item.form);
+            item.form.__initialSnapshot = readFormSnapshot(item.form);
+          }
+
+          showUpdateModal(
+            changedRows,
+            '<i class="bi bi-check-circle-fill text-success me-1"></i> Admission Updated'
+          );
+
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (err) {
+          showUpdateModal(
+            [
+              {
+                student: 'Update failed',
+                fields: [err.message || 'Please try again.']
+              }
+            ],
+            '<i class="bi bi-x-circle-fill text-danger me-1"></i> Update Failed'
+          );
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = oldText;
+        }
+      });
+    });
   })();
 </script>
 <script>

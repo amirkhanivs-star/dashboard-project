@@ -52,7 +52,7 @@
 
           <ol class="ps-3 mb-0">
             <li class="mb-1">Set the basic information.</li>
-            <li class="mb-1">Choose the role, department & Pipeline / Agent Type for Agents/SubAgents.</li>
+            <li class="mb-1">Choose the role, department, assigned admin & pipeline type for Agents/Sub Agents.</li>
             <li class="mb-1">Choose the allowed columns.</li>
             <li class="mb-1">Turn columns & buttons permissions on or off.</li>
           </ol>
@@ -149,11 +149,12 @@
 
               <div class="col-md-4">
                 <label class="form-label small">Department</label>
-                <select name="dept" class="form-select" required>
+                <select name="dept" id="deptSelect" class="form-select" required>
                   <option value="">Select department</option>
                   <option value="quran">Quran</option>
                   <option value="tuition">Tuition</option>
                   <option value="school">School</option>
+                  <option value="accounts">School Accounts</option>
                 </select>
                 <small class="text-muted d-block">
                   Assign each user to one primary department.
@@ -172,7 +173,64 @@
                   Only for Agent and Sub Agent. It will be ignored for Admin.
                 </small>
               </div>
+              <!-- ASSIGNMENT -->
+              <div class="col-12 mt-3" id="assignmentSection">
+                <div class="rounded-4 border bg-light p-3">
+                  <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
+                    <div>
+                      <h6 class="mb-1">
+                        <i class="bi bi-diagram-3 me-1 text-danger"></i>
+                        Assignment & Data Access
+                      </h6>
+                      <p class="text-muted small mb-2">
+                        Select which Admin will manage this Agent/Sub Agent. Admin users do not need assignment.
+                      </p>
+                    </div>
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                      Required for Agent/Sub Agent
+                    </span>
+                  </div>
 
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <label class="form-label small">Assigned Admin</label>
+                      <select name="assignedAdminId" id="assignedAdminSelect" class="form-select">
+                        <option value="">Select assigned admin</option>
+                        <% 
+                          const adminsForAssignment = (typeof assignableAdmins !== "undefined" && Array.isArray(assignableAdmins))
+                            ? assignableAdmins
+                            : [];
+                        %>
+                        <% adminsForAssignment.forEach(function(admin) { %>
+                          <option 
+                            value="<%= admin.id %>" 
+                            data-dept="<%= admin.dept || '' %>"
+                          >
+                            <%= admin.name %> 
+                            <% if (admin.dept) { %>
+                              - <%= String(admin.dept).toUpperCase() %>
+                            <% } %>
+                            <% if (admin.email) { %>
+                              (<%= admin.email %>)
+                            <% } %>
+                          </option>
+                        <% }) %>
+                      </select>
+                      <small class="text-muted d-block" id="assignedAdminHelp">
+                        Only admins from the selected department will be shown.
+                      </small>
+                    </div>
+
+                    <div class="col-md-6">
+                      <label class="form-label small">Access Scope</label>
+                      <input type="text" id="accessScopePreview" class="form-control bg-white" value="Auto by role" readonly>
+                      <small class="text-muted d-block">
+                        Super Admin controls assignment. Backend will automatically set access scope.
+                      </small>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <!-- QUICK TOGGLES -->
               <div class="col-12 mt-3">
                 <div class="d-flex flex-wrap gap-2 align-items-center">
@@ -483,7 +541,7 @@
         </div>
                 <div class="col-md-4">
           <div class="form-check small">
-            <input class="form-check-input perm-toggle" type="checkbox" id="canDeleteAdmissions" name="canDeleteAdmissions">
+           <input class="form-check-input perm-toggle" type="checkbox" id="canDeleteAdmissions" name="canDeleteAdmissions" checked>
             <label class="form-check-label" for="canDeleteAdmissions">Can Delete Admissions</label>
           </div>
         </div>
@@ -515,24 +573,91 @@
 <script>
   (function () {
     const roleSelect = document.getElementById("roleSelect");
+    const deptSelect = document.getElementById("deptSelect");
     const agentTypeSelect = document.getElementById("agentTypeSelect");
+
+    const assignmentSection = document.getElementById("assignmentSection");
+    const assignedAdminSelect = document.getElementById("assignedAdminSelect");
+    const assignedAdminHelp = document.getElementById("assignedAdminHelp");
+    const accessScopePreview = document.getElementById("accessScopePreview");
 
     const btnSelectAll = document.getElementById("btnSelectAll");
     const btnSelectNone = document.getElementById("btnSelectNone");
 
+    function filterAssignedAdmins() {
+      if (!assignedAdminSelect) return;
+
+      const selectedDept = (deptSelect && deptSelect.value) ? deptSelect.value.toLowerCase() : "";
+      let visibleCount = 0;
+
+      Array.from(assignedAdminSelect.options).forEach((opt) => {
+        if (!opt.value) {
+          opt.hidden = false;
+          return;
+        }
+
+        const adminDept = String(opt.getAttribute("data-dept") || "").toLowerCase();
+        const shouldShow = !selectedDept || adminDept === selectedDept;
+
+        opt.hidden = !shouldShow;
+        opt.disabled = !shouldShow;
+
+        if (shouldShow) visibleCount += 1;
+      });
+
+      const selectedOption = assignedAdminSelect.options[assignedAdminSelect.selectedIndex];
+      if (selectedOption && selectedOption.disabled) {
+        assignedAdminSelect.value = "";
+      }
+
+      if (assignedAdminHelp) {
+        assignedAdminHelp.textContent = visibleCount
+          ? "Only admins from the selected department are shown."
+          : "No admin found for this department. Please create an Admin first.";
+      }
+    }
+
     function syncRoleUI() {
       const role = (roleSelect && roleSelect.value) ? roleSelect.value : "";
+      const dept = (deptSelect && deptSelect.value) ? deptSelect.value : "";
 
-    if (agentTypeSelect) {
-  if (role === "admin") {
-    agentTypeSelect.value = "";
-    agentTypeSelect.disabled = true;
-    agentTypeSelect.classList.add("bg-light");
-  } else {
-    agentTypeSelect.disabled = false;
-    agentTypeSelect.classList.remove("bg-light");
-  }
-}
+      if (agentTypeSelect) {
+        if (role === "admin") {
+          agentTypeSelect.value = "";
+          agentTypeSelect.disabled = true;
+          agentTypeSelect.classList.add("bg-light");
+        } else {
+          agentTypeSelect.disabled = false;
+          agentTypeSelect.classList.remove("bg-light");
+        }
+      }
+
+      if (assignmentSection && assignedAdminSelect) {
+        if (role === "agent" || role === "sub_agent") {
+          assignmentSection.style.display = "";
+          assignedAdminSelect.disabled = false;
+          assignedAdminSelect.required = true;
+        } else {
+          assignmentSection.style.display = "none";
+          assignedAdminSelect.value = "";
+          assignedAdminSelect.disabled = true;
+          assignedAdminSelect.required = false;
+        }
+      }
+
+      if (accessScopePreview) {
+        if (role === "admin" && dept === "accounts") {
+          accessScopePreview.value = "School admissions - School Accounts Admin";
+        } else if (role === "admin") {
+          accessScopePreview.value = "Team admissions - Department Admin";
+        } else if (role === "agent" || role === "sub_agent") {
+          accessScopePreview.value = "Own admissions - Assigned team user";
+        } else {
+          accessScopePreview.value = "Auto by role";
+        }
+      }
+
+      filterAssignedAdmins();
     }
 
     function toggleAll(on) {
@@ -543,11 +668,11 @@
     }
 
     if (roleSelect) roleSelect.addEventListener("change", syncRoleUI);
+    if (deptSelect) deptSelect.addEventListener("change", syncRoleUI);
 
     if (btnSelectAll) btnSelectAll.addEventListener("click", () => toggleAll(true));
     if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));
 
-    // init
     syncRoleUI();
   })();
 </script>

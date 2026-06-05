@@ -77,6 +77,34 @@ const roleBadgeClass =
   editUser.role === 'admin' ? 'bg-success-subtle text-success'
   : editUser.role === 'agent' ? 'agent-role-badge-edit'
   : 'subagent-role-badge';
+    const canEditPerms = true;
+
+const assignedAdminDisplay =
+  editUser.assignedAdminName ||
+  editUser.assigned_admin_name ||
+  editUser.assignedAdmin ||
+  editUser.assigned_admin ||
+  (Number(editUser.assigned_admin_id || 0) === Number(user.id || 0) ? 'You' : '') ||
+  (editUser.assigned_admin_id ? ('Admin ID #' + editUser.assigned_admin_id) : 'You');
+
+const createdByDisplay =
+  editUser.createdByName ||
+  editUser.created_by_name ||
+  editUser.createdBy ||
+  editUser.created_by_user ||
+  (Number(editUser.created_by || 0) === Number(user.id || 0) ? 'You' : '') ||
+  (editUser.created_by ? ('User ID #' + editUser.created_by) : '—');
+
+const accessScopeLabel =
+  String(editUser.access_scope || '').trim() === 'all' ? 'All Admissions' :
+  String(editUser.access_scope || '').trim() === 'team' ? 'Team Admissions' :
+  String(editUser.access_scope || '').trim() === 'department' ? 'Department Admissions' :
+  String(editUser.access_scope || '').trim() === 'own' ? 'Own Admissions' :
+  'Own Admissions';
+  const deptDisplay =
+  String(editUser.dept || '').trim().toLowerCase() === 'accounts'
+    ? 'School Accounts'
+    : (editUser.dept || '—');
   %>
 
 <style>
@@ -184,7 +212,21 @@ const roleBadgeClass =
        </span>
 
         <span class="badge rounded-pill bg-light text-muted text-capitalize">
-          Dept: <span class="ms-1"><%= editUser.dept || '—' %></span>
+         Dept: <span class="ms-1"><%= deptDisplay %></span>
+        </span>
+                <span class="badge rounded-pill bg-light text-muted border">
+          <i class="bi bi-diagram-3 me-1 <%= themeTextClass %>"></i>
+          Assigned: <strong class="ms-1"><%= assignedAdminDisplay %></strong>
+        </span>
+
+        <span class="badge rounded-pill bg-light text-muted border">
+          <i class="bi bi-shield-check me-1 <%= themeTextClass %>"></i>
+          Scope: <strong class="ms-1"><%= accessScopeLabel %></strong>
+        </span>
+
+        <span class="badge rounded-pill bg-light text-muted border">
+          <i class="bi bi-person-plus me-1 <%= themeTextClass %>"></i>
+          Created By: <strong class="ms-1"><%= createdByDisplay %></strong>
         </span>
       </div>
     </div>
@@ -204,11 +246,11 @@ const roleBadgeClass =
           <p class="text-muted mb-2">
             ID: <strong><%= editUser.id %></strong><br>
             Role: <span class="text-capitalize"><%= String(editUser.role || '').replace(/_/g,' ') %></span><br>
-            Dept: <span class="text-capitalize"><%= editUser.dept || '—' %></span>
+           Dept: <span><%= deptDisplay %></span>
           </p>
 
-          <p class="text-muted mb-0">
-            From here, you can update the name, email, and allowed permissions.
+                    <p class="text-muted mb-0">
+            From here, you can update the name, email, pipeline type, and allowed permissions.
           </p>
         </div>
       </div>
@@ -274,9 +316,42 @@ const roleBadgeClass =
   <% } %>
 </div>
 </div>
+                        <div class="mt-3">
+              <div class="rounded-4 border bg-light p-3">
+                <div class="d-flex align-items-start gap-2">
+                  <div class="mt-1">
+                    <i class="bi bi-diagram-3 <%= themeTextClass %>"></i>
+                  </div>
+                  <div>
+                    <h6 class="mb-1">Assignment & Data Access</h6>
 
+                    <% if (isAgentRoute) { %>
+                      <p class="text-muted small mb-0">
+                        This Sub Agent remains under your assigned Admin team. You can assign only the permissions that are already allowed for your own Agent account.
+                      </p>
+                    <% } else { %>
+                      <p class="text-muted small mb-0">
+                        This user is assigned to you. You can edit permissions, but reassignment is controlled by Super Admin.
+                      </p>
+                    <% } %>
+
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                      <span class="badge rounded-pill bg-white text-dark border">
+                        Assigned: <strong><%= assignedAdminDisplay %></strong>
+                      </span>
+                      <span class="badge rounded-pill bg-white text-dark border">
+                        Scope: <strong><%= accessScopeLabel %></strong>
+                      </span>
+                      <span class="badge rounded-pill bg-white text-dark border">
+                        Created By: <strong><%= createdByDisplay %></strong>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <hr>
-            <div class="mb-2">
+           <div class="mb-2">
   <div class="d-flex flex-wrap align-items-center gap-2 small">
     <span class="text-dark fw-semibold">Quick:</span>
 
@@ -287,9 +362,14 @@ const roleBadgeClass =
     <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1" id="btnSelectNone">
       Select none
     </button>
+
+    <% if (isAgentRoute) { %>
+      <span class="text-muted">
+        Only your own allowed permissions can be assigned to this Sub Agent.
+      </span>
+    <% } %>
   </div>
 </div>
-
 <div class="mb-2">
   <h6 class="mb-1">2. Columns & Buttons Permissions</h6>
     <p class="text-muted small mb-2">Turn columns, buttons, and special permissions on or off.</p>
@@ -316,10 +396,16 @@ const roleBadgeClass =
                       <div class="row g-2">
                         <% COL_KEYS.forEach(function(k){ %>
                           <div class="col-md-4">
-                            <input type="hidden" name="<%= k %>" value="">
                             <div class="form-check small">
-                              <input class="form-check-input perm-toggle" type="checkbox" id="<%= k %>" name="<%= k %>" value="on"
-                                     <%= isChecked(k) ? 'checked' : '' %>>
+                              <% if (canEditPerms) { %>
+  <input type="hidden" name="<%= k %>" value="">
+  <input class="form-check-input perm-toggle" type="checkbox" id="<%= k %>" name="<%= k %>" value="on"
+         <%= isChecked(k) ? 'checked' : '' %>>
+<% } else { %>
+  <input type="hidden" name="<%= k %>" value="<%= isChecked(k) ? 'on' : '' %>">
+  <input class="form-check-input perm-toggle" type="checkbox" id="<%= k %>" value="on"
+         <%= isChecked(k) ? 'checked' : '' %> disabled>
+<% } %>
                               <label class="form-check-label" for="<%= k %>"><%= COL_LABELS[k] %></label>
                             </div>
                           </div>
@@ -349,10 +435,16 @@ const roleBadgeClass =
                       <div class="row g-2">
                         <% BTN_KEYS.forEach(function(k){ %>
                           <div class="col-md-4">
-                            <input type="hidden" name="<%= k %>" value="">
                             <div class="form-check small">
-                              <input class="form-check-input perm-toggle" type="checkbox" id="<%= k %>" name="<%= k %>" value="on"
-                                     <%= isChecked(k) ? 'checked' : '' %>>
+                             <% if (canEditPerms) { %>
+  <input type="hidden" name="<%= k %>" value="">
+  <input class="form-check-input perm-toggle" type="checkbox" id="<%= k %>" name="<%= k %>" value="on"
+         <%= isChecked(k) ? 'checked' : '' %>>
+<% } else { %>
+  <input type="hidden" name="<%= k %>" value="<%= isChecked(k) ? 'on' : '' %>">
+  <input class="form-check-input perm-toggle" type="checkbox" id="<%= k %>" value="on"
+         <%= isChecked(k) ? 'checked' : '' %> disabled>
+<% } %>
                               <label class="form-check-label" for="<%= k %>"><%= BTN_LABELS[k] %></label>
                             </div>
                           </div>

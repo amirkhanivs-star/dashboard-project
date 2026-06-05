@@ -6,8 +6,10 @@ import { fileURLToPath } from "url";
 import bcrypt from "bcrypt";
 import cors from "cors"; // ✅ CORS
 import fs from "fs"; // ✅ PDF download check
+import crypto from "crypto";
 import multer from "multer";
 import { parse as parseCsv } from "csv-parse/sync";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 import http from "http"; // ✅ NEW (Socket server)
 import { Server as SocketIOServer } from "socket.io"; // ✅ NEW
@@ -42,6 +44,20 @@ import {
   getAdmissionBillingByYear,
   saveAdmissionBillingMonthByYear,
 } from "./db.js";
+
+// ================== GEMINI AI ASSISTANT SETUP ==================
+// Gemini key/model will be read from API Settings DB first,
+// then from .env as fallback. Do not create genAI globally.
+function getAiSettingValue(key, fallback = "") {
+  try {
+    const value = getApiSetting(key, fallback);
+    return String(value || fallback || "").trim();
+  } catch (err) {
+    console.error("getAiSettingValue error:", err.message);
+    return String(fallback || "").trim();
+  }
+}
+
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -220,7 +236,151 @@ function getAdmissionsTableColumns() {
     return [];
   }
 }
+// ================== USER ASSIGNMENT / ACCESS HELPERS ==================
+function ensureUserAssignmentColumns() {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(users)`).all();
+    const existing = new Set(cols.map((c) => String(c.name || "").trim()));
 
+    const addColumn = (name, type) => {
+      if (!existing.has(name)) {
+        db.prepare(`ALTER TABLE users ADD COLUMN ${name} ${type}`).run();
+      }
+    };
+
+    addColumn("assigned_admin_id", "INTEGER");
+    addColumn("created_by", "INTEGER");
+    addColumn("access_scope", "TEXT DEFAULT 'own'");
+  } catch (e) {
+    console.error("ensureUserAssignmentColumns error:", e.message);
+  }
+}
+
+ensureUserAssignmentColumns();
+
+function isAccountsUser(user) {
+  const dept = String(user?.dept || "").trim().toLowerCase();
+
+  // ✅ Sirf Department = accounts ko School Accounts user samjho.
+  // Pipeline / Agent Type = accounts ko special accounts access nahi milega.
+  return dept === "accounts";
+}
+
+function getUserAccessScope(user) {
+  if (!user) return "own";
+  if (user.role === "super_admin") return "all";
+
+  // ✅ School Accounts users can see School admissions only.
+  // They should NOT see Quran/Tuition admissions.
+  if (isAccountsUser(user)) return "school_accounts";
+
+  if (user.role === "admin") return "team";
+  if (user.role === "agent" || user.role === "sub_agent") return "own";
+  return "own";
+}
+
+function getAssignableAdmins(dept = "") {
+  try {
+    const cleanDept = String(dept || "").trim().toLowerCase();
+
+    if (cleanDept) {
+      return db.prepare(`
+        SELECT id, name, email, role, dept
+        FROM users
+        WHERE role = 'admin'
+          AND dept = ?
+        ORDER BY name ASC
+      `).all(cleanDept);
+    }
+
+    return db.prepare(`
+      SELECT id, name, email, role, dept
+      FROM users
+      WHERE role = 'admin'
+      ORDER BY dept ASC, name ASC
+    `).all();
+  } catch (e) {
+    console.error("getAssignableAdmins error:", e.message);
+    return [];
+  }
+}
+
+function getAdminTeamNames(adminUser) {
+  try {
+    if (!adminUser?.id) return [];
+
+   const rows = db.prepare(`
+      SELECT name
+      FROM users
+      WHERE role IN ('agent', 'sub_agent')
+        AND (
+          assigned_admin_id = ?
+          OR managerId = ?
+        )
+      ORDER BY name ASC
+    `).all(adminUser.id, adminUser.id);
+
+    const names = rows
+      .map((r) => String(r.name || "").trim())
+      .filter(Boolean);
+
+    const adminName = String(adminUser.name || "").trim();
+    if (adminName) names.push(adminName);
+
+    return [...new Set(names)];
+  } catch (e) {
+    console.error("getAdminTeamNames error:", e.message);
+    return [];
+  }
+}
+
+function makeInPlaceholders(arr) {
+  return arr.map(() => "?").join(",");
+}
+function canAccessAdmissionRow(user, row) {
+  if (!user || !row) return false;
+
+  // Super Admin = full access
+  if (user.role === "super_admin") return true;
+
+  // ✅ School Accounts users = only School admissions
+  if (isAccountsUser(user)) {
+  const rowDept = String(row.dept || "").trim().toLowerCase();
+  return rowDept === "school";
+}
+  const userDept = String(user.dept || "").trim().toLowerCase();
+  const rowDept = String(row.dept || "").trim().toLowerCase();
+
+  if (!userDept || !rowDept || userDept !== rowDept) return false;
+
+  const processedBy = String(row.processed_by || "").trim();
+  const userName = String(user.name || "").trim();
+
+  // Admin = only assigned team admissions
+  if (user.role === "admin") {
+    const teamNames = getAdminTeamNames(user)
+      .map((name) => String(name || "").trim().toLowerCase())
+      .filter(Boolean);
+
+    return teamNames.includes(processedBy.toLowerCase());
+  }
+
+  // Agent/Sub Agent = own admissions only
+  if (user.role === "agent" || user.role === "sub_agent") {
+    return processedBy && userName && processedBy.toLowerCase() === userName.toLowerCase();
+  }
+
+  return false;
+}
+
+function isUserAssignedToAdmin(row, adminUser) {
+  if (!row || !adminUser) return false;
+
+  return (
+    Number(row.assigned_admin_id || 0) === Number(adminUser.id || 0) ||
+    Number(row.managerId || 0) === Number(adminUser.id || 0)
+  );
+}
 function csvEscape(value) {
   const str = String(value ?? "");
   if (str.includes('"') || str.includes(",") || str.includes("\n") || str.includes("\r")) {
@@ -627,19 +787,75 @@ if (out.admission) {
 
 function fetchAdmissionsForUser(user) {
   const perms = getPerm(user);
-  const dept = user?.dept || null;
-  if (!dept) return [];
+  const scope = getUserAccessScope(user);
 
-  const rows = db
-    .prepare(`
+  let rows = [];
+
+    // Super Admin = all admissions
+  if (scope === "all") {
+    rows = db.prepare(`
       SELECT *
       FROM admissions
-      WHERE dept = ?
-        AND COALESCE(is_deleted, 0) = 0
+      WHERE COALESCE(is_deleted, 0) = 0
       ORDER BY id DESC
-    `)
-    .all(dept);
-const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
+    `).all();
+  }
+
+  // ✅ School Accounts = only School admissions
+  else if (scope === "school_accounts") {
+  rows = db.prepare(`
+    SELECT *
+    FROM admissions
+    WHERE LOWER(TRIM(COALESCE(dept, ''))) = 'school'
+      AND COALESCE(is_deleted, 0) = 0
+    ORDER BY id DESC
+  `).all();
+}
+
+  // Admin = only assigned team admissions
+  else if (scope === "team") {
+    const dept = String(user?.dept || "").trim().toLowerCase();
+    const teamNames = getAdminTeamNames(user)
+      .map((name) => String(name || "").trim().toLowerCase())
+      .filter(Boolean);
+
+    if (!dept || !teamNames.length) {
+      rows = [];
+    } else {
+      const placeholders = makeInPlaceholders(teamNames);
+
+      rows = db.prepare(`
+        SELECT *
+        FROM admissions
+        WHERE LOWER(TRIM(COALESCE(dept, ''))) = ?
+          AND COALESCE(is_deleted, 0) = 0
+          AND LOWER(TRIM(COALESCE(processed_by, ''))) IN (${placeholders})
+        ORDER BY id DESC
+      `).all(dept, ...teamNames);
+    }
+  }
+
+  // Agent / Sub Agent = only own admissions
+  else {
+    const dept = String(user?.dept || "").trim().toLowerCase();
+    const ownName = String(user?.name || "").trim().toLowerCase();
+
+    if (!dept || !ownName) {
+      rows = [];
+    } else {
+      rows = db.prepare(`
+        SELECT *
+        FROM admissions
+        WHERE LOWER(TRIM(COALESCE(dept, ''))) = ?
+          AND COALESCE(is_deleted, 0) = 0
+          AND LOWER(TRIM(COALESCE(processed_by, ''))) = ?
+        ORDER BY id DESC
+      `).all(dept, ownName);
+    }
+  }
+
+  const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
+
   return rowsWithDuplicateFlags.map((row) => {
     const latestUpload = getLatestUploadForAdmission(row.id, user);
 
@@ -854,7 +1070,114 @@ function ensureUploadSeenTable() {
 }
 
 ensureUploadSeenTable();
+// ================== EXTERNAL UPLOAD LINK HELPERS ==================
+function ensureExternalUploadLinksTable() {
+  try {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS admission_external_upload_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        admission_id INTEGER NOT NULL,
+        token TEXT UNIQUE NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        created_by_id INTEGER,
+        created_at TEXT NOT NULL,
+        last_used_at TEXT
+      )
+    `).run();
+  } catch (e) {
+    console.error("ensureExternalUploadLinksTable error:", e.message);
+  }
+}
 
+ensureExternalUploadLinksTable();
+
+function makeExternalUploadToken() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+function createOrGetExternalUploadLink(admissionId, user) {
+  const existing = db.prepare(`
+    SELECT token
+    FROM admission_external_upload_links
+    WHERE admission_id = ?
+      AND is_active = 1
+    ORDER BY id DESC
+    LIMIT 1
+  `).get(admissionId);
+
+  if (existing?.token) {
+    return existing.token;
+  }
+
+  const token = makeExternalUploadToken();
+
+  db.prepare(`
+    INSERT INTO admission_external_upload_links
+      (admission_id, token, is_active, created_by_id, created_at)
+    VALUES (?, ?, 1, ?, ?)
+  `).run(
+    admissionId,
+    token,
+    user?.id || null,
+    new Date().toISOString()
+  );
+
+  return token;
+}
+
+function getAdmissionByExternalUploadToken(token) {
+  const cleanToken = String(token || "").trim();
+
+  if (!cleanToken) return null;
+
+  return db.prepare(`
+    SELECT
+      l.id AS link_id,
+      l.token,
+      l.is_active,
+      l.admission_id,
+      a.id,
+      a.dept,
+      a.student_name,
+      a.father_name,
+      a.grade,
+      a.tuition_grade,
+      a.phone,
+      a.guardian_whatsapp
+    FROM admission_external_upload_links l
+    INNER JOIN admissions a
+      ON a.id = l.admission_id
+    WHERE l.token = ?
+      AND l.is_active = 1
+      AND COALESCE(a.is_deleted, 0) = 0
+    LIMIT 1
+  `).get(cleanToken);
+}
+
+function normalizeExternalLinkUrl(value) {
+  const raw = String(value || "").trim();
+
+  if (!raw) return "";
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return raw;
+  }
+
+  return `https://${raw}`;
+}
+
+function isSafeExternalLink(value) {
+  const clean = normalizeExternalLinkUrl(value);
+
+  if (!clean) return false;
+
+  try {
+    const url = new URL(clean);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 function hasUserSeenUpload(uploadId, userId) {
   try {
     if (!uploadId || !userId) return false;
@@ -930,6 +1253,111 @@ return {
     return null;
   }
 }
+function getAdmissionUploadsForViewer(viewerUser = null, filter = "all") {
+  try {
+    const userId = Number(viewerUser?.id || 0);
+    const userRole = String(viewerUser?.role || "").trim();
+    const userDept = String(viewerUser?.dept || "").trim().toLowerCase();
+
+    const cleanFilter = String(filter || "all").trim().toLowerCase();
+
+    const rows = db.prepare(`
+      SELECT
+        u.id,
+        u.admission_id,
+        u.original_name,
+        u.stored_name,
+        u.file_url,
+        u.mime_type,
+        u.size,
+        u.uploaded_by_id,
+        u.uploaded_by_name,
+        u.uploaded_by_role,
+        u.uploaded_at,
+
+        a.id AS adm_id,
+        a.dept,
+        a.student_name,
+        a.father_name,
+        a.grade,
+        a.tuition_grade,
+        a.phone,
+                a.guardian_whatsapp,
+        a.processed_by,
+        a.accounts_registration_number,
+        a.accounts_family_number,
+
+        CASE
+          WHEN us.id IS NULL THEN 0
+          ELSE 1
+        END AS seen_by_current_user
+
+      FROM uploads u
+      LEFT JOIN admissions a
+        ON a.id = u.admission_id
+      LEFT JOIN upload_seen_logs us
+        ON us.upload_id = u.id
+       AND us.user_id = ?
+
+      WHERE u.admission_id IS NOT NULL
+        AND a.id IS NOT NULL
+        AND COALESCE(a.is_deleted, 0) = 0
+
+      ORDER BY
+        datetime(COALESCE(u.uploaded_at, '1970-01-01')) DESC,
+        u.id DESC
+    `).all(userId);
+
+    let safeRows = rows;
+
+        if (userRole !== "super_admin") {
+      safeRows = safeRows.filter((r) => {
+        return canAccessAdmissionRow(viewerUser, {
+          id: r.adm_id || r.admission_id,
+          dept: r.dept,
+          processed_by: r.processed_by || "",
+        });
+      });
+    }
+
+    if (cleanFilter === "seen") {
+      safeRows = safeRows.filter((r) => Number(r.seen_by_current_user || 0) === 1);
+    }
+
+    if (cleanFilter === "unseen") {
+      safeRows = safeRows.filter((r) => Number(r.seen_by_current_user || 0) !== 1);
+    }
+
+    return safeRows.map((r) => ({
+      id: r.id,
+      uploadId: r.id,
+      admissionId: r.admission_id,
+
+      fileName: r.original_name || r.stored_name || "File",
+      fileUrl: r.file_url || "",
+      mimeType: r.mime_type || "",
+      size: r.size || 0,
+
+      addedBy: r.uploaded_by_name || r.uploaded_by_role || "System / Old Record",
+      addedByRole: r.uploaded_by_role || (r.uploaded_by_name ? "" : "Old file record"),
+      uploadedAt: r.uploaded_at || "",
+
+      seen: Number(r.seen_by_current_user || 0) === 1,
+      seenByCurrentUser: Number(r.seen_by_current_user || 0) === 1,
+
+      student: r.student_name || "No Name",
+      father: r.father_name || "-",
+      dept: r.dept || "",
+      grade: r.grade || r.tuition_grade || "",
+      phone: r.phone || r.guardian_whatsapp || "",
+      registrationNumber: r.accounts_registration_number || "",
+      familyNumber: r.accounts_family_number || "",
+    }));
+  } catch (e) {
+    console.error("getAdmissionUploadsForViewer error:", e.message);
+    return [];
+  }
+}
 function insertUploadRecord({
   admissionId,
   originalName,
@@ -974,12 +1402,8 @@ function getDeleteAdmissionAccess(user, row) {
 
   const perms = getPerm(user);
   if (!perms?.canDeleteAdmissions) return false;
-  if (!user.dept) return false;
 
-  const rowDept = String(row.dept || "").trim().toLowerCase();
-  const userDept = String(user.dept || "").trim().toLowerCase();
-
-  return rowDept && userDept && rowDept === userDept;
+  return canAccessAdmissionRow(user, row);
 }
 
 
@@ -2641,34 +3065,20 @@ function matchesBulkSection(row, selectedSection) {
 function getBulkChallanMatchingAdmissions({ user, className, section }) {
   const cleanClass = String(className || "").trim();
 
-  let rows = [];
+  const rows = db.prepare(`
+    SELECT *
+    FROM admissions
+    WHERE COALESCE(is_deleted, 0) = 0
+      AND (
+        TRIM(COALESCE(grade, '')) = TRIM(?)
+        OR TRIM(COALESCE(tuition_grade, '')) = TRIM(?)
+      )
+    ORDER BY id DESC
+  `).all(cleanClass, cleanClass);
 
-  if (user?.role === "super_admin") {
-    rows = db.prepare(`
-      SELECT *
-      FROM admissions
-      WHERE COALESCE(is_deleted, 0) = 0
-        AND (
-          TRIM(COALESCE(grade, '')) = TRIM(?)
-          OR TRIM(COALESCE(tuition_grade, '')) = TRIM(?)
-        )
-      ORDER BY id DESC
-    `).all(cleanClass, cleanClass);
-  } else {
-    rows = db.prepare(`
-      SELECT *
-      FROM admissions
-      WHERE dept = ?
-        AND COALESCE(is_deleted, 0) = 0
-        AND (
-          TRIM(COALESCE(grade, '')) = TRIM(?)
-          OR TRIM(COALESCE(tuition_grade, '')) = TRIM(?)
-        )
-      ORDER BY id DESC
-    `).all(user?.dept || "", cleanClass, cleanClass);
-  }
-
-  return rows.filter((row) => matchesBulkSection(row, section));
+  return rows
+    .filter((row) => canAccessAdmissionRow(user, row))
+    .filter((row) => matchesBulkSection(row, section));
 }
 
 function isBillingMonthAlreadyUpdated(row, monthKey, billingYear = new Date().getFullYear()) {
@@ -4147,10 +4557,8 @@ app.get("/api/billing/:id", requireLogin, requireOpenBilling, (req, res) => {
     }
 
     // ✅ non-super dept restriction
-    if (user?.role !== "super_admin") {
-      if (!user?.dept || row.dept !== user.dept) {
-        return res.status(403).json({ success: false, message: "Not allowed" });
-      }
+    if (!canAccessAdmissionRow(user, row)) {
+      return res.status(403).json({ success: false, message: "Not allowed" });
     }
 
     const billingYear = getBillingYearFromReq(req);
@@ -4257,6 +4665,201 @@ for (const item of billingArr) {
     return res.status(500).json({ success: false, message: "DB error" });
   }
 });
+// ================== EXTERNAL UPLOAD PUBLIC ROUTES ==================
+
+// ✅ Generate / get external upload link
+app.post("/api/admissions/:id/external-upload-link", requireLogin, requirePerm("btnUpload"), (req, res) => {
+  try {
+    const user = req.session.user;
+    const admissionId = parseInt(req.params.id, 10);
+
+    if (!admissionId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid admission id",
+      });
+    }
+
+    const row = getActiveAdmissionById(admissionId);
+
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        message: "Admission not found",
+      });
+    }
+
+    if (!canAccessAdmissionRow(user, row)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not allowed",
+      });
+    }
+
+    const token = createOrGetExternalUploadLink(admissionId, user);
+    const uploadBaseUrl =
+  process.env.NODE_ENV === "production"
+    ? getBaseUrl(req)
+    : `${req.protocol}://${req.get("host")}/`;
+
+const uploadUrl = `${uploadBaseUrl}external-upload/${token}`;
+
+    return res.json({
+      success: true,
+      admissionId,
+      uploadUrl,
+    });
+  } catch (err) {
+    console.error("POST /api/admissions/:id/external-upload-link error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Could not create external upload link",
+    });
+  }
+});
+
+// ✅ Public page, no login required
+app.get("/external-upload/:token", (req, res) => {
+  try {
+    const token = String(req.params.token || "").trim();
+    const admission = getAdmissionByExternalUploadToken(token);
+
+    if (!admission) {
+      return res.status(404).send("Invalid or expired upload link");
+    }
+
+    return res.render("external-upload", {
+      pageTitle: "External Upload",
+      token,
+      admission,
+      success: false,
+      error: "",
+    });
+  } catch (err) {
+    console.error("GET /external-upload/:token error:", err);
+    return res.status(500).send("Server error");
+  }
+});
+
+// ✅ Public submit, no login required
+app.post("/external-upload/:token", upload.single("file"), (req, res) => {
+  try {
+    const token = String(req.params.token || "").trim();
+    const admission = getAdmissionByExternalUploadToken(token);
+
+    if (!admission) {
+      return res.status(404).send("Invalid or expired upload link");
+    }
+
+    const f = req.file;
+    const externalLinkRaw = String(req.body.external_link || "").trim();
+    const hasExternalLink = externalLinkRaw && isSafeExternalLink(externalLinkRaw);
+
+    if (!f && !hasExternalLink) {
+      return res.status(400).render("external-upload", {
+        pageTitle: "External Upload",
+        token,
+        admission,
+        success: false,
+        error: "Please upload a file or paste a valid link.",
+      });
+    }
+
+    if (f) {
+      const relPath = toPosix(path.relative(uploadsDir, f.path));
+      const fileUrl = `${getBaseUrl(req)}uploads/${relPath}`;
+
+      insertUploadRecord({
+        admissionId: admission.admission_id,
+        originalName: f.originalname,
+        storedName: relPath,
+        fileUrl,
+        mimeType: f.mimetype,
+        size: f.size || 0,
+        user: {
+          id: null,
+          name: "External Parent / Student",
+          email: "",
+          role: "external",
+        },
+      });
+    }
+
+    if (hasExternalLink) {
+      const safeLink = normalizeExternalLinkUrl(externalLinkRaw);
+
+      insertUploadRecord({
+        admissionId: admission.admission_id,
+        originalName: "External Uploaded Link",
+        storedName: "",
+        fileUrl: safeLink,
+        mimeType: "text/url",
+        size: 0,
+        user: {
+          id: null,
+          name: "External Parent / Student",
+          email: "",
+          role: "external",
+        },
+      });
+    }
+
+    db.prepare(`
+      UPDATE admission_external_upload_links
+      SET last_used_at = ?
+      WHERE token = ?
+    `).run(new Date().toISOString(), token);
+
+    emitAdmissionChanged(req, {
+      type: "external_upload_added",
+      admissionId: admission.admission_id,
+      dept: admission.dept || "",
+    });
+
+    return res.render("external-upload", {
+      pageTitle: "External Upload",
+      token,
+      admission,
+      success: true,
+      error: "",
+    });
+  } catch (err) {
+    console.error("POST /external-upload/:token error:", err);
+    return res.status(500).send("Upload failed");
+  }
+});
+app.get("/api/admission-files", requireLogin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const filter = String(req.query.filter || "all").trim().toLowerCase();
+
+    const allowedFilters = new Set(["all", "seen", "unseen"]);
+    const finalFilter = allowedFilters.has(filter) ? filter : "all";
+
+    const files = getAdmissionUploadsForViewer(user, finalFilter);
+
+    const allFiles = getAdmissionUploadsForViewer(user, "all");
+    const seenFiles = allFiles.filter((f) => f.seen);
+    const unseenFiles = allFiles.filter((f) => !f.seen);
+
+    return res.json({
+      success: true,
+      filter: finalFilter,
+      counts: {
+        all: allFiles.length,
+        seen: seenFiles.length,
+        unseen: unseenFiles.length,
+      },
+      files,
+    });
+  } catch (err) {
+    console.error("GET /api/admission-files error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+});
 app.post("/api/uploads/:uploadId/seen", requireLogin, (req, res) => {
   try {
     const user = req.session.user;
@@ -4270,9 +4873,15 @@ app.post("/api/uploads/:uploadId/seen", requireLogin, (req, res) => {
     }
 
     const uploadRow = db.prepare(`
-      SELECT id, admission_id
-      FROM uploads
-      WHERE id = ?
+            SELECT
+        u.id,
+        u.admission_id,
+        a.dept,
+        a.processed_by
+      FROM uploads u
+      LEFT JOIN admissions a
+        ON a.id = u.admission_id
+      WHERE u.id = ?
       LIMIT 1
     `).get(uploadId);
 
@@ -4280,6 +4889,24 @@ app.post("/api/uploads/:uploadId/seen", requireLogin, (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Upload not found",
+      });
+    }
+
+    if (!uploadRow.admission_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Upload is not attached to an admission",
+      });
+    }
+
+        if (!canAccessAdmissionRow(user, {
+      id: uploadRow.admission_id,
+      dept: uploadRow.dept,
+      processed_by: uploadRow.processed_by || "",
+    })) {
+      return res.status(403).json({
+        success: false,
+        message: "Not allowed",
       });
     }
 
@@ -4297,6 +4924,8 @@ app.post("/api/uploads/:uploadId/seen", requireLogin, (req, res) => {
     return res.json({
       success: true,
       message: "Marked as seen",
+      uploadId: uploadRow.id,
+      admissionId: uploadRow.admission_id,
     });
   } catch (err) {
     console.error("POST /api/uploads/:uploadId/seen error:", err);
@@ -4322,10 +4951,8 @@ app.post("/api/billing/:id", requireLogin, requireSaveBilling, async (req, res) 
     }
 
     // ✅ non-super dept restriction
-    if (user?.role !== "super_admin") {
-      if (!user?.dept || row.dept !== user.dept) {
-        return res.status(403).json({ success: false, message: "Not allowed" });
-      }
+    if (!canAccessAdmissionRow(user, row)) {
+      return res.status(403).json({ success: false, message: "Not allowed" });
     }
    // ✅ ALWAYS first
     const beforeBillingArr = getAdmissionBillingByYear(id, billingYear);
@@ -4659,24 +5286,7 @@ const familyNumber = String(updatedRow?.accounts_family_number || "").trim();
 
 let familyRows = [];
 if (familyNumber) {
-  if (user?.role === "super_admin") {
-    familyRows = db.prepare(`
-      SELECT *
-      FROM admissions
-      WHERE accounts_family_number = ?
-        AND COALESCE(is_deleted, 0) = 0
-      ORDER BY id DESC
-    `).all(familyNumber);
-  } else {
-    familyRows = db.prepare(`
-      SELECT *
-      FROM admissions
-      WHERE accounts_family_number = ?
-        AND dept = ?
-        AND COALESCE(is_deleted, 0) = 0
-      ORDER BY id DESC
-    `).all(familyNumber, user?.dept || "");
-  }
+  familyRows = getAccessibleFamilyRows(user, familyNumber);
 }
 
 const billingPayload = buildBillingWebhookPayload({
@@ -5156,7 +5766,20 @@ admission_total_paid: String(receivedPaymentAfterAdmissionMonth || 0),
 
   emitAdmissionChanged(req, { type: "super_update", admissionId: id });
 
-  return res.redirect("/dashboard");
+if (
+  req.xhr ||
+  req.get("X-Requested-With") === "XMLHttpRequest" ||
+  String(req.headers.accept || "").includes("application/json")
+) {
+  return res.json({
+    success: true,
+    message: "Admission updated successfully.",
+    admissionId: id,
+    updatedFields: after,
+  });
+}
+
+return res.redirect("/dashboard");
 }
 
 /* ================= API: WEB ADMISSIONS (form se) ================= */
@@ -5374,8 +5997,7 @@ app.get("/admissions/:id/pdf", requireLogin, async (req, res) => {
     // ✅ non-super: dept check + permission check
     if (user?.role !== "super_admin") {
      if (!perms.btnPdf) return res.status(403).send("Not allowed");
-if (!user?.dept || row.dept !== user.dept) return res.status(403).send("Not allowed");
-
+if (!canAccessAdmissionRow(user, row)) return res.status(403).send("Not allowed");
     }
 
     const hostBaseUrl = getBaseUrl(req);
@@ -5411,70 +6033,43 @@ function canUseDetailsFeature(user, perms) {
 function ensureAdmissionRouteAccess(user, perms, row) {
   if (!user || !row) return false;
 
-  // super admin: full access
+  // Super Admin: full access
   if (user.role === "super_admin") return true;
 
-  // other users: must have details permission
+  // Other users must have details permission
   if (!perms?.btnDetails) return false;
 
-  // same department only
-  if (!user.dept || row.dept !== user.dept) return false;
-
-  return true;
+  return canAccessAdmissionRow(user, row);
 }
 
 function getAccessibleFamilyRows(user, familyNumber) {
   if (!familyNumber) return [];
 
-  if (user?.role === "super_admin") {
-    return db
-      .prepare(`
-        SELECT *
-        FROM admissions
-        WHERE accounts_family_number = ?
-          AND COALESCE(is_deleted, 0) = 0
-        ORDER BY id DESC
-      `)
-      .all(familyNumber);
-  }
-
-  return db
+  const rows = db
     .prepare(`
       SELECT *
       FROM admissions
       WHERE accounts_family_number = ?
-        AND dept = ?
         AND COALESCE(is_deleted, 0) = 0
       ORDER BY id DESC
     `)
-    .all(familyNumber, user.dept || "");
+    .all(familyNumber);
+
+    if (user?.role === "super_admin") {
+    return rows;
+  }
+
+  return rows.filter((row) => canAccessAdmissionRow(user, row));
 }
 
 function getAccessibleFamilyIds(user, familyNumber) {
   if (!familyNumber) return [];
 
-  if (user?.role === "super_admin") {
-    return db
-      .prepare(`
-        SELECT id
-        FROM admissions
-        WHERE accounts_family_number = ?
-          AND COALESCE(is_deleted, 0) = 0
-        ORDER BY id DESC
-      `)
-      .all(familyNumber);
-  }
+  const rows = getAccessibleFamilyRows(user, familyNumber);
 
-  return db
-    .prepare(`
-      SELECT id
-      FROM admissions
-      WHERE accounts_family_number = ?
-        AND dept = ?
-        AND COALESCE(is_deleted, 0) = 0
-      ORDER BY id DESC
-    `)
-    .all(familyNumber, user.dept || "");
+  return rows.map((row) => ({
+    id: row.id,
+  }));
 }
 // =====================================================
 // ✅ COMMON VIEW DETAILS PAGE
@@ -6967,31 +7562,20 @@ app.get("/api/admissions", requireLogin, (req, res) => {
     const user = req.session.user;
     const perms = getPerm(user);
 
-    let rows = [];
+    let rows = db.prepare(`
+      SELECT *
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+      ORDER BY id DESC
+    `).all();
 
-    if (user?.role === "super_admin") {
-      rows = db.prepare(`
-        SELECT *
-        FROM admissions
-        WHERE COALESCE(is_deleted, 0) = 0
-        ORDER BY id DESC
-      `).all();
-      return res.json(attachDuplicateFlagsToRawRows(rows));
+    if (user?.role !== "super_admin" && !isAccountsUser(user)) {
+      rows = rows.filter((row) => canAccessAdmissionRow(user, row));
     }
 
-    if (!user?.dept) return res.json([]);
-
-    rows = db
-      .prepare(`
-        SELECT *
-        FROM admissions
-        WHERE dept = ?
-          AND COALESCE(is_deleted, 0) = 0
-        ORDER BY id DESC
-      `)
-      .all(user.dept);
     const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
-    const masked = rowsWithDuplicateFlags.map((r) => maskAdmissionDbRow(r, perms));;
+    const masked = rowsWithDuplicateFlags.map((r) => maskAdmissionDbRow(r, perms));
+
     return res.json(masked);
   } catch (err) {
     console.error("GET /api/admissions error:", err);
@@ -8825,11 +9409,9 @@ app.post("/api/whatsapp/send", requireLogin, requireSendWhatsApp, async (req, re
 
     user = req.session.user;
 
-    // ✅ non-super dept restriction
-    if (user?.role !== "super_admin") {
-      if (!user?.dept || row.dept !== user.dept) {
-        return res.status(403).json({ success: false, message: "Not allowed" });
-      }
+        // ✅ assigned access restriction
+    if (!canAccessAdmissionRow(user, row)) {
+      return res.status(403).json({ success: false, message: "Not allowed" });
     }
 
     const whatsappWebhookUrl = getApiSetting(
@@ -9401,13 +9983,21 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
   });
 }
 
-  const deptAdmissionsPage = fetchAdmissionsPage({
-  dept: user.dept || null,
-  page,
-  limit,
-  perms: null,
-  viewerUser: user,
-});
+    const accessibleAdmissions = fetchAdmissionsForUser(user);
+
+  const totalRecords = accessibleAdmissions.length;
+  const totalPages = Math.max(Math.ceil(totalRecords / limit), 1);
+  const offset = (page - 1) * limit;
+
+  const deptAdmissionsPage = {
+    rows: accessibleAdmissions.slice(offset, offset + limit),
+    page,
+    limit,
+    totalRecords,
+    totalPages,
+    startRecord: totalRecords === 0 ? 0 : offset + 1,
+    endRecord: totalRecords === 0 ? 0 : Math.min(offset + limit, totalRecords),
+  };
 
 if (user.role === "admin") {
   return res.render("dashboard-admin", {
@@ -9496,30 +10086,48 @@ app.get("/dashboard/admin/users", requireLogin, (req, res) => {
   const roleFilter = (req.query.role || "all").toString();
 
   // ✅ dynamic filter
-  let roleSql = "";
-  if (roleFilter === "agent") roleSql = "AND role = 'agent'";
-  else if (roleFilter === "sub_agent") roleSql = "AND role = 'sub_agent'";
-  else roleSql = "AND role IN ('agent','sub_agent')"; // all
+    let roleSql = "";
+  if (roleFilter === "agent") roleSql = "AND u.role = 'agent'";
+  else if (roleFilter === "sub_agent") roleSql = "AND u.role = 'sub_agent'";
+  else roleSql = "AND u.role IN ('agent','sub_agent')"; // all
 
  const rows = db.prepare(`
   SELECT
-    id,
-    name,
-    email,
-    role,
-    dept,
-    agentType,
-    permissions,
-    lastUpdatedBy,
-    lastUpdatedByRole,
-    lastUpdatedAt
-  FROM users
-  WHERE dept = ?
-    ${roleSql}
-  ORDER BY id DESC
-`).all(user.dept);
+    u.*,
 
-  const deptUsers = rows.map(mapUserRow);
+    assigned.name AS assignedAdminName,
+    assigned.email AS assignedAdminEmail,
+    assigned.dept AS assignedAdminDept,
+
+    creator.name AS createdByName,
+    creator.email AS createdByEmail,
+    creator.role AS createdByRole
+  FROM users u
+  LEFT JOIN users assigned
+    ON assigned.id = COALESCE(u.assigned_admin_id, u.managerId)
+  LEFT JOIN users creator
+    ON creator.id = u.created_by
+  WHERE u.dept = ?
+    AND (
+      u.assigned_admin_id = ?
+      OR u.managerId = ?
+    )
+    ${roleSql}
+  ORDER BY u.id DESC
+`).all(user.dept, user.id, user.id);
+
+  const deptUsers = rows.map((row) => {
+    const u = mapUserRow(row);
+
+    if (!u.access_scope) {
+      if (u.role === "super_admin") u.access_scope = "all";
+      else if (String(u.dept || "").toLowerCase() === "accounts") u.access_scope = "all";
+      else if (u.role === "admin") u.access_scope = "team";
+      else u.access_scope = "own";
+    }
+
+    return u;
+  });
 
   return res.render("admin-users", {
     user,
@@ -9538,7 +10146,25 @@ app.get("/dashboard/admin/users/:id/edit", requireLogin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).send("Invalid id");
 
-  const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+  const row = db.prepare(`
+  SELECT
+    u.*,
+
+    assigned.name AS assignedAdminName,
+    assigned.email AS assignedAdminEmail,
+    assigned.dept AS assignedAdminDept,
+
+    creator.name AS createdByName,
+    creator.email AS createdByEmail,
+    creator.role AS createdByRole
+  FROM users u
+  LEFT JOIN users assigned
+    ON assigned.id = COALESCE(u.assigned_admin_id, u.managerId)
+  LEFT JOIN users creator
+    ON creator.id = u.created_by
+  WHERE u.id = ?
+  LIMIT 1
+`).get(id);
   if (!row) return res.status(404).send("User not found");
 
   // ✅ Admin can edit only same dept + only agent/sub_agent
@@ -9548,18 +10174,27 @@ app.get("/dashboard/admin/users/:id/edit", requireLogin, (req, res) => {
   if (!(row.role === "agent" || row.role === "sub_agent")) {
     return res.status(403).send("Not allowed");
   }
-
+  if (!isUserAssignedToAdmin(row, current)) {
+    return res.status(403).send("Not allowed");
+  }
   const editUser = mapUserRow(row);
 
   // ✅ normalize child perms so missing keys become false
   editUser.permissions = getPerm(editUser);
+  if (!editUser.access_scope) {
+  if (editUser.role === "super_admin") editUser.access_scope = "all";
+  else if (String(editUser.dept || "").toLowerCase() === "accounts") editUser.access_scope = "all";
+  else if (editUser.role === "admin") editUser.access_scope = "team";
+  else editUser.access_scope = "own";
+}
 
   return res.render("admin-user-edit", {
-    user: current,
-    perms: getPerm(current),
-    editUser,
-    error: null,
-  });
+  user: current,
+  perms: getPerm(current),
+  editUser,
+  error: null,
+  basePath: "/dashboard/admin",
+});
 });
 // ==================== ADMIN: EDIT USER (POST) ====================
 app.post("/dashboard/admin/users/:id/edit", requireLogin, (req, res) => {
@@ -9582,7 +10217,10 @@ app.post("/dashboard/admin/users/:id/edit", requireLogin, (req, res) => {
   if (!(row.role === "agent" || row.role === "sub_agent")) {
     return res.status(403).send("Not allowed");
   }
-
+  
+  if (!isUserAssignedToAdmin(row, current)) {
+    return res.status(403).send("Not allowed");
+  }
   const { name, email, agentType } = req.body || {};
 
   if (!name || !email) {
@@ -9684,9 +10322,20 @@ app.post("/dashboard/admin/users/:id/delete", requireLogin, (req, res) => {
   if (!(row.role === "agent" || row.role === "sub_agent")) {
     return res.status(403).send("Not allowed");
   }
-
+  if (!isUserAssignedToAdmin(row, current)) {
+    return res.status(403).send("Not allowed");
+  }
   // ✅ delete
-  db.prepare("DELETE FROM users WHERE id = ?").run(id);
+    db.prepare(`
+    DELETE FROM users
+    WHERE id = ?
+      AND dept = ?
+      AND role IN ('agent', 'sub_agent')
+      AND (
+        assigned_admin_id = ?
+        OR managerId = ?
+      )
+  `).run(id, current.dept, current.id, current.id);
 
   // optional audit
   try {
@@ -9838,6 +10487,10 @@ app.post("/dashboard/super/files/delete-all", requireLogin, requireSuperAdmin, (
     return res.redirect("/dashboard/super/files");
   }
 });
+app.post("/dashboard/agent/agents", requireLogin, (req, res, next) => {
+  req.url = "/dashboard/admin/agents";
+  next();
+});
 app.post("/dashboard/admin/agents", requireLogin, async (req, res) => {
   try {
     const user = req.session.user;
@@ -9882,10 +10535,10 @@ app.post("/dashboard/admin/agents", requireLogin, async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
 
     const info = db.prepare(`
-      INSERT INTO users
-        (name, email, password_hash, role, dept, agentType, managerId, permissions, updateNoticeUnread, updatedAt)
+           INSERT INTO users
+        (name, email, password_hash, role, dept, agentType, managerId, assigned_admin_id, created_by, access_scope, permissions, updateNoticeUnread, updatedAt)
       VALUES
-        (@name, @email, @password_hash, @role, @dept, @agentType, @managerId, @permissions, 0, CURRENT_TIMESTAMP)
+        (@name, @email, @password_hash, @role, @dept, @agentType, @managerId, @assigned_admin_id, @created_by, @access_scope, @permissions, 0, CURRENT_TIMESTAMP)
     `).run({
       name,
       email,
@@ -9893,7 +10546,10 @@ app.post("/dashboard/admin/agents", requireLogin, async (req, res) => {
       role: newRole,
       dept: dept || null,
       agentType: agentType || null,
-      managerId: user.id,
+           managerId: user.id,
+            assigned_admin_id: user.role === "admin" ? user.id : (user.assigned_admin_id || user.managerId || null),
+      created_by: user.id,
+      access_scope: "own",
       permissions: JSON.stringify(finalPerms),
     });
 
@@ -9946,17 +10602,13 @@ app.post("/admin/uploads",
         return res.status(400).json({ success: false, message: "No file received" });
       }
 
-      // ✅ admin dept restriction
-      if (user?.role !== "super_admin") {
-        if (!user?.dept) return res.status(403).json({ success: false, message: "Dept missing" });
+            // ✅ assigned access restriction
+      if (admissionId) {
+        const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(admissionId);
+        if (!row) return res.status(404).json({ success: false, message: "Admission not found" });
 
-        // admissionId must belong to same dept
-        if (admissionId) {
-          const row = db.prepare("SELECT dept FROM admissions WHERE id = ?").get(admissionId);
-          if (!row) return res.status(404).json({ success: false, message: "Admission not found" });
-          if (row.dept !== user.dept) {
-            return res.status(403).json({ success: false, message: "Not allowed" });
-          }
+        if (!canAccessAdmissionRow(user, row)) {
+          return res.status(403).json({ success: false, message: "Not allowed" });
         }
       }
     const relPath = toPosix(path.relative(uploadsDir, f.path));
@@ -10017,39 +10669,24 @@ if (user?.role !== "super_admin") {
 
 if (admissionId) {
   baseAdmission = db.prepare(`
-    SELECT id, dept, student_name, accounts_family_number
+        SELECT id, dept, student_name, accounts_family_number, processed_by
     FROM admissions
     WHERE id = ?
   `).get(admissionId);
 
   if (!baseAdmission) return res.status(404).send("Admission not found");
 
-  if (user?.role !== "super_admin" && baseAdmission.dept !== user.dept) {
+if (!canAccessAdmissionRow(user, baseAdmission)) {
     return res.status(403).send("Not allowed");
   }
 
   familyNumber = String(baseAdmission.accounts_family_number || "").trim();
 
-  if (familyNumber) {
-    if (user?.role === "super_admin") {
-      familyAdmissionIds = db.prepare(`
-        SELECT id
-        FROM admissions
-        WHERE accounts_family_number = ?
-        ORDER BY id DESC
-      `).all(familyNumber).map(r => r.id);
-    } else {
-      familyAdmissionIds = db.prepare(`
-        SELECT id
-        FROM admissions
-        WHERE accounts_family_number = ?
-          AND dept = ?
-        ORDER BY id DESC
-      `).all(familyNumber, user.dept).map(r => r.id);
-    }
-  } else {
-    familyAdmissionIds = [admissionId];
-  }
+if (familyNumber) {
+  familyAdmissionIds = getAccessibleFamilyIds(user, familyNumber).map((r) => r.id);
+} else {
+  familyAdmissionIds = [admissionId];
+}
 }
 
    let files = [];
@@ -10073,28 +10710,31 @@ if (admissionId) {
     files = [];
   }
 } else {
-      // ✅ admin ko sirf apne dept ke admissions ki files
-      if (user?.role !== "super_admin") {
-        files = db.prepare(`
-          SELECT
-            u.*,
-            a.student_name AS student_name
-          FROM uploads u
-          LEFT JOIN admissions a ON a.id = u.admission_id
-          WHERE a.dept = ?
-          ORDER BY u.id DESC
-        `).all(user.dept);
-      } else {
-        files = db.prepare(`
-          SELECT
-            u.*,
-            a.student_name AS student_name
-          FROM uploads u
-          LEFT JOIN admissions a ON a.id = u.admission_id
-          ORDER BY u.id DESC
-        `).all();
-      }
-    }
+  files = db.prepare(`
+    SELECT
+      u.*,
+      a.id AS linked_admission_id,
+      a.student_name AS student_name,
+      a.accounts_family_number AS family_number,
+      a.dept,
+      a.processed_by
+    FROM uploads u
+    LEFT JOIN admissions a ON a.id = u.admission_id
+    WHERE a.id IS NOT NULL
+      AND COALESCE(a.is_deleted, 0) = 0
+    ORDER BY u.id DESC
+  `).all();
+
+  if (user?.role !== "super_admin" && !isAccountsUser(user)) {
+    files = files.filter((f) =>
+      canAccessAdmissionRow(user, {
+        id: f.linked_admission_id || f.admission_id,
+        dept: f.dept,
+        processed_by: f.processed_by || "",
+      })
+    );
+  }
+}
 
    return res.render("super-files", {
   user,
@@ -10130,12 +10770,12 @@ app.delete("/admin/files/:id", requireLogin, requireDeleteFiles, (req, res) => {
     }
 
     // ✅ admission dept check
-    const adm = db.prepare("SELECT dept FROM admissions WHERE id = ?").get(fileRow.admission_id);
+        const adm = db.prepare("SELECT * FROM admissions WHERE id = ?").get(fileRow.admission_id);
     if (!adm) {
       return res.status(404).json({ success: false, message: "Admission not found" });
     }
 
-    if (!user.dept || adm.dept !== user.dept) {
+    if (!canAccessAdmissionRow(user, adm)) {
       return res.status(403).json({ success: false, message: "Not allowed" });
     }
 
@@ -10171,7 +10811,7 @@ app.post("/dashboard/super/files/link", requireLogin, requireSuperAdmin, (req, r
     if (!cleanLink.startsWith("http://") && !cleanLink.startsWith("https://"))
       return res.status(400).json({ success:false, message:"Valid http/https link required" });
 
-    const adm = db.prepare("SELECT id, dept FROM admissions WHERE id = ?").get(admissionId);
+    const adm = db.prepare("SELECT * FROM admissions WHERE id = ?").get(admissionId);
     if (!adm) return res.status(404).json({ success:false, message:"Admission not found" });
 
     const actor = getUploadActor(user);
@@ -10237,16 +10877,13 @@ function saveUrlToUploads(req, res, role) {
     }
 
     // ✅ admission exists + dept restriction
-    const adm = db.prepare("SELECT id, dept FROM admissions WHERE id = ?").get(admissionId);
+const adm = db.prepare("SELECT * FROM admissions WHERE id = ?").get(admissionId);
     if (!adm) return res.status(404).json({ success: false, message: "Admission not found" });
 
     // ✅ dept check for non-super
-    if (user.role !== "super_admin") {
-      if (!user.dept || adm.dept !== user.dept) {
-        return res.status(403).json({ success: false, message: "Not allowed" });
-      }
+if (!canAccessAdmissionRow(user, adm)) {
+      return res.status(403).json({ success: false, message: "Not allowed" });
     }
-
     const { year, month } = getYearMonthParts();
 const groupedSummary = `[${year}-${month}] ${cleanSummary || ""}`.trim();
 
@@ -10350,16 +10987,14 @@ function editUrlInUploads(req, res, role) {
     }
 
     // ✅ admission exists + dept restriction (same as save)
-    const adm = db.prepare("SELECT id, dept FROM admissions WHERE id = ?").get(row.admission_id);
+    const adm = db.prepare("SELECT * FROM admissions WHERE id = ?").get(row.admission_id);
     if (!adm) {
       return res.status(404).json({ success: false, message: "Admission not found" });
     }
 
-    // ✅ dept check for non-super
-    if (user.role !== "super_admin") {
-      if (!user.dept || adm.dept !== user.dept) {
-        return res.status(403).json({ success: false, message: "Not allowed" });
-      }
+    // ✅ assigned access check
+    if (!canAccessAdmissionRow(user, adm)) {
+      return res.status(403).json({ success: false, message: "Not allowed" });
     }
 
     // ✅ update in uploads
@@ -10429,34 +11064,21 @@ app.post( "/dashboard/super/uploads",
       const relPath = toPosix(path.relative(uploadsDir, f.path));
 const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relPath}`;
 
-const actor = getUploadActor(req.session.user);
-
-db.prepare(`
-  INSERT INTO uploads (
-    admission_id,
-    original_name,
-    stored_name,
-    file_url,
-    mime_type,
-    size,
-    uploaded_by_id,
-    uploaded_by_name,
-    uploaded_by_role,
-    uploaded_at
-  )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`).run(
+insertUploadRecord({
   admissionId,
-  f.originalname,
-  relStored,
+  originalName: f.originalname,
+  storedName: relPath,
   fileUrl,
-  f.mimetype,
-  f.size,
-  actor.uploadedById,
-  actor.uploadedByName,
-  actor.uploadedByRole,
-  actor.uploadedAt
-);
+  mimeType: f.mimetype,
+  size: f.size || 0,
+  user: req.session.user,
+});
+
+emitAdmissionChanged(req, {
+  type: "upload_added",
+  admissionId,
+  dept: req.session.user?.dept || "",
+});
       return res.json({ success: true, message: "Uploaded" });
     } catch (err) {
       console.error("upload error:", err);
@@ -10582,8 +11204,37 @@ app.get("/dashboard/super/users", requireLogin, (req, res) => {
 
   const roleFilter = (req.query.role === "super" ? "super_admin" : (req.query.role || "all"));
 
-  const rows = db.prepare("SELECT * FROM users ORDER BY id ASC").all();
-  const allUsers = rows.map(mapUserRow);
+ const rows = db.prepare(`
+  SELECT
+    u.*,
+
+    assigned.name AS assignedAdminName,
+    assigned.email AS assignedAdminEmail,
+    assigned.dept AS assignedAdminDept,
+
+    creator.name AS createdByName,
+    creator.email AS createdByEmail,
+    creator.role AS createdByRole
+  FROM users u
+  LEFT JOIN users assigned
+    ON assigned.id = COALESCE(u.assigned_admin_id, u.managerId)
+  LEFT JOIN users creator
+    ON creator.id = u.created_by
+  ORDER BY u.id ASC
+`).all();
+
+const allUsers = rows.map((row) => {
+  const u = mapUserRow(row);
+
+  if (!u.access_scope) {
+    if (u.role === "super_admin") u.access_scope = "all";
+    else if (String(u.dept || "").toLowerCase() === "accounts") u.access_scope = "all";
+    else if (u.role === "admin") u.access_scope = "team";
+    else u.access_scope = "own";
+  }
+
+  return u;
+});
 
   let filteredUsers = allUsers;
   if (roleFilter === "super_admin") {
@@ -10619,11 +11270,12 @@ app.get("/dashboard/super/users/new", requireLogin, (req, res) => {
     return res.status(403).send("Not allowed");
   }
 
-  res.render("super-user-form", {
+    res.render("super-user-form", {
     user: current,
     error: null,
+    assignableAdmins: getAssignableAdmins(),
   });
-});
+  });
 
 // Create User submit
 app.post("/dashboard/super/users", requireLogin, async (req, res) => {
@@ -10648,6 +11300,7 @@ app.post("/dashboard/super/users", requireLogin, async (req, res) => {
 
   if (!name || !email || !password || !role) {
     return res.render("super-user-form", {
+      assignableAdmins: getAssignableAdmins(),
       user: current,
       error: "Name, email, password, role are required.",
     });
@@ -10656,16 +11309,55 @@ app.post("/dashboard/super/users", requireLogin, async (req, res) => {
   const allowedRoles = ["admin", "agent", "sub_agent"];
   if (!allowedRoles.includes(role)) {
     return res.render("super-user-form", {
+      assignableAdmins: getAssignableAdmins(),
       user: current,
       error: "Role must be Admin, Agent, or Sub Agent.",
     });
   }
 
-  const allowedDepts = ["quran", "tuition", "school"];
+  const allowedDepts = ["quran", "tuition", "school", "accounts"];
   const allowedAgentTypes = ["accounts", "admission", "management"];
   const isPipelineRole = role === "sub_agent" || role === "agent";
 
   const passwordHash = await bcrypt.hash(password, 10);
+    let assignedAdminId = null;
+
+  if (isPipelineRole) {
+    const rawAssignedAdminId = Number(req.body.assignedAdminId || req.body.assigned_admin_id || 0);
+
+    if (rawAssignedAdminId) {
+      const assignedAdmin = db.prepare(`
+        SELECT id, dept
+        FROM users
+        WHERE id = ?
+          AND role = 'admin'
+        LIMIT 1
+      `).get(rawAssignedAdminId);
+
+      if (!assignedAdmin) {
+        return res.render("super-user-form", {
+          
+          user: current,
+          error: "Selected assigned admin is not valid.",
+          assignableAdmins: getAssignableAdmins(),
+        });
+      }
+
+      assignedAdminId = assignedAdmin.id;
+    }
+  }
+  if (isPipelineRole && !assignedAdminId) {
+    return res.render("super-user-form", {
+      user: current,
+      error: "Please select an Assigned Admin for Agent/Sub Agent.",
+      assignableAdmins: getAssignableAdmins(),
+    });
+  }
+  const safeDept = allowedDepts.includes(dept) ? dept : null;
+  const safeAccessScope =
+    role === "admin"
+      ? (safeDept === "accounts" ? "all" : "team")
+      : "own";
 
  const permissions = {
   // Columns
@@ -10717,9 +11409,9 @@ canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
   const result = db
     .prepare(
       `
-      INSERT INTO users
-       (name, email, password_hash, role, dept, agentType, managerId, permissions)
-       VALUES (@name, @email, @password_hash, @role, @dept, @agentType, @managerId, @permissions)
+     INSERT INTO users
+       (name, email, password_hash, role, dept, agentType, managerId, assigned_admin_id, created_by, access_scope, permissions)
+       VALUES (@name, @email, @password_hash, @role, @dept, @agentType, @managerId, @assigned_admin_id, @created_by, @access_scope, @permissions)
     `
     )
     .run({
@@ -10727,15 +11419,18 @@ canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
       email,
       password_hash: passwordHash,
       role,
-      dept: allowedDepts.includes(dept) ? dept : null,
+      dept: safeDept,
       agentType: isPipelineRole
         ? allowedAgentTypes.includes(agentType)
           ? agentType
           : "accounts"
         : null,
-      managerId: current.id,
+      managerId: assignedAdminId || current.id,
+      assigned_admin_id: assignedAdminId,
+      created_by: current.id,
+      access_scope: safeAccessScope,
       permissions: JSON.stringify(permissions),
-    });
+        });
 
   logAudit("user_created", current, {
     targetUserId: result.lastInsertRowid,
@@ -10770,10 +11465,11 @@ app.get("/dashboard/super/users/:id/edit", requireLogin, (req, res) => {
   const editUser = mapUserRow(row);
   editUser.permissions = getPerm(editUser);
 
-  return res.render("super-user-edit", {
+    return res.render("super-user-edit", {
     user: current,
     editUser,
     error: null,
+    assignableAdmins: getAssignableAdmins(),
   });
 });
 
@@ -10807,32 +11503,84 @@ app.post("/dashboard/super/users/:id/edit", requireLogin, async (req, res) => {
 
   if (!name || !email || !role) {
     const editUser = mapUserRow(existingRow);
+        editUser.permissions = getPerm(editUser);
+
     return res.render("super-user-edit", {
       user: current,
       editUser,
       error: "Name, email and role are required.",
+      assignableAdmins: getAssignableAdmins(),
     });
   }
 
   const allowedRoles = ["admin", "agent", "sub_agent"];
   if (!allowedRoles.includes(role)) {
     const editUser = mapUserRow(existingRow);
+        editUser.permissions = getPerm(editUser);
+
     return res.render("super-user-edit", {
       user: current,
       editUser,
       error: "Role must be Admin, Agent, or Sub Agent.",
+      assignableAdmins: getAssignableAdmins(),
     });
   }
 
-  const allowedDepts = ["quran", "tuition", "school"];
+    const allowedDepts = ["quran", "tuition", "school", "accounts"];
   const allowedAgentTypes = ["accounts", "admission", "management"];
-  const isPipelineRole = role === "sub_agent" || role === "agent";
+  const isPipelineRole = role === "agent" || role === "sub_agent";
 
   let passwordHash = existingRow.password_hash;
   if (password && password.trim() !== "") {
     passwordHash = await bcrypt.hash(password.trim(), 10);
   }
+  let assignedAdminId = null;
 
+  if (isPipelineRole) {
+    const rawAssignedAdminId = Number(req.body.assignedAdminId || req.body.assigned_admin_id || 0);
+
+    if (rawAssignedAdminId) {
+      const assignedAdmin = db.prepare(`
+        SELECT id
+        FROM users
+        WHERE id = ?
+          AND role = 'admin'
+        LIMIT 1
+      `).get(rawAssignedAdminId);
+
+      if (!assignedAdmin) {
+        const editUser = mapUserRow(existingRow);
+        editUser.permissions = getPerm(editUser);
+
+        return res.render("super-user-edit", {
+          user: current,
+          editUser,
+          error: "Selected assigned admin is not valid.",
+          assignableAdmins: getAssignableAdmins(),
+        });
+      }
+
+      assignedAdminId = assignedAdmin.id;
+    }
+
+    if (!assignedAdminId) {
+      const editUser = mapUserRow(existingRow);
+      editUser.permissions = getPerm(editUser);
+
+      return res.render("super-user-edit", {
+        user: current,
+        editUser,
+        error: "Please select an Assigned Admin for Agent/Sub Agent.",
+        assignableAdmins: getAssignableAdmins(),
+      });
+    }
+  }
+
+  const safeDept = allowedDepts.includes(dept) ? dept : null;
+  const safeAccessScope =
+    role === "admin"
+      ? (safeDept === "accounts" ? "all" : "team")
+      : "own";
  const permissions = {
   // Columns
   colStatus: isOn(req.body.colStatus),
@@ -10895,6 +11643,9 @@ canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
          dept=@dept,
          agentType=@agentType,
          permissions=@permissions,
+                managerId=@managerId,
+       assigned_admin_id=@assigned_admin_id,
+       access_scope=@access_scope,
          lastUpdatedBy=@lastUpdatedBy,
          lastUpdatedByRole=@lastUpdatedByRole,
          lastUpdatedAt=@lastUpdatedAt,
@@ -10906,13 +11657,16 @@ canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
     email,
     password_hash: passwordHash,
     role,
-    dept: allowedDepts.includes(dept) ? dept : null,
+    dept: safeDept,
     agentType: isPipelineRole
       ? allowedAgentTypes.includes(agentType)
         ? agentType
         : "accounts"
       : null,
     permissions: JSON.stringify(permissions),
+        managerId: assignedAdminId || existingRow.managerId || current.id,
+    assigned_admin_id: assignedAdminId,
+    access_scope: safeAccessScope,
     lastUpdatedBy: current.name,
     lastUpdatedByRole: current.role,
     lastUpdatedAt: new Date().toISOString(),
@@ -11150,7 +11904,18 @@ const classOptions = getBulkChallanClassOptions();
 });
 
   const rows = db.prepare("SELECT * FROM users ORDER BY id ASC").all();
-  const allUsers = rows.map(mapUserRow);
+  const allUsers = rows.map((row) => {
+  const u = mapUserRow(row);
+
+  if (!u.access_scope) {
+    if (u.role === "super_admin") u.access_scope = "all";
+    else if (u.dept === "accounts") u.access_scope = "all";
+    else if (u.role === "admin") u.access_scope = "team";
+    else u.access_scope = "own";
+  }
+
+  return u;
+});
 
  return res.render("dashboard-super", {
   user,
@@ -11198,7 +11963,7 @@ if (user.role !== "admin" && !perms.btnUpdateRow) {
   const id = parseInt(req.params.id, 10);
   const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
 
-  if (!row || row.dept !== user.dept) {
+    if (!row || !canAccessAdmissionRow(user, row)) {
     return res.status(404).send("Not found");
   }
 
@@ -11449,7 +12214,20 @@ for (const m of BILLING_MONTHS) {
   // ✅ NEW: Real-time notify all dashboards
   emitAdmissionChanged(req, { type: "admin_update", admissionId: id, dept: row.dept });
 
-  return res.redirect("/dashboard");
+if (
+  req.xhr ||
+  req.get("X-Requested-With") === "XMLHttpRequest" ||
+  String(req.headers.accept || "").includes("application/json")
+) {
+  return res.json({
+    success: true,
+    message: "Admission updated successfully.",
+    admissionId: id,
+    updatedFields: after,
+  });
+}
+
+return res.redirect("/dashboard");
 });
 
 app.post("/pipeline/update/:id", requireLogin, requirePerm("btnUpdateRow"), (req, res) => {
@@ -11464,7 +12242,7 @@ app.post("/pipeline/update/:id", requireLogin, requirePerm("btnUpdateRow"), (req
 
   // ✅ dept restriction for non-super
   if (user?.role !== "super_admin") {
-    if (!user?.dept || row.dept !== user.dept) return res.status(403).send("Not allowed");
+    if (!canAccessAdmissionRow(user, row)) return res.status(403).send("Not allowed");
   }
 
   // ✅ Only update fields that are allowed columns
@@ -11660,7 +12438,20 @@ logAudit(eventType, user, {
 
   emitAdmissionChanged(req, { type: "pipeline_update", admissionId: id, dept: row.dept });
 
-  return res.redirect("/dashboard");
+if (
+  req.xhr ||
+  req.get("X-Requested-With") === "XMLHttpRequest" ||
+  String(req.headers.accept || "").includes("application/json")
+) {
+  return res.json({
+    success: true,
+    message: "Admission updated successfully.",
+    admissionId: id,
+    updatedFields: after,
+  });
+}
+
+return res.redirect("/dashboard");
 });
 app.post("/uploads", requireLogin, requirePerm("btnUpload"), upload.single("file"), (req, res) => {
   try {
@@ -11670,13 +12461,13 @@ app.post("/uploads", requireLogin, requirePerm("btnUpload"), upload.single("file
     const admissionId = req.body.admission_id ? parseInt(req.body.admission_id, 10) : null;
     if (!f) return res.status(400).json({ success: false, message: "No file received" });
 
-    // dept restriction
-    if (user?.role !== "super_admin") {
-      if (!user?.dept) return res.status(403).json({ success: false, message: "Dept missing" });
-      if (admissionId) {
-        const row = db.prepare("SELECT dept FROM admissions WHERE id = ?").get(admissionId);
-        if (!row) return res.status(404).json({ success: false, message: "Admission not found" });
-        if (row.dept !== user.dept) return res.status(403).json({ success: false, message: "Not allowed" });
+        // ✅ assigned access restriction
+    if (admissionId) {
+      const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(admissionId);
+      if (!row) return res.status(404).json({ success: false, message: "Admission not found" });
+
+      if (!canAccessAdmissionRow(user, row)) {
+        return res.status(403).json({ success: false, message: "Not allowed" });
       }
     }
 
@@ -11716,36 +12507,21 @@ app.get("/files", requireLogin, requirePerm("btnFiles"), (req, res) => {
     let familyAdmissionIds = [];
 
     const adm = db.prepare(`
-  SELECT id, dept, student_name, accounts_family_number
+    SELECT id, dept, student_name, accounts_family_number, processed_by
   FROM admissions
   WHERE id = ?
 `).get(admissionId);
 
 if (!adm) return res.status(404).send("Admission not found");
 
-if (user?.role !== "super_admin") {
-  if (!user?.dept || adm.dept !== user.dept) return res.status(403).send("Not allowed");
+if (!canAccessAdmissionRow(user, adm)) {
+  return res.status(403).send("Not allowed");
 }
 
 familyNumber = String(adm.accounts_family_number || "").trim();
 
 if (familyNumber) {
-  if (user?.role === "super_admin") {
-    familyAdmissionIds = db.prepare(`
-      SELECT id
-      FROM admissions
-      WHERE accounts_family_number = ?
-      ORDER BY id DESC
-    `).all(familyNumber).map(r => r.id);
-  } else {
-    familyAdmissionIds = db.prepare(`
-      SELECT id
-      FROM admissions
-      WHERE accounts_family_number = ?
-        AND dept = ?
-      ORDER BY id DESC
-    `).all(familyNumber, user.dept).map(r => r.id);
-  }
+  familyAdmissionIds = getAccessibleFamilyIds(user, familyNumber).map((r) => r.id);
 } else {
   familyAdmissionIds = [admissionId];
 }
@@ -11793,15 +12569,12 @@ app.delete("/files/:id", requireLogin, requirePerm("canDeleteFiles"), (req, res)
     const fileRow = db.prepare("SELECT * FROM uploads WHERE id = ?").get(id);
     if (!fileRow) return res.status(404).json({ success: false, message: "File not found" });
 
-    const adm = db.prepare("SELECT dept FROM admissions WHERE id = ?").get(fileRow.admission_id);
+    const adm = db.prepare("SELECT * FROM admissions WHERE id = ?").get(fileRow.admission_id);
     if (!adm) return res.status(404).json({ success: false, message: "Admission not found" });
 
-    if (user?.role !== "super_admin") {
-      if (!user?.dept || adm.dept !== user.dept) {
-        return res.status(403).json({ success: false, message: "Not allowed" });
-      }
+    if (!canAccessAdmissionRow(user, adm)) {
+      return res.status(403).json({ success: false, message: "Not allowed" });
     }
-
     const filePath = path.join(__dirname, "uploads", fileRow.stored_name || "");
     if (fileRow.stored_name && fs.existsSync(filePath)) fs.unlinkSync(filePath);
 
@@ -11868,28 +12641,37 @@ app.get("/dashboard/agent/users", requireLogin, (req, res) => {
     const user = req.session.user;
     if (!user || user.role !== "agent") return res.status(403).send("Not allowed");
 
-   const mySubAgents = db.prepare(`
+   const rows = db.prepare(`
   SELECT
-    id,
-    name,
-    email,
-    role,
-    dept,
-    agentType,
-    managerId,
-    permissions,
-    createdAt,
-    lastUpdatedBy,
-    lastUpdatedByRole,
-    lastUpdatedAt,
-    updateNoticeUnread
-  FROM users
-  WHERE role = 'sub_agent'
-    AND dept = ?
-    AND managerId = ?
-  ORDER BY id DESC
+    u.*,
+
+    assigned.name AS assignedAdminName,
+    assigned.email AS assignedAdminEmail,
+    assigned.dept AS assignedAdminDept,
+
+    creator.name AS createdByName,
+    creator.email AS createdByEmail,
+    creator.role AS createdByRole
+  FROM users u
+  LEFT JOIN users assigned
+    ON assigned.id = COALESCE(u.assigned_admin_id, u.managerId)
+  LEFT JOIN users creator
+    ON creator.id = u.created_by
+  WHERE u.role = 'sub_agent'
+    AND u.dept = ?
+    AND u.managerId = ?
+  ORDER BY u.id DESC
 `).all(user.dept, user.id);
 
+const mySubAgents = rows.map((row) => {
+  const u = mapUserRow(row);
+
+  if (!u.access_scope) {
+    u.access_scope = "own";
+  }
+
+  return u;
+});
     return res.render("agent-users", {
       user,
       mySubAgents,
@@ -11910,18 +12692,35 @@ app.get("/dashboard/agent/users/:id/edit", requireLogin, (req, res) => {
   if (!id) return res.status(400).send("Invalid id");
 
   const row = db.prepare(`
-    SELECT *
-    FROM users
-    WHERE id = ?
-      AND role = 'sub_agent'
-      AND dept = ?
-      AND managerId = ?
-  `).get(id, user.dept, user.id);
+  SELECT
+    u.*,
+
+    assigned.name AS assignedAdminName,
+    assigned.email AS assignedAdminEmail,
+    assigned.dept AS assignedAdminDept,
+
+    creator.name AS createdByName,
+    creator.email AS createdByEmail,
+    creator.role AS createdByRole
+  FROM users u
+  LEFT JOIN users assigned
+    ON assigned.id = COALESCE(u.assigned_admin_id, u.managerId)
+  LEFT JOIN users creator
+    ON creator.id = u.created_by
+  WHERE u.id = ?
+    AND u.role = 'sub_agent'
+    AND u.dept = ?
+    AND u.managerId = ?
+  LIMIT 1
+`).get(id, user.dept, user.id);
 
   if (!row) return res.status(403).send("Not allowed");
 
   const editUser = mapUserRow(row);
   editUser.permissions = getPerm(editUser);
+  if (!editUser.access_scope) {
+  editUser.access_scope = "own";
+}
 
   return res.render("admin-user-edit", {
     user,
@@ -11962,13 +12761,14 @@ app.post("/dashboard/agent/users/:id/edit", requireLogin, (req, res) => {
       ? agentTypeRaw
       : (owned.agentType || null);
 
-    // ✅ Agent can grant only what agent has
-    const parentPerms = getPerm(user);
+// ✅ Agent can assign only the permissions that are already allowed for his own account.
+// Extra/tampered permissions from frontend will be ignored.
+const parentPerms = getPerm(user);
 
-    const finalPerms = {};
-    for (const key of PERMISSION_KEYS) {
-      finalPerms[key] = parentPerms[key] ? isOn(req.body[key]) : false;
-    }
+const finalPerms = {};
+for (const key of PERMISSION_KEYS) {
+  finalPerms[key] = parentPerms[key] ? isOn(req.body[key]) : false;
+}
 
     db.prepare(`
       UPDATE users
@@ -12066,7 +12866,425 @@ app.post("/dashboard/agent/users/:id/delete", requireLogin, (req, res) => {
 
   return res.redirect("/dashboard/agent/users");
 });
+// =====================================================
+// ✅ SUPER ADMIN AI ASSISTANT
+// Read-only AI assistant connected with DB
+// URL: POST /api/super-ai/ask
+// =====================================================
 
+function normalizeAiQuestion(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 500);
+}
+
+function aiSafeText(value) {
+  return String(value ?? "").trim();
+}
+
+function aiNumber(value) {
+  const n = Number(parseFirstNumber(value || 0) || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function getAiDepartmentStats() {
+  try {
+    return db.prepare(`
+      SELECT
+        LOWER(TRIM(COALESCE(dept, 'unknown'))) AS dept,
+        COUNT(*) AS total
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+      GROUP BY LOWER(TRIM(COALESCE(dept, 'unknown')))
+      ORDER BY total DESC
+    `).all();
+  } catch (e) {
+    console.error("getAiDepartmentStats error:", e.message);
+    return [];
+  }
+}
+
+function getAiStatusStats() {
+  try {
+    return db.prepare(`
+      SELECT
+        COALESCE(status, 'Not Set') AS status,
+        COALESCE(feeStatus, 'Not Set') AS feeStatus,
+        COUNT(*) AS total
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+      GROUP BY COALESCE(status, 'Not Set'), COALESCE(feeStatus, 'Not Set')
+      ORDER BY total DESC
+      LIMIT 30
+    `).all();
+  } catch (e) {
+    console.error("getAiStatusStats error:", e.message);
+    return [];
+  }
+}
+
+function getAiPaymentStats() {
+  try {
+    return db.prepare(`
+      SELECT
+        COALESCE(accounts_payment_status, 'Not Set') AS paymentStatus,
+        COUNT(*) AS total,
+        SUM(CAST(COALESCE(NULLIF(admission_pending_dues, ''), '0') AS REAL)) AS pendingDues,
+        SUM(CAST(COALESCE(NULLIF(admission_total_paid, ''), '0') AS REAL)) AS receivedPayment
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+      GROUP BY COALESCE(accounts_payment_status, 'Not Set')
+      ORDER BY total DESC
+      LIMIT 30
+    `).all();
+  } catch (e) {
+    console.error("getAiPaymentStats error:", e.message);
+    return [];
+  }
+}
+
+function getAiUserStats() {
+  try {
+    return db.prepare(`
+      SELECT
+        role,
+        COALESCE(dept, 'Not Set') AS dept,
+        COUNT(*) AS total
+      FROM users
+      GROUP BY role, COALESCE(dept, 'Not Set')
+      ORDER BY role ASC, total DESC
+    `).all();
+  } catch (e) {
+    console.error("getAiUserStats error:", e.message);
+    return [];
+  }
+}
+
+function getAiProcessedByStats() {
+  try {
+    return db.prepare(`
+      SELECT
+        COALESCE(processed_by, 'Not Set') AS processedBy,
+        COUNT(*) AS total,
+        SUM(CAST(COALESCE(NULLIF(admission_pending_dues, ''), '0') AS REAL)) AS pendingDues,
+        SUM(CAST(COALESCE(NULLIF(admission_total_paid, ''), '0') AS REAL)) AS receivedPayment
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+      GROUP BY COALESCE(processed_by, 'Not Set')
+      ORDER BY total DESC
+      LIMIT 30
+    `).all();
+  } catch (e) {
+    console.error("getAiProcessedByStats error:", e.message);
+    return [];
+  }
+}
+function getAiSearchTerms(question) {
+  const stopWords = new Set([
+    "who", "is", "are", "the", "a", "an", "of", "for", "to", "in", "on", "by",
+    "what", "which", "where", "when", "why", "how", "tell", "show", "give",
+    "me", "about", "student", "admission", "details", "status", "fee", "fees",
+    "payment", "record", "records", "please", "plz", "hey", "hi", "hello"
+  ]);
+
+  const clean = String(question || "")
+    .toLowerCase()
+    .replace(/[^\w\s@.+-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const words = clean
+    .split(" ")
+    .map(w => w.trim())
+    .filter(w => w.length >= 2 && !stopWords.has(w));
+
+  const uniqueWords = [...new Set(words)].slice(0, 8);
+
+  return uniqueWords.length ? uniqueWords : [clean].filter(Boolean);
+}
+function getAiAdmissionSearchRows(question) {
+  try {
+    const terms = getAiSearchTerms(question);
+
+    if (!terms.length) return [];
+
+    const searchableColumns = [
+      "CAST(id AS TEXT)",
+      "student_name",
+      "father_name",
+      "father_email",
+      "phone",
+      "guardian_whatsapp",
+      "processed_by",
+      "dept",
+      "status",
+      "feeStatus",
+      "grade",
+      "tuition_grade",
+      "accounts_registration_number",
+      "accounts_family_number",
+      "accounts_payment_status",
+      "accounts_paid_upto",
+      "accounts_verification_number",
+      "admission_month",
+      "admission_invoice_status",
+      "admission_paid_invoice_status"
+    ];
+
+    const whereParts = [];
+    const params = [];
+
+    terms.forEach(term => {
+      const likeTerm = `%${term}%`;
+
+      searchableColumns.forEach(col => {
+        whereParts.push(`LOWER(COALESCE(${col}, '')) LIKE LOWER(?)`);
+        params.push(likeTerm);
+      });
+    });
+
+    return db.prepare(`
+      SELECT
+        id,
+        dept,
+        status,
+        feeStatus,
+        student_name,
+        father_name,
+        father_email,
+        grade,
+        tuition_grade,
+        phone,
+        guardian_whatsapp,
+        processed_by,
+        registration_date,
+
+        accounts_payment_status,
+        accounts_paid_upto,
+        accounts_verification_number,
+        accounts_registration_number,
+        accounts_family_number,
+
+        admission_registration_fee,
+        admission_fees,
+        currency_code,
+        admission_month,
+        admission_total_fees,
+        admission_pending_dues,
+        admission_total_paid,
+        admission_invoice_status,
+        admission_invoice_status_timestamp,
+        admission_paid_invoice_status,
+        admission_paid_invoice_status_timestamp
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND (${whereParts.join(" OR ")})
+      ORDER BY id DESC
+      LIMIT 60
+    `).all(...params);
+  } catch (e) {
+    console.error("getAiAdmissionSearchRows error:", e.message);
+    return [];
+  }
+}
+
+function getAiUserSearchRows(question) {
+  try {
+    const terms = getAiSearchTerms(question);
+
+    if (!terms.length) return [];
+
+    const searchableColumns = [
+      "CAST(id AS TEXT)",
+      "name",
+      "email",
+      "role",
+      "dept",
+      "agentType",
+      "access_scope",
+      "created_by"
+    ];
+
+    const whereParts = [];
+    const params = [];
+
+    terms.forEach(term => {
+      const likeTerm = `%${term}%`;
+
+      searchableColumns.forEach(col => {
+        whereParts.push(`LOWER(COALESCE(${col}, '')) LIKE LOWER(?)`);
+        params.push(likeTerm);
+      });
+    });
+
+    return db.prepare(`
+      SELECT
+        id,
+        name,
+        email,
+        role,
+        dept,
+        agentType,
+        assigned_admin_id,
+        managerId,
+        created_by,
+        access_scope,
+        lastUpdatedAt,
+        lastUpdatedBy,
+        lastUpdatedByRole
+      FROM users
+      WHERE ${whereParts.join(" OR ")}
+      ORDER BY id DESC
+      LIMIT 60
+    `).all(...params);
+  } catch (e) {
+    console.error("getAiUserSearchRows error:", e.message);
+    return [];
+  }
+}
+
+function getAiExactCounts() {
+  try {
+    const totalAdmissions = db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+    `).get()?.total || 0;
+
+    const totalUsers = db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM users
+    `).get()?.total || 0;
+
+    const feeTotals = db.prepare(`
+      SELECT
+        SUM(CAST(COALESCE(NULLIF(admission_total_fees, ''), '0') AS REAL)) AS totalFees,
+        SUM(CAST(COALESCE(NULLIF(admission_pending_dues, ''), '0') AS REAL)) AS pendingDues,
+        SUM(CAST(COALESCE(NULLIF(admission_total_paid, ''), '0') AS REAL)) AS receivedPayment
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+    `).get() || {};
+
+    return {
+      totalAdmissions,
+      totalUsers,
+      totalFees: aiNumber(feeTotals.totalFees),
+      pendingDues: aiNumber(feeTotals.pendingDues),
+      receivedPayment: aiNumber(feeTotals.receivedPayment),
+    };
+  } catch (e) {
+    console.error("getAiExactCounts error:", e.message);
+    return {
+      totalAdmissions: 0,
+      totalUsers: 0,
+      totalFees: 0,
+      pendingDues: 0,
+      receivedPayment: 0,
+    };
+  }
+}
+
+function buildAiDbContext(question) {
+  const exactCounts = getAiExactCounts();
+  const matchingAdmissions = getAiAdmissionSearchRows(question);
+  const matchingUsers = getAiUserSearchRows(question);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    exactCounts,
+    departmentStats: getAiDepartmentStats(),
+    statusStats: getAiStatusStats(),
+    paymentStats: getAiPaymentStats(),
+    processedByStats: getAiProcessedByStats(),
+    userStats: getAiUserStats(),
+    matchingAdmissions,
+    matchingUsers,
+    note: "This context is read-only database data from the dashboard. Answer only from this context. If the answer is not available, say it is not available in current DB context.",
+  };
+}
+
+app.post("/api/super-ai/ask", requireLogin, requireSuperAdmin, async (req, res) => {
+  try {
+    const question = normalizeAiQuestion(req.body?.question);
+
+    if (!question) {
+      return res.status(400).json({
+        success: false,
+        message: "Question is required.",
+      });
+    }
+
+    const geminiApiKey = getAiSettingValue(
+  "GEMINI_API_KEY",
+  process.env.GEMINI_API_KEY || ""
+);
+
+const geminiModelName = getAiSettingValue(
+  "GEMINI_MODEL",
+  process.env.GEMINI_MODEL || "gemini-2.5-flash-lite"
+);
+
+if (!geminiApiKey) {
+  return res.status(500).json({
+    success: false,
+    message: "GEMINI_API_KEY is missing. Please add it from API Settings.",
+  });
+}
+
+const genAI = new GoogleGenerativeAI(geminiApiKey);
+
+    const dbContext = buildAiDbContext(question);
+
+    const model = genAI.getGenerativeModel({
+  model: geminiModelName,
+  systemInstruction:
+    "You are the Super Admin AI Assistant for IQRA Virtual School dashboard. " +
+    "You answer in clear, simple English unless the user asks another language. " +
+    "You are read-only. Do not suggest editing/deleting/updating records unless the user asks how to do it manually. " +
+    "Use only the provided database context. Do not invent values. " +
+    "For admissions, fees, billing, users, and counts, give clear short answers with names, IDs, amounts, departments, and statuses when available.",
+});
+
+const result = await model.generateContent(
+  JSON.stringify({
+    question,
+    databaseContext: dbContext,
+  })
+);
+
+const answer =
+  result.response.text() ||
+  "Sorry, AI response could not be generated. Please try again.";
+
+    logAudit("super_ai_assistant_ask", req.session.user, {
+      dept: "all",
+      details: {
+        question,
+        matchedAdmissions: dbContext.matchingAdmissions.length,
+        matchedUsers: dbContext.matchingUsers.length,
+      },
+    });
+
+    return res.json({
+      success: true,
+      answer,
+      debug: {
+        matchedAdmissions: dbContext.matchingAdmissions.length,
+        matchedUsers: dbContext.matchingUsers.length,
+        exactCounts: dbContext.exactCounts,
+      },
+    });
+  } catch (err) {
+    console.error("POST /api/super-ai/ask error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "AI assistant error. Please check server logs.",
+      error: String(err?.message || err),
+    });
+  }
+});
 /* ========== Root redirect ========== */
 app.get("/", (req, res) => {
   res.redirect("/login");

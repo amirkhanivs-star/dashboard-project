@@ -654,14 +654,72 @@ const hasAnyUi = visibleColCount > 0;
       </button>
     </div>
 
-    <div class="ms-auto d-flex justify-content-end">
-      <button
-        type="button"
-        class="btn rounded-pill px-4 bulk-challan-open-btn"
-        id="openBulkChallanBtn">
-        <i class="bi bi-whatsapp me-2"></i>Send Bulk Challan
-      </button>
+    <div class="ms-auto d-flex justify-content-end align-items-center gap-2 flex-wrap">
+
+  <div class="dropdown admission-files-filter-dropdown">
+    <button
+  type="button"
+  class="btn rounded-pill px-3 file-filter-btn file-filter-all dropdown-toggle"
+  data-admission-file-filter="all"
+  aria-expanded="false">
+      <i class="bi bi-folder2-open me-1"></i>
+      All Files
+      <span class="badge rounded-pill bg-light text-dark ms-1" id="allFilesCount">0</span>
+    </button>
+
+    <div class="dropdown-menu dropdown-menu-end admission-files-dropdown-menu shadow-lg border-0">
+      <div class="files-dropdown-title">
+        <i class="bi bi-folder2-open me-1"></i> All Uploaded Files
+      </div>
+      <div id="allFilesDropdownList" class="files-dropdown-list"></div>
     </div>
+  </div>
+
+  <div class="dropdown admission-files-filter-dropdown">
+    <button
+  type="button"
+  class="btn rounded-pill px-3 file-filter-btn file-filter-unseen dropdown-toggle"
+  data-admission-file-filter="unseen"
+  aria-expanded="false">
+      <i class="bi bi-receipt-cutoff me-1"></i>
+      Unseen
+      <span class="badge rounded-pill bg-light text-dark ms-1" id="unseenFilesCount">0</span>
+    </button>
+
+    <div class="dropdown-menu dropdown-menu-end admission-files-dropdown-menu shadow-lg border-0">
+      <div class="files-dropdown-title text-danger">
+        <i class="bi bi-exclamation-circle me-1"></i> Unseen Files
+      </div>
+      <div id="unseenFilesDropdownList" class="files-dropdown-list"></div>
+    </div>
+  </div>
+
+  <div class="dropdown admission-files-filter-dropdown">
+    <button
+  type="button"
+  class="btn rounded-pill px-3 file-filter-btn file-filter-seen dropdown-toggle"
+  data-admission-file-filter="seen"
+  aria-expanded="false">
+      <i class="bi bi-check-circle me-1"></i>
+      Seen
+      <span class="badge rounded-pill bg-light text-dark ms-1" id="seenFilesCount">0</span>
+    </button>
+
+    <div class="dropdown-menu dropdown-menu-end admission-files-dropdown-menu shadow-lg border-0">
+      <div class="files-dropdown-title text-success">
+        <i class="bi bi-check-circle me-1"></i> Seen Files
+      </div>
+      <div id="seenFilesDropdownList" class="files-dropdown-list"></div>
+    </div>
+  </div>
+
+  <button
+    type="button"
+    class="btn rounded-pill px-4 bulk-challan-open-btn"
+    id="openBulkChallanBtn">
+    <i class="bi bi-whatsapp me-2"></i>Send Bulk Challan
+  </button>
+</div>
   </div>
 </div>
 
@@ -783,11 +841,18 @@ const hasAnyUi = visibleColCount > 0;
           <div class="admission-card-top-right">
   <% if (a.hasLatestUpload && a.latestUpload) { %>
     <a
-      href="<%= a.latestUpload.fileUrl || '#' %>"
-      target="_blank"
-      class="admission-file-bill-icon <%= a.latestUpload.seenByCurrentUser ? 'seen-file-icon' : 'new-file-icon' %>"
-      data-upload-id="<%= a.latestUpload.id %>"
-      title="Open file">
+  href="<%= a.latestUpload.fileUrl || '#' %>"
+  target="_blank"
+  class="admission-file-bill-icon <%= a.latestUpload.seenByCurrentUser ? 'seen-file-icon' : 'new-file-icon' %>"
+  data-upload-id="<%= a.latestUpload.id %>"
+  data-admission-id="<%= a.id %>"
+  data-student="<%= studentVal || 'No Name' %>"
+  data-father="<%= fatherVal || '-' %>"
+  data-added-by="<%= a.latestUpload.addedBy || 'System / Old Record' %>"
+  data-added-by-role="<%= a.latestUpload.addedByRole || '' %>"
+  data-file-name="<%= a.latestUpload.fileName || 'File' %>"
+  data-uploaded-at="<%= a.latestUpload.uploadedAt || '' %>"
+  title="Open file">
       <i class="bi bi-receipt-cutoff"></i>
 
       <span class="admission-file-tooltip <%= a.latestUpload.seenByCurrentUser ? 'seen-file-tooltip' : 'new-file-tooltip' %>">
@@ -2169,7 +2234,196 @@ const hasAnyUi = visibleColCount > 0;
 .bulk-challan-toolbar-wrap{
   background: linear-gradient(180deg, rgba(255,255,255,.88), rgba(248,250,252,.82));
 }
+/* ✅ Admission files filter buttons + dropdown */
+.file-filter-btn{
+  border: none;
+  color: #fff !important;
+  font-weight: 800;
+  box-shadow: 0 10px 22px rgba(15,23,42,.12);
+  transition: transform .14s ease, box-shadow .14s ease, filter .14s ease;
+}
 
+.file-filter-btn:hover,
+.file-filter-btn:focus,
+.file-filter-btn:active,
+.file-filter-btn.active,
+.file-filter-btn.show,
+.file-filter-btn.active-file-filter{
+  transform: translateY(-1px);
+  filter: brightness(1.02);
+  color: #fff !important;
+}
+
+.file-filter-all{
+  background: linear-gradient(135deg, #0f172a, #334155);
+}
+
+.file-filter-unseen{
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+}
+
+.file-filter-seen{
+  background: linear-gradient(135deg, #22c55e, #15803d);
+}
+
+/* ✅ Open file dropdown only on hover, not on click */
+.admission-files-filter-dropdown{
+  position: relative;
+  z-index: 5000;
+}
+
+.admission-files-filter-dropdown:hover > .admission-files-dropdown-menu{
+  display: block !important;
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ✅ Never open dropdown on click/focus, only hover */
+.admission-files-filter-dropdown > .admission-files-dropdown-menu{
+  display: none;
+}
+
+.admission-files-filter-dropdown:not(:hover) > .admission-files-dropdown-menu.show{
+  display: none !important;
+}
+
+.file-filter-btn,
+.file-filter-btn:hover,
+.file-filter-btn:focus,
+.file-filter-btn:active,
+.file-filter-btn.active,
+.file-filter-btn.show,
+.file-filter-btn.active-file-filter{
+  color: #fff !important;
+}
+
+.admission-files-filter-dropdown > .dropdown-toggle::after{
+  color: #fff !important;
+}
+
+.admission-files-dropdown-menu{
+  width: 360px;
+  max-width: calc(100vw - 30px);
+  border-radius: 18px;
+  padding: 10px;
+  background: rgba(255,255,255,.98);
+  z-index: 99999 !important;
+  box-shadow: 0 24px 60px rgba(15,23,42,.18) !important;
+}
+
+.files-dropdown-title{
+  font-weight: 900;
+  color: #0f172a;
+  padding: 9px 10px 10px;
+  border-bottom: 1px solid rgba(148,163,184,.25);
+  margin-bottom: 8px;
+}
+
+.files-dropdown-list{
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.files-dropdown-list::-webkit-scrollbar{
+  width: 7px;
+}
+
+.files-dropdown-list::-webkit-scrollbar-thumb{
+  background: rgba(148,163,184,.75);
+  border-radius: 999px;
+}
+
+.file-dropdown-item{
+  width: 100%;
+  border: 1px solid rgba(148,163,184,.25);
+  background: #fff;
+  border-radius: 14px;
+  padding: 10px 11px;
+  margin-bottom: 8px;
+  text-align: left;
+  display: block;
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+.file-dropdown-item:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(15,23,42,.10);
+}
+
+.file-dropdown-item.unseen{
+  background: #fff1f2;
+  border-color: #fecaca;
+}
+
+.file-dropdown-item.seen{
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.file-dropdown-head{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.file-dropdown-student{
+  font-weight: 900;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.file-dropdown-status{
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 900;
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+
+.file-dropdown-status.unseen{
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+}
+
+.file-dropdown-status.seen{
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #bbf7d0;
+}
+
+.file-dropdown-meta{
+  font-size: 11px;
+  color: #475569;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.file-dropdown-empty{
+  padding: 18px 10px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* ✅ Admission pipeline file filter */
+.admission-card.file-filter-hidden{
+  display: none !important;
+}
+
+.file-filter-btn.active-file-filter{
+  outline: 3px solid rgba(15,23,42,.14);
+  box-shadow:
+    0 14px 28px rgba(15,23,42,.18),
+    0 0 0 4px rgba(255,255,255,.85);
+  transform: translateY(-1px);
+}
 .bulk-challan-open-btn{
   border: none;
   color: #fff;
@@ -2754,7 +3008,7 @@ const hasAnyUi = visibleColCount > 0;
   justify-content: center;
   text-decoration: none;
   cursor: pointer;
-  z-index: 30;
+  z-index: 5;
   transition: transform .14s ease, background .14s ease, box-shadow .14s ease;
 }
 
@@ -4450,20 +4704,134 @@ const hasAnyUi = visibleColCount > 0;
 <script src="/js/user-perms-live.js"></script>
 <script src="/js/admissions.js"></script>
 <script>
-  document.addEventListener('click', async function (e) {
-    const fileIcon = e.target.closest('.admission-file-bill-icon');
-    if (!fileIcon) return;
+  (function () {
+    let latestAdmissionFilesCache = [];
+    let currentAdmissionFileFilter = 'none';
 
-    e.preventDefault();
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
 
-    const uploadId = fileIcon.getAttribute('data-upload-id');
-    const fileUrl = fileIcon.getAttribute('href');
+    function normalizeFileItem(item) {
+      return {
+        uploadId: item.uploadId || item.id || '',
+        admissionId: item.admissionId || '',
+        fileUrl: item.fileUrl || '#',
+        seen: item.seen === true || item.seenByCurrentUser === true,
+        student: item.student || item.studentName || 'No Name',
+        father: item.father || item.fatherName || '-',
+        addedBy: item.addedBy || item.uploadedByName || 'System / Old Record',
+        addedByRole: item.addedByRole || item.uploadedByRole || '',
+        fileName: item.fileName || item.originalName || 'File',
+        uploadedAt: item.uploadedAt || '',
+        dept: item.dept || '',
+        grade: item.grade || '',
+        registrationNumber: item.registrationNumber || '',
+        familyNumber: item.familyNumber || ''
+      };
+    }
+    function getAdmissionCardUploadState(card) {
+  if (!card) return 'none';
 
-    if (!uploadId) return;
+  const icon = card.querySelector('.admission-file-bill-icon');
 
-    try {
-      const res = await fetch(`/api/uploads/${encodeURIComponent(uploadId)}/seen`, {
-        method: 'POST',
+  if (!icon) return 'none';
+
+  if (icon.classList.contains('seen-file-icon')) return 'seen';
+  if (icon.classList.contains('new-file-icon')) return 'unseen';
+
+  return 'none';
+}
+
+function setActiveFileFilterButton(filter) {
+  document.querySelectorAll('[data-admission-file-filter]').forEach(btn => {
+    const btnFilter = btn.getAttribute('data-admission-file-filter') || '';
+    btn.classList.toggle('active-file-filter', filter !== 'none' && btnFilter === filter);
+  });
+}
+
+function applyAdmissionPipelineFileFilter(filter) {
+  const finalFilter = String(filter || 'none').trim().toLowerCase();
+  const cards = document.querySelectorAll('.admission-card');
+
+  cards.forEach(card => {
+    const state = getAdmissionCardUploadState(card);
+
+    let showCard = true;
+
+    if (finalFilter === 'all') {
+      showCard = state === 'seen' || state === 'unseen';
+    } else if (finalFilter === 'seen') {
+      showCard = state === 'seen';
+    } else if (finalFilter === 'unseen') {
+      showCard = state === 'unseen';
+    } else {
+      showCard = true;
+    }
+
+    card.classList.toggle('file-filter-hidden', !showCard);
+  });
+
+  setActiveFileFilterButton(finalFilter);
+}
+    function updateSingleIconToSeen(uploadId) {
+      if (!uploadId) return;
+
+      const icons = document.querySelectorAll(
+        `.admission-file-bill-icon[data-upload-id="${CSS.escape(String(uploadId))}"]`
+      );
+
+      icons.forEach(fileIcon => {
+        fileIcon.classList.remove('new-file-icon');
+        fileIcon.classList.add('seen-file-icon');
+
+        const tooltip = fileIcon.querySelector('.admission-file-tooltip');
+        if (tooltip) {
+          tooltip.classList.remove('new-file-tooltip');
+          tooltip.classList.add('seen-file-tooltip');
+
+          const title = tooltip.querySelector('.file-tooltip-title');
+          if (title) title.textContent = 'File Seen';
+        }
+      });
+    }
+
+    async function markUploadSeen(uploadId) {
+      if (!uploadId) return false;
+
+      try {
+        const res = await fetch(`/api/uploads/${encodeURIComponent(uploadId)}/seen`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || data.success === false) {
+          console.error('Mark upload seen failed:', data.message || 'Unknown error');
+          return false;
+        }
+
+        return true;
+      } catch (err) {
+        console.error('Mark upload seen failed:', err);
+        return false;
+      }
+    }
+
+    async function fetchAdmissionFiles(filter) {
+      const finalFilter = filter || 'all';
+
+      const res = await fetch(`/api/admission-files?filter=${encodeURIComponent(finalFilter)}`, {
+        method: 'GET',
         credentials: 'same-origin',
         headers: {
           'Accept': 'application/json'
@@ -4473,28 +4841,175 @@ const hasAnyUi = visibleColCount > 0;
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || data.success === false) {
-        console.error('Mark upload seen failed:', data.message || 'Unknown error');
+        throw new Error(data.message || 'Files load failed');
       }
-    } catch (err) {
-      console.error('Mark upload seen failed:', err);
+
+      return data;
     }
 
-    fileIcon.classList.remove('new-file-icon');
-    fileIcon.classList.add('seen-file-icon');
+    function renderList(targetId, items) {
+      const wrap = document.getElementById(targetId);
+      if (!wrap) return;
 
-    const tooltip = fileIcon.querySelector('.admission-file-tooltip');
-    if (tooltip) {
-      tooltip.classList.remove('new-file-tooltip');
-      tooltip.classList.add('seen-file-tooltip');
+      const finalItems = (items || []).map(normalizeFileItem);
 
-      const title = tooltip.querySelector('.file-tooltip-title');
-      if (title) title.textContent = 'File Seen';
+      if (!finalItems.length) {
+        wrap.innerHTML = '<div class="file-dropdown-empty">No files found.</div>';
+        return;
+      }
+
+      wrap.innerHTML = finalItems.map(item => {
+        const statusClass = item.seen ? 'seen' : 'unseen';
+        const statusText = item.seen ? 'Seen' : 'Unseen';
+
+        return `
+          <button
+            type="button"
+            class="file-dropdown-item ${statusClass}"
+            data-upload-id="${escapeHtml(item.uploadId)}"
+            data-file-url="${escapeHtml(item.fileUrl)}">
+            <div class="file-dropdown-head">
+              <div class="file-dropdown-student">${escapeHtml(item.student)}</div>
+              <span class="file-dropdown-status ${statusClass}">${statusText}</span>
+            </div>
+
+            <div class="file-dropdown-meta">
+              <div><b>Father:</b> ${escapeHtml(item.father)}</div>
+              ${item.grade ? `<div><b>Grade:</b> ${escapeHtml(item.grade)}</div>` : ''}
+              ${item.dept ? `<div><b>Dept:</b> ${escapeHtml(item.dept)}</div>` : ''}
+              ${item.registrationNumber ? `<div><b>Reg #:</b> ${escapeHtml(item.registrationNumber)}</div>` : ''}
+              ${item.familyNumber ? `<div><b>Family #:</b> ${escapeHtml(item.familyNumber)}</div>` : ''}
+              <div><b>Added by:</b> ${escapeHtml(item.addedBy)}${item.addedByRole ? ' (' + escapeHtml(item.addedByRole).replace(/_/g, ' ') + ')' : ''}</div>
+              <div><b>File:</b> ${escapeHtml(item.fileName)}</div>
+              ${item.uploadedAt ? `<div><b>Date:</b> ${escapeHtml(item.uploadedAt)}</div>` : ''}
+            </div>
+          </button>
+        `;
+      }).join('');
     }
 
-    if (fileUrl && fileUrl !== '#') {
-      window.open(fileUrl, '_blank');
+    function setCounts(counts, fallbackFiles) {
+      const files = Array.isArray(fallbackFiles) ? fallbackFiles.map(normalizeFileItem) : [];
+
+      const allCount = document.getElementById('allFilesCount');
+      const unseenCount = document.getElementById('unseenFilesCount');
+      const seenCount = document.getElementById('seenFilesCount');
+
+      const finalCounts = counts || {
+        all: files.length,
+        unseen: files.filter(f => !f.seen).length,
+        seen: files.filter(f => f.seen).length
+      };
+
+      if (allCount) allCount.textContent = String(finalCounts.all || 0);
+      if (unseenCount) unseenCount.textContent = String(finalCounts.unseen || 0);
+      if (seenCount) seenCount.textContent = String(finalCounts.seen || 0);
     }
-  });
+
+    window.rebuildAdmissionFilesDropdowns = async function () {
+      try {
+        const data = await fetchAdmissionFiles('all');
+
+        latestAdmissionFilesCache = Array.isArray(data.files)
+          ? data.files.map(normalizeFileItem)
+          : [];
+
+        const allFiles = latestAdmissionFilesCache;
+        const unseenFiles = allFiles.filter(f => !f.seen);
+        const seenFiles = allFiles.filter(f => f.seen);
+
+        setCounts(data.counts, allFiles);
+
+        renderList('allFilesDropdownList', allFiles);
+        renderList('unseenFilesDropdownList', unseenFiles);
+        renderList('seenFilesDropdownList', seenFiles);
+        applyAdmissionPipelineFileFilter(currentAdmissionFileFilter);
+      } catch (err) {
+        console.error('Admission files dropdown load failed:', err);
+
+        renderList('allFilesDropdownList', []);
+        renderList('unseenFilesDropdownList', []);
+        renderList('seenFilesDropdownList', []);
+        setCounts({ all: 0, unseen: 0, seen: 0 }, []);
+      }
+    };
+
+    async function openFileAndMarkSeen(uploadId, fileUrl) {
+      if (!uploadId) return;
+
+      await markUploadSeen(uploadId);
+
+      latestAdmissionFilesCache = latestAdmissionFilesCache.map(item => {
+        if (String(item.uploadId) === String(uploadId)) {
+          return { ...item, seen: true, seenByCurrentUser: true };
+        }
+        return item;
+      });
+
+      updateSingleIconToSeen(uploadId);
+
+      if (typeof window.rebuildAdmissionFilesDropdowns === 'function') {
+        await window.rebuildAdmissionFilesDropdowns();
+      }
+
+      if (fileUrl && fileUrl !== '#') {
+        window.open(fileUrl, '_blank');
+      }
+    }
+document.addEventListener('click', function (e) {
+  const filterBtn = e.target.closest('[data-admission-file-filter]');
+  if (!filterBtn) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const filter = filterBtn.getAttribute('data-admission-file-filter') || 'none';
+
+  currentAdmissionFileFilter = filter;
+  applyAdmissionPipelineFileFilter(filter);
+
+  const parentDropdown = filterBtn.closest('.admission-files-filter-dropdown');
+  const menu = parentDropdown ? parentDropdown.querySelector('.admission-files-dropdown-menu') : null;
+
+  if (menu) {
+    menu.classList.remove('show');
+    menu.style.display = '';
+  }
+
+  filterBtn.blur();
+});
+    document.addEventListener('click', async function (e) {
+      const fileIcon = e.target.closest('.admission-file-bill-icon');
+      if (!fileIcon) return;
+
+      e.preventDefault();
+
+      const uploadId = fileIcon.getAttribute('data-upload-id');
+      const fileUrl = fileIcon.getAttribute('href');
+
+      await openFileAndMarkSeen(uploadId, fileUrl);
+    });
+
+    document.addEventListener('click', async function (e) {
+      const dropdownItem = e.target.closest('.file-dropdown-item');
+      if (!dropdownItem) return;
+
+      e.preventDefault();
+
+      const uploadId = dropdownItem.getAttribute('data-upload-id');
+      const fileUrl = dropdownItem.getAttribute('data-file-url');
+
+      await openFileAndMarkSeen(uploadId, fileUrl);
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+      window.rebuildAdmissionFilesDropdowns();
+    });
+
+    if (document.readyState !== 'loading') {
+      window.rebuildAdmissionFilesDropdowns();
+    }
+  })();
 </script>
 <script>
   document.addEventListener('click', function (e) {

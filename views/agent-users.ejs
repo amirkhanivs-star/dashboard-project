@@ -6,7 +6,16 @@
   const total = myList.length;
 
   const cap = (txt) => (txt ? txt.charAt(0).toUpperCase() + txt.slice(1) : '-');
-  const deptLabel = cap(user.dept || 'Department');
+  const deptLabel =
+  String(user.dept || '').trim().toLowerCase() === 'accounts'
+    ? 'School Accounts'
+    : cap(user.dept || 'Department');
+
+const formatDeptLabel = (dept) => {
+  return String(dept || '').trim().toLowerCase() === 'accounts'
+    ? 'School Accounts'
+    : (dept || '-');
+};
   const managerName = user.name || 'Manager';
   const ALL_COLS = [
   { key: 'colStatus' },
@@ -567,7 +576,7 @@
           id="subAgentSearch"
           type="text"
           class="form-control border-start-0"
-          placeholder="Search name, email, or id..."
+          placeholder="Search name, email, id, assigned admin..."
           autocomplete="off">
         <button class="btn btn-outline-secondary" type="button" id="subAgentSearchClear">
           Clear
@@ -644,6 +653,29 @@
           const isBtnOn = (key) => !!p[key];
           const canDeleteAdmissions = !!p.canDeleteAdmissions;
 
+          const assignedAdminDisplay =
+            sa.assignedAdminName ||
+            sa.assigned_admin_name ||
+            sa.assignedAdmin ||
+            sa.assigned_admin ||
+            (Number(sa.assigned_admin_id || 0) === Number(user.assigned_admin_id || 0) ? 'Assigned Admin' : '') ||
+            (sa.assigned_admin_id ? ('Admin ID #' + sa.assigned_admin_id) : 'Your Admin Team');
+
+          const createdByDisplay =
+            sa.createdByName ||
+            sa.created_by_name ||
+            sa.createdBy ||
+            sa.created_by_user ||
+            (Number(sa.created_by || 0) === Number(user.id || 0) ? 'You' : '') ||
+            (sa.created_by ? ('User ID #' + sa.created_by) : '—');
+
+          const accessScopeLabel =
+            String(sa.access_scope || '').trim() === 'all' ? 'All Admissions' :
+            String(sa.access_scope || '').trim() === 'team' ? 'Team Admissions' :
+            String(sa.access_scope || '').trim() === 'department' ? 'Department Admissions' :
+            String(sa.access_scope || '').trim() === 'own' ? 'Own Admissions' :
+            'Own Admissions';
+
           const enabledCols = ALL_COLS.reduce((acc, c) => acc + (isColOn(c.key, c.legacy) ? 1 : 0), 0);
           const totalCols = ALL_COLS.length;
           const typeValue = String(sa.agentType || '').toLowerCase() || 'unknown';
@@ -660,7 +692,14 @@
               sa.role || '',
               sa.agentType || '',
               sa.id || '',
-              sa.lastUpdatedBy || ''
+              sa.lastUpdatedBy || '',
+              sa.assignedAdminName || '',
+              sa.assigned_admin_name || '',
+              sa.assigned_admin_id || '',
+              sa.access_scope || '',
+              sa.createdByName || '',
+              sa.created_by_name || '',
+              sa.created_by || ''
             ].join(' ').toLowerCase() %>">
 
             <div class="card border-0 shadow-sm h-100 rounded-4 position-relative agent-user-card" style="overflow:hidden;">
@@ -693,7 +732,7 @@
                   <div class="mb-1">
                     <span class="text-muted">Dept:</span>
                     <span class="badge rounded-pill bg-light text-dark border text-capitalize ms-1">
-                      <%= sa.dept || '-' %>
+                      <%= formatDeptLabel(sa.dept) %>
                     </span>
                   </div>
 
@@ -704,9 +743,24 @@
                     </span>
                   </div>
 
-                  <div class="d-flex flex-wrap gap-2 align-items-center">
+                                    <div class="d-flex flex-wrap gap-2 align-items-center">
                     <span class="text-muted">ID:</span>
                     <span class="badge rounded-pill bg-light text-dark border">#<%= sa.id %></span>
+
+                    <span class="badge rounded-pill bg-light text-dark border">
+                      <i class="bi bi-diagram-3 me-1" style="color:#7c3aed;"></i>
+                      Assigned: <strong><%= assignedAdminDisplay %></strong>
+                    </span>
+
+                    <span class="badge rounded-pill bg-light text-dark border">
+                      <i class="bi bi-shield-check me-1" style="color:#2563eb;"></i>
+                      Scope: <strong><%= accessScopeLabel %></strong>
+                    </span>
+
+                    <span class="badge rounded-pill bg-light text-dark border">
+                      <i class="bi bi-person-plus me-1" style="color:#7c3aed;"></i>
+                      Created By: <strong><%= createdByDisplay %></strong>
+                    </span>
                   </div>
                 </div>
 
