@@ -1178,46 +1178,7 @@ function insertUploadRecord({
     actor.uploadedByRole,
     actor.uploadedAt
   );
-}// ================== UPLOAD NOTIFICATION HELPERS ==================
-function ensureUploadsNotificationColumns() {
-  try {
-    const cols = db.prepare(`PRAGMA table_info(uploads)`).all();
-    const existing = new Set(cols.map((c) => String(c.name || "").trim()));
-
-    const addColumn = (name, type) => {
-      if (!existing.has(name)) {
-        db.prepare(`ALTER TABLE uploads ADD COLUMN ${name} ${type}`).run();
-      }
-    };
-
-    addColumn("uploaded_by_id", "INTEGER");
-    addColumn("uploaded_by_name", "TEXT");
-    addColumn("uploaded_by_role", "TEXT");
-    addColumn("uploaded_at", "TEXT");
-  } catch (e) {
-    console.error("ensureUploadsNotificationColumns error:", e.message);
-  }
 }
-
-ensureUploadsNotificationColumns();
-function ensureUploadSeenTable() {
-  try {
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS upload_seen_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        upload_id INTEGER NOT NULL,
-        admission_id INTEGER,
-        user_id INTEGER NOT NULL,
-        seen_at TEXT NOT NULL,
-        UNIQUE(upload_id, user_id)
-      )
-    `).run();
-  } catch (e) {
-    console.error("ensureUploadSeenTable error:", e.message);
-  }
-}
-
-ensureUploadSeenTable();
 // ================== EXTERNAL UPLOAD LINK HELPERS ==================
 function ensureExternalUploadLinksTable() {
   try {
