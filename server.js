@@ -9542,11 +9542,13 @@ app.post("/api-settings/update", requireLogin, requireSuperAdmin, (req, res) => 
     const body = req.body || {};
 
     const allowedKeys = [
-      "APP_BASE_URL",
-      "ADMISSIONS_API_KEY",
-      "N8N_WHATSAPP_WEBHOOK_URL",
-      "N8N_BILLING_WEBHOOK_URL",
-    ];
+  "APP_BASE_URL",
+  "ADMISSIONS_API_KEY",
+  "N8N_WHATSAPP_WEBHOOK_URL",
+  "N8N_BILLING_WEBHOOK_URL",
+  "GEMINI_API_KEY",
+  "GEMINI_MODEL",
+];
 
     for (const key of allowedKeys) {
       if (Object.prototype.hasOwnProperty.call(body, key)) {
