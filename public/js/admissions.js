@@ -342,14 +342,21 @@ const res = await fetch(form.action, {
     }
 
     clearDirtyRow(formId);
-    finishRowSaveFlow();
+finishRowSaveFlow();
 
-    setTimeout(() => {
-      if (typeof saveViewportState === "function") {
-        saveViewportState(formId, fieldName);
-      }
-      window.location.reload();
-    }, 2200);
+setTimeout(() => {
+  if (typeof saveViewportState === "function") {
+    saveViewportState(formId, fieldName);
+  }
+
+  if (window.showUploadFlash) {
+    window.showUploadFlash(
+      "success",
+      "Updated",
+      "Row updated successfully."
+    );
+  }
+}, 300);
 
   } catch (err) {
     console.error("Row update error:", err);
@@ -777,8 +784,13 @@ document.addEventListener("click", async (e) => {
    
     // ✅ UI remove card (optional)
     const card = btn.closest(".file-card") || btn.closest(".card") || btn.closest("tr");
-    if (card) card.remove();
-    else window.location.reload();
+if (card) {
+  card.remove();
+}
+
+if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
+  window.rebuildAdmissionFilesDropdowns();
+}
 
   } catch (err) {
     console.error(err);
@@ -815,11 +827,15 @@ document.addEventListener("change", async (e) => {
       return;
     }
 
-    window.showUploadFlash
-      ? window.showUploadFlash("success", "Uploaded", "File uploaded successfully.")
-      : alert("Uploaded ✅");
+   window.showUploadFlash
+  ? window.showUploadFlash("success", "Uploaded", "File uploaded successfully.")
+  : alert("Uploaded ✅");
 
-    input.value = "";
+if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
+  window.rebuildAdmissionFilesDropdowns();
+}
+
+input.value = "";
   } catch (err) {
     console.error(err);
     alert("Upload failed");

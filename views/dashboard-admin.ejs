@@ -310,16 +310,16 @@
   actionButtons: canCol('actionButtons')
 },
 
-      // ✅ action column itself controlled
-        btn: {
+              btn: {
       details: canBtn('details'),
+      edit: canBtn('edit') || _hasKey('btnEditRow'),
       pdf: canBtn('pdf'),
       update: canBtn('update'),
       whatsapp: canBtn('whatsapp'),
       billing: canBtn('billing'),
       upload: canBtn('upload'),
       files: canBtn('files'),
-     deleteAdmission: _hasKey('canDeleteAdmissions'),
+      deleteAdmission: _hasKey('canDeleteAdmissions'),
     },
    edit: {
   dept: false,
@@ -346,9 +346,9 @@
   // ✅ Action column shows only if column permission is ON and at least one button allowed
  const canDeleteAdmissions = !!P.btn.deleteAdmission;
 
- const showActions =
+  const showActions =
   P.col.actionButtons &&
-  (P.btn.details || P.btn.pdf || P.btn.update || P.btn.whatsapp || P.btn.billing || P.btn.upload || P.btn.files || canDeleteAdmissions);
+  (P.btn.details || P.btn.edit || P.btn.pdf || P.btn.update || P.btn.whatsapp || P.btn.billing || P.btn.upload || P.btn.files || canDeleteAdmissions);
 
 const showBulkDeleteBar = canDeleteAdmissions;
 
@@ -641,18 +641,29 @@ function escHtml(value) {
 
   <!-- TABLE -->
   <div class="card shadow-sm admin-table-card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <div>
-        <strong><%= isAccountsAdmin ? 'Admissions for All Departments' : `Admissions for ${deptTitle}` %></strong>
-      </div>
-      <span class="badge text-bg-light text-muted small">
-  <% if (isAccountsAdmin) { %>
-    Scope: <span>All Departments</span>
-  <% } else { %>
-    Dept: <span class="text-capitalize"><%= user.dept %></span>
-  <% } %>
-</span>
-    </div>
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div>
+    <strong><%= isAccountsAdmin ? 'Admissions for All Departments' : `Admissions for ${deptTitle}` %></strong>
+  </div>
+
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <button
+      type="button"
+      id="applyRealtimeUpdatesBtn"
+      class="btn btn-sm btn-warning rounded-pill px-3 d-none">
+      <i class="bi bi-arrow-repeat me-1"></i>
+      <span id="realtimeUpdateCount">0</span> new updates available
+    </button>
+
+    <span class="badge text-bg-light text-muted small">
+      <% if (isAccountsAdmin) { %>
+        Scope: <span>All Departments</span>
+      <% } else { %>
+        Dept: <span class="text-capitalize"><%= user.dept %></span>
+      <% } %>
+    </span>
+  </div>
+</div>
 
                 <div class="px-3 pt-3 pb-2 border-top bulk-challan-toolbar-wrap">
   <div class="d-flex flex-wrap align-items-center gap-2 admin-toolbar-row">
@@ -692,69 +703,73 @@ function escHtml(value) {
 
     <div class="ms-auto d-flex justify-content-end align-items-center gap-2 flex-wrap">
 
-  <div class="dropdown admission-files-filter-dropdown">
-    <button
-  type="button"
-  class="btn rounded-pill px-3 file-filter-btn file-filter-all dropdown-toggle"
-  data-admission-file-filter="all"
-  aria-expanded="false">
-      <i class="bi bi-folder2-open me-1"></i>
-      All Files
-      <span class="badge rounded-pill bg-light text-dark ms-1" id="allFilesCount">0</span>
-    </button>
+    <% if (P.btn.files) { %>
+    <div class="dropdown admission-files-filter-dropdown">
+      <button
+        type="button"
+        class="btn rounded-pill px-3 file-filter-btn file-filter-all dropdown-toggle"
+        data-admission-file-filter="all"
+        aria-expanded="false">
+        <i class="bi bi-folder2-open me-1"></i>
+        All Files
+        <span class="badge rounded-pill bg-light text-dark ms-1" id="allFilesCount">0</span>
+      </button>
 
-    <div class="dropdown-menu dropdown-menu-end admission-files-dropdown-menu shadow-lg border-0">
-      <div class="files-dropdown-title">
-        <i class="bi bi-folder2-open me-1"></i> All Uploaded Files
+      <div class="dropdown-menu dropdown-menu-end admission-files-dropdown-menu shadow-lg border-0">
+        <div class="files-dropdown-title">
+          <i class="bi bi-folder2-open me-1"></i> All Uploaded Files
+        </div>
+        <div id="allFilesDropdownList" class="files-dropdown-list"></div>
       </div>
-      <div id="allFilesDropdownList" class="files-dropdown-list"></div>
     </div>
-  </div>
 
-  <div class="dropdown admission-files-filter-dropdown">
-    <button
-  type="button"
-  class="btn rounded-pill px-3 file-filter-btn file-filter-unseen dropdown-toggle"
-  data-admission-file-filter="unseen"
-  aria-expanded="false">
-      <i class="bi bi-receipt-cutoff me-1"></i>
-      Unseen
-      <span class="badge rounded-pill bg-light text-dark ms-1" id="unseenFilesCount">0</span>
-    </button>
+    <div class="dropdown admission-files-filter-dropdown">
+      <button
+        type="button"
+        class="btn rounded-pill px-3 file-filter-btn file-filter-unseen dropdown-toggle"
+        data-admission-file-filter="unseen"
+        aria-expanded="false">
+        <i class="bi bi-receipt-cutoff me-1"></i>
+        Unseen
+        <span class="badge rounded-pill bg-light text-dark ms-1" id="unseenFilesCount">0</span>
+      </button>
 
-    <div class="dropdown-menu dropdown-menu-end admission-files-dropdown-menu shadow-lg border-0">
-      <div class="files-dropdown-title text-danger">
-        <i class="bi bi-exclamation-circle me-1"></i> Unseen Files
+      <div class="dropdown-menu dropdown-menu-end admission-files-dropdown-menu shadow-lg border-0">
+        <div class="files-dropdown-title text-danger">
+          <i class="bi bi-exclamation-circle me-1"></i> Unseen Files
+        </div>
+        <div id="unseenFilesDropdownList" class="files-dropdown-list"></div>
       </div>
-      <div id="unseenFilesDropdownList" class="files-dropdown-list"></div>
     </div>
-  </div>
 
-  <div class="dropdown admission-files-filter-dropdown">
-    <button
-  type="button"
-  class="btn rounded-pill px-3 file-filter-btn file-filter-seen dropdown-toggle"
-  data-admission-file-filter="seen"
-  aria-expanded="false">
-      <i class="bi bi-check-circle me-1"></i>
-      Seen
-      <span class="badge rounded-pill bg-light text-dark ms-1" id="seenFilesCount">0</span>
-    </button>
+    <div class="dropdown admission-files-filter-dropdown">
+      <button
+        type="button"
+        class="btn rounded-pill px-3 file-filter-btn file-filter-seen dropdown-toggle"
+        data-admission-file-filter="seen"
+        aria-expanded="false">
+        <i class="bi bi-check-circle me-1"></i>
+        Seen
+        <span class="badge rounded-pill bg-light text-dark ms-1" id="seenFilesCount">0</span>
+      </button>
 
-    <div class="dropdown-menu dropdown-menu-end admission-files-dropdown-menu shadow-lg border-0">
-      <div class="files-dropdown-title text-success">
-        <i class="bi bi-check-circle me-1"></i> Seen Files
+      <div class="dropdown-menu dropdown-menu-end admission-files-dropdown-menu shadow-lg border-0">
+        <div class="files-dropdown-title text-success">
+          <i class="bi bi-check-circle me-1"></i> Seen Files
+        </div>
+        <div id="seenFilesDropdownList" class="files-dropdown-list"></div>
       </div>
-      <div id="seenFilesDropdownList" class="files-dropdown-list"></div>
     </div>
-  </div>
+  <% } %>
 
-  <button
-    type="button"
-    class="btn rounded-pill px-4 bulk-challan-open-btn"
-    id="openBulkChallanBtn">
-    <i class="bi bi-whatsapp me-2"></i>Send Bulk Challan
-  </button>
+    <% if (P.btn.whatsapp) { %>
+    <button
+      type="button"
+      class="btn rounded-pill px-4 bulk-challan-open-btn"
+      id="openBulkChallanBtn">
+      <i class="bi bi-whatsapp me-2"></i>Send Bulk Challan
+    </button>
+  <% } %>
 </div>
   </div>
 </div>
@@ -944,16 +959,29 @@ function escHtml(value) {
 </div>
         </div>
 
-       <div class="admission-card-fields">
+              <div class="admission-card-fields">
   <% cardFields.forEach(field => { %>
     <% if (field.show) { %>
-      <a
-      href="/admin/admission/<%= a.id %>/edit?focus=<%= encodeURIComponent(field.key || '') %>"
-        class="admission-field-link <%= getCardFieldClass(field) %>"
-        style="<%= getCardFieldStyle(field) %>">
-        <span class="field-label"><%= field.label %></span>
-        <span class="field-value"><%= field.value %></span>
-      </a>
+
+      <% if (P.btn.edit) { %>
+        <a
+          href="/admin/admission/<%= a.id %>/edit?focus=<%= encodeURIComponent(field.key || '') %>"
+          class="admission-field-link <%= getCardFieldClass(field) %>"
+          data-field-key="<%= field.key || '' %>"
+          style="<%= getCardFieldStyle(field) %>">
+          <span class="field-label"><%= field.label %></span>
+          <span class="field-value"><%= field.value %></span>
+        </a>
+      <% } else { %>
+        <span
+          class="admission-field-link <%= getCardFieldClass(field) %> no-edit-field"
+          data-field-key="<%= field.key || '' %>"
+          style="<%= getCardFieldStyle(field) %>">
+          <span class="field-label"><%= field.label %></span>
+          <span class="field-value"><%= field.value %></span>
+        </span>
+      <% } %>
+
     <% } %>
   <% }) %>
 </div>
@@ -967,7 +995,7 @@ function escHtml(value) {
               </a>
             <% } %>
 
-            <% if (P.btn.update) { %>
+                        <% if (P.btn.edit) { %>
   <a href="/admin/admission/<%= a.id %>/edit" class="mini-action-btn mini-green">
     <i class="bi bi-pencil-square"></i> Edit
   </a>
@@ -1099,6 +1127,34 @@ function escHtml(value) {
 </div>
 
 <style>
+  /* ✅ Real-time update button */
+#applyRealtimeUpdatesBtn{
+  border: none;
+  color: #78350f;
+  font-weight: 900;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  box-shadow: 0 8px 18px rgba(245,158,11,.18);
+}
+
+#applyRealtimeUpdatesBtn:hover{
+  color: #78350f;
+  filter: brightness(1.02);
+  transform: translateY(-1px);
+}
+
+.admission-card.realtime-updated{
+  animation: realtimeCardPulse 1200ms ease-out;
+}
+
+@keyframes realtimeCardPulse{
+  0%{
+    box-shadow: 0 0 0 0 rgba(34,197,94,.42);
+    border-top-color: #22c55e;
+  }
+  100%{
+    box-shadow: 0 12px 28px rgba(15,23,42,.08);
+  }
+}
   @keyframes flashScaleIn {
     from { transform: scale(0.9); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
@@ -3196,7 +3252,16 @@ function escHtml(value) {
   color: #0f172a !important;
   box-shadow: 0 4px 10px rgba(15,23,42,.06);
 }
+.no-edit-field{
+  cursor: default !important;
+  pointer-events: none;
+}
 
+.no-edit-field:hover{
+  transform: none !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 10px rgba(15,23,42,.06) !important;
+}
 .field-label{
   display: inline;
   font-size: 10px;
@@ -7005,25 +7070,9 @@ function applyAdmissionPipelineFileFilter(filter) {
   setTimeout(function () {
     showBillingMessage('success', 'Saved', 'Data has been saved.');
 
-    const okBtn = document.getElementById('upload-flash-close-btn');
-    const xBtn = document.getElementById('upload-flash-x-btn');
-
-    function reloadAfterPopupClose() {
-      if (typeof window.saveViewportState === 'function') {
-        window.saveViewportState();
-      }
-
-      setTimeout(function () {
-  if (typeof window.smoothDashboardReload === "function") {
-    window.smoothDashboardReload(1000);
-  } else {
-    window.location.reload();
-  }
-}, 250);
+    if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
+      window.rebuildAdmissionFilesDropdowns();
     }
-
-    if (okBtn) okBtn.onclick = reloadAfterPopupClose;
-    if (xBtn) xBtn.onclick = reloadAfterPopupClose;
   }, 250);
 } catch (err) {
   console.error(err);
@@ -7104,36 +7153,292 @@ function applyAdmissionPipelineFileFilter(filter) {
 <script>
   (function () {
     if (typeof io === "undefined") return;
+
     const socket = io();
-    let pending = false;
+    const pendingAdmissionIds = new Set();
 
-    socket.on("admission:changed", function () {
-      const billingModal = document.getElementById("billingModal");
-      const billingOpen =
-        billingModal &&
-        billingModal.classList.contains("show");
+    const updateBtn = document.getElementById("applyRealtimeUpdatesBtn");
+    const updateCount = document.getElementById("realtimeUpdateCount");
 
-      const flashOpen =
-        document.getElementById("upload-flash-overlay") &&
-        !document.getElementById("upload-flash-overlay").classList.contains("d-none");
+    function isModalOpen() {
+      return !!document.querySelector(".modal.show, .billing-status-overlay:not(.d-none)");
+    }
 
+    function isFlashOpen() {
+      const flash = document.getElementById("upload-flash-overlay");
+      return !!(flash && !flash.classList.contains("d-none"));
+    }
+
+    function isUserTyping() {
+      const el = document.activeElement;
+      if (!el) return false;
+
+      return el.matches("input, textarea, select, [contenteditable='true']");
+    }
+
+    function isUserBusy() {
       const recentSubmit =
         sessionStorage.getItem("admin_dashboard_recent_submit") === "1";
 
-      if (billingOpen || flashOpen || recentSubmit) {
+      return isModalOpen() || isFlashOpen() || isUserTyping() || recentSubmit;
+    }
+
+    function showUpdatesButton() {
+      if (!updateBtn || !updateCount) return;
+
+      updateCount.textContent = String(pendingAdmissionIds.size || 0);
+
+      if (pendingAdmissionIds.size > 0) {
+        updateBtn.classList.remove("d-none");
+      } else {
+        updateBtn.classList.add("d-none");
+      }
+    }
+
+    function getAdmissionIdFromPayload(payload) {
+      const id =
+        payload?.admissionId ||
+        payload?.id ||
+        "";
+
+      return String(id || "").trim();
+    }
+
+    function getFieldValue(admission, key) {
+      const a = admission || {};
+
+      const map = {
+        status: a.status || "-",
+        feeStatus: a.feeStatus || "-",
+        dept: a.dept || "-",
+        student: a.student || a.studentName || "-",
+        father: a.father || a.fatherName || "-",
+        grade: a.grade || "-",
+        tuitionGrade: a.tuitionGrade || "-",
+        fatherEmail: a.fatherEmail || a.father_email || "-",
+        phone: a.phone || a.contactNumber || "-",
+        processedBy: a.processedBy || a.processed_by || "-",
+        paymentStatus: a.accounts?.paymentStatus || "-",
+        paidUpto: a.accounts?.paidUpto || "-",
+        verificationNumber: a.latestBillingVerificationNumber || a.accounts?.verificationNumber || "-",
+        registrationNumber: a.accounts?.registrationNumber || "-",
+        familyNumber: a.accounts?.familyNumber || "-",
+        registrationFee: a.admission?.registrationFee || "-",
+        fees: a.admission?.fees || "-",
+        currency: a.currency_code || a.currencyCode || a.admission?.currencyCode || a.admission?.currency_code || "-",
+        month: a.admission?.month || "-",
+        totalFees: a.admission?.totalFees || "-",
+        pendingDues: a.admission?.pendingDues || "-",
+        receivedPayment: a.admission?.receivedPayment || "0",
+        invoiceStatus: a.admission?.invoiceStatus || "-",
+        invoiceStatusTimestamp: a.admission?.invoiceStatusTimestamp || "-",
+        paidInvoiceStatus: a.admission?.paidInvoiceStatus || "-",
+        paidInvoiceStatusTimestamp: a.admission?.paidInvoiceStatusTimestamp || "-"
+      };
+
+      return map[key] ?? "-";
+    }
+
+    function updateField(card, key, value) {
+      const field = card.querySelector(`.admission-field-link[data-field-key="${CSS.escape(String(key))}"] .field-value`);
+
+      if (field) {
+        field.textContent = value || "-";
+        field.setAttribute("title", value || "-");
+      }
+    }
+
+    function updateCardActions(card, admission) {
+      const id = admission?.id || card.getAttribute("data-admission-id") || "";
+
+      const student = admission?.student || admission?.studentName || "";
+      const grade = admission?.grade || "";
+      const phone = admission?.phone || admission?.contactNumber || "";
+      const fees = admission?.admission?.fees || "";
+      const currency =
+        admission?.currency_code ||
+        admission?.currencyCode ||
+        admission?.admission?.currencyCode ||
+        admission?.admission?.currency_code ||
+        "";
+
+      card.querySelectorAll("[data-admission-id]").forEach(el => {
+        el.setAttribute("data-admission-id", id);
+      });
+
+      card.querySelectorAll("[data-student]").forEach(el => {
+        el.setAttribute("data-student", student);
+      });
+
+      card.querySelectorAll("[data-grade]").forEach(el => {
+        el.setAttribute("data-grade", grade);
+      });
+
+      card.querySelectorAll("[data-phone]").forEach(el => {
+        el.setAttribute("data-phone", phone);
+      });
+
+      const billingBtn = card.querySelector(".btn-billing");
+      if (billingBtn) {
+        billingBtn.setAttribute("data-fees", fees);
+        billingBtn.setAttribute("data-currency", currency);
+      }
+
+      const deleteBtn = card.querySelector(".btn-delete-admission");
+      if (deleteBtn) {
+        deleteBtn.setAttribute("data-student-name", student);
+      }
+    }
+
+    function updateCardHeader(card, admission) {
+      const student = admission?.student || admission?.studentName || "No Name";
+      const father = admission?.father || admission?.fatherName || "-";
+      const dept = admission?.dept || "Dept";
+
+      const title = card.querySelector(".admission-title");
+      const subtitle = card.querySelector(".admission-subtitle");
+      const avatar = card.querySelector(".admission-avatar");
+      const deptPill = card.querySelector(".admission-role-pill");
+
+      if (title) title.textContent = student;
+      if (subtitle) subtitle.textContent = father;
+      if (avatar) avatar.textContent = String(student || "A").charAt(0).toUpperCase();
+      if (deptPill) deptPill.textContent = dept;
+    }
+
+    async function refreshAdmissionCard(admissionId) {
+      if (!admissionId) return false;
+
+      const card = document.querySelector(`.admission-card[data-admission-id="${CSS.escape(String(admissionId))}"]`);
+
+      if (!card) {
+        pendingAdmissionIds.add(String(admissionId));
+        showUpdatesButton();
+        return false;
+      }
+
+      const res = await fetch(`/api/admissions/${encodeURIComponent(admissionId)}`, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+          "Accept": "application/json"
+        }
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data.success === false || !data.admission) {
+        throw new Error(data.message || "Admission refresh failed");
+      }
+
+      const admission = data.admission;
+
+      updateCardHeader(card, admission);
+
+      [
+        "status",
+        "feeStatus",
+        "dept",
+        "student",
+        "father",
+        "grade",
+        "tuitionGrade",
+        "fatherEmail",
+        "phone",
+        "processedBy",
+        "paymentStatus",
+        "paidUpto",
+        "verificationNumber",
+        "registrationNumber",
+        "familyNumber",
+        "registrationFee",
+        "fees",
+        "currency",
+        "month",
+        "totalFees",
+        "pendingDues",
+        "receivedPayment",
+        "invoiceStatus",
+        "invoiceStatusTimestamp",
+        "paidInvoiceStatus",
+        "paidInvoiceStatusTimestamp"
+      ].forEach(key => {
+        updateField(card, key, getFieldValue(admission, key));
+      });
+
+      updateCardActions(card, admission);
+
+      card.classList.remove("realtime-updated");
+      void card.offsetWidth;
+      card.classList.add("realtime-updated");
+
+      return true;
+    }
+
+    async function applyPendingAdmissionUpdates() {
+      const ids = Array.from(pendingAdmissionIds);
+      pendingAdmissionIds.clear();
+      showUpdatesButton();
+
+      for (const id of ids) {
+        try {
+          await refreshAdmissionCard(id);
+        } catch (err) {
+          console.error("Real-time card update failed:", err);
+        }
+      }
+
+      if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
+        window.rebuildAdmissionFilesDropdowns();
+      }
+    }
+
+    if (updateBtn) {
+      updateBtn.addEventListener("click", function () {
+        applyPendingAdmissionUpdates();
+      });
+    }
+
+    socket.on("admission:changed", async function (payload) {
+      const singleId = getAdmissionIdFromPayload(payload);
+      const insertedIds = Array.isArray(payload?.insertedIds) ? payload.insertedIds : [];
+      const deletedIds = Array.isArray(payload?.deletedIds) ? payload.deletedIds : [];
+
+      deletedIds.forEach(id => {
+        const card = document.querySelector(`.admission-card[data-admission-id="${CSS.escape(String(id))}"]`);
+        if (card) card.remove();
+      });
+
+      if (insertedIds.length) {
+        insertedIds.forEach(id => pendingAdmissionIds.add(String(id)));
+        showUpdatesButton();
         return;
       }
 
-      if (pending) return;
-      pending = true;
+      if (!singleId) {
+        if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
+          window.rebuildAdmissionFilesDropdowns();
+        }
+        return;
+      }
 
-      setTimeout(function () {
-  if (typeof window.smoothDashboardReload === "function") {
-    window.smoothDashboardReload(1000);
-  } else {
-    window.location.reload();
-  }
-}, 4200);
+      if (isUserBusy()) {
+        pendingAdmissionIds.add(String(singleId));
+        showUpdatesButton();
+        return;
+      }
+
+      try {
+        await refreshAdmissionCard(singleId);
+
+        if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
+          window.rebuildAdmissionFilesDropdowns();
+        }
+      } catch (err) {
+        console.error("Real-time admission update failed:", err);
+        pendingAdmissionIds.add(String(singleId));
+        showUpdatesButton();
+      }
     });
 
     socket.on("user:updated", function (payload) {
@@ -7143,27 +7448,22 @@ function applyAdmissionPipelineFileFilter(filter) {
       if (!currentUserId || !targetUserId) return;
       if (currentUserId !== targetUserId) return;
 
-      const flashOpen =
-        document.getElementById("upload-flash-overlay") &&
-        !document.getElementById("upload-flash-overlay").classList.contains("d-none");
+      if (isUserBusy()) {
+        if (typeof window.showUploadFlash === "function") {
+          window.showUploadFlash(
+            "info",
+            "Account Updated",
+            "Your permissions were updated. Please refresh when you are free."
+          );
+        }
+        return;
+      }
 
-      const billingModal = document.getElementById("billingModal");
-      const billingOpen =
-        billingModal &&
-        billingModal.classList.contains("show");
-
-      if (flashOpen || billingOpen) return;
-      if (pending) return;
-
-      pending = true;
-
-      setTimeout(function () {
-  if (typeof window.smoothDashboardReload === "function") {
-    window.smoothDashboardReload(1000);
-  } else {
-    window.location.reload();
-  }
-}, 300);
+      if (typeof window.smoothDashboardReload === "function") {
+        window.smoothDashboardReload(1000);
+      } else {
+        window.location.reload();
+      }
     });
   })();
 </script>

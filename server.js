@@ -109,9 +109,27 @@ io.on("connection", (socket) => {
 function emitAdmissionChanged(req, payload = {}) {
   try {
     const ioRef = req.app.get("io");
-    if (ioRef) {
-      ioRef.emit("admission:changed", { ts: Date.now(), ...payload });
-    }
+    if (!ioRef) return;
+
+    const actor = req?.session?.user || null;
+
+    ioRef.emit("admission:changed", {
+      ts: Date.now(),
+      type: payload.type || "admission_changed",
+      admissionId: payload.admissionId || null,
+      insertedIds: Array.isArray(payload.insertedIds) ? payload.insertedIds : [],
+      deletedIds: Array.isArray(payload.deletedIds) ? payload.deletedIds : [],
+      dept: payload.dept || "",
+      changedBy: actor
+        ? {
+            id: actor.id || null,
+            name: actor.name || "",
+            role: actor.role || "",
+            dept: actor.dept || "",
+          }
+        : null,
+      ...payload,
+    });
   } catch (e) {
     console.error("emitAdmissionChanged error:", e);
   }
@@ -666,6 +684,7 @@ function requirePerm(flag) {
 const requireOpenBilling = requirePerm("btnBilling");
 const requireSaveBilling = requirePerm("btnBilling");
 const requireSendWhatsApp = requirePerm("btnWhatsApp");
+const requireViewFiles = requirePerm("btnFiles");
 const requireDeleteFiles = requirePerm("canDeleteFiles");
 const requireDeleteAdmissions = requirePerm("canDeleteAdmissions");
 
@@ -2220,23 +2239,40 @@ const offset = (page - 1) * limit;
       createdAt: registrationDate || "",
     });
 
-    const latestBilling = getLatestBillingEntry(row);
-    if (latestBilling) {
-      recentBillingChanges.push({
-        id: row.id,
-        studentName: row.student_name || "",
-        dept: row.dept || "",
-        month: latestBilling.month || "",
-        status: latestBilling.status || "",
-        amount: safeNumber(latestBilling.amount || latestBilling.amountReceived),
-        updatedAt:
-          latestBilling.updated_at ||
-          latestBilling.updatedAt ||
-          latestBilling.created_at ||
-          latestBilling.createdAt ||
-          "",
-      });
-    }
+    for (const bill of billingArr) {
+  const billStatus = normalizeText(bill.status || "");
+  const billAmount = safeNumber(bill.amount || bill.amountReceived);
+  const billVerification = normalizeText(bill.verificationNumber || "");
+  const billBank = normalizeText(bill.bank || bill.bankName || "");
+  const billPaymentDate = normalizeText(bill.paymentDate || bill.paidOn || "");
+
+  const billUpdatedAt =
+    bill.updated_at ||
+    bill.updatedAt ||
+    bill.created_at ||
+    bill.createdAt ||
+    billPaymentDate ||
+    "";
+
+  const hasRealBillingUpdate =
+    billStatus ||
+    billAmount > 0 ||
+    billVerification ||
+    billBank ||
+    billPaymentDate;
+
+  if (!hasRealBillingUpdate) continue;
+
+  recentBillingChanges.push({
+    id: row.id,
+    studentName: row.student_name || "",
+    dept: row.dept || "",
+    month: bill.month || "",
+    status: billStatus || "-",
+    amount: billAmount,
+    updatedAt: billUpdatedAt || "-",
+  });
+}
   }
 
   for (const opt of statusOptions) {
@@ -2423,7 +2459,7 @@ totalPages,
         color: x.color || "",
       })),
     },
-    recentBillingChanges: recentBillingChanges.slice(0, 10),
+    recentBillingChanges: recentBillingChanges.slice(0, 100),
   };
 }
 
@@ -4828,7 +4864,7 @@ app.post("/external-upload/:token", upload.single("file"), (req, res) => {
     return res.status(500).send("Upload failed");
   }
 });
-app.get("/api/admission-files", requireLogin, (req, res) => {
+app.get("/api/admission-files", requireLogin, requireViewFiles, (req, res) => {
   try {
     const user = req.session.user;
     const filter = String(req.query.filter || "all").trim().toLowerCase();
@@ -4860,7 +4896,7 @@ app.get("/api/admission-files", requireLogin, (req, res) => {
     });
   }
 });
-app.post("/api/uploads/:uploadId/seen", requireLogin, (req, res) => {
+app.post("/api/uploads/:uploadId/seen", requireLogin, requireViewFiles, (req, res) => {
   try {
     const user = req.session.user;
     const uploadId = Number(req.params.uploadId || 0);
@@ -6041,7 +6077,83 @@ function ensureAdmissionRouteAccess(user, perms, row) {
 
   return canAccessAdmissionRow(user, row);
 }
+function canUseEditFeature(user, perms) {
+  if (!user) return false;
+  if (user.role === "super_admin") return true;
+  return !!perms?.btnEditRow;
+}
 
+function ensureAdmissionEditRouteAccess(user, perms, row) {
+  if (!user || !row) return false;
+
+  // Super Admin: full access
+  if (user.role === "super_admin") return true;
+
+  // Other users must have Edit button permission
+  if (!perms?.btnEditRow) return false;
+
+  return canAccessAdmissionRow(user, row);
+}
+
+function renderSharedAdmissionEdit(req, res) {
+  try {
+    const user = req.session.user;
+    const perms = getPerm(user);
+    const billingYear = getBillingYearFromReq(req);
+
+    if (!canUseEditFeature(user, perms)) {
+      return res.status(403).send("Not allowed");
+    }
+
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).send("Invalid id");
+
+    const row = getActiveAdmissionById(id);
+    if (!row) return res.status(404).send("Admission not found");
+
+    if (!ensureAdmissionEditRouteAccess(user, perms, row)) {
+      return res.status(403).send("Not allowed");
+    }
+
+    const familyNumber = String(row.accounts_family_number || "").trim();
+
+    let rows = [row];
+    if (familyNumber) {
+      rows = getAccessibleFamilyRows(user, familyNumber);
+      if (!rows.length) rows = [row];
+    }
+
+    const admissionsFull = rows
+      .map((r) => dbGetAdmissionDetailsById(r.id, billingYear))
+      .filter(Boolean);
+
+    const admissions = admissionsFull.map((full) => {
+      const safe = maskAdmissionMapped(full, perms);
+      const rrow = getActiveAdmissionById(full.id);
+      if (rrow) attachComputedMonthFees(rrow, safe, billingYear);
+      return safe;
+    });
+
+    const primaryFull = dbGetAdmissionDetailsById(id, billingYear);
+    if (!primaryFull) return res.status(404).send("Admission not found");
+
+    const primary = maskAdmissionMapped(primaryFull, perms);
+    attachComputedMonthFees(row, primary, billingYear);
+
+    return res.render("admission-edit", {
+      user,
+      perms,
+      admission: primary,
+      admissions,
+      familyNumber,
+      billingMonths: BILLING_MONTHS,
+      pageTitle: "Edit Admission",
+    });
+  } catch (err) {
+    console.error("renderSharedAdmissionEdit error:", err);
+    return res.status(500).send("Server error");
+  }
+}
 function getAccessibleFamilyRows(user, familyNumber) {
   if (!familyNumber) return [];
 
@@ -6239,18 +6351,18 @@ app.get("/dashboard/admission/:id", requireLogin, (req, res) => {
 });
 // =====================================================
 // ✅ EDIT ADMISSION PAGE
-// UI only. Save/update logic remains same.
+// btnEditRow permission required
 // =====================================================
 app.get("/dashboard/super/admission/:id/edit", requireLogin, (req, res) => {
-  return renderSharedAdmissionDetails(req, res, "admission-edit");
+  return renderSharedAdmissionEdit(req, res);
 });
 
 app.get("/admin/admission/:id/edit", requireLogin, (req, res) => {
-  return renderSharedAdmissionDetails(req, res, "admission-edit");
+  return renderSharedAdmissionEdit(req, res);
 });
 
 app.get("/dashboard/admission/:id/edit", requireLogin, (req, res) => {
-  return renderSharedAdmissionDetails(req, res, "admission-edit");
+  return renderSharedAdmissionEdit(req, res);
 });
 
 // =====================================================
@@ -7502,32 +7614,126 @@ unallocatedAmount: registrationRemaining + remaining,
     });
   }
 });
+// ✅ NEW: External admissions API for n8n (API key se secure)
 
+app.get("/api/admissions/external", checkApiKey, (req, res) => {
+
+  try {
+
+    const { dept } = req.query;
+
+
+
+    let rows;
+
+    if (dept) {
+
+      rows = db
+
+        .prepare(`
+
+          SELECT *
+
+          FROM admissions
+
+          WHERE dept = ?
+
+            AND COALESCE(is_deleted, 0) = 0
+
+          ORDER BY id DESC
+
+        `)
+
+        .all(dept);
+
+    } else {
+
+      rows = db.prepare(`
+
+        SELECT *
+
+        FROM admissions
+
+        WHERE COALESCE(is_deleted, 0) = 0
+
+        ORDER BY id DESC
+
+      `).all();
+
+    }
+
+
+
+    const data = rows.map(mapAdmissionRow);
+
+
+
+    return res.json({
+
+      success: true,
+
+      count: data.length,
+
+      data,
+
+    });
+
+  } catch (err) {
+
+    console.error("GET /api/admissions/external error:", err);
+
+    return res
+
+      .status(500)
+
+      .json({ success: false, message: "DB select failed" });
+
+  }
+
+});
 // =====================================================
 // ✅ Single admission JSON API
+// Used for real-time row refresh without full page reload
 // =====================================================
 app.get("/api/admissions/:id", requireLogin, (req, res) => {
   try {
     const user = req.session.user;
     const perms = getPerm(user);
 
-    if (!canUseDetailsFeature(user, perms)) {
-      return res.status(403).json({ success: false, message: "Not allowed" });
+    const id = parseInt(req.params.id, 10);
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid id",
+      });
     }
 
-    const id = parseInt(req.params.id, 10);
-    if (!id) return res.status(400).json({ success: false, message: "Invalid id" });
-
     const row = getActiveAdmissionById(id);
-    if (!row) return res.status(404).json({ success: false, message: "Admission not found" });
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        message: "Admission not found",
+      });
+    }
 
-    if (!ensureAdmissionRouteAccess(user, perms, row)) {
-      return res.status(403).json({ success: false, message: "Not allowed" });
+    // ✅ Real-time row refresh ke liye btnDetails zaroori nahi.
+    // Sirf wahi user row fetch kar sakta hai jisko us admission ka access hai.
+    if (!canAccessAdmissionRow(user, row)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not allowed",
+      });
     }
 
     const billingYear = getBillingYearFromReq(req);
-const full = dbGetAdmissionDetailsById(id, billingYear);
-    if (!full) return res.status(404).json({ success: false, message: "Admission not found" });
+    const full = dbGetAdmissionDetailsById(id, billingYear);
+
+    if (!full) {
+      return res.status(404).json({
+        success: false,
+        message: "Admission not found",
+      });
+    }
 
     const safe = maskAdmissionMapped(full, perms);
     attachComputedMonthFees(row, safe, billingYear);
@@ -7538,7 +7744,10 @@ const full = dbGetAdmissionDetailsById(id, billingYear);
     });
   } catch (err) {
     console.error("GET /api/admissions/:id error:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 });
 // ✅ Backward compatibility (optional)
@@ -7560,68 +7769,19 @@ app.get("/api/me", requireLogin, (req, res) => {
 app.get("/api/admissions", requireLogin, (req, res) => {
   try {
     const user = req.session.user;
-    const perms = getPerm(user);
+    const admissions = fetchAdmissionsForUser(user);
 
-    let rows = db.prepare(`
-      SELECT *
-      FROM admissions
-      WHERE COALESCE(is_deleted, 0) = 0
-      ORDER BY id DESC
-    `).all();
-
-    if (user?.role !== "super_admin" && !isAccountsUser(user)) {
-      rows = rows.filter((row) => canAccessAdmissionRow(user, row));
-    }
-
-    const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
-    const masked = rowsWithDuplicateFlags.map((r) => maskAdmissionDbRow(r, perms));
-
-    return res.json(masked);
+    return res.json(admissions);
   } catch (err) {
     console.error("GET /api/admissions error:", err);
-    return res.status(500).json({ success: false, message: "DB select failed" });
-  }
-});
-
-// ✅ NEW: External admissions API for n8n (API key se secure)
-app.get("/api/admissions/external", checkApiKey, (req, res) => {
-  try {
-    const { dept } = req.query;
-
-    let rows;
-    if (dept) {
-      rows = db
-        .prepare(`
-          SELECT *
-          FROM admissions
-          WHERE dept = ?
-            AND COALESCE(is_deleted, 0) = 0
-          ORDER BY id DESC
-        `)
-        .all(dept);
-    } else {
-      rows = db.prepare(`
-        SELECT *
-        FROM admissions
-        WHERE COALESCE(is_deleted, 0) = 0
-        ORDER BY id DESC
-      `).all();
-    }
-
-    const data = rows.map(mapAdmissionRow);
-
-    return res.json({
-      success: true,
-      count: data.length,
-      data,
+    return res.status(500).json({
+      success: false,
+      message: "DB select failed",
     });
-  } catch (err) {
-    console.error("GET /api/admissions/external error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "DB select failed" });
   }
 });
+
+
 
 app.post("/api/admissions/invoice-status", checkApiKey, (req, res) => {
   try {
@@ -7695,7 +7855,7 @@ app.post("/api/admissions/invoice-status", checkApiKey, (req, res) => {
   }
 });
 
-app.post("/api/bulk-challan/create", requireLogin, requirePerm("btnUpdateRow"), (req, res) => {
+app.post("/api/bulk-challan/create", requireLogin, requireSendWhatsApp, (req, res) => {
   try {
     const user = req.session.user;
 
