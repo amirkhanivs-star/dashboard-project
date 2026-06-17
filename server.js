@@ -254,6 +254,138 @@ function getAdmissionsTableColumns() {
     return [];
   }
 }
+
+function ensureAdmissionEntryNumberColumn() {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(admissions)`).all();
+    const existing = new Set(cols.map((c) => String(c.name || "").trim()));
+
+    if (!existing.has("entry_number")) {
+      db.prepare(`ALTER TABLE admissions ADD COLUMN entry_number INTEGER`).run();
+    }
+
+    if (!existing.has("last_activity_at")) {
+      db.prepare(`ALTER TABLE admissions ADD COLUMN last_activity_at TEXT`).run();
+    }
+
+    // Old active admissions ko one-time fixed entry number do:
+    // oldest admission = 1, latest admission = biggest number.
+    db.prepare(`
+      WITH ordered AS (
+        SELECT
+          id,
+          ROW_NUMBER() OVER (ORDER BY id ASC) AS rn
+        FROM admissions
+        WHERE COALESCE(is_deleted, 0) = 0
+      )
+      UPDATE admissions
+      SET entry_number = (
+        SELECT rn
+        FROM ordered
+        WHERE ordered.id = admissions.id
+      )
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND (
+          entry_number IS NULL
+          OR TRIM(COALESCE(entry_number, '')) = ''
+          OR CAST(entry_number AS INTEGER) = 0
+        )
+    `).run();
+
+    // Old records ke liye initial activity time set karo.
+    db.prepare(`
+      UPDATE admissions
+      SET last_activity_at = COALESCE(
+        NULLIF(TRIM(last_activity_at), ''),
+        NULLIF(TRIM(created_at), ''),
+        NULLIF(TRIM(registration_date), ''),
+        datetime('now')
+      )
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND (
+          last_activity_at IS NULL
+          OR TRIM(COALESCE(last_activity_at, '')) = ''
+        )
+    `).run();
+  } catch (e) {
+    console.error("ensureAdmissionEntryNumberColumn error:", e.message);
+  }
+}
+
+ensureAdmissionEntryNumberColumn();
+function ensureAdmissionBankColumn() {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(admissions)`).all();
+    const existing = new Set(cols.map((c) => String(c.name || "").trim()));
+
+    if (!existing.has("bank_name")) {
+      db.prepare(`ALTER TABLE admissions ADD COLUMN bank_name TEXT`).run();
+    }
+  } catch (e) {
+    console.error("ensureAdmissionBankColumn error:", e.message);
+  }
+}
+
+ensureAdmissionBankColumn();
+
+function ensureAdmissionCommentColumn() {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(admissions)`).all();
+    const existing = new Set(cols.map((c) => String(c.name || "").trim()));
+
+    if (!existing.has("admission_comment")) {
+      db.prepare(`ALTER TABLE admissions ADD COLUMN admission_comment TEXT`).run();
+    }
+  } catch (e) {
+    console.error("ensureAdmissionCommentColumn error:", e.message);
+  }
+}
+
+ensureAdmissionCommentColumn();
+
+function touchAdmissionActivity(admissionId) {
+  try {
+    const id = Number(admissionId || 0);
+    if (!id) return;
+
+    db.prepare(`
+      UPDATE admissions
+      SET last_activity_at = datetime('now')
+      WHERE id = ?
+        AND COALESCE(is_deleted, 0) = 0
+    `).run(id);
+  } catch (e) {
+    console.error("touchAdmissionActivity error:", e.message);
+  }
+}
+
+const ADMISSION_ACTIVITY_ORDER_SQL = `
+  datetime(
+    COALESCE(
+      NULLIF(TRIM(last_activity_at), ''),
+      NULLIF(TRIM(created_at), ''),
+      NULLIF(TRIM(registration_date), ''),
+      '1970-01-01'
+    )
+  ) DESC,
+  COALESCE(entry_number, id) DESC,
+  id DESC
+`;
+
+function getNextAdmissionEntryNumber() {
+  try {
+    const row = db.prepare(`
+      SELECT COALESCE(MAX(entry_number), 0) + 1 AS nextNumber
+      FROM admissions
+    `).get();
+
+    return Number(row?.nextNumber || 1);
+  } catch (e) {
+    console.error("getNextAdmissionEntryNumber error:", e.message);
+    return 1;
+  }
+}
+
 // ================== USER ASSIGNMENT / ACCESS HELPERS ==================
 function ensureUserAssignmentColumns() {
   try {
@@ -519,6 +651,28 @@ function pickCurrencyCode(body, fallback = "") {
 
   return String(fallback ?? "").trim().toUpperCase();
 }
+
+function pickBankName(body, fallback = "") {
+  const sources = [
+    body,
+    body?.admission,
+    body?.admissionPanel,
+  ];
+
+  for (const src of sources) {
+    if (!src) continue;
+
+    for (const key of ["bank", "bank_name", "bankName"]) {
+      if (Object.prototype.hasOwnProperty.call(src, key)) {
+        const raw = Array.isArray(src[key]) ? src[key][src[key].length - 1] : src[key];
+        return String(raw ?? "").trim();
+      }
+    }
+  }
+
+  return String(fallback ?? "").trim();
+}
+
 function pickPaymentStatus(body, fallback = "") {
   const v =
     body?.paymentStatus ??
@@ -590,6 +744,13 @@ if (freshUser.lastUpdatedAt && freshUser.lastUpdatedAt !== sessionUser.lastUpdat
     console.error("requireLogin check error:", err);
   }
 
+    // ✅ make current user's admission form link available everywhere
+  try {
+    req.session.user = attachAdmissionLinkToUser(req.session.user);
+    res.locals.admissionFormBaseUrl = getAdmissionFormBaseUrl();
+    res.locals.currentUserAdmissionLink = req.session.user?.admissionLink || "";
+  } catch {}
+
   // ✅ make perms available everywhere (EJS + routes)
   try {
     req.perms = getPerm(req.session.user);
@@ -633,10 +794,13 @@ function getPerm(user) {
     p.colFamilyNumber ||
     p.colRegistrationFee ||
     p.colFees ||
+    p.colCurrency ||
+    p.colBank ||
     p.colMonth ||
     p.colTotalFees ||
     p.colPendingDues ||
     p.colReceivedPayment ||
+    p.colComment ||
     p.colInvoiceStatus ||
     p.colInvoiceStatusTimestamp ||
     p.colPaidInvoiceStatus ||
@@ -652,6 +816,8 @@ function getPerm(user) {
     p.colGrade ||
     p.colTuitionGrade ||
     p.colPhone ||
+    p.colCurrency ||
+    p.colBank ||
     p.colProcessedBy ||
     p.btnPdf ||
     p.btnUpload ||
@@ -733,11 +899,13 @@ if (!perms.colProcessedBy) out.processed_by = "";
 
   // Admission columns
   if (!perms.colFees) out.admission_fees = "";
+  if (!perms.colBank) out.bank_name = "";
   if (!perms.colCurrency) out.currency_code = "";
   if (!perms.colMonth) out.admission_month = "";
   if (!perms.colTotalFees) out.admission_total_fees = "";
   if (!perms.colPendingDues) out.admission_pending_dues = "";
   if (!perms.colReceivedPayment) out.admission_total_paid = "";
+  if (!perms.colComment) out.admission_comment = "";
   if (!perms.colInvoiceStatus) out.admission_invoice_status = "";
 if (!perms.colInvoiceStatusTimestamp) out.admission_invoice_status_timestamp = "";
 if (!perms.colPaidInvoiceStatus) out.admission_paid_invoice_status = "";
@@ -790,10 +958,12 @@ if (out.admission) {
   if (!perms.colRegistrationFee) out.admission.registrationFee = "";
   if (!perms.colFees) out.admission.fees = "";
   if (!perms.colCurrency) out.admission.currencyCode = "";
+  if (!perms.colBank) out.admission.bankName = "";
   if (!perms.colMonth) out.admission.month = "";
   if (!perms.colTotalFees) out.admission.totalFees = "";
   if (!perms.colPendingDues) out.admission.pendingDues = "";
   if (!perms.colReceivedPayment) out.admission.receivedPayment = "";
+  if (!perms.colComment) out.admission.comment = "";
   if (!perms.colInvoiceStatus) out.admission.invoiceStatus = "";
   if (!perms.colInvoiceStatusTimestamp) out.admission.invoiceStatusTimestamp = "";
   if (!perms.colPaidInvoiceStatus) out.admission.paidInvoiceStatus = "";
@@ -810,26 +980,26 @@ function fetchAdmissionsForUser(user) {
 
   let rows = [];
 
-    // Super Admin = all admissions
+  // Super Admin = all admissions
   if (scope === "all") {
     rows = db.prepare(`
       SELECT *
       FROM admissions
       WHERE COALESCE(is_deleted, 0) = 0
-      ORDER BY id DESC
+      ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
     `).all();
   }
 
   // ✅ School Accounts = only School admissions
   else if (scope === "school_accounts") {
-  rows = db.prepare(`
-    SELECT *
-    FROM admissions
-    WHERE LOWER(TRIM(COALESCE(dept, ''))) = 'school'
-      AND COALESCE(is_deleted, 0) = 0
-    ORDER BY id DESC
-  `).all();
-}
+    rows = db.prepare(`
+      SELECT *
+      FROM admissions
+      WHERE LOWER(TRIM(COALESCE(dept, ''))) = 'school'
+        AND COALESCE(is_deleted, 0) = 0
+      ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
+    `).all();
+  }
 
   // Admin = only assigned team admissions
   else if (scope === "team") {
@@ -849,7 +1019,7 @@ function fetchAdmissionsForUser(user) {
         WHERE LOWER(TRIM(COALESCE(dept, ''))) = ?
           AND COALESCE(is_deleted, 0) = 0
           AND LOWER(TRIM(COALESCE(processed_by, ''))) IN (${placeholders})
-        ORDER BY id DESC
+        ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
       `).all(dept, ...teamNames);
     }
   }
@@ -868,7 +1038,7 @@ function fetchAdmissionsForUser(user) {
         WHERE LOWER(TRIM(COALESCE(dept, ''))) = ?
           AND COALESCE(is_deleted, 0) = 0
           AND LOWER(TRIM(COALESCE(processed_by, ''))) = ?
-        ORDER BY id DESC
+        ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
       `).all(dept, ownName);
     }
   }
@@ -909,12 +1079,48 @@ function checkApiKey(req, res, next) {
 }
 
 // convert DB row -> user object
+function getAdmissionFormBaseUrl() {
+  return String(
+    getApiSetting(
+      "ADMISSION_FORM_BASE_URL",
+      process.env.ADMISSION_FORM_BASE_URL ||
+        "https://ivs-admission-form.onrender.com/"
+    ) || "https://ivs-admission-form.onrender.com/"
+  )
+    .trim()
+    .replace(/\?+$/, "")
+    .replace(/\/+$/, "/");
+}
+
+function makeProcessedByAdmissionLink(userName = "") {
+  const cleanName = String(userName || "").trim();
+  const baseUrl = getAdmissionFormBaseUrl();
+
+  if (!cleanName) return baseUrl;
+
+  return `${baseUrl}?sentBy=${encodeURIComponent(cleanName)}`;
+}
+
+function attachAdmissionLinkToUser(user) {
+  if (!user) return user;
+
+  return {
+    ...user,
+    admissionLink: makeProcessedByAdmissionLink(user.name),
+    admission_link: makeProcessedByAdmissionLink(user.name),
+  };
+}
+
+// convert DB row -> user object
 function mapUserRow(row) {
   if (!row) return null;
-  return {
+
+  const user = {
     ...row,
     permissions: row.permissions ? JSON.parse(row.permissions) : {},
   };
+
+  return attachAdmissionLinkToUser(user);
 }
 
 // 🔎 Audit log helper
@@ -1048,6 +1254,115 @@ function getActiveAdmissionById(id) {
     WHERE id = ?
       AND COALESCE(is_deleted, 0) = 0
   `).get(id);
+}
+// ================== FAMILY MATCHING HELPERS ==================
+// Family match priority:
+// 1) Same accounts_family_number
+// 2) Same father_name + same normalized phone number
+function normalizeFamilyText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function normalizeFamilyPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+
+  // Pakistan/local/international formats ko match karne ke liye last 10 digits use karo
+  // Example: +92 335 5245551, 0335-5245551, 3355245551 = same
+  if (digits.length > 10) {
+    return digits.slice(-10);
+  }
+
+  return digits;
+}
+
+function getFamilyPhoneFromRow(row) {
+  return normalizeFamilyPhone(row?.phone || row?.guardian_whatsapp || "");
+}
+
+function getFamilyFatherFromRow(row) {
+  return normalizeFamilyText(row?.father_name || "");
+}
+
+function getFamilyPhoneSqlExpression() {
+  const cleaned = `
+    REPLACE(
+      REPLACE(
+        REPLACE(
+          REPLACE(
+            REPLACE(
+              REPLACE(
+                COALESCE(NULLIF(TRIM(phone), ''), guardian_whatsapp, ''),
+                ' ', ''
+              ),
+              '-', ''
+            ),
+            '+', ''
+          ),
+          '(', ''
+        ),
+        ')', ''
+      ),
+      '.', ''
+    )
+  `;
+
+  return `
+    CASE
+      WHEN LENGTH(${cleaned}) > 10 THEN SUBSTR(${cleaned}, -10)
+      ELSE ${cleaned}
+    END
+  `;
+}
+
+function getAccessibleFamilyRowsByAdmission(user, row) {
+  if (!row) return [];
+
+  const familyNumber = String(row.accounts_family_number || "").trim();
+  const fatherName = getFamilyFatherFromRow(row);
+  const phoneNumber = getFamilyPhoneFromRow(row);
+
+  const whereParts = [];
+  const params = {};
+
+  if (familyNumber) {
+    whereParts.push("TRIM(COALESCE(accounts_family_number, '')) = @familyNumber");
+    params.familyNumber = familyNumber;
+  }
+
+  if (fatherName && phoneNumber) {
+    whereParts.push(`
+      (
+        LOWER(TRIM(COALESCE(father_name, ''))) = @fatherName
+        AND ${getFamilyPhoneSqlExpression()} = @phoneNumber
+      )
+    `);
+
+    params.fatherName = fatherName;
+    params.phoneNumber = phoneNumber;
+  }
+
+  if (!whereParts.length) {
+    return canAccessAdmissionRow(user, row) ? [row] : [];
+  }
+
+  const rows = db.prepare(`
+    SELECT *
+    FROM admissions
+    WHERE COALESCE(is_deleted, 0) = 0
+      AND (
+        ${whereParts.join(" OR ")}
+      )
+    ORDER BY id DESC
+  `).all(params);
+
+  if (user?.role === "super_admin") {
+    return rows;
+  }
+
+  return rows.filter((familyRow) => canAccessAdmissionRow(user, familyRow));
 }
 // ================== UPLOAD NOTIFICATION HELPERS ==================
 function ensureUploadsNotificationColumns() {
@@ -1388,7 +1703,7 @@ function insertUploadRecord({
 }) {
   const actor = getUploadActor(user);
 
-  return db.prepare(`
+  const info = db.prepare(`
     INSERT INTO uploads (
       admission_id,
       original_name,
@@ -1414,6 +1729,12 @@ function insertUploadRecord({
     actor.uploadedByRole,
     actor.uploadedAt
   );
+
+  if (admissionId) {
+    touchAdmissionActivity(admissionId);
+  }
+
+  return info;
 }
 function getDeleteAdmissionAccess(user, row) {
   if (!user || !row) return false;
@@ -1481,6 +1802,10 @@ function mapAdmissionRow(row) {
   if (!row) return null;
   return {
     id: row.id,
+    entryNumber: row.entry_number || row.id,
+    entry_number: row.entry_number || row.id,
+    lastActivityAt: row.last_activity_at || "",
+    last_activity_at: row.last_activity_at || "",
     isDuplicate: !!row.isDuplicate,
 duplicateWithId: row.duplicateWithId || "",
     status: row.status || "New Admission",
@@ -1510,13 +1835,15 @@ duplicateWithId: row.duplicateWithId || "",
      familyNumber: row.accounts_family_number || "",
   },
     admission: {
-      registrationFee: row.admission_registration_fee || "",
-      fees: row.admission_fees || "",
-      currencyCode: row.currency_code || "",
-      month: row.admission_month || "",
+  registrationFee: row.admission_registration_fee || "",
+  fees: row.admission_fees || "",
+  currencyCode: row.currency_code || "",
+  bankName: row.bank_name || "",
+  month: row.admission_month || "",
       totalFees: row.admission_total_fees || "",
       pendingDues: row.admission_pending_dues || "",
       receivedPayment: row.admission_total_paid || "0",
+      comment: row.admission_comment || "",
       invoiceStatus: row.admission_invoice_status || "",
       invoiceStatusTimestamp: row.admission_invoice_status_timestamp || "",
       paidInvoiceStatus: row.admission_paid_invoice_status || "",
@@ -1587,15 +1914,17 @@ function fetchAdmissionsForDept(dept, viewerUser = null) {
         FROM admissions
         WHERE dept = ?
           AND COALESCE(is_deleted, 0) = 0
-        ORDER BY id DESC
+        ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
       `).all(dept)
     : db.prepare(`
         SELECT *
         FROM admissions
         WHERE COALESCE(is_deleted, 0) = 0
-        ORDER BY id DESC
+        ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
       `).all();
-const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
+
+  const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
+
   return rowsWithDuplicateFlags.map((row) => {
     const latestUpload = getLatestUploadForAdmission(row.id, viewerUser);
 
@@ -1637,7 +1966,7 @@ function fetchAdmissionsPage({ dept = null, page = 1, limit = 200, perms = null,
         FROM admissions
         WHERE dept = ?
           AND COALESCE(is_deleted, 0) = 0
-        ORDER BY id DESC
+        ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
         LIMIT ? OFFSET ?
       `)
       .all(dept, safeLimit, offset);
@@ -1657,12 +1986,14 @@ function fetchAdmissionsPage({ dept = null, page = 1, limit = 200, perms = null,
         SELECT *
         FROM admissions
         WHERE COALESCE(is_deleted, 0) = 0
-        ORDER BY id DESC
+        ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
         LIMIT ? OFFSET ?
       `)
       .all(safeLimit, offset);
   }
-const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
+
+  const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
+
   const mappedRows = rowsWithDuplicateFlags.map((row) => {
     const latestUpload = getLatestUploadForAdmission(row.id, viewerUser);
 
@@ -2465,6 +2796,11 @@ totalPages,
 
 function buildPipelineSnapshotFromRow(row) {
   return {
+    id: row.id,
+    entryNumber: row.entry_number || row.id,
+    entry_number: row.entry_number || row.id,
+    lastActivityAt: row.last_activity_at || "",
+    last_activity_at: row.last_activity_at || "",
     status: row.status || "New Admission",
     feeStatus: row.feeStatus || "New Admission",
     statusMeta: resolveOption("status_options", row.status || "New Admission"),
@@ -2486,13 +2822,15 @@ function buildPipelineSnapshotFromRow(row) {
   familyNumber: row.accounts_family_number || "",
 },
     admissionPanel: {
-      registrationFee: row.admission_registration_fee || "",
-      fees: row.admission_fees || "",
-      month: row.admission_month || "",
-      totalFees: row.admission_total_fees || "",
-      currencyCode: row.currency_code || "",
+  registrationFee: row.admission_registration_fee || "",
+  fees: row.admission_fees || "",
+  month: row.admission_month || "",
+  totalFees: row.admission_total_fees || "",
+  currencyCode: row.currency_code || "",
+  bankName: row.bank_name || "",
       pendingDues: row.admission_pending_dues || "",
       receivedPayment: row.admission_total_paid || "0",
+      comment: row.admission_comment || "",
       invoiceStatus: row.admission_invoice_status || "",
       invoiceStatusTimestamp: row.admission_invoice_status_timestamp || "",
       paidInvoiceStatus: row.admission_paid_invoice_status || "",
@@ -2692,17 +3030,27 @@ function getBillingJsonFromRow(row) {
   for (const m of BILLING_MONTHS) {
     const raw = String(row[m.key] || "").trim();
     if (!raw) {
-      out[m.key] = { status: "", amount: "", feeOverride: "", verification: "", number: "" };
+      out[m.key] = {
+  status: "",
+  amount: "",
+  feeOverride: "",
+  verification: "",
+  number: "",
+  bank: "",
+  paymentDate: "",
+};
       continue;
     }
     const { status, amount } = splitBillingValue(raw);
     out[m.key] = {
-      status: status || "",
-      amount: String(amount || ""),
-      feeOverride: "",
-      verification: "",
-      number: "",
-    };
+  status: status || "",
+  amount: String(amount || ""),
+  feeOverride: "",
+  verification: "",
+  number: "",
+  bank: "",
+  paymentDate: "",
+};
   }
   return out;
 }
@@ -3210,7 +3558,60 @@ function buildReceivableRowsFromRow(row, billingYear = new Date().getFullYear())
 
   return rows;
 }
+function buildExcludedFeeCollectionRowsForAdmission(row, billingYear = new Date().getFullYear()) {
+  if (!row) return [];
 
+  const billingJson = getBillingJsonByAdmissionId(row.id, billingYear);
+  const excludedRows = [];
+
+  for (const m of BILLING_MONTHS) {
+    const e = billingJson?.[m.key] || {};
+    const st = String(e.status || "").trim().toLowerCase();
+
+    if (st !== "not admitted") continue;
+
+    excludedRows.push({
+      feeType: "Not Admitted",
+      isExcludedMonth: true,
+      admissionId: row.id,
+      studentName: row.student_name || "",
+      familyNumber: String(row.accounts_family_number || "").trim(),
+      registrationNumber: String(row.accounts_registration_number || "").trim(),
+      dept: row.dept || "",
+      grade: row.grade || "",
+      currency: row.currency_code || "",
+      monthKey: m.key,
+      monthLabel: m.label,
+      status: "Not admitted",
+      fee: 0,
+      received: 0,
+      due: 0,
+      verification: String(e.verification || "").trim(),
+      bank: String(e.bank || "").trim(),
+      year: Number(billingYear),
+    });
+  }
+
+  return excludedRows;
+}
+
+function buildExcludedFeeCollectionRowsForFamily(rows, billingYear = new Date().getFullYear()) {
+  const all = [];
+
+  for (const row of rows || []) {
+    all.push(...buildExcludedFeeCollectionRowsForAdmission(row, billingYear));
+  }
+
+  all.sort((a, b) => {
+    if (a.year !== b.year) return a.year - b.year;
+    if (Number(a.admissionId || 0) !== Number(b.admissionId || 0)) {
+      return Number(a.admissionId || 0) - Number(b.admissionId || 0);
+    }
+    return monthIndex(a.monthKey) - monthIndex(b.monthKey);
+  });
+
+  return all;
+}
 function buildFeeCollectionRowsForAdmission(row, billingYear = new Date().getFullYear()) {
   const receivableRows = buildReceivableRowsFromRow(row, billingYear) || [];
   const registrationFeeRow = buildRegistrationFeeCollectionRow(row, billingYear);
@@ -3636,6 +4037,10 @@ function applyRegistrationFeeCollectionToBilling({
   const newReceived = snap.received + used;
   const balance = Math.max(0, snap.total - newReceived);
 
+  const effectiveVerificationNumber = String(
+    verificationNumber || row.accounts_verification_number || ""
+  ).trim();
+
   const current = billingJson[snap.monthKey] || {
     status: "",
     amount: "",
@@ -3647,7 +4052,7 @@ function applyRegistrationFeeCollectionToBilling({
 
   current.registrationFeeTotal = String(snap.total);
   current.registrationFeeReceived = String(newReceived);
-  current.registrationFeeVerification = String(verificationNumber || "").trim();
+    current.registrationFeeVerification = effectiveVerificationNumber;
   current.registrationFeeBank = String(collectionAccount || "").trim();
   current.registrationFeePaymentDate = String(receivingDate || "").trim();
   current.registrationFeeStatus = balance <= 0 ? "Full payment" : "Partial payment";
@@ -3701,6 +4106,7 @@ function applyRegistrationFeeCollectionToBilling({
         monthly_fee_current = @monthly_fee_current,
         accounts_paid_upto = @accounts_paid_upto,
         accounts_verification_number = @accounts_verification_number,
+        bank_name = @bank_name,
         admission_total_fees = @admission_total_fees,
         admission_pending_dues = @admission_pending_dues,
         admission_total_paid = @admission_total_paid
@@ -3711,7 +4117,8 @@ function applyRegistrationFeeCollectionToBilling({
     fee_history: JSON.stringify(feeHistory),
     monthly_fee_current: dues.currentFee || baseFee || 0,
     accounts_paid_upto: paidUpto || "",
-    accounts_verification_number: String(verificationNumber || row.accounts_verification_number || "").trim(),
+    accounts_verification_number: effectiveVerificationNumber,
+    bank_name: String(collectionAccount || row.bank_name || "").trim(),
     admission_total_fees: String(totalExpectedWithReg || 0),
     admission_pending_dues: String(totalPendingWithReg || 0),
     admission_total_paid: String(totalReceivedWithReg || 0),
@@ -3825,10 +4232,7 @@ function markSelectedMonthsNotAdmitted({
   ? touchedMonths[touchedMonths.length - 1].monthKey
   : "";
 
-const latestVerificationForColumn =
-  latestTouchedMonthKey && billingJson[latestTouchedMonthKey]
-    ? String(billingJson[latestTouchedMonthKey].verification || "").trim()
-    : "";
+const latestVerificationForColumn = String(row.accounts_verification_number || "").trim();
 
 db.prepare(`
   UPDATE admissions
@@ -3926,9 +4330,13 @@ for (const p of receivableRows) {
     const newReceived = currentReceived + used;
     const balance = Math.max(0, feeOverride - newReceived);
 
+    const effectiveVerificationNumber = String(
+      verificationNumber || row.accounts_verification_number || ""
+    ).trim();
+
     current.amount = String(newReceived);
     current.feeOverride = String(feeOverride);
-    current.verification = String(verificationNumber || "").trim();
+    current.verification = effectiveVerificationNumber;
     current.bank = String(collectionAccount || "").trim();
     current.paymentDate = String(receivingDate || "").trim();
 
@@ -3999,6 +4407,7 @@ const pendingWithRegistration =
         monthly_fee_current = @monthly_fee_current,
         accounts_paid_upto = @accounts_paid_upto,
         accounts_verification_number = @accounts_verification_number,
+        bank_name = @bank_name,
         admission_total_fees = @admission_total_fees,
         admission_pending_dues = @admission_pending_dues,
         admission_total_paid = @admission_total_paid
@@ -4010,6 +4419,7 @@ const pendingWithRegistration =
     monthly_fee_current: dues.currentFee || baseFee || 0,
     accounts_paid_upto: paidUpto || "",
     accounts_verification_number: latestVerificationForColumn,
+    bank_name: String(collectionAccount || row.bank_name || "").trim(),
     admission_total_fees: String(expectedWithRegistration || 0),
     admission_pending_dues: String(pendingWithRegistration || 0),
     admission_total_paid: String(receivedPayment || 0),
@@ -4138,9 +4548,13 @@ function applySpecificMonthlyFeeToBilling({
   const newReceived = currentReceived + used;
   const balance = Math.max(0, feeOverride - newReceived);
 
+  const effectiveVerificationNumber = String(
+    verificationNumber || row.accounts_verification_number || ""
+  ).trim();
+
   current.amount = String(newReceived);
   current.feeOverride = String(feeOverride);
-  current.verification = String(verificationNumber || "").trim();
+  current.verification = effectiveVerificationNumber;
   current.bank = String(collectionAccount || "").trim();
   current.paymentDate = String(receivingDate || "").trim();
   current.status = balance <= 0 ? "Full payment" : "Partial payment";
@@ -4192,6 +4606,7 @@ function applySpecificMonthlyFeeToBilling({
         monthly_fee_current = @monthly_fee_current,
         accounts_paid_upto = @accounts_paid_upto,
         accounts_verification_number = @accounts_verification_number,
+        bank_name = @bank_name,
         admission_total_fees = @admission_total_fees,
         admission_pending_dues = @admission_pending_dues,
         admission_total_paid = @admission_total_paid
@@ -4202,7 +4617,8 @@ function applySpecificMonthlyFeeToBilling({
     fee_history: JSON.stringify(feeHistory),
     monthly_fee_current: dues.currentFee || baseFee || 0,
     accounts_paid_upto: paidUpto || "",
-    accounts_verification_number: String(verificationNumber || row.accounts_verification_number || "").trim(),
+    accounts_verification_number: effectiveVerificationNumber,
+    bank_name: String(collectionAccount || row.bank_name || "").trim(),
     admission_total_fees: String(expectedWithRegistration || 0),
     admission_pending_dues: String(pendingWithRegistration || 0),
     admission_total_paid: String(receivedPayment || 0),
@@ -4735,10 +5151,10 @@ app.post("/api/admissions/:id/external-upload-link", requireLogin, requirePerm("
     const token = createOrGetExternalUploadLink(admissionId, user);
     const uploadBaseUrl =
   process.env.NODE_ENV === "production"
-    ? getBaseUrl(req)
-    : `${req.protocol}://${req.get("host")}/`;
+    ? getBaseUrl(req).replace(/\/$/, "")
+    : `${req.protocol}://${req.get("host")}`;
 
-const uploadUrl = `${uploadBaseUrl}external-upload/${token}`;
+const uploadUrl = `${uploadBaseUrl}/external-upload/${token}`;
 
     return res.json({
       success: true,
@@ -4802,24 +5218,24 @@ app.post("/external-upload/:token", upload.single("file"), (req, res) => {
     }
 
     if (f) {
-      const relPath = toPosix(path.relative(uploadsDir, f.path));
-      const fileUrl = `${getBaseUrl(req)}uploads/${relPath}`;
+  const relPath = toPosix(path.relative(uploadsDir, f.path));
+  const fileUrl = `/uploads/${relPath}`;
 
-      insertUploadRecord({
-        admissionId: admission.admission_id,
-        originalName: f.originalname,
-        storedName: relPath,
-        fileUrl,
-        mimeType: f.mimetype,
-        size: f.size || 0,
-        user: {
-          id: null,
-          name: "External Parent / Student",
-          email: "",
-          role: "external",
-        },
-      });
-    }
+  insertUploadRecord({
+    admissionId: admission.admission_id,
+    originalName: f.originalname,
+    storedName: relPath,
+    fileUrl,
+    mimeType: f.mimetype,
+    size: f.size || 0,
+    user: {
+      id: null,
+      name: "External Parent / Student",
+      email: "",
+      role: "external",
+    },
+  });
+}
 
     if (hasExternalLink) {
       const safeLink = normalizeExternalLinkUrl(externalLinkRaw);
@@ -5127,34 +5543,40 @@ billingJson[m.key] = {
         registrationFeePaymentDate: String(v.registrationFeePaymentDate || prev.registrationFeePaymentDate || ""),
       };      } else {
         const raw = String(v || "").trim();
-        const { status, amount } = splitBillingValue(raw);
+const { status, amount } = splitBillingValue(raw);
 
-        const st = String(status || "").trim();
-                if (st) {
-          const allowed = db
-            .prepare("SELECT id FROM billing_status_options WHERE label = ?")
-            .get(st);
+const st = String(status || "").trim();
 
-          if (!allowed) {
-            return res.status(400).json({
-              success: false,
-              message: `Invalid billing status selected for ${m.label}`
-            });
-          }
-        }
-        const bankVal = String(v.bank || "").trim();
-        if (bankVal) {
-        const allowedBank = db
-       .prepare("SELECT id FROM bank_options WHERE label = ?")
-       .get(bankVal);
+if (st) {
+  const allowed = db
+    .prepare("SELECT id FROM billing_status_options WHERE label = ?")
+    .get(st);
 
-       if (!allowedBank) {
-       return res.status(400).json({
-       success: false,
-       message: `Invalid bank selected for ${m.label}`
-      });
-    }
+  if (!allowed) {
+    return res.status(400).json({
+      success: false,
+      message: `Invalid billing status selected for ${m.label}`
+    });
   }
+}
+
+const bankVal =
+  v && typeof v === "object"
+    ? String(v.bank || "").trim()
+    : "";
+
+if (bankVal) {
+  const allowedBank = db
+    .prepare("SELECT id FROM bank_options WHERE label = ?")
+    .get(bankVal);
+
+  if (!allowedBank) {
+    return res.status(400).json({
+      success: false,
+      message: `Invalid bank selected for ${m.label}`
+    });
+  }
+}
         const amt = parseFirstNumber(amount || "");
         const hasNowActivity = (st && st !== "") || (amt > 0);
 
@@ -5313,7 +5735,7 @@ admission_total_paid: String(receivedPayment || 0),
         calc: { baseFee, ...dues, paidUpto },
       },
     });
-
+   touchAdmissionActivity(id);
    emitAdmissionChanged(req, { type: "billing_update", admissionId: id, dept: row.dept });
 
 const updatedRow = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
@@ -5321,8 +5743,8 @@ const updatedRow = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
 const familyNumber = String(updatedRow?.accounts_family_number || "").trim();
 
 let familyRows = [];
-if (familyNumber) {
-  familyRows = getAccessibleFamilyRows(user, familyNumber);
+if (updatedRow) {
+  familyRows = getAccessibleFamilyRowsByAdmission(user, updatedRow);
 }
 
 const billingPayload = buildBillingWebhookPayload({
@@ -5524,7 +5946,13 @@ function handleSuperFullUpdate(req, res) {
   month,
   currencyCode,
   currency_code,
-  currency, // ✅ ADD
+  currency,
+  bank,
+  bank_name,
+  bankName,
+  comment,
+  admission_comment,
+  admissionComment,
 } = req.body;
 
   const cleanRegistrationNumber = String(registrationNumber || "").trim();
@@ -5538,6 +5966,20 @@ if (resolvedCurrencyCode) {
     return res.status(400).json({
       success: false,
       message: "Invalid currency selected"
+    });
+  }
+}
+const resolvedBankName = pickBankName(req.body, row.bank_name || "");
+
+if (resolvedBankName) {
+  const allowedBank = db
+    .prepare("SELECT id FROM bank_options WHERE label = ?")
+    .get(resolvedBankName);
+
+  if (!allowedBank) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid bank selected"
     });
   }
 }
@@ -5734,6 +6176,15 @@ for (const m of BILLING_MONTHS) {
        ? String(fees).trim()
        : (row.admission_fees || ""),
     currency_code: resolvedCurrencyCode,
+    bank_name: resolvedBankName,
+    admission_comment:
+      typeof comment !== "undefined" && comment !== null
+        ? String(comment).trim()
+        : typeof admission_comment !== "undefined" && admission_comment !== null
+          ? String(admission_comment).trim()
+          : typeof admissionComment !== "undefined" && admissionComment !== null
+            ? String(admissionComment).trim()
+            : row.admission_comment || "",
     admission_month:
       typeof month !== "undefined" && month !== null
         ? month
@@ -5765,6 +6216,8 @@ admission_total_paid: String(receivedPaymentAfterAdmissionMonth || 0),
          admission_registration_fee = @admission_registration_fee,
          admission_fees = @admission_fees,
          currency_code = @currency_code,
+         bank_name = @bank_name,
+         admission_comment = @admission_comment,
          admission_month = @admission_month,
          fee_history = @fee_history,
          monthly_fee_current = @monthly_fee_current,
@@ -5799,7 +6252,7 @@ admission_total_paid: String(receivedPaymentAfterAdmissionMonth || 0),
     dept: updated.dept,
     details: { admissionId: id, before, after },
   });
-
+  touchAdmissionActivity(id);
   emitAdmissionChanged(req, { type: "super_update", admissionId: id });
 
 if (
@@ -5912,7 +6365,9 @@ app.post("/api/admissions", checkApiKey, async (req, res) => {
 
 const stmt = db.prepare(`
   INSERT INTO admissions
-  (dept,
+  (entry_number,
+   last_activity_at,
+   dept,
    status, feeStatus,
    student_name, gender, dob, grade,
    father_name, guardian_whatsapp, religion, father_email, father_occupation, nationality,
@@ -5920,6 +6375,8 @@ const stmt = db.prepare(`
    session, registration_date, processed_by,
    tuition_grade, phone, currency_code)
   VALUES (
+    @entry_number,
+    @last_activity_at,
     @dept,
     @status, @feeStatus,
     @student_name, @gender, @dob, @grade,
@@ -5936,6 +6393,8 @@ const skippedDuplicates = [];
 const insertMany = db.transaction((rowsToInsert) => {
   rowsToInsert.forEach((row) => {
     const safeRow = {
+      entry_number: getNextAdmissionEntryNumber(),
+      last_activity_at: new Date().toISOString(),
       status: "New Admission",
       feeStatus: "New Admission",
       dept: String(row.dept ?? "").trim(),
@@ -6117,11 +6576,8 @@ function renderSharedAdmissionEdit(req, res) {
 
     const familyNumber = String(row.accounts_family_number || "").trim();
 
-    let rows = [row];
-    if (familyNumber) {
-      rows = getAccessibleFamilyRows(user, familyNumber);
-      if (!rows.length) rows = [row];
-    }
+let rows = getAccessibleFamilyRowsByAdmission(user, row);
+if (!rows.length) rows = [row];
 
     const admissionsFull = rows
       .map((r) => dbGetAdmissionDetailsById(r.id, billingYear))
@@ -6141,33 +6597,35 @@ function renderSharedAdmissionEdit(req, res) {
     attachComputedMonthFees(row, primary, billingYear);
 
     return res.render("admission-edit", {
-      user,
-      perms,
-      admission: primary,
-      admissions,
-      familyNumber,
-      billingMonths: BILLING_MONTHS,
-      pageTitle: "Edit Admission",
-    });
+  user,
+  perms,
+  admission: primary,
+  admissions,
+  familyNumber,
+  billingMonths: BILLING_MONTHS,
+  bankOptions: getBankOptions(),
+  pageTitle: "Edit Admission",
+});
   } catch (err) {
     console.error("renderSharedAdmissionEdit error:", err);
     return res.status(500).send("Server error");
   }
 }
 function getAccessibleFamilyRows(user, familyNumber) {
-  if (!familyNumber) return [];
+  const cleanFamilyNumber = String(familyNumber || "").trim();
+  if (!cleanFamilyNumber) return [];
 
   const rows = db
     .prepare(`
       SELECT *
       FROM admissions
-      WHERE accounts_family_number = ?
+      WHERE TRIM(COALESCE(accounts_family_number, '')) = TRIM(?)
         AND COALESCE(is_deleted, 0) = 0
       ORDER BY id DESC
     `)
-    .all(familyNumber);
+    .all(cleanFamilyNumber);
 
-    if (user?.role === "super_admin") {
+  if (user?.role === "super_admin") {
     return rows;
   }
 
@@ -6182,6 +6640,46 @@ function getAccessibleFamilyIds(user, familyNumber) {
   return rows.map((row) => ({
     id: row.id,
   }));
+}
+function getAccessibleFamilyRowsForRoute(user, { familyNumber = "", admissionId = "" } = {}) {
+  const cleanFamilyNumber = String(familyNumber || "").trim();
+  const cleanAdmissionId = parseInt(admissionId, 10);
+
+  // ✅ Best case: admissionId mila to same family number + father name + phone se family nikalo
+  if (cleanAdmissionId) {
+    const row = getActiveAdmissionById(cleanAdmissionId);
+    if (!row) return [];
+
+    if (!canAccessAdmissionRow(user, row)) return [];
+
+    const rows = getAccessibleFamilyRowsByAdmission(user, row);
+    return rows.length ? rows : [row];
+  }
+
+  // ✅ Old support: sirf family number se family nikalo
+  if (cleanFamilyNumber && cleanFamilyNumber.toLowerCase() !== "auto") {
+    return getAccessibleFamilyRows(user, cleanFamilyNumber);
+  }
+
+  return [];
+}
+
+function getAccessibleFamilyIdsForRoute(user, { familyNumber = "", admissionId = "" } = {}) {
+  const rows = getAccessibleFamilyRowsForRoute(user, { familyNumber, admissionId });
+
+  return rows.map((row) => ({
+    id: row.id,
+  }));
+}
+
+function getFamilyRouteLabel(familyNumber, admissionId = "") {
+  const cleanFamilyNumber = String(familyNumber || "").trim();
+  if (cleanFamilyNumber && cleanFamilyNumber.toLowerCase() !== "auto") {
+    return cleanFamilyNumber;
+  }
+
+  const cleanAdmissionId = String(admissionId || "").trim();
+  return cleanAdmissionId ? `auto-${cleanAdmissionId}` : "auto-family";
 }
 // =====================================================
 // ✅ COMMON VIEW DETAILS PAGE
@@ -6209,20 +6707,32 @@ function renderSharedAdmissionDetails(req, res, viewName = "admission-details") 
 
     const familyNumber = String(row.accounts_family_number || "").trim();
 
-    let rows = [row];
-    if (familyNumber) {
-      rows = getAccessibleFamilyRows(user, familyNumber);
-      if (!rows.length) rows = [row];
-    }
+let rows = getAccessibleFamilyRowsByAdmission(user, row);
+if (!rows.length) rows = [row];
 
   const admissionsFull = rows
   .map((r) => dbGetAdmissionDetailsById(r.id, billingYear))
   .filter(Boolean);
 
-    const admissions = admissionsFull.map((full) => {
+        const admissions = admissionsFull.map((full) => {
       const safe = maskAdmissionMapped(full, perms);
       const rrow = getActiveAdmissionById(full.id);
-      if (rrow) attachComputedMonthFees(rrow, safe, billingYear);
+
+      if (rrow) {
+  safe.accounts = safe.accounts || {};
+  safe.accounts.verificationNumber = String(rrow.accounts_verification_number || "").trim();
+  safe.accounts_verification_number = String(rrow.accounts_verification_number || "").trim();
+
+  // ✅ Details page read-only: Bank should show even if colBank permission is off
+  safe.admission = safe.admission || {};
+  safe.admission.bankName = String(rrow.bank_name || "").trim();
+  safe.admission.bank_name = String(rrow.bank_name || "").trim();
+  safe.bankName = String(rrow.bank_name || "").trim();
+  safe.bank_name = String(rrow.bank_name || "").trim();
+
+  attachComputedMonthFees(rrow, safe, billingYear);
+}
+
       return safe;
     });
 
@@ -6230,7 +6740,19 @@ function renderSharedAdmissionDetails(req, res, viewName = "admission-details") 
     if (!primaryFull) return res.status(404).send("Admission not found");
 
     const primary = maskAdmissionMapped(primaryFull, perms);
-    attachComputedMonthFees(row, primary, billingYear);
+
+    primary.accounts = primary.accounts || {};
+primary.accounts.verificationNumber = String(row.accounts_verification_number || "").trim();
+primary.accounts_verification_number = String(row.accounts_verification_number || "").trim();
+
+// ✅ Details page read-only: Bank should show even if colBank permission is off
+primary.admission = primary.admission || {};
+primary.admission.bankName = String(row.bank_name || "").trim();
+primary.admission.bank_name = String(row.bank_name || "").trim();
+primary.bankName = String(row.bank_name || "").trim();
+primary.bank_name = String(row.bank_name || "").trim();
+
+attachComputedMonthFees(row, primary, billingYear);
 
     return res.render(viewName, {
       user,
@@ -6275,12 +6797,21 @@ function renderFeeCollectionPage(req, res) {
       primaryRow = row;
 
       if (familyNumber) {
-        rows = getAccessibleFamilyRows(user, familyNumber);
-        if (rows.length) mode = "family";
-        else rows = [row];
-      } else {
-        rows = [row];
-      }
+  rows = getAccessibleFamilyRowsForRoute(user, {
+    familyNumber,
+    admissionId,
+  });
+
+  if (rows.length) {
+    mode = "family";
+  } else {
+    rows = [row];
+  }
+} else {
+  rows = getAccessibleFamilyRowsByAdmission(user, row);
+  if (!rows.length) rows = [row];
+  if (rows.length > 1) mode = "family";
+}
     } else if (familyNumber) {
       rows = getAccessibleFamilyRows(user, familyNumber);
       if (!rows.length) return res.status(404).send("No family admissions found");
@@ -6300,7 +6831,17 @@ function renderFeeCollectionPage(req, res) {
         ? buildPaidFeeCollectionRowsForFamily(rows, billingYear)
         : buildPaidFeeCollectionRowsForAdmission(primaryRow, billingYear);
 
+    const excludedRows =
+     mode === "family"
+      ? buildExcludedFeeCollectionRowsForFamily(rows, billingYear)
+      : buildExcludedFeeCollectionRowsForAdmission(primaryRow, billingYear);
+
     const summary = summarizeFeeCollectionRows(rows, billingYear, currentMonthKey());
+
+const familyLabelForView =
+  mode === "family"
+    ? getFamilyRouteLabel(familyNumber, primaryRow?.id || admissionId)
+    : (familyNumber || String(primaryRow?.accounts_family_number || "").trim());
 
     return res.render("fee-collection", {
       user,
@@ -6309,10 +6850,13 @@ function renderFeeCollectionPage(req, res) {
       billingYear,
       mode,
       admissionId: primaryRow?.id || "",
-      familyNumber: familyNumber || String(primaryRow?.accounts_family_number || "").trim(),
+      familyNumber: familyLabelForView,
+      masterVerificationNumber: String(primaryRow?.accounts_verification_number || "").trim(),
+      masterBankName: String(primaryRow?.bank_name || "").trim(),
       rows,
       feeRows,
       paidRows,
+      excludedRows,
       summary,
       bankOptions: getBankOptions(),
     });
@@ -6453,7 +6997,11 @@ const pdfBuffer = await makeMonthlyChallanPdf({
   size: pdfBuffer.length || 0,
   user,
 });
-
+emitAdmissionChanged(req, {
+  type: "challan_generated",
+  admissionId: id,
+  dept: row.dept || "",
+});
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Length", pdfBuffer.length);
     res.setHeader("Content-Disposition", `attachment; filename="challan-${id}-${monthKey}.pdf"`);
@@ -6557,7 +7105,11 @@ app.get("/dashboard/super/admission/:id/challan/bulk", requireLogin, async (req,
       message: `Fee challans generated: ${made}. You can find them in Files.`,
     };
 
-       emitAdmissionChanged(req, { type: "fee_bulk_generated", admissionId: id });
+       emitAdmissionChanged(req, {
+  type: "fee_bulk_generated",
+  admissionId: id,
+  dept: row.dept || "",
+});
     return res.redirect(`/dashboard/super/admission/${id}`);
   } catch (err) {
     console.error("Single admission bulk fee challan error:", err);
@@ -6720,7 +7272,11 @@ if ((!amt || amt <= 0) && (!regFeePaid || regFeePaid <= 0)) {
   size: pdfBuffer.length || 0,
   user,
 });
-
+emitAdmissionChanged(req, {
+  type: "paid_challan_generated",
+  admissionId: id,
+  dept: row.dept || "",
+});
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Length", pdfBuffer.length);
     res.setHeader("Content-Disposition", `attachment; filename="paid-challan-${id}-${monthKey}.pdf"`);
@@ -6744,14 +7300,23 @@ app.get("/api/pending/family/:familyNumber", requireLogin, (req, res) => {
       return res.status(403).json({ success: false, message: "Not allowed" });
     }
 
-    const familyNumber = String(req.params.familyNumber || "").trim();
-    if (!familyNumber) {
-      return res.status(400).json({ success: false, message: "Invalid family number" });
-    }
+   const familyNumber = String(req.params.familyNumber || "").trim();
+const admissionId = String(req.query.admissionId || req.query.id || "").trim();
 
-    const rows = getAccessibleFamilyRows(user, familyNumber);
+const rows = getAccessibleFamilyRowsForRoute(user, {
+  familyNumber,
+  admissionId,
+});
 
-   const billingYear = getBillingYearFromReq(req);
+if (!rows.length) {
+  return res.status(404).json({
+    success: false,
+    message: "No family admissions found",
+  });
+}
+
+const familyLabel = getFamilyRouteLabel(familyNumber, admissionId);
+const billingYear = getBillingYearFromReq(req);
 
 const result = rows.map((r) => ({
   admissionId: r.id,
@@ -6765,7 +7330,7 @@ const result = rows.map((r) => ({
     return res.json({
       success: true,
       mode: "family",
-      familyNumber,
+      familyNumber: familyLabel,
       students: result,
     });
   } catch (err) {
@@ -6788,10 +7353,15 @@ app.get("/dashboard/super/family/:familyNumber/challan", requireLogin, async (re
     }
 
     const familyNumber = String(req.params.familyNumber || "").trim();
-    if (!familyNumber) return res.status(400).send("Invalid family number");
+const admissionId = String(req.query.admissionId || req.query.id || "").trim();
+const familyLabel = getFamilyRouteLabel(familyNumber, admissionId);
 
-    const rows = getAccessibleFamilyIds(user, familyNumber);
-    if (!rows || rows.length === 0) return res.status(404).send("No family admissions found");
+const rows = getAccessibleFamilyIdsForRoute(user, {
+  familyNumber,
+  admissionId,
+});
+
+if (!rows.length) return res.status(404).send("No family admissions found");
 
    const billingYear = getBillingYearFromReq(req);
 
@@ -6832,7 +7402,7 @@ const currentMonthKey = latestPendingMonth || latestAnyMonth || "january";
 });
 
 const pdfBuffer = await makeFamilyChallanPdf({
-  familyNumber,
+  familyNumber: familyLabel,
   admissionsFull: admissionsFullWithHistory,
   bannerPath,
 });
@@ -6841,7 +7411,7 @@ const pdfBuffer = await makeFamilyChallanPdf({
     const challanDir = path.join(uploadsDir, "challans", year, month);
     if (!fs.existsSync(challanDir)) fs.mkdirSync(challanDir, { recursive: true });
 
-    const filename = `family-challan-${familyNumber}-${Date.now()}.pdf`;
+    const filename = `family-challan-${familyLabel}-${Date.now()}.pdf`;
     const absPath = path.join(challanDir, filename);
     fs.writeFileSync(absPath, pdfBuffer);
 
@@ -6867,7 +7437,7 @@ const pdfBuffer = await makeFamilyChallanPdf({
 
       ins.run(
         admissionId,
-        `Family Challan (F.Code ${familyNumber})`,
+        `Family Challan (F.Code ${familyLabel})`,
         relStored,
         fileUrl,
         "application/pdf",
@@ -6877,7 +7447,7 @@ const pdfBuffer = await makeFamilyChallanPdf({
 
     res.setHeader("Content-Length", pdfBuffer.length);
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="family-challan-${familyNumber}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="family-challan-${familyLabel}.pdf"`);
     return res.send(pdfBuffer);
 
   } catch (err) {
@@ -6900,10 +7470,15 @@ app.get("/dashboard/super/family/:familyNumber/challan/bulk", requireLogin, asyn
     }
 
     const familyNumber = String(req.params.familyNumber || "").trim();
-    if (!familyNumber) return res.status(400).send("Invalid family number");
+const admissionId = String(req.query.admissionId || req.query.id || "").trim();
+const familyLabel = getFamilyRouteLabel(familyNumber, admissionId);
 
-    const rows = getAccessibleFamilyIds(user, familyNumber);
-    if (!rows.length) return res.status(404).send("No family admissions found");
+const rows = getAccessibleFamilyIdsForRoute(user, {
+  familyNumber,
+  admissionId,
+});
+
+if (!rows.length) return res.status(404).send("No family admissions found");
 
     const billingYear = getBillingYearFromReq(req);
 const admissionsFull = rows.map(r => dbGetAdmissionDetailsById(r.id, billingYear)).filter(Boolean);
@@ -6941,7 +7516,7 @@ const currentMonthKey = latestPendingMonth || latestAnyMonth || "january";
 });
 
 const pdfBuffer = await makeFamilyChallanPdf({
-  familyNumber,
+  familyNumber: familyLabel,
   admissionsFull: admissionsFullWithHistory,
   bannerPath,
   pendingOnly: true,
@@ -6950,7 +7525,7 @@ const pdfBuffer = await makeFamilyChallanPdf({
     const challanDir = path.join(uploadsDir, "challans", year, month);
     if (!fs.existsSync(challanDir)) fs.mkdirSync(challanDir, { recursive: true });
 
-    const filename = `family-pending-challan-${familyNumber}-${Date.now()}.pdf`;
+    const filename = `family-pending-challan-${familyLabel}-${Date.now()}.pdf`;
     const absPath = path.join(challanDir, filename);
     fs.writeFileSync(absPath, pdfBuffer);
 
@@ -6970,19 +7545,29 @@ const pdfBuffer = await makeFamilyChallanPdf({
     }),
 };
 
-    for (const a of admissionsFull) {
-      ins.run(
-        a.id,
-        `All Pending Fee Challans (Family ${familyNumber})`,
-        relStored,
-        fileUrl,
-        "application/pdf",
-        pdfBuffer.length || 0
-      );
-    }
+    const changedAdmissionIds = [];
 
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="family-pending-${familyNumber}.pdf"`);
+for (const a of admissionsFull) {
+  ins.run(
+    a.id,
+    `All Pending Fee Challans (Family ${familyLabel})`,
+    relStored,
+    fileUrl,
+    "application/pdf",
+    pdfBuffer.length || 0
+  );
+
+  changedAdmissionIds.push(Number(a.id));
+}
+
+emitAdmissionChanged(req, {
+  type: "family_fee_challan_generated",
+  insertedIds: changedAdmissionIds,
+  dept: admissionsFull?.[0]?.dept || "",
+});
+
+res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="family-pending-${familyLabel}.pdf"`);
     return res.send(pdfBuffer);
 
   } catch (err) {
@@ -7005,9 +7590,14 @@ app.get("/dashboard/super/family/:familyNumber/paid/bulk", requireLogin, async (
     }
 
     const familyNumber = String(req.params.familyNumber || "").trim();
-    if (!familyNumber) return res.status(400).send("Invalid family number");
+    const admissionId = String(req.query.admissionId || req.query.id || "").trim();
+    const familyLabel = getFamilyRouteLabel(familyNumber, admissionId);
 
-    const ids = getAccessibleFamilyIds(user, familyNumber);
+    const ids = getAccessibleFamilyIdsForRoute(user, {
+      familyNumber,
+      admissionId,
+    });
+
     if (!ids.length) return res.status(404).send("No family admissions found");
 
     const bannerPath = path.join(__dirname, "public", "img", "ivs-banner.jpg");
@@ -7017,19 +7607,21 @@ app.get("/dashboard/super/family/:familyNumber/paid/bulk", requireLogin, async (
     if (!fs.existsSync(challanDir)) fs.mkdirSync(challanDir, { recursive: true });
 
     const ins = {
-  run: (admissionId, originalName, storedName, fileUrl, mimeType, size) =>
-    insertUploadRecord({
-      admissionId,
-      originalName,
-      storedName,
-      fileUrl,
-      mimeType,
-      size,
-      user,
-    }),
-};
+      run: (admissionId, originalName, storedName, fileUrl, mimeType, size) =>
+        insertUploadRecord({
+          admissionId,
+          originalName,
+          storedName,
+          fileUrl,
+          mimeType,
+          size,
+          user,
+        }),
+    };
 
     let totalMade = 0;
+    const changedAdmissionIds = new Set();
+    const changedDeptSet = new Set();
     const billingYear = getBillingYearFromReq(req);
 
     for (const r of ids) {
@@ -7060,15 +7652,29 @@ app.get("/dashboard/super/family/:familyNumber/paid/bulk", requireLogin, async (
 
         ins.run(
           r.id,
-          `All Paid Receipts (${pm.monthKey}) (Family ${familyNumber})`,
+          `All Paid Receipts (${pm.monthKey}) (Family ${familyLabel})`,
           relStored,
           fileUrl,
           "application/pdf",
           pdfBuffer.length || 0
         );
 
+        changedAdmissionIds.add(Number(r.id));
+
+        if (row.dept) {
+          changedDeptSet.add(String(row.dept || "").trim());
+        }
+
         totalMade++;
       }
+    }
+
+    if (changedAdmissionIds.size > 0) {
+      emitAdmissionChanged(req, {
+        type: "family_paid_receipts_generated",
+        insertedIds: Array.from(changedAdmissionIds),
+        dept: Array.from(changedDeptSet).join(","),
+      });
     }
 
     return res.send(`Done. Paid receipts generated: ${totalMade}`);
@@ -7132,6 +7738,12 @@ app.post("/api/fee-collection/receive", requireLogin, requireSaveBilling, async 
   registrationReceivingAmount,
   receivingAmount,
   verificationNumber,
+  verificationMode,
+  verificationChoice,
+  useMasterVerification,
+  useMasterBank,
+  bankMode,
+  bankChoice,
   collectionAccount,
   receivingDate,
   note,
@@ -7144,8 +7756,47 @@ app.post("/api/fee-collection/receive", requireLogin, requireSaveBilling, async 
 const amount = Number(receivingAmount || 0);
 const totalInputAmount = registrationAmount + amount;
     const cleanFamilyNumber = String(familyNumber || "").trim();
-    const cleanVerificationNumber = String(verificationNumber || "").trim();
+        const cleanVerificationNumber = String(verificationNumber || "").trim();
+
+    const verificationDecision = String(
+      useMasterVerification || verificationMode || verificationChoice || ""
+    ).trim().toLowerCase();
+
+    const shouldUseMasterVerification = [
+      "1",
+      "true",
+      "yes",
+      "master",
+      "current",
+      "saved",
+    ].includes(verificationDecision);
+
+    const bankDecision = String(
+      useMasterBank || bankMode || bankChoice || ""
+    ).trim().toLowerCase();
+
+    const shouldUseMasterBank = [
+      "1",
+      "true",
+      "yes",
+      "master",
+      "current",
+      "saved",
+    ].includes(bankDecision);
+
+    const canEditBank =
+      user?.role === "super_admin" ||
+      perms?.colBank === true;
+
     const cleanCollectionAccount = String(collectionAccount || "").trim();
+
+    if (!shouldUseMasterBank && !canEditBank) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to change collection account",
+      });
+    }
+
     const cleanReceivingDate = String(receivingDate || "").trim();
     const cleanNote = String(note || "").trim();
     const cleanSelectedNotAdmittedMonths = Array.isArray(selectedNotAdmittedMonths)
@@ -7164,70 +7815,54 @@ const totalInputAmount = registrationAmount + amount;
   });
 }
 
-if (totalInputAmount > 0 && !cleanVerificationNumber) {
-  return res.status(400).json({
-    success: false,
-    message: "Verification number is required",
-  });
-}
 
-if (totalInputAmount > 0 && !cleanCollectionAccount) {
-  return res.status(400).json({
-    success: false,
-    message: "Collection account is required",
-  });
-}
-   if (totalInputAmount > 0) {
-  const allowedBank = db
-    .prepare("SELECT id FROM bank_options WHERE label = ?")
-    .get(cleanCollectionAccount);
 
-  if (!allowedBank) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid collection account selected",
-    });
-  }
-}
 
     let targetRows = [];
-    let mode = "single";
+let mode = "single";
 
-    if (cleanFamilyNumber) {
-      targetRows = getAccessibleFamilyRows(user, cleanFamilyNumber);
-      if (!targetRows.length) {
-        return res.status(404).json({
-          success: false,
-          message: "No family admissions found",
-        });
-      }
-      mode = "family";
-    } else {
-      const id = parseInt(admissionId, 10);
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: "admissionId or familyNumber required",
-        });
-      }
+const cleanAdmissionId = parseInt(admissionId, 10);
 
-      const row = getActiveAdmissionById(id);
-      if (!row) {
-        return res.status(404).json({
-          success: false,
-          message: "Admission not found",
-        });
-      }
+if (cleanFamilyNumber || cleanAdmissionId) {
+  targetRows = getAccessibleFamilyRowsForRoute(user, {
+    familyNumber: cleanFamilyNumber,
+    admissionId: cleanAdmissionId,
+  });
 
-      if (!ensureAdmissionRouteAccess(user, perms, row)) {
-        return res.status(403).json({
-          success: false,
-          message: "Not allowed",
-        });
-      }
+  if (!targetRows.length) {
+    return res.status(404).json({
+      success: false,
+      message: cleanFamilyNumber
+        ? "No family admissions found"
+        : "Admission not found",
+    });
+  }
 
-      targetRows = [row];
-    }
+  mode = targetRows.length > 1 || cleanFamilyNumber ? "family" : "single";
+
+  const hasAnyMasterVerification = targetRows.some((r) =>
+    String(r.accounts_verification_number || "").trim()
+  );
+
+  if (totalInputAmount > 0 && !shouldUseMasterVerification && !cleanVerificationNumber) {
+    return res.status(400).json({
+      success: false,
+      message: "Verification number is required",
+    });
+  }
+
+  if (totalInputAmount > 0 && shouldUseMasterVerification && !hasAnyMasterVerification) {
+    return res.status(400).json({
+      success: false,
+      message: "Master verification number is missing. Please enter correct verification number.",
+    });
+  }
+} else {
+  return res.status(400).json({
+    success: false,
+    message: "admissionId or familyNumber required",
+  });
+}
 
     const allPendingRows =
       mode === "family"
@@ -7239,6 +7874,30 @@ if (!allPendingRows.length && !cleanSelectedNotAdmittedMonths.length) {
     success: false,
     message: "No pending dues found",
   });
+}
+
+const effectiveCollectionAccount = shouldUseMasterBank
+  ? String(targetRows?.[0]?.bank_name || cleanCollectionAccount || "").trim()
+  : cleanCollectionAccount;
+
+if (totalInputAmount > 0 && !effectiveCollectionAccount) {
+  return res.status(400).json({
+    success: false,
+    message: "Collection account is required",
+  });
+}
+
+if (totalInputAmount > 0) {
+  const allowedEffectiveBank = db
+    .prepare("SELECT id FROM bank_options WHERE label = ?")
+    .get(effectiveCollectionAccount);
+
+  if (!allowedEffectiveBank) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid collection account selected",
+    });
+  }
 }
 
     let registrationRemaining = registrationAmount;
@@ -7282,8 +7941,8 @@ for (const row of rowsInOrder) {
       row,
       billingYear,
       receiveAmount: registrationRemaining,
-      verificationNumber: cleanVerificationNumber,
-      collectionAccount: cleanCollectionAccount,
+      verificationNumber: shouldUseMasterVerification ? "" : cleanVerificationNumber,
+      collectionAccount: effectiveCollectionAccount,
       receivingDate: cleanReceivingDate,
       note: cleanNote,
       actorUser: user,
@@ -7326,8 +7985,8 @@ if (remaining > 0) {
       rows: rowsInOrder,
       billingYear,
       receiveAmount: remaining,
-      verificationNumber: cleanVerificationNumber,
-      collectionAccount: cleanCollectionAccount,
+      verificationNumber: shouldUseMasterVerification ? "" : cleanVerificationNumber,
+      collectionAccount: effectiveCollectionAccount,
       receivingDate: cleanReceivingDate,
       note: cleanNote,
       actorUser: user,
@@ -7343,8 +8002,8 @@ if (remaining > 0) {
         row,
         billingYear,
         receiveAmount: remaining,
-        verificationNumber: cleanVerificationNumber,
-        collectionAccount: cleanCollectionAccount,
+        verificationNumber: shouldUseMasterVerification ? "" : cleanVerificationNumber,
+        collectionAccount: effectiveCollectionAccount,
         receivingDate: cleanReceivingDate,
         note: cleanNote,
         actorUser: user,
@@ -7393,10 +8052,13 @@ const applied = Array.from(appliedMap.values())
     remainingAmount: registrationRemaining + remaining,
   }));
 
-    const refreshedRows =
+   const refreshedRows =
       mode === "family"
-        ? getAccessibleFamilyRows(user, cleanFamilyNumber)
-        : [getActiveAdmissionById(parseInt(admissionId, 10))].filter(Boolean);
+        ? getAccessibleFamilyRowsForRoute(user, {
+            familyNumber: cleanFamilyNumber,
+            admissionId: cleanAdmissionId,
+          })
+        : [getActiveAdmissionById(cleanAdmissionId)].filter(Boolean);
 
     const refreshedFeeRows =
       mode === "family"
@@ -7415,7 +8077,12 @@ const rowInfoMap = new Map(
   (refreshedRows || []).map((r) => [Number(r.id || 0), r])
 );
 
-if (mode === "family" && cleanFamilyNumber) {
+const collectionFamilyLabel =
+  mode === "family"
+    ? getFamilyRouteLabel(cleanFamilyNumber, cleanAdmissionId)
+    : cleanFamilyNumber;
+
+if (mode === "family") {
   const familyPaidTouchedMonths = [];
 
   for (const item of applied) {
@@ -7447,7 +8114,7 @@ guardianWhatsapp:
   item.guardianWhatsapp ||
   String(rowInfo.guardian_whatsapp || rowInfo.phone || "").trim(),
 verification: cleanVerificationNumber,
-        bank: cleanCollectionAccount,
+        bank: effectiveCollectionAccount,
       }))
     );
   }
@@ -7467,23 +8134,23 @@ verification: cleanVerificationNumber,
         paidMonths: familyPaidTouchedMonths,
         fullOverride: {
           ...(primaryFull || {}),
-          familyNumber: cleanFamilyNumber,
+          familyNumber: collectionFamilyLabel,
           accounts: {
             ...(primaryFull?.accounts || {}),
-            familyNumber: cleanFamilyNumber,
+            familyNumber: collectionFamilyLabel,
           },
         },
-        familyNumber: cleanFamilyNumber,
-        labelPrefix: `Family Received Paid Receipt (${cleanFamilyNumber})`,
+        familyNumber: collectionFamilyLabel,
+        labelPrefix: `Family Received Paid Receipt (${collectionFamilyLabel})`,
       });
 
       receipts.push({
-        familyNumber: cleanFamilyNumber,
+        familyNumber: collectionFamilyLabel,
         ...receipt,
       });
     } catch (receiptErr) {
       receipts.push({
-        familyNumber: cleanFamilyNumber,
+        familyNumber: collectionFamilyLabel,
         error: String(receiptErr?.message || receiptErr),
       });
     }
@@ -7524,7 +8191,7 @@ guardianWhatsapp:
   item.guardianWhatsapp ||
   String(rowInfo.guardian_whatsapp || rowInfo.phone || "").trim(),
 verification: cleanVerificationNumber,
-          bank: cleanCollectionAccount,
+          bank: effectiveCollectionAccount,
         })),
         labelPrefix: "Received Paid Receipt",
       });
@@ -7561,14 +8228,14 @@ if (billingWebhookUrl) {
 unallocatedAmount: registrationRemaining + remaining,
     applied,
     receipts,
-    familyNumber: cleanFamilyNumber,
+    familyNumber: collectionFamilyLabel,
     admissionId: admissionId || "",
     receiving: {
       amount: totalInputAmount,
 registrationAmount,
 monthlyAmount: amount,
-verificationNumber: cleanVerificationNumber,
-      collectionAccount: cleanCollectionAccount,
+verificationNumber: shouldUseMasterVerification ? "" : cleanVerificationNumber,
+      collectionAccount: effectiveCollectionAccount,
       receivingDate: cleanReceivingDate,
       note: cleanNote,
     },
@@ -9315,9 +9982,9 @@ app.get("/api/options/bank", requireLogin, (req, res) => {
     const user = req.session.user;
     const perms = getPerm(user);
 
-    if (user?.role !== "super_admin" && !perms.btnBilling) {
-      return res.status(403).json({ success: false, message: "Not allowed" });
-    }
+    if (user?.role !== "super_admin" && !perms.btnBilling && !perms.btnUpdateRow) {
+  return res.status(403).json({ success: false, message: "Not allowed" });
+}
 
     const data = getBankOptions();
     return res.json({ success: true, data });
@@ -9336,7 +10003,8 @@ app.post("/api/options/bank", requireLogin, requireManageDropdownOptions, (req, 
       return res.status(400).json({ success: false, message: "Label required" });
     }
 
-    const optKey = cleanLabel;
+    let optKey = makeOptionKey(cleanLabel);
+if (!optKey) optKey = `bank_${Date.now()}`;
 
     const exists = db
       .prepare("SELECT id FROM bank_options WHERE opt_key = ? OR label = ?")
@@ -10560,13 +11228,14 @@ function buildAllowedFromParent(parentPermRaw = {}) {
     colFees: readBoolPerm(parentPermRaw, "colFees", false),
     colCurrency: readBoolPerm(parentPermRaw, "colCurrency", false),
     colMonth: readBoolPerm(parentPermRaw, "colMonth", false),
-    colTotalFees: readBoolPerm(parentPermRaw, "colTotalFees", false),
+        colTotalFees: readBoolPerm(parentPermRaw, "colTotalFees", false),
     colPendingDues: readBoolPerm(parentPermRaw, "colPendingDues", false),
     colReceivedPayment: readBoolPerm(parentPermRaw, "colReceivedPayment", false),
+    colComment: readBoolPerm(parentPermRaw, "colComment", false),
     colInvoiceStatus: readBoolPerm(parentPermRaw, "colInvoiceStatus", false),
-colInvoiceStatusTimestamp: readBoolPerm(parentPermRaw, "colInvoiceStatusTimestamp", false),
-colPaidInvoiceStatus: readBoolPerm(parentPermRaw, "colPaidInvoiceStatus", false),
-colPaidInvoiceStatusTimestamp: readBoolPerm(parentPermRaw, "colPaidInvoiceStatusTimestamp", false),
+    colInvoiceStatusTimestamp: readBoolPerm(parentPermRaw, "colInvoiceStatusTimestamp", false),
+    colPaidInvoiceStatus: readBoolPerm(parentPermRaw, "colPaidInvoiceStatus", false),
+    colPaidInvoiceStatusTimestamp: readBoolPerm(parentPermRaw, "colPaidInvoiceStatusTimestamp", false),
     colActionButtons: readBoolPerm(parentPermRaw, "colActionButtons", false),
   };
 
@@ -10774,7 +11443,7 @@ app.post("/admin/uploads",
         }
       }
     const relPath = toPosix(path.relative(uploadsDir, f.path));
-const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relPath}`;
+    const fileUrl = `${getBaseUrl(req).replace(/\/$/, "")}/uploads/${relPath}`;
 
 insertUploadRecord({
   admissionId,
@@ -11223,8 +11892,8 @@ app.post( "/dashboard/super/uploads",
       if (!f) {
         return res.status(400).json({ success: false, message: "No file received" });
       }
-      const relPath = toPosix(path.relative(uploadsDir, f.path));
-const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${relPath}`;
+     const relPath = toPosix(path.relative(uploadsDir, f.path));
+     const fileUrl = `/uploads/${relPath}`;
 
 insertUploadRecord({
   admissionId,
@@ -11418,11 +12087,13 @@ const allUsers = rows.map((row) => {
   };
 
   return res.render("super-users", {
-    user: current,
-    users: filteredUsers,
-    roleFilter,
-    counts,
-  });
+  user: current,
+  users: filteredUsers.map(attachAdmissionLinkToUser),
+  roleFilter,
+  counts,
+  admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+  makeProcessedByAdmissionLink,
+});
 });
 
 // Create User form
@@ -11433,10 +12104,11 @@ app.get("/dashboard/super/users/new", requireLogin, (req, res) => {
   }
 
     res.render("super-user-form", {
-    user: current,
-    error: null,
-    assignableAdmins: getAssignableAdmins(),
-  });
+  user: current,
+  error: null,
+  assignableAdmins: getAssignableAdmins(),
+  admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+});
   });
 
 // Create User submit
@@ -11462,19 +12134,21 @@ app.post("/dashboard/super/users", requireLogin, async (req, res) => {
 
   if (!name || !email || !password || !role) {
     return res.render("super-user-form", {
-      assignableAdmins: getAssignableAdmins(),
-      user: current,
-      error: "Name, email, password, role are required.",
-    });
+  assignableAdmins: getAssignableAdmins(),
+  user: current,
+  error: "Name, email, password, role are required.",
+  admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+});
   }
 
   const allowedRoles = ["admin", "agent", "sub_agent"];
   if (!allowedRoles.includes(role)) {
     return res.render("super-user-form", {
-      assignableAdmins: getAssignableAdmins(),
-      user: current,
-      error: "Role must be Admin, Agent, or Sub Agent.",
-    });
+  assignableAdmins: getAssignableAdmins(),
+  user: current,
+  error: "Role must be Admin, Agent, or Sub Agent.",
+  admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+});
   }
 
   const allowedDepts = ["quran", "tuition", "school", "accounts"];
@@ -11498,11 +12172,11 @@ app.post("/dashboard/super/users", requireLogin, async (req, res) => {
 
       if (!assignedAdmin) {
         return res.render("super-user-form", {
-          
-          user: current,
-          error: "Selected assigned admin is not valid.",
-          assignableAdmins: getAssignableAdmins(),
-        });
+  user: current,
+  error: "Selected assigned admin is not valid.",
+  assignableAdmins: getAssignableAdmins(),
+  admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+});
       }
 
       assignedAdminId = assignedAdmin.id;
@@ -11510,10 +12184,11 @@ app.post("/dashboard/super/users", requireLogin, async (req, res) => {
   }
   if (isPipelineRole && !assignedAdminId) {
     return res.render("super-user-form", {
-      user: current,
-      error: "Please select an Assigned Admin for Agent/Sub Agent.",
-      assignableAdmins: getAssignableAdmins(),
-    });
+  user: current,
+  error: "Please select an Assigned Admin for Agent/Sub Agent.",
+  assignableAdmins: getAssignableAdmins(),
+  admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+});
   }
   const safeDept = allowedDepts.includes(dept) ? dept : null;
   const safeAccessScope =
@@ -11541,10 +12216,12 @@ app.post("/dashboard/super/users", requireLogin, async (req, res) => {
   colRegistrationFee: isOn(req.body.colRegistrationFee),
   colFees: isOn(req.body.colFees),
   colCurrency: isOn(req.body.colCurrency),
+  colBank: isOn(req.body.colBank),
   colMonth: isOn(req.body.colMonth),
   colTotalFees: isOn(req.body.colTotalFees),
   colPendingDues: isOn(req.body.colPendingDues),
   colReceivedPayment: isOn(req.body.colReceivedPayment),
+  colComment: isOn(req.body.colComment),
   colInvoiceStatus: isOn(req.body.colInvoiceStatus),
 colInvoiceStatusTimestamp: isOn(req.body.colInvoiceStatusTimestamp),
 colPaidInvoiceStatus: isOn(req.body.colPaidInvoiceStatus),
@@ -11632,6 +12309,7 @@ app.get("/dashboard/super/users/:id/edit", requireLogin, (req, res) => {
     editUser,
     error: null,
     assignableAdmins: getAssignableAdmins(),
+    admissionFormBaseUrl: getAdmissionFormBaseUrl(),
   });
 });
 
@@ -11763,10 +12441,12 @@ app.post("/dashboard/super/users/:id/edit", requireLogin, async (req, res) => {
   colRegistrationFee: isOn(req.body.colRegistrationFee),
   colFees: isOn(req.body.colFees),
   colCurrency: isOn(req.body.colCurrency),
+  colBank: isOn(req.body.colBank),
   colMonth: isOn(req.body.colMonth),
-  colTotalFees: isOn(req.body.colTotalFees),
+    colTotalFees: isOn(req.body.colTotalFees),
   colPendingDues: isOn(req.body.colPendingDues),
   colReceivedPayment: isOn(req.body.colReceivedPayment),
+  colComment: isOn(req.body.colComment),
   colInvoiceStatus: isOn(req.body.colInvoiceStatus),
 colInvoiceStatusTimestamp: isOn(req.body.colInvoiceStatusTimestamp),
 colPaidInvoiceStatus: isOn(req.body.colPaidInvoiceStatus),
@@ -12150,7 +12830,13 @@ if (user.role !== "admin" && !perms.btnUpdateRow) {
     month,
     currencyCode,
     currency_code,
-    currency, // ✅ ADD
+    currency,
+    bank,
+    bank_name,
+    bankName,
+    comment,
+    admission_comment,
+    admissionComment,
   } = req.body;
  
     const cleanRegistrationNumber = String(registrationNumber || "").trim();
@@ -12166,6 +12852,20 @@ if (resolvedCurrencyCode) {
     return res.status(400).json({
       success: false,
       message: "Invalid currency selected"
+    });
+  }
+}
+const resolvedBankName = pickBankName(req.body, row.bank_name || "");
+
+if (resolvedBankName) {
+  const allowedBank = db
+    .prepare("SELECT id FROM bank_options WHERE label = ?")
+    .get(resolvedBankName);
+
+  if (!allowedBank) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid bank selected"
     });
   }
 }
@@ -12286,7 +12986,22 @@ for (const m of BILLING_MONTHS) {
   currency_code: canAdmissions
   ? pickCurrencyCode(req.body, row.currency_code || "")
   : (row.currency_code || ""),
-    admission_month: canAdmissions
+bank_name: perms.colBank
+  ? resolvedBankName
+  : (row.bank_name || ""),
+admission_comment:
+  canAccounts || perms.colComment
+    ? (
+        typeof comment !== "undefined" && comment !== null
+          ? String(comment).trim()
+          : typeof admission_comment !== "undefined" && admission_comment !== null
+            ? String(admission_comment).trim()
+            : typeof admissionComment !== "undefined" && admissionComment !== null
+              ? String(admissionComment).trim()
+              : row.admission_comment || ""
+      )
+    : row.admission_comment || "",
+admission_month: canAdmissions
       ? (typeof month !== "undefined" && month !== null ? month : row.admission_month || "")
       : (row.admission_month || ""),
     accounts_family_number: canAccounts
@@ -12339,6 +13054,8 @@ for (const m of BILLING_MONTHS) {
          admission_registration_fee = @admission_registration_fee,
          admission_fees = @admission_fees,
          currency_code = @currency_code,
+         bank_name = @bank_name,
+         admission_comment = @admission_comment,
          admission_month = @admission_month,
          fee_history = @fee_history,
          monthly_fee_current = @monthly_fee_current,
@@ -12372,7 +13089,7 @@ for (const m of BILLING_MONTHS) {
     dept: row.dept,
     details: { admissionId: id, before, after },
   });
-
+  touchAdmissionActivity(id);
   // ✅ NEW: Real-time notify all dashboards
   emitAdmissionChanged(req, { type: "admin_update", admissionId: id, dept: row.dept });
 
@@ -12411,20 +13128,38 @@ app.post("/pipeline/update/:id", requireLogin, requirePerm("btnUpdateRow"), (req
   const perms = getPerm(user);
 
   const {
-    status,feeStatus,dept, student, father, father_email, grade, tuitionGrade, phone,
-    paymentStatus, paidUpto, verificationNumber, registrationNumber,
-    familyNumber, registrationFee,  fees, month, currencyCode, currency_code,  currency // ✅ ADD
-  } = req.body;
+  status, feeStatus, dept, student, father, father_email, grade, tuitionGrade, phone,
+  paymentStatus, paidUpto, verificationNumber, registrationNumber,
+  familyNumber, registrationFee, fees, month, currencyCode, currency_code, currency,
+  bank, bank_name, bankName, comment, admission_comment, admissionComment
+} = req.body;
   
     const cleanRegistrationNumber = String(registrationNumber || "").trim();
   const duplicateReg = checkDuplicateRegistrationNumber(cleanRegistrationNumber, id);
 
-  if (duplicateReg) {
-    return res.status(409).json({
+if (duplicateReg) {
+  return res.status(409).json({
+    success: false,
+    message: "This registration number is already in use. Please enter another number."
+  });
+}
+
+const resolvedBankName = perms.colBank
+  ? pickBankName(req.body, row.bank_name || "")
+  : (row.bank_name || "");
+
+if (perms.colBank && resolvedBankName) {
+  const allowedBank = db
+    .prepare("SELECT id FROM bank_options WHERE label = ?")
+    .get(resolvedBankName);
+
+  if (!allowedBank) {
+    return res.status(400).json({
       success: false,
-      message: "This registration number is already in use. Please enter another number."
+      message: "Invalid bank selected"
     });
   }
+}
 
  const billingJson = getBillingJsonFromRow(row);
 
@@ -12526,7 +13261,21 @@ for (const m of BILLING_MONTHS) {
    currency_code: perms.colCurrency
   ? pickCurrencyCode(req.body, row.currency_code || "")
   : (row.currency_code || ""),
-    admission_month: perms.colMonth ? (month ?? row.admission_month) : row.admission_month,
+bank_name: perms.colBank
+  ? resolvedBankName
+  : (row.bank_name || ""),
+admission_comment: perms.colComment
+  ? (
+      typeof comment !== "undefined" && comment !== null
+        ? String(comment).trim()
+        : typeof admission_comment !== "undefined" && admission_comment !== null
+          ? String(admission_comment).trim()
+          : typeof admissionComment !== "undefined" && admissionComment !== null
+            ? String(admissionComment).trim()
+            : row.admission_comment || ""
+    )
+  : row.admission_comment || "",
+admission_month: perms.colMonth ? (month ?? row.admission_month) : row.admission_month,
     fee_history: JSON.stringify(feeHistory),
     monthly_fee_current: incomingFeeNumber > 0 ? incomingFeeNumber : (dues.currentFee || baseFee || 0),
     
@@ -12556,6 +13305,8 @@ for (const m of BILLING_MONTHS) {
            admission_registration_fee=@admission_registration_fee,
            admission_fees=@admission_fees,
            currency_code=@currency_code,
+           bank_name=@bank_name,
+           admission_comment=@admission_comment,
            admission_month=@admission_month,
            fee_history=@fee_history,
            monthly_fee_current=@monthly_fee_current,
@@ -12597,7 +13348,7 @@ logAudit(eventType, user, {
   },
 });
 
-
+  touchAdmissionActivity(id);
   emitAdmissionChanged(req, { type: "pipeline_update", admissionId: id, dept: row.dept });
 
 if (
