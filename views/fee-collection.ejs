@@ -16,6 +16,7 @@
   Array.isArray(paidRows)
     ? paidRows
     : (Array.isArray(paidFeeRows) ? paidFeeRows : []);
+    const excludedRowsSafe = Array.isArray(excludedRows) ? excludedRows : [];
   const bankOptionsSafe = Array.isArray(bankOptions) ? bankOptions : [];
   const summarySafe = summary || {};
 
@@ -25,11 +26,66 @@
     return String(n);
   };
 
-  const familyLabel = familyNumber || '-';
+  const cleanFamilyNumber = String(familyNumber || '').trim();
+const isAutoFamilyMatch =
+  cleanFamilyNumber.toLowerCase() === 'auto' ||
+  cleanFamilyNumber.toLowerCase().startsWith('auto-');
+
+const familyLabel = cleanFamilyNumber
+  ? (isAutoFamilyMatch ? 'Auto Matched' : cleanFamilyNumber)
+  : '-';
   const currentYear = Number(billingYear || new Date().getFullYear());
   const hasRegistrationFeeDue = feeRowsSafe.some((r) => {
   return r && r.isRegistrationFee && Number(r.due || 0) > 0;
 });
+
+    const masterVerificationNumberSafe = String(masterVerificationNumber || '').trim();
+
+  const firstRowSafe = rowsSafe[0] || {};
+  const firstFeeBankRow =
+    feeRowsSafe.find((r) => String(r?.bank || '').trim()) ||
+    paidRowsSafe.find((r) => String(r?.bank || r?.bankName || '').trim()) ||
+    excludedRowsSafe.find((r) => String(r?.bank || '').trim()) ||
+    {};
+
+  const masterBankNameSafe = String(
+    (typeof masterBankName !== 'undefined' ? masterBankName : '') ||
+    (typeof bankName !== 'undefined' ? bankName : '') ||
+    (typeof admissionBank !== 'undefined' ? admissionBank : '') ||
+    firstRowSafe.accounts_bank ||
+    firstRowSafe.bank ||
+    firstRowSafe?.accounts?.bank ||
+    firstFeeBankRow.bank ||
+    firstFeeBankRow.bankName ||
+    ''
+  ).trim();
+
+  const isSuperUser =
+    role === 'super_admin' ||
+    role === 'superadmin' ||
+    U?.isSuperAdmin === true ||
+    U?.is_super_admin === true;
+
+  const rawPerms = U?.permissions || U?.perms || U?.permission || U?.permissionMap || {};
+  const canEditVerificationNumber =
+    isSuperUser ||
+    rawPerms === true ||
+    (Array.isArray(rawPerms) && (
+      rawPerms.includes('*') ||
+      rawPerms.includes('all') ||
+      rawPerms.includes('colVerificationNumber')
+    )) ||
+    (rawPerms && typeof rawPerms === 'object' && rawPerms.colVerificationNumber === true);
+
+  const canEditBank =
+    isSuperUser ||
+    rawPerms === true ||
+    (Array.isArray(rawPerms) && (
+      rawPerms.includes('*') ||
+      rawPerms.includes('all') ||
+      rawPerms.includes('colBank')
+    )) ||
+    (rawPerms && typeof rawPerms === 'object' && rawPerms.colBank === true);
 %>
 
 <div class="container-fluid py-3 fee-collection-page">
@@ -63,19 +119,21 @@
           </div>
 
           <div class="summary-grid mb-3">
-            <div class="sum-item">
-              <div class="label">Total Fee for the Session</div>
-              <div class="val" id="fcSummaryTotalFee"><%= fmt(summarySafe.totalFee) %></div>
-            </div>
-            <div class="sum-item">
-              <div class="label">Total Received</div>
-              <div class="val" id="fcSummaryTotalReceived"><%= fmt(summarySafe.totalReceived) %></div>
-            </div>
-            <div class="sum-item">
-              <div class="label">Total Fee for the Session</div>
-              <div class="val" id="fcSummaryTotalDues"><%= fmt(summarySafe.totalFullPendingDues) %></div>
-            </div>
-          </div>
+  <div class="sum-item">
+    <div class="label">Total Fee for the Session</div>
+    <div class="val" id="fcSummaryTotalFee"><%= fmt(summarySafe.totalFee) %></div>
+  </div>
+
+  <div class="sum-item">
+    <div class="label">Total Received</div>
+    <div class="val" id="fcSummaryTotalReceived"><%= fmt(summarySafe.totalReceived) %></div>
+  </div>
+
+  <div class="sum-item">
+    <div class="label">Total Pending Dues</div>
+    <div class="val" id="fcSummaryTotalDues"><%= fmt(summarySafe.totalFullPendingDues) %></div>
+  </div>
+</div>
 
           <div class="card border-0 inner-card">
             <div class="card-body p-3">
@@ -177,6 +235,58 @@
               </div>
             </div>
           <% } %>
+           
+          <div class="card border-0 inner-card mt-3">
+  <div class="card-body p-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+      <div class="sec-title">Excluded / Not Admitted Months</div>
+      <div class="text-muted small">
+        Excluded Rows: <b id="fcExcludedRowsCount"><%= excludedRowsSafe.length %></b>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm align-middle excluded-table mb-0">
+        <thead>
+          <tr>
+            <th style="width:6%">#</th>
+            <th style="width:18%">Student</th>
+            <th style="width:12%">Dept</th>
+            <th style="width:12%">Grade</th>
+            <th style="width:12%">Month</th>
+            <th style="width:14%">Status</th>
+            <th style="width:12%">Fee</th>
+            <th style="width:14%">Due</th>
+          </tr>
+        </thead>
+
+        <tbody id="fcExcludedTableBody">
+          <% if (!excludedRowsSafe.length) { %>
+            <tr>
+              <td colspan="8" class="text-muted small">No excluded / not admitted months found.</td>
+            </tr>
+          <% } else { %>
+            <% excludedRowsSafe.forEach((r, idx) => { %>
+              <tr class="excluded-month-row">
+                <td><span class="pill-mini"><%= idx + 1 %></span></td>
+                <td>
+                  <div class="fw-semibold"><%= r.studentName || '-' %></div>
+                  <div class="text-muted tiny"><%= r.registrationNumber || '-' %></div>
+                </td>
+                <td><span class="pill-light text-capitalize"><%= r.dept || '-' %></span></td>
+                <td><%= r.grade || '-' %></td>
+                <td><span class="pill-month excluded-month-chip"><%= r.monthLabel || r.monthKey || '-' %></span></td>
+                <td><span class="excluded-status-chip"><%= r.status || 'Not admitted' %></span></td>
+                <td><span class="num text-muted"><%= fmt(r.fee) %></span></td>
+                <td><span class="num text-muted"><%= fmt(r.due) %></span></td>
+              </tr>
+            <% }) %>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
                     <div class="card border-0 inner-card mt-3">
             <div class="card-body p-3">
@@ -303,25 +413,91 @@ placeholder="Enter received amount"
             </div>
 
             
-                <div class="mb-3">
+<div class="mb-3">
   <label for="verificationNumber" class="form-label fw-semibold">Verification Number</label>
-  <input
-    type="text"
-    class="form-control premium-input"
-id="verificationNumber"
-name="verificationNumber"
-placeholder="Enter verification number"
-  >
+
+  <input type="hidden" id="useMasterVerification" name="useMasterVerification" value="true">
+
+  <div class="input-group verification-group">
+    <input
+      type="text"
+      class="form-control premium-input"
+      id="verificationNumber"
+      name="verificationNumber"
+      value="<%= masterVerificationNumberSafe %>"
+      placeholder="No verification number saved"
+      readonly
+    >
+
+    <button
+      type="button"
+      class="btn btn-verify-choice verify-yes active"
+      id="verificationUseSavedBtn"
+      title="Use saved verification number"
+    >✓</button>
+
+    <button
+      type="button"
+      class="btn btn-verify-choice verify-no"
+      id="verificationEditBtn"
+      title="<%= canEditVerificationNumber ? 'Enter correct verification number' : 'No permission to edit verification number' %>"
+      <%= canEditVerificationNumber ? '' : 'disabled' %>
+    >✕</button>
+  </div>
+
+  <div class="tiny text-muted mt-1" id="verificationHelpText">
+    <% if (canEditVerificationNumber) { %>
+      Tick ✓ will use saved verification number. Cross ✕ will allow correction.
+    <% } else { %>
+      Saved verification number will be used. You do not have permission to change it.
+    <% } %>
+  </div>
 </div>
 
 <div class="mb-3">
-  <label for="collectionAccount" class="form-label fw-semibold">Collection Account</label>
-  <select class="form-select premium-input" id="collectionAccount" name="collectionAccount">
-    <option value="">Select account</option>
-    <% bankOptionsSafe.forEach((b) => { %>
-      <option value="<%= b.label %>"><%= b.label %></option>
-    <% }) %>
-  </select>
+  <label for="collectionAccountSelect" class="form-label fw-semibold">Collection Account</label>
+
+  <input type="hidden" id="useMasterBank" name="useMasterBank" value="true">
+  <input type="hidden" id="collectionAccount" name="collectionAccount" value="<%= masterBankNameSafe %>">
+
+  <div class="input-group bank-group">
+    <select
+      class="form-select premium-input bank-locked"
+      id="collectionAccountSelect"
+      name="collectionAccountSelect"
+      aria-disabled="true"
+    >
+      <option value="">Select account</option>
+      <% bankOptionsSafe.forEach((b) => { %>
+        <option value="<%= b.label %>" <%= String(masterBankNameSafe).trim() === String(b.label).trim() ? 'selected' : '' %>>
+          <%= b.label %>
+        </option>
+      <% }) %>
+    </select>
+
+    <button
+      type="button"
+      class="btn btn-verify-choice verify-yes active"
+      id="bankUseSavedBtn"
+      title="Use saved bank"
+    >✓</button>
+
+    <button
+      type="button"
+      class="btn btn-verify-choice verify-no"
+      id="bankEditBtn"
+      title="<%= canEditBank ? 'Select correct bank' : 'No permission to edit bank' %>"
+      <%= canEditBank ? '' : 'disabled' %>
+    >✕</button>
+  </div>
+
+  <div class="tiny text-muted mt-1" id="bankHelpText">
+    <% if (canEditBank) { %>
+      Tick ✓ will use saved bank. Cross ✕ will allow bank correction.
+    <% } else { %>
+      Saved bank will be used. You do not have permission to change it.
+    <% } %>
+  </div>
 </div>
 
             <div class="mb-3">
@@ -538,7 +714,43 @@ placeholder="Enter verification number"
   font-weight: 900;
   border-bottom: 1px solid rgba(15,23,42,.10);
 }
+.excluded-table thead th{
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: rgba(15,23,42,.55);
+  font-weight: 900;
+  border-bottom: 1px solid rgba(15,23,42,.10);
+}
 
+.excluded-table td{
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-color: rgba(15,23,42,.08);
+  vertical-align: middle;
+}
+
+.excluded-month-row{
+  background: rgba(148,163,184,.08);
+}
+
+.excluded-status-chip{
+  display:inline-flex;
+  align-items:center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  background: rgba(148,163,184,.16);
+  border: 1px solid rgba(100,116,139,.22);
+  color: rgba(71,85,105,.95);
+}
+
+.excluded-month-chip{
+  background: rgba(148,163,184,.12);
+  border-color: rgba(100,116,139,.20);
+  color: rgba(71,85,105,.95);
+}
 .paid-table td{
   padding-top: 10px;
   padding-bottom: 10px;
@@ -575,7 +787,44 @@ placeholder="Enter verification number"
     border-color: rgba(124,58,237,.35);
     box-shadow: 0 0 0 .2rem rgba(124,58,237,.12);
   }
+  .verification-group .premium-input[readonly]{
+    background: rgba(248,250,252,.95);
+    color: rgba(15,23,42,.82);
+    font-weight: 800;
+  }
 
+  .bank-group .bank-locked{
+    background: rgba(248,250,252,.95);
+    color: rgba(15,23,42,.82);
+    font-weight: 800;
+    pointer-events: none;
+  }
+
+  .btn-verify-choice{
+    font-weight: 900;
+    border: 1px solid rgba(15,23,42,.12) !important;
+    min-width: 42px;
+  }
+
+  .verify-yes{
+    color: #15803d !important;
+    background: rgba(34,197,94,.10) !important;
+  }
+
+  .verify-yes.active{
+    color: #fff !important;
+    background: #16a34a !important;
+  }
+
+  .verify-no{
+    color: #b91c1c !important;
+    background: rgba(239,68,68,.10) !important;
+  }
+
+  .verify-no.active{
+    color: #fff !important;
+    background: #dc2626 !important;
+  }
   .read-box{
     min-height: 44px;
     display:flex;
@@ -664,6 +913,25 @@ const registrationAmountInput = document.getElementById('registrationReceivingAm
     const summaryDueEl = document.getElementById('fcSummaryTotalDues');
     const paidTableBody = document.getElementById('fcPaidTableBody');
 const paidRowsCountEl = document.getElementById('fcPaidRowsCount');
+const excludedTableBody = document.getElementById('fcExcludedTableBody');
+const excludedRowsCountEl = document.getElementById('fcExcludedRowsCount');
+
+const verificationInput = document.getElementById('verificationNumber');
+const useMasterVerificationInput = document.getElementById('useMasterVerification');
+const verificationUseSavedBtn = document.getElementById('verificationUseSavedBtn');
+const verificationEditBtn = document.getElementById('verificationEditBtn');
+const verificationHelpText = document.getElementById('verificationHelpText');
+let savedMasterVerificationNumber = <%- JSON.stringify(masterVerificationNumberSafe) %>;
+const canEditVerificationNumber = <%- JSON.stringify(!!canEditVerificationNumber) %>;
+
+const bankSelect = document.getElementById('collectionAccountSelect');
+const collectionAccountInput = document.getElementById('collectionAccount');
+const useMasterBankInput = document.getElementById('useMasterBank');
+const bankUseSavedBtn = document.getElementById('bankUseSavedBtn');
+const bankEditBtn = document.getElementById('bankEditBtn');
+const bankHelpText = document.getElementById('bankHelpText');
+let savedMasterBankName = <%- JSON.stringify(masterBankNameSafe) %>;
+const canEditBank = <%- JSON.stringify(!!canEditBank) %>;
 
     const fmt = (v) => {
       const n = Number(v || 0);
@@ -671,6 +939,129 @@ const paidRowsCountEl = document.getElementById('fcPaidRowsCount');
     };
 
     const getTotalDues = () => Number((summaryDueEl?.textContent || '0').trim() || 0);
+
+    function setVerificationMode(useSaved) {
+      if (!verificationInput || !useMasterVerificationInput) return;
+
+      useMasterVerificationInput.value = useSaved ? 'true' : 'false';
+
+      if (useSaved) {
+        verificationInput.value = savedMasterVerificationNumber || '';
+        verificationInput.readOnly = true;
+        verificationInput.placeholder = savedMasterVerificationNumber
+          ? 'Saved verification number'
+          : 'No verification number saved';
+
+        verificationUseSavedBtn?.classList.add('active');
+        verificationEditBtn?.classList.remove('active');
+
+        if (verificationHelpText) {
+          verificationHelpText.textContent = 'Saved verification number will be used for this receive.';
+        }
+      } else {
+        if (!canEditVerificationNumber) {
+          useMasterVerificationInput.value = 'true';
+          verificationInput.readOnly = true;
+          verificationEditBtn?.classList.remove('active');
+          verificationUseSavedBtn?.classList.add('active');
+
+          if (verificationHelpText) {
+            verificationHelpText.textContent = 'Saved verification number will be used. You do not have permission to change it.';
+          }
+
+          return;
+        }
+
+        verificationInput.readOnly = false;
+        verificationInput.value = '';
+        verificationInput.placeholder = 'Enter correct verification number';
+
+        verificationUseSavedBtn?.classList.remove('active');
+        verificationEditBtn?.classList.add('active');
+
+        if (verificationHelpText) {
+          verificationHelpText.textContent = 'Enter correct verification number. It will update everywhere after receive.';
+        }
+
+        setTimeout(() => verificationInput.focus(), 50);
+      }
+    }
+
+    verificationUseSavedBtn?.addEventListener('click', () => setVerificationMode(true));
+        verificationEditBtn?.addEventListener('click', () => {
+      if (!canEditVerificationNumber) return;
+      setVerificationMode(false);
+    });
+    setVerificationMode(true);
+
+    function setBankMode(useSaved) {
+      if (!bankSelect || !collectionAccountInput || !useMasterBankInput) return;
+
+      useMasterBankInput.value = useSaved ? 'true' : 'false';
+
+      if (useSaved) {
+        bankSelect.value = savedMasterBankName || '';
+        collectionAccountInput.value = savedMasterBankName || '';
+        bankSelect.classList.add('bank-locked');
+        bankSelect.setAttribute('aria-disabled', 'true');
+
+        bankUseSavedBtn?.classList.add('active');
+        bankEditBtn?.classList.remove('active');
+
+        if (bankHelpText) {
+          bankHelpText.textContent = savedMasterBankName
+            ? 'Saved bank will be used for this receive.'
+            : 'No saved bank found. Select a bank if you have permission.';
+        }
+      } else {
+        if (!canEditBank) {
+          useMasterBankInput.value = 'true';
+          bankSelect.value = savedMasterBankName || '';
+          collectionAccountInput.value = savedMasterBankName || '';
+          bankSelect.classList.add('bank-locked');
+          bankSelect.setAttribute('aria-disabled', 'true');
+
+          bankEditBtn?.classList.remove('active');
+          bankUseSavedBtn?.classList.add('active');
+
+          if (bankHelpText) {
+            bankHelpText.textContent = 'Saved bank will be used. You do not have permission to change it.';
+          }
+
+          return;
+        }
+
+        bankSelect.classList.remove('bank-locked');
+        bankSelect.setAttribute('aria-disabled', 'false');
+
+        bankUseSavedBtn?.classList.remove('active');
+        bankEditBtn?.classList.add('active');
+
+        if (bankHelpText) {
+          bankHelpText.textContent = 'Select correct bank. It will update everywhere after receive.';
+        }
+
+        setTimeout(() => bankSelect.focus(), 50);
+      }
+    }
+
+    bankUseSavedBtn?.addEventListener('click', () => setBankMode(true));
+
+    bankEditBtn?.addEventListener('click', () => {
+      if (!canEditBank) return;
+      setBankMode(false);
+    });
+
+    bankSelect?.addEventListener('change', () => {
+      if (!useMasterBankInput || !collectionAccountInput) return;
+
+      if (useMasterBankInput.value === 'false') {
+        collectionAccountInput.value = bankSelect.value || '';
+      }
+    });
+
+    setBankMode(true);
+
 function syncRegistrationFeeInput(rows = []) {
   if (!registrationAmountInput) return;
 
@@ -771,6 +1162,39 @@ tableBody.innerHTML = `
 
       if (totalRowsEl) totalRowsEl.textContent = String(rows.length);
     }
+    
+    function renderExcludedRows(rows = []) {
+  if (!excludedTableBody) return;
+
+  if (!rows.length) {
+    excludedTableBody.innerHTML = `
+      <tr>
+        <td colspan="8" class="text-muted small">No excluded / not admitted months found.</td>
+      </tr>
+    `;
+    if (excludedRowsCountEl) excludedRowsCountEl.textContent = '0';
+    return;
+  }
+
+  excludedTableBody.innerHTML = rows.map((r, idx) => `
+    <tr class="excluded-month-row">
+      <td><span class="pill-mini">${idx + 1}</span></td>
+      <td>
+        <div class="fw-semibold">${r.studentName || '-'}</div>
+        <div class="text-muted tiny">${r.registrationNumber || '-'}</div>
+      </td>
+      <td><span class="pill-light text-capitalize">${r.dept || '-'}</span></td>
+      <td>${r.grade || '-'}</td>
+      <td><span class="pill-month excluded-month-chip">${r.monthLabel || r.monthKey || '-'}</span></td>
+      <td><span class="excluded-status-chip">${r.status || 'Not admitted'}</span></td>
+      <td><span class="num text-muted">${fmt(r.fee)}</span></td>
+      <td><span class="num text-muted">${fmt(r.due)}</span></td>
+    </tr>
+  `).join('');
+
+  if (excludedRowsCountEl) excludedRowsCountEl.textContent = String(rows.length);
+}
+
     function renderPaidRows(rows = []) {
       if (!paidTableBody) return;
 
@@ -843,6 +1267,14 @@ tableBody.innerHTML = `
       try {
         const fd = new FormData(form);
         const payload = Object.fromEntries(fd.entries());
+
+        if (payload.useMasterVerification === 'false' && !String(payload.verificationNumber || '').trim()) {
+          throw new Error('Please enter correct verification number.');
+        }
+
+        if (payload.useMasterBank === 'false' && !String(payload.collectionAccount || '').trim()) {
+          throw new Error('Please select correct collection account.');
+        }
         const selectedNotAdmittedMonths = Array.from(
   document.querySelectorAll('.fc-not-admitted-check:checked')
 ).map((el) => ({
@@ -868,7 +1300,16 @@ payload.selectedNotAdmittedMonths = selectedNotAdmittedMonths;
 
         showMsg('success', data.message || 'Fee received successfully');
 
+                if (payload.useMasterVerification === 'false') {
+          savedMasterVerificationNumber = String(payload.verificationNumber || '').trim();
+        }
+
+        if (payload.useMasterBank === 'false') {
+          savedMasterBankName = String(payload.collectionAccount || '').trim();
+        }
+
         renderRows(Array.isArray(data.feeRows) ? data.feeRows : []);
+        renderExcludedRows(Array.isArray(data.excludedRows) ? data.excludedRows : []);
 syncRegistrationFeeInput(Array.isArray(data.feeRows) ? data.feeRows : []);
 renderPaidRows(Array.isArray(data.paidRows) ? data.paidRows : []);
 setSummary(data.summary || {});
@@ -890,6 +1331,8 @@ setSummary(data.summary || {});
         }
 
         form.reset();
+        setVerificationMode(true);
+        setBankMode(true);
         const dateInput = document.getElementById('receivingDate');
         if (dateInput) dateInput.value = new Date().toISOString().slice(0, 10);
         updateRemainingPreview();

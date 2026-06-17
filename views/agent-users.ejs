@@ -36,10 +36,12 @@ const formatDeptLabel = (dept) => {
   { key: 'colRegistrationFee' },
   { key: 'colFees' },
   { key: 'colCurrency' },
+  { key: 'colBank' },
   { key: 'colMonth' },
   { key: 'colTotalFees' },
   { key: 'colPendingDues' },
 { key: 'colReceivedPayment' },
+{ key: 'colComment' },
 { key: 'colInvoiceStatus' },
 { key: 'colInvoiceStatusTimestamp' },
 { key: 'colPaidInvoiceStatus' },
@@ -549,6 +551,76 @@ const formatDeptLabel = (dept) => {
 .agent-page .agent-total-badge i{
   color: #5b21b6 !important;
 }
+.agent-page .user-admission-link-box{
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.agent-page .user-admission-link-mini{
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 10px;
+  font-size: .70rem;
+  font-weight: 800;
+  line-height: 1.25;
+  border: 1px solid rgba(37, 99, 235, 0.24);
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+}
+
+.agent-page .user-admission-link-mini i{
+  font-size: .74rem;
+  line-height: 1.2;
+  margin-top: 1px;
+  flex: 0 0 auto;
+}
+
+.agent-page .user-admission-link-text{
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: .66rem;
+  font-weight: 800;
+}
+
+.agent-page .user-admission-link-copy{
+  width: 23px;
+  height: 23px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0;
+  background: rgba(37, 99, 235, 0.14);
+  color: #1d4ed8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 23px;
+  transition: all .16s ease;
+}
+
+.agent-page .user-admission-link-copy i{
+  font-size: .72rem;
+  line-height: 1;
+}
+
+.agent-page .user-admission-link-copy:hover{
+  transform: translateY(-1px);
+  filter: brightness(.98);
+}
+
+.agent-page .user-admission-link-copy:disabled{
+  opacity: .75;
+  cursor: not-allowed;
+  transform: none;
+}
 </style>
 
 <div class="container-fluid py-4 agent-page">
@@ -763,6 +835,7 @@ const formatDeptLabel = (dept) => {
                     </span>
                   </div>
                 </div>
+                <% const userAdmissionLink = sa.admissionLink || sa.admission_link || ''; %>
 
                 <div class="small mb-3">
                   <div class="text-muted mb-1">Access summary</div>
@@ -808,7 +881,26 @@ const formatDeptLabel = (dept) => {
                     <span class="badge rounded-pill <%= canDeleteAdmissions ? 'bg-danger-subtle text-danger' : 'bg-light text-muted border' %>">
                       <i class="bi bi-trash3 me-1"></i>Delete Admissions
                     </span>
-                  </div>
+                                    </div>
+
+                  <% if (userAdmissionLink) { %>
+                    <div class="user-admission-link-box">
+                      <div class="user-admission-link-mini" title="<%= userAdmissionLink %>">
+                        <i class="bi bi-link-45deg"></i>
+
+                        <span class="user-admission-link-text"><%= userAdmissionLink %></span>
+
+                        <button
+                          type="button"
+                          class="user-admission-link-copy"
+                          data-user-admission-link="<%= userAdmissionLink %>"
+                          title="Copy admission form link"
+                          aria-label="Copy admission form link">
+                          <i class="bi bi-clipboard"></i>
+                        </button>
+                      </div>
+                    </div>
+                  <% } %>
 
                   <% if (sa.lastUpdatedBy) { %>
                     <div class="text-muted mt-2" style="font-size:.78rem;">
@@ -895,6 +987,67 @@ const formatDeptLabel = (dept) => {
         searchInput.focus();
       });
     }
+  })();
+</script>
+<script>
+  (function () {
+    async function copyUserAdmissionLink(text) {
+      const cleanText = String(text || '').trim();
+      if (!cleanText) return false;
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(cleanText);
+          return true;
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = cleanText;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+
+        return copied;
+      } catch (err) {
+        console.error('Agent sub agent admission link copy failed:', err);
+        return false;
+      }
+    }
+
+    document.addEventListener('click', async function (e) {
+      const btn = e.target.closest('.user-admission-link-copy');
+      if (!btn) return;
+
+      e.preventDefault();
+
+      const link = btn.getAttribute('data-user-admission-link') || '';
+      const oldHtml = btn.innerHTML;
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+      const copied = await copyUserAdmissionLink(link);
+
+      if (copied) {
+        btn.innerHTML = '<i class="bi bi-check2-circle"></i>';
+        btn.title = 'Copied';
+      } else {
+        prompt('Copy this admission form link:', link);
+        btn.innerHTML = oldHtml;
+      }
+
+      setTimeout(function () {
+        btn.disabled = false;
+        btn.innerHTML = oldHtml;
+        btn.title = 'Copy admission form link';
+      }, 1200);
+    });
   })();
 </script>
 <%- include('partials/bootstrap-footer') %>

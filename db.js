@@ -36,10 +36,12 @@ const PERMISSION_KEYS = [
   "colRegistrationFee",
   "colFees",
   "colCurrency",
+  "colBank",
   "colMonth",
   "colTotalFees",
   "colPendingDues",
   "colReceivedPayment",
+  "colComment",
   "colInvoiceStatus",
   "colInvoiceStatusTimestamp",
   "colPaidInvoiceStatus",
@@ -177,6 +179,7 @@ db.exec(`
     admission_total_paid TEXT,
     admission_total_fees TEXT,
     admission_pending_dues TEXT,
+    admission_comment TEXT,
 
     admission_invoice_status TEXT,
     admission_invoice_status_timestamp TEXT,
@@ -352,11 +355,13 @@ ensureColumn("admissions", "accounts_family_number", "TEXT");
 ensureColumn("admissions", "admission_registration_fee", "TEXT");
 ensureColumn("admissions", "admission_fees", "TEXT");
 ensureColumn("admissions", "currency_code", "TEXT DEFAULT 'SAR'");
+ensureColumn("admissions", "bank_name", "TEXT");
 ensureColumn("admissions", "fee_history", "TEXT");
 ensureColumn("admissions", "admission_month", "TEXT");
 ensureColumn("admissions", "admission_total_paid", "TEXT");
 ensureColumn("admissions", "admission_total_fees", "TEXT");
 ensureColumn("admissions", "admission_pending_dues", "TEXT");
+ensureColumn("admissions", "admission_comment", "TEXT");
 
 ensureColumn("admissions", "admission_invoice_status", "TEXT");
 ensureColumn("admissions", "admission_invoice_status_timestamp", "TEXT");
@@ -695,12 +700,14 @@ try {
         admission_registration_fee TEXT,
         admission_fees TEXT,
         currency_code TEXT DEFAULT 'SAR',
+        bank_name TEXT,
         fee_history TEXT,
         admission_month TEXT,
 
         admission_total_paid TEXT,
         admission_total_fees TEXT,
         admission_pending_dues TEXT,
+        admission_comment TEXT,
 
         admission_invoice_status TEXT,
         admission_invoice_status_timestamp TEXT,
@@ -745,8 +752,8 @@ try {
         present_address, city, state, secondary_contact, session, registration_date, processed_by,
         tuition_grade, phone,
         accounts_payment_status, accounts_paid_upto, accounts_verification_number, accounts_registration_number, accounts_family_number,
-        admission_registration_fee, admission_fees, currency_code, fee_history, admission_month,
-        admission_total_paid, admission_total_fees, admission_pending_dues,
+                admission_registration_fee, admission_fees, currency_code, bank_name, fee_history, admission_month,
+        admission_total_paid, admission_total_fees, admission_pending_dues, admission_comment,
         admission_invoice_status, admission_invoice_status_timestamp,
         admission_paid_invoice_status, admission_paid_invoice_status_timestamp,
         january, february, march, april, may, june, july, august, september, october, november, december,
@@ -765,8 +772,8 @@ try {
         present_address, city, state, secondary_contact, session, registration_date, processed_by,
         tuition_grade, phone,
         accounts_payment_status, accounts_paid_upto, accounts_verification_number, accounts_registration_number, accounts_family_number,
-        admission_registration_fee, admission_fees, currency_code, fee_history, admission_month,
-        admission_total_paid, admission_total_fees, admission_pending_dues,
+                admission_registration_fee, admission_fees, currency_code, bank_name, fee_history, admission_month,
+                admission_total_paid, admission_total_fees, admission_pending_dues, admission_comment,
         admission_invoice_status, admission_invoice_status_timestamp,
         admission_paid_invoice_status, admission_paid_invoice_status_timestamp,
         january, february, march, april, may, june, july, august, september, october, november, december,
@@ -1379,14 +1386,17 @@ export function dbGetAdmissionDetailsById(id, billingYear = new Date().getFullYe
   totalFees: row.admission_total_fees || "",
   pendingDues: row.admission_pending_dues || "",
   receivedPayment: row.admission_total_paid || "0",
+  comment: row.admission_comment || "",
       invoiceStatus: row.admission_invoice_status || "",
       invoiceStatusTimestamp: row.admission_invoice_status_timestamp || "",
       paidInvoiceStatus: row.admission_paid_invoice_status || "",
       paidInvoiceStatusTimestamp: row.admission_paid_invoice_status_timestamp || "",
       currencyCode: row.currency_code || "",
+      bankName: row.bank_name || "",
     },
 
     currency_code: row.currency_code || "",
+    bank_name: row.bank_name || "",
 
 admission_registration_fee: row.admission_registration_fee || "",
 admission_fees: row.admission_fees || "",

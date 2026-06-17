@@ -8,8 +8,32 @@ function admissionUrl(admissionId, suffix = "") {
   return `${getDetailsBase()}/admission/${encodeURIComponent(admissionId)}${suffix}`;
 }
 
-function familyUrl(familyNumber, suffix = "") {
-  return `${getDetailsBase()}/family/${encodeURIComponent(familyNumber)}${suffix}`;
+function familyUrl(familyNumber, suffix = "", admissionId = "") {
+  const cleanFamilyNumber = String(familyNumber || "").trim();
+  const cleanAdmissionId = String(admissionId || "").trim();
+
+  let url = `${getDetailsBase()}/family/${encodeURIComponent(cleanFamilyNumber)}${suffix}`;
+
+  // Auto-family case: backend ko admissionId chahiye hota hai
+  if (cleanFamilyNumber.toLowerCase() === "auto" && cleanAdmissionId) {
+    url += url.includes("?") ? "&" : "?";
+    url += `admissionId=${encodeURIComponent(cleanAdmissionId)}`;
+  }
+
+  return url;
+}
+
+function pendingFamilyApiUrl(familyNumber, admissionId = "") {
+  const cleanFamilyNumber = String(familyNumber || "").trim();
+  const cleanAdmissionId = String(admissionId || "").trim();
+
+  let url = `/api/pending/family/${encodeURIComponent(cleanFamilyNumber)}`;
+
+  if (cleanFamilyNumber.toLowerCase() === "auto" && cleanAdmissionId) {
+    url += `?admissionId=${encodeURIComponent(cleanAdmissionId)}`;
+  }
+
+  return url;
 }
 
 document.addEventListener("click", (e) => {
@@ -23,6 +47,16 @@ const pendingBtn = e.target.closest(".js-print-pending-challan");
 if (pendingBtn) {
   const admissionId = pendingBtn.getAttribute("data-admission-id");
   const familyNumber = pendingBtn.getAttribute("data-family-number");
+  const familyCount = Number(pendingBtn.getAttribute("data-family-count") || "0");
+
+  if (familyNumber && familyCount > 1) {
+    window.location.href = familyUrl(
+      familyNumber,
+      "/challan/bulk?mode=pending",
+      admissionId
+    );
+    return;
+  }
 
   if (admissionId) {
     window.location.href = admissionUrl(admissionId, "/challan/bulk?mode=pending");
@@ -30,7 +64,11 @@ if (pendingBtn) {
   }
 
   if (familyNumber) {
-    window.location.href = familyUrl(familyNumber, "/challan/bulk?mode=pending");
+    window.location.href = familyUrl(
+      familyNumber,
+      "/challan/bulk?mode=pending",
+      admissionId
+    );
     return;
   }
 
@@ -61,12 +99,17 @@ if (pendingBtn) {
   }
 
   // ✅ Family combined challan
-  if (familyBtn) {
-    const familyNumber = familyBtn.getAttribute("data-family-number");
-    if (!familyNumber) return;
+if (familyBtn) {
+  const familyNumber = familyBtn.getAttribute("data-family-number");
+  const admissionId =
+    familyBtn.getAttribute("data-admission-id") ||
+    window.__ADMISSION_ID__ ||
+    "";
 
-  window.location.href = familyUrl(familyNumber, "/challan");
-  }
+  if (!familyNumber) return;
+
+  window.location.href = familyUrl(familyNumber, "/challan", admissionId);
+}
 });
 // ✅ Pending challan modal opener
 document.addEventListener("click", async (e) => {
@@ -93,10 +136,10 @@ document.addEventListener("click", async (e) => {
 
   try {
     // ✅ if family has 2+ students -> family API, else single admission
-    const url =
-      familyNumber && familyCount > 1
-        ? `/api/pending/family/${encodeURIComponent(familyNumber)}`
-        : `/api/pending/admission/${encodeURIComponent(admissionId)}`;
+   const url =
+  familyNumber && familyCount > 1
+    ? pendingFamilyApiUrl(familyNumber, admissionId)
+    : `/api/pending/admission/${encodeURIComponent(admissionId)}`;
 
     const res = await fetch(url);
     const json = await res.json();
@@ -137,9 +180,9 @@ document.getElementById("btnAllFeeChallans")?.addEventListener("click", async ()
     const familyNo = window.__FAMILY_NUMBER__ || "";
     const admissionId = window.__ADMISSION_ID__;
 
-    const url = familyNo
-      ? familyUrl(familyNo, "/challan/bulk?mode=pending")
-      : admissionUrl(admissionId, "/challan/bulk?mode=pending");
+const url = familyNo
+  ? familyUrl(familyNo, "/challan/bulk?mode=pending", admissionId)
+  : admissionUrl(admissionId, "/challan/bulk?mode=pending");
 
     window.open(url, "_blank");
   } catch (e) {
@@ -153,9 +196,9 @@ document.getElementById("btnAllPaidChallans")?.addEventListener("click", async (
     const familyNo = window.__FAMILY_NUMBER__ || "";
     const admissionId = window.__ADMISSION_ID__;
 
-    const url = familyNo
-      ? familyUrl(familyNo, "/paid/bulk?mode=paid")
-      : admissionUrl(admissionId, "/paid/bulk?mode=paid");
+   const url = familyNo
+  ? familyUrl(familyNo, "/paid/bulk?mode=paid", admissionId)
+  : admissionUrl(admissionId, "/paid/bulk?mode=paid");
 
     window.location.href = url;
   } catch (e) {

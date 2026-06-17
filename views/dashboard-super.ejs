@@ -161,6 +161,7 @@
       registrationFee: canCol('registrationFee'),
       fees: canCol('fees'),
       currency: canCol('currency'),
+      bank: _hasKey('colBank') || canCol('bank'),
       month: canCol('month'),
       totalFees: canCol('totalFees'),
       pendingDues: canCol('pendingDues'),
@@ -591,9 +592,12 @@
       const feeStatusVal = (a.feeStatus || a.fee_status || a.feeStatusText || '').trim();
 
       const cardFields = [
-  { key: 'no', show: true, label: 'No.', value: (startRecord || 1) + index },
-  { key: 'status', show: P.col.status, label: 'Current Status', value: currentStatusVal || '-' },
-  { key: 'feeStatus', show: P.col.feeStatus, label: 'Fee Status', value: feeStatusVal || '-' },
+ { key: 'no', show: true, label: 'No.', value: a.entryNumber || a.entry_number || a.id || '-' },
+{ key: 'registrationNumber', show: P.col.reg, label: 'Reg #', value: (a.accounts && a.accounts.registrationNumber) || '-' },
+{ key: 'familyNumber', show: P.col.family, label: 'Family #', value: (a.accounts && a.accounts.familyNumber) || '-' },
+{ key: 'verificationNumber', show: P.col.verif, label: 'Verif #', value: a.latestBillingVerificationNumber || '-' },
+{ key: 'status', show: P.col.status, label: 'Current Status', value: currentStatusVal || '-' },
+{ key: 'feeStatus', show: P.col.feeStatus, label: 'Fee Status', value: feeStatusVal || '-' },
   { key: 'dept', show: P.col.dept, label: 'Dept', value: a.dept || '-' },
   { key: 'student', show: P.col.student, label: 'Student', value: a.student || a.studentName || '-' },
   { key: 'father', show: P.col.father, label: 'Father', value: a.father || a.fatherName || '-' },
@@ -604,12 +608,10 @@
   { key: 'processedBy', show: P.col.processedBy, label: 'Processed By', value: a.processedBy || a.processed_by || '-' },
   { key: 'paymentStatus', show: P.col.paymentStatus, label: 'Payment Status', value: (a.accounts && a.accounts.paymentStatus) || '-' },
   { key: 'paidUpto', show: P.col.paidUpto, label: 'Paid Upto', value: (a.accounts && a.accounts.paidUpto) || '-' },
-  { key: 'verificationNumber', show: P.col.verif, label: 'Verif #', value: a.latestBillingVerificationNumber || '-' },
-  { key: 'registrationNumber', show: P.col.reg, label: 'Reg #', value: (a.accounts && a.accounts.registrationNumber) || '-' },
-  { key: 'familyNumber', show: P.col.family, label: 'Family #', value: (a.accounts && a.accounts.familyNumber) || '-' },
   { key: 'registrationFee', show: P.col.registrationFee, label: 'Registration Fee', value: (a.admission && a.admission.registrationFee) || '-' },
   { key: 'fees', show: P.col.fees, label: 'Monthly Fees', value: (a.admission && a.admission.fees) || '-' },
-  { key: 'currency', show: P.col.currency, label: 'Currency', value: (a.currency_code || a.currencyCode || (a.admission && (a.admission.currencyCode || a.admission.currency_code))) || '-' },
+    { key: 'currency', show: P.col.currency, label: 'Currency', value: (a.currency_code || a.currencyCode || (a.admission && (a.admission.currencyCode || a.admission.currency_code))) || '-' },
+  { key: 'bank', show: P.col.bank, label: 'Bank', value: (a.bank_name || a.bankName || (a.admission && (a.admission.bankName || a.admission.bank_name))) || '-' },
   { key: 'month', show: P.col.month, label: 'Month/Year', value: (a.admission && a.admission.month) || '-' },
   { key: 'totalFees', show: P.col.totalFees, label: 'Total Fees', value: (a.admission && a.admission.totalFees) || '-' },
   { key: 'pendingDues', show: P.col.pendingDues, label: 'Pending Dues', value: (a.admission && a.admission.pendingDues) || '-' },
@@ -3233,6 +3235,30 @@
     flex-wrap: wrap;
   }
 }
+.admission-field-link[data-field-key="registrationNumber"],
+.admission-field-link[data-field-key="familyNumber"],
+.admission-field-link[data-field-key="verificationNumber"]{
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.admission-field-link[data-field-key="registrationNumber"] .field-label,
+.admission-field-link[data-field-key="familyNumber"] .field-label,
+.admission-field-link[data-field-key="verificationNumber"] .field-label{
+  font-size: 11px;
+  font-weight: 800;
+  color: #9a3412 !important;
+}
+
+.admission-field-link[data-field-key="registrationNumber"] .field-value,
+.admission-field-link[data-field-key="familyNumber"] .field-value,
+.admission-field-link[data-field-key="verificationNumber"] .field-value{
+  font-size: 13px;
+  font-weight: 900;
+  max-width: 170px;
+}
 </style>
 
 <div id="upload-flash-overlay"
@@ -3302,6 +3328,7 @@
             <button type="button" class="super-search-option" data-search-key="registrationFee" data-search-label="Registration Fee">Registration Fee</button>
             <button type="button" class="super-search-option" data-search-key="fees" data-search-label="Monthly Fees">Monthly Fees</button>
             <button type="button" class="super-search-option" data-search-key="currency" data-search-label="Currency">Currency</button>
+            <button type="button" class="super-search-option" data-search-key="bank" data-search-label="Bank">Bank</button>
             <button type="button" class="super-search-option" data-search-key="month" data-search-label="Month/Year">Month/Year</button>
             <button type="button" class="super-search-option" data-search-key="totalFees" data-search-label="Total Fees">Total Fees</button>
             <button type="button" class="super-search-option" data-search-key="pendingDues" data-search-label="Pending Dues">Pending Dues</button>
@@ -5977,6 +6004,7 @@ if (feeLabel) {
       const a = admission || {};
 
       const map = {
+        no: a.entryNumber || a.entry_number || a.id || "-",
         status: a.status || "-",
         feeStatus: a.feeStatus || "-",
         dept: a.dept || "-",
@@ -6104,6 +6132,7 @@ if (feeLabel) {
       updateCardHeader(card, admission);
 
       [
+        "no",
         "status",
         "feeStatus",
         "dept",
@@ -6163,51 +6192,37 @@ if (feeLabel) {
 
     if (updateBtn) {
       updateBtn.addEventListener("click", function () {
-        applyPendingAdmissionUpdates();
+        document.documentElement.classList.add("ivs-loading");
+        window.location.reload();
       });
     }
 
-    socket.on("admission:changed", async function (payload) {
-      const singleId = getAdmissionIdFromPayload(payload);
-      const insertedIds = Array.isArray(payload?.insertedIds) ? payload.insertedIds : [];
-      const deletedIds = Array.isArray(payload?.deletedIds) ? payload.deletedIds : [];
+    socket.on("admission:changed", function (payload) {
+  const singleId = getAdmissionIdFromPayload(payload);
+  const insertedIds = Array.isArray(payload?.insertedIds) ? payload.insertedIds : [];
+  const deletedIds = Array.isArray(payload?.deletedIds) ? payload.deletedIds : [];
 
-      deletedIds.forEach(id => {
-        const card = document.querySelector(`.admission-card[data-admission-id="${CSS.escape(String(id))}"]`);
-        if (card) card.remove();
-      });
+  deletedIds.forEach(id => {
+    const card = document.querySelector(`.admission-card[data-admission-id="${CSS.escape(String(id))}"]`);
+    if (card) card.remove();
+  });
 
-      if (insertedIds.length) {
-        insertedIds.forEach(id => pendingAdmissionIds.add(String(id)));
-        showUpdatesButton();
-        return;
-      }
+  if (insertedIds.length) {
+    insertedIds.forEach(id => pendingAdmissionIds.add(String(id)));
+    showUpdatesButton();
+    return;
+  }
 
-      if (!singleId) {
-        if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
-          window.rebuildAdmissionFilesDropdowns();
-        }
-        return;
-      }
+  if (singleId) {
+    pendingAdmissionIds.add(String(singleId));
+    showUpdatesButton();
+    return;
+  }
 
-      if (isUserBusy()) {
-        pendingAdmissionIds.add(String(singleId));
-        showUpdatesButton();
-        return;
-      }
-
-      try {
-        await refreshAdmissionCard(singleId);
-
-        if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
-          window.rebuildAdmissionFilesDropdowns();
-        }
-      } catch (err) {
-        console.error("Real-time admission update failed:", err);
-        pendingAdmissionIds.add(String(singleId));
-        showUpdatesButton();
-      }
-    });
+  if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
+    window.rebuildAdmissionFilesDropdowns();
+  }
+});
 
     socket.on("user:updated", function (payload) {
       const currentUserId = Number(window.CURRENT_USER?.id || 0);
@@ -7392,6 +7407,7 @@ document.addEventListener("click", function (e) {
           registrationFee: 'Registration Fee',
           fees: 'Monthly Fees',
           currency: 'Currency',
+          bank: 'Bank',
           month: 'Month/Year',
           totalFees: 'Total Fees',
           pendingDues: 'Pending Dues',

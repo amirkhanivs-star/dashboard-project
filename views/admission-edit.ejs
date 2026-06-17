@@ -94,10 +94,12 @@ if (roleKey === 'admin') {
       registrationFee: canCol('registrationFee', 'colRegistrationFee'),
       fees: canCol('fees', 'colFees'),
       currency: canCol('currency', 'colCurrency'),
+      bank: canCol('bank', 'colBank'),
       month: canCol('month', 'colMonth'),
       totalFees: canCol('totalFees', 'colTotalFees'),
       pendingDues: canCol('pendingDues', 'colPendingDues'),
       receivedPayment: canCol('receivedPayment', 'colReceivedPayment'),
+      comment: canCol('comment', 'colComment'),
       invoiceStatus: canCol('invoiceStatus', 'colInvoiceStatus'),
       invoiceStatusTimestamp: canCol('invoiceStatusTimestamp', 'colInvoiceStatusTimestamp'),
       paidInvoiceStatus: canCol('paidInvoiceStatus', 'colPaidInvoiceStatus'),
@@ -143,6 +145,29 @@ if (roleKey === 'admin') {
           { value: 'USD', label: 'USD' },
           { value: 'GBP', label: 'GBP' }
         ];
+          const DEFAULT_BANK_OPTIONS =
+    (typeof bankOptions !== 'undefined' && Array.isArray(bankOptions) && bankOptions.length)
+      ? bankOptions.map(opt => ({
+          value: opt.value || opt.label || opt.opt_key || '',
+          label: opt.label || opt.value || opt.opt_key || ''
+        })).filter(opt => opt.value)
+      : [
+          { value: 'UBL SMC', label: 'UBL SMC' },
+          { value: 'MZ IVS', label: 'MZ IVS' },
+          { value: 'Mashreq bank', label: 'Mashreq bank' },
+          { value: 'MZ Ahmad Ali', label: 'MZ Ahmad Ali' },
+          { value: 'PayPal', label: 'PayPal' },
+          { value: 'UBL', label: 'UBL' },
+          { value: 'Pick Up', label: 'Pick Up' },
+          { value: 'EasyPaisa', label: 'EasyPaisa' },
+          { value: 'Summit', label: 'Summit' },
+          { value: 'Nomood payment', label: 'Nomood payment' },
+          { value: 'MZ solution', label: 'MZ solution' },
+          { value: 'FREE', label: 'FREE' },
+          { value: 'MZ ivs solution 7793', label: 'MZ ivs solution 7793' },
+          { value: 'UBL Ahmad Ali 6593', label: 'UBL Ahmad Ali 6593' },
+          { value: 'UBL solution 0322', label: 'UBL solution 0322' }
+        ];
 
   const editAction = isSuper ? `/dashboard/super/update/${A.id}` : `/admin/update/${A.id}`;
 const detailsUrl = isSuper ? `/dashboard/super/admission/${A.id}` : `/admin/admission/${A.id}`;
@@ -153,6 +178,7 @@ const backUrl = dashboardUrl;
   const currentStatusVal = String(A.status || A.currentStatus || A.current_status || 'New Admission').trim();
   const feeStatusVal = String(A.feeStatus || A.fee_status || A.feeStatusText || 'New Admission').trim();
   const currencyVal = String(A.currency_code || A.currencyCode || adm.currencyCode || adm.currency_code || '').trim().toUpperCase();
+  const bankVal = String(A.bank_name || A.bankName || adm.bankName || adm.bank_name || '').trim();
   const monthVal = String(adm.month || A.admission_month || '').trim();
   const currentYearOnly = new Date().getFullYear();
   const months = [
@@ -184,11 +210,23 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
   const yActive = Number(y && y.id || 0) === activeAdmissionId ? 0 : 1;
   return xActive - yActive;
 });
+
+const cleanFamilyNumber = String(
+  (typeof familyNumber !== 'undefined' ? familyNumber : '') ||
+  acc.familyNumber ||
+  A.familyNumber ||
+  A.accounts_family_number ||
+  ''
+).trim();
+
+const isAutoFamilyMatch = !cleanFamilyNumber && editAdmissions.length > 1;
+const familyDisplayLabel = cleanFamilyNumber || (isAutoFamilyMatch ? 'Auto Matched' : '');
+const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
 %>
 
 <div class="compact-edit-page <%= themeClass %>">
 
-  <% if (familyNumber && editAdmissions.length > 1) { %>
+  <% if (hasFamilyEditGroup) { %>
     <div class="family-edit-banner">
       <div>
         <div class="family-title">
@@ -196,7 +234,7 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
           Family Admissions
         </div>
         <div class="family-subtitle">
-          Family # <strong><%= familyNumber %></strong> | <%= editAdmissions.length %> admissions found
+          Family # <strong><%= familyDisplayLabel %></strong> | <%= editAdmissions.length %> admissions found
         </div>
       </div>
     </div>
@@ -213,6 +251,7 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
     const eCurrentStatusVal = String(E.status || E.currentStatus || E.current_status || 'New Admission').trim();
     const eFeeStatusVal = String(E.feeStatus || E.fee_status || E.feeStatusText || 'New Admission').trim();
     const eCurrencyVal = String(E.currency_code || E.currencyCode || eAdm.currencyCode || eAdm.currency_code || '').trim().toUpperCase();
+    const eBankVal = String(E.bank_name || E.bankName || eAdm.bankName || eAdm.bank_name || '').trim();
     const eMonthVal = String(eAdm.month || E.admission_month || '').trim();
 
     const isActiveCard = Number(E.id || 0) === activeAdmissionId;
@@ -240,9 +279,9 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
                 <span class="mini-chip">ID #<%= E.id %></span>
               <% } %>
 
-              <% if (eAcc.familyNumber) { %>
-                <span class="mini-chip">Family #<%= eAcc.familyNumber %></span>
-              <% } %>
+              <% if (eAcc.familyNumber || isAutoFamilyMatch) { %>
+  <span class="mini-chip">Family #<%= eAcc.familyNumber || 'Auto Matched' %></span>
+<% } %>
 
               <% if (isActiveCard) { %>
                 <span class="mini-chip active-chip">Selected</span>
@@ -377,7 +416,12 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
         <% if (P.col.verif) { %>
           <div class="field-box">
             <label>Verification #</label>
-            <input type="text" class="form-control form-control-sm compact-input readonly-field" value="<%= E.latestBillingVerificationNumber || eAcc.verificationNumber || '' %>" readonly tabindex="-1">
+            <input
+              type="text"
+              name="verificationNumber"
+              class="form-control form-control-sm compact-input"
+              value="<%= eAcc.verificationNumber || E.accounts_verification_number || '' %>"
+            >
           </div>
         <% } %>
 
@@ -428,6 +472,26 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
           </div>
         <% } %>
 
+                <% if (P.col.bank) { %>
+          <div class="field-box">
+            <label>Bank</label>
+            <select
+              name="bank_name"
+              class="form-select form-select-sm compact-input js-bank-select"
+              data-prev-value="<%= eBankVal %>">
+              <option value="" <%= !eBankVal ? 'selected' : '' %>>Select bank</option>
+
+              <% DEFAULT_BANK_OPTIONS.forEach(opt => { %>
+                <option value="<%= opt.value %>" <%= eBankVal === String(opt.value) ? 'selected' : '' %>>
+                  <%= opt.label || opt.value %>
+                </option>
+              <% }) %>
+
+              <option value="__add_new_bank__">+ Add Option</option>
+            </select>
+          </div>
+        <% } %>
+
         <% if (P.col.month) { %>
           <div class="field-box">
             <label>Month/Year</label>
@@ -466,6 +530,18 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
             <input type="text" name="receivedPayment" class="form-control form-control-sm compact-input readonly-field" value="<%= eAdm.receivedPayment || '0' %>" readonly tabindex="-1">
           </div>
         <% } %>
+
+        <% if (P.col.comment) { %>
+          <div class="field-box comment-field-box">
+            <label>Comment</label>
+            <textarea
+              name="comment"
+              class="form-control form-control-sm compact-input comment-input"
+              rows="2"
+              placeholder="Write admission comment here..."
+            ><%= eAdm.comment || E.admission_comment || '' %></textarea>
+          </div>
+        <% } %>
       </div>
 
       <div class="section-title">Invoice Fields</div>
@@ -499,7 +575,7 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
           </div>
         <% } %>
       </div>
-           <% if (!(familyNumber && editAdmissions.length > 1)) { %>
+           <% if (!hasFamilyEditGroup) { %>
         <div class="compact-footer">
           <div></div>
 
@@ -524,7 +600,7 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
 
   <% }) %>
 
-<% if (familyNumber && editAdmissions.length > 1) { %>
+<% if (hasFamilyEditGroup) { %>
   <div class="compact-family-footer">
     <div class="footer-actions">
       <a href="<%= dashboardUrl %>" class="btn btn-light rounded-pill px-4">
@@ -803,6 +879,19 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
     color:#64748b !important;
   }
 
+  .comment-field-box{
+    grid-column: span 2;
+  }
+
+  .comment-input{
+    height:auto !important;
+    min-height:68px !important;
+    resize:vertical;
+    line-height:1.35;
+    padding-top:8px;
+    padding-bottom:8px;
+  }
+
   .compact-footer{
     margin-top:12px;
     padding-top:10px;
@@ -957,6 +1046,46 @@ const editAdmissions = rawEditAdmissions.slice().sort((x, y) => {
   background:rgba(248,250,252,.7);
 }
 </style>
+<!-- Bank Option Manager Popup -->
+<div id="bankOptionModal" class="billing-status-overlay d-none" aria-hidden="true">
+  <div class="billing-status-dialog">
+    <div class="modal-content border-0 shadow-lg rounded-4">
+      <div class="modal-header border-0">
+        <div>
+          <h5 class="modal-title mb-0">Manage Bank Options</h5>
+          <div class="small text-muted">Add new bank and delete custom ones.</div>
+        </div>
+        <button type="button" class="btn-close bank-option-close-btn" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body pt-0">
+        <div class="p-3 rounded-4 bg-light-subtle mb-3">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-8">
+              <label class="form-label small text-muted mb-1">Bank Name</label>
+              <input type="text" id="bankOptionInput" class="form-control" placeholder="e.g. HBL / Meezan / JazzCash">
+            </div>
+            <div class="col-md-4">
+              <button type="button" id="bankOptionSaveBtn" class="btn btn-dark w-100 rounded-pill">
+                <i class="bi bi-plus-circle me-1"></i> Save Option
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">Saved Bank Options</div>
+        </div>
+
+        <div id="bankOptionList" class="d-grid gap-2 billing-option-scroll-list"></div>
+      </div>
+
+      <div class="modal-footer border-0 justify-content-end">
+        <button type="button" class="btn btn-light rounded-pill px-4 bank-option-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 <!-- Currency Option Manager Popup -->
 <div id="currencyOptionModal" class="billing-status-overlay d-none" aria-hidden="true">
   <div class="billing-status-dialog">
@@ -1304,15 +1433,18 @@ function showUpdateModal(items, titleText) {
         tuitionGrade: ['[name="tuitionGrade"]'],
         paymentStatus: ['[name="paymentStatus"]'],
         paidUpto: ['[name="paidUpto"]'],
+        verificationNumber: ['[name="verificationNumber"]'],
         registrationNumber: ['[name="registrationNumber"]'],
         familyNumber: ['[name="familyNumber"]'],
         registrationFee: ['[name="registrationFee"]'],
         fees: ['[name="fees"]'],
         currency: ['[name="currency_code"]'],
+        bank: ['[name="bank_name"]'],
         month: ['[name="month"]'],
         totalFees: ['[name="totalFees"]'],
         pendingDues: ['[name="pendingDues"]'],
-        receivedPayment: ['[name="receivedPayment"]']
+        receivedPayment: ['[name="receivedPayment"]'],
+        comment: ['[name="comment"]']
       };
 
       const labelMap = {
@@ -1743,6 +1875,228 @@ const boxes = Array.from(scope.querySelectorAll('.field-box'));
       console.error('Options load error:', err);
       applyDynamicColors();
     });
+})();
+</script>
+<script>
+(function () {
+  const bankModalEl = document.getElementById('bankOptionModal');
+  if (!bankModalEl) return;
+
+  const inputEl = document.getElementById('bankOptionInput');
+  const saveBtn = document.getElementById('bankOptionSaveBtn');
+  const listEl = document.getElementById('bankOptionList');
+
+  let pendingSelect = null;
+
+  function normalizeBankRows(rows) {
+    return (rows || []).map(row => ({
+      id: row.id,
+      value: row.value || row.label || row.opt_key || '',
+      label: row.label || row.value || row.opt_key || '',
+      is_custom: Number(row.is_custom || 0)
+    })).filter(x => x.value);
+  }
+
+  async function fetchBankOptions() {
+    const res = await fetch('/api/options/bank', {
+      headers: { Accept: 'application/json' }
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to load bank options');
+    }
+
+    window.BANK_OPTION_CACHE = normalizeBankRows(data.data || []);
+    return window.BANK_OPTION_CACHE;
+  }
+
+  async function createBankOption(value) {
+    const res = await fetch('/api/options/bank', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({ label: value })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to save bank option');
+    }
+
+    return data.data;
+  }
+
+  async function deleteBankOption(id) {
+    const res = await fetch(`/api/options/bank/${id}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' }
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to delete bank option');
+    }
+
+    return true;
+  }
+
+  function renderBankList() {
+    const items = Array.isArray(window.BANK_OPTION_CACHE)
+      ? window.BANK_OPTION_CACHE
+      : [];
+
+    if (!items.length) {
+      listEl.innerHTML = '<div class="status-option-empty">No bank options available.</div>';
+      return;
+    }
+
+    listEl.innerHTML = items.map(item => `
+      <div class="status-option-item">
+        <div class="status-option-left">
+          <div class="status-option-name">${item.label}</div>
+        </div>
+
+        <div class="status-option-actions">
+          ${item.is_custom ? `
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-danger rounded-pill bank-option-delete-btn"
+              data-id="${item.id}">
+              Delete
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function rebuildBankSelect(selectEl, items, selectedValue, includeAdd) {
+    if (!selectEl) return;
+
+    let html = '<option value="">Select bank</option>';
+
+    html += items.map(item => {
+      const selected = String(selectedValue || '') === String(item.value) ? 'selected' : '';
+      return `<option value="${item.value}" ${selected}>${item.label}</option>`;
+    }).join('');
+
+    if (includeAdd) {
+      html += '<option value="__add_new_bank__">+ Add Option</option>';
+    }
+
+    selectEl.innerHTML = html;
+    selectEl.value = selectedValue || '';
+  }
+
+  function refreshBankDropdowns() {
+    const items = Array.isArray(window.BANK_OPTION_CACHE)
+      ? window.BANK_OPTION_CACHE
+      : [];
+
+    document.querySelectorAll('.js-bank-select').forEach(sel => {
+      const selected = sel.getAttribute('data-prev-value') || sel.value || '';
+      rebuildBankSelect(sel, items, selected, true);
+      sel.value = selected || '';
+    });
+  }
+
+  async function loadBankOptionsAndRefresh() {
+    await fetchBankOptions();
+    renderBankList();
+    refreshBankDropdowns();
+  }
+
+  function openBankModal(selectEl) {
+    pendingSelect = selectEl || null;
+    bankModalEl.classList.remove('d-none');
+    bankModalEl.setAttribute('aria-hidden', 'false');
+  }
+
+  document.addEventListener('change', function (e) {
+    const el = e.target;
+    if (!el) return;
+
+    if (el.matches('.js-bank-select')) {
+      if (el.value === '__add_new_bank__') {
+        const prev = el.getAttribute('data-prev-value') || '';
+        el.value = prev;
+        openBankModal(el);
+        return;
+      }
+
+      el.setAttribute('data-prev-value', el.value || '');
+    }
+  });
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async function () {
+      try {
+        const val = String(inputEl.value || '').trim();
+
+        if (!val) {
+          alert('Bank name required');
+          return;
+        }
+
+        const existing = window.BANK_OPTION_CACHE || [];
+        const duplicate = existing.some(x =>
+          String(x.value || '').trim().toLowerCase() === val.toLowerCase()
+        );
+
+        if (duplicate) {
+          alert('Ye bank pehle se mojood hai');
+          return;
+        }
+
+        const created = await createBankOption(val);
+        await loadBankOptionsAndRefresh();
+
+        if (pendingSelect) {
+          const newVal = created.value || created.label || created.opt_key || val;
+          pendingSelect.value = newVal;
+          pendingSelect.setAttribute('data-prev-value', newVal);
+        }
+
+        inputEl.value = '';
+      } catch (err) {
+        alert(err.message || 'Bank save failed');
+      }
+    });
+  }
+
+  if (listEl) {
+    listEl.addEventListener('click', async function (e) {
+      const btn = e.target.closest('.bank-option-delete-btn');
+      if (!btn) return;
+
+      try {
+        const id = Number(btn.getAttribute('data-id'));
+        if (!id) return;
+
+        await deleteBankOption(id);
+        await loadBankOptionsAndRefresh();
+      } catch (err) {
+        alert(err.message || 'Delete failed');
+      }
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('.bank-option-close-btn') || e.target === bankModalEl) {
+      bankModalEl.classList.add('d-none');
+      bankModalEl.setAttribute('aria-hidden', 'true');
+    }
+  });
+
+  loadBankOptionsAndRefresh().catch(function (err) {
+    console.error('Bank options load error:', err);
+  });
 })();
 </script>
 <script>

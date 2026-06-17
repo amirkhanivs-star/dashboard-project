@@ -230,6 +230,7 @@ function mapColToPerm(colKey) {
 
     fees: "colFees",
     currency: "colCurrency",
+    bank: "colBank",
     month: "colMonth",
     totalFees: "colTotalFees",
     pendingDues: "colPendingDues",
@@ -668,7 +669,8 @@ function renderAdmissions(rows) {
       <td>${row.student_name || ""}</td>
       <td>${row.grade || ""}</td>
       <td>${row.father_name || ""}</td>
-      <td>${row.currency || ""}</td>   <!-- ✅ NEW -->
+      <td>${row.currency || row.currency_code || ""}</td>
+      <td>${row.bank_name || row.bankName || ""}</td>
     `;
 
     tbody.appendChild(tr);
@@ -1322,8 +1324,11 @@ const res = await fetch(`/api/billing/${admissionId}?year=${billingYear}`);
         verifInputs[k].value = (entry.verification || entry.verif || entry.verificationNumber || "").toString();
         }
         if (bankInputs[k]) {
-        bankInputs[k].value = (entry.bank || entry.number || "").toString();
-        }
+  setBankSelectValueSafe(
+    bankInputs[k],
+    entry.bank || entry.bankName || entry.bank_name || entry.number || ""
+  );
+}
        });
       setTimeout(() => {
   if (window.applyDynamicBillingColors) {
@@ -1338,7 +1343,40 @@ const res = await fetch(`/api/billing/${admissionId}?year=${billingYear}`);
   function normalizeBillValue(v) {
   return String(v || "").trim();
 }
+function setBankSelectValueSafe(selectEl, value) {
+  if (!selectEl) return;
 
+  const finalValue = String(value || "").trim();
+
+  if (!finalValue) {
+    selectEl.value = "";
+    selectEl.setAttribute("data-prev-value", "");
+    return;
+  }
+
+  const exists = Array.from(selectEl.options).some(opt =>
+    String(opt.value || "").trim().toLowerCase() === finalValue.toLowerCase()
+  );
+
+  if (!exists) {
+    const addOption = Array.from(selectEl.options).find(opt =>
+      opt.value === "__add_new_bank__"
+    );
+
+    const option = document.createElement("option");
+    option.value = finalValue;
+    option.textContent = finalValue;
+
+    if (addOption) {
+      selectEl.insertBefore(option, addOption);
+    } else {
+      selectEl.appendChild(option);
+    }
+  }
+
+  selectEl.value = finalValue;
+  selectEl.setAttribute("data-prev-value", finalValue);
+}
 function getLatestChangedVerificationForColumn(nextBilling) {
   let latestChangedMonthKey = "";
 

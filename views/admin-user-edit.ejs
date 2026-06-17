@@ -34,10 +34,12 @@
   colRegistrationFee: "Registration Fee",
   colFees: "Fees",
   colCurrency: "Currency",
+  colBank: "Bank",
   colMonth: "Month",
   colTotalFees: "Total Fees",
   colPendingDues: "Pending Dues",
   colReceivedPayment: "Received Payment",
+  colComment: "Comment",
   colInvoiceStatus: "Invoice Status",
   colInvoiceStatusTimestamp: "Invoice Status Timestamp",
   colPaidInvoiceStatus: "Paid Invoice Status",
@@ -105,6 +107,9 @@ const accessScopeLabel =
   String(editUser.dept || '').trim().toLowerCase() === 'accounts'
     ? 'School Accounts'
     : (editUser.dept || '—');
+
+  const editUserAdmissionLink =
+    editUser.admissionLink || editUser.admission_link || '';
   %>
 
 <style>
@@ -178,6 +183,105 @@ const accessScopeLabel =
     color: #1d4ed8 !important;
     border: 1px solid rgba(59, 130, 246, 0.28) !important;
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.10);
+  }
+  .edit-user-link-preview{
+    margin-top: 8px;
+    width: 100%;
+  }
+
+  .edit-user-link-mini{
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 10px;
+    font-size: .70rem;
+    font-weight: 800;
+    line-height: 1.25;
+    border: 1px solid transparent;
+  }
+
+  .edit-user-link-mini i{
+    font-size: .74rem;
+    line-height: 1.2;
+    margin-top: 1px;
+    flex: 0 0 auto;
+  }
+
+  .edit-user-link-text{
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: .66rem;
+    font-weight: 800;
+  }
+
+  .edit-user-link-copy{
+    width: 23px;
+    height: 23px;
+    border: 0;
+    border-radius: 8px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 23px;
+    transition: all .16s ease;
+  }
+
+  .edit-user-link-copy i{
+    font-size: .72rem;
+    line-height: 1;
+  }
+
+  .edit-user-link-copy:hover{
+    transform: translateY(-1px);
+    filter: brightness(.98);
+  }
+
+  .edit-user-link-copy:disabled{
+    opacity: .75;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .edit-user-link-mini.link-role-admin{
+    background: rgba(25, 135, 84, 0.08);
+    border-color: rgba(25, 135, 84, 0.24);
+    color: #157347;
+  }
+
+  .edit-user-link-mini.link-role-admin .edit-user-link-copy{
+    background: rgba(25, 135, 84, 0.14);
+    color: #157347;
+  }
+
+  .edit-user-link-mini.link-role-agent{
+    background: rgba(124, 58, 237, 0.09);
+    border-color: rgba(124, 58, 237, 0.26);
+    color: #5b21b6;
+  }
+
+  .edit-user-link-mini.link-role-agent .edit-user-link-copy{
+    background: rgba(124, 58, 237, 0.15);
+    color: #5b21b6;
+  }
+
+  .edit-user-link-mini.link-role-sub-agent{
+    background: rgba(37, 99, 235, 0.08);
+    border-color: rgba(37, 99, 235, 0.24);
+    color: #1d4ed8;
+  }
+
+  .edit-user-link-mini.link-role-sub-agent .edit-user-link-copy{
+    background: rgba(37, 99, 235, 0.14);
+    color: #1d4ed8;
   }
 </style>
 
@@ -284,7 +388,40 @@ const accessScopeLabel =
 
               <div class="col-md-4">
                 <label class="form-label small">Name</label>
-                <input type="text" name="name" class="form-control" value="<%= editUser.name %>" required>
+                <input
+                  type="text"
+                  name="name"
+                  id="editUserNameInput"
+                  class="form-control"
+                  value="<%= editUser.name %>"
+                  required>
+
+                               <% const editLinkRoleClass =
+                  editUser.role === 'admin' ? 'link-role-admin' :
+                  editUser.role === 'agent' ? 'link-role-agent' :
+                  'link-role-sub-agent';
+                %>
+
+                <div class="edit-user-link-preview">
+                  <div class="edit-user-link-mini <%= editLinkRoleClass %>" title="<%= editUserAdmissionLink %>">
+                    <i class="bi bi-link-45deg"></i>
+
+                    <span
+                      id="editUserAdmissionLinkPreview"
+                      class="edit-user-link-text">
+                      <%= editUserAdmissionLink || 'Type name to generate link' %>
+                    </span>
+
+                    <button
+                      type="button"
+                      class="edit-user-link-copy"
+                      id="copyEditUserAdmissionLinkBtn"
+                      title="Copy admission form link"
+                      aria-label="Copy admission form link">
+                      <i class="bi bi-clipboard"></i>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div class="col-md-4">
@@ -485,15 +622,110 @@ const accessScopeLabel =
     const btnSelectAll = document.getElementById("btnSelectAll");
     const btnSelectNone = document.getElementById("btnSelectNone");
 
+        const editUserNameInput = document.getElementById("editUserNameInput");
+    const editUserAdmissionLinkPreview = document.getElementById("editUserAdmissionLinkPreview");
+    const copyEditUserAdmissionLinkBtn = document.getElementById("copyEditUserAdmissionLinkBtn");
+
+    const admissionFormBaseUrl = "<%= typeof admissionFormBaseUrl !== 'undefined' ? admissionFormBaseUrl : 'https://ivs-admission-form.onrender.com/' %>";
+        function buildAdmissionLinkFromName(name) {
+      const cleanName = String(name || "").trim();
+      const baseUrl = String(admissionFormBaseUrl || "https://ivs-admission-form.onrender.com/")
+        .trim()
+        .replace(/\?+$/, "")
+        .replace(/\/+$/, "/");
+
+      if (!cleanName) return "";
+
+      return baseUrl + "?sentBy=" + encodeURIComponent(cleanName);
+    }
+
+    function syncEditUserAdmissionLinkPreview() {
+      if (!editUserNameInput || !editUserAdmissionLinkPreview) return;
+
+      const link = buildAdmissionLinkFromName(editUserNameInput.value);
+      editUserAdmissionLinkPreview.textContent = link || "Type name to generate link";
+
+      const linkWrap = editUserAdmissionLinkPreview.closest(".edit-user-link-mini");
+      if (linkWrap) {
+        linkWrap.setAttribute("title", link || "");
+      }
+
+      if (copyEditUserAdmissionLinkBtn) {
+        copyEditUserAdmissionLinkBtn.disabled = !link;
+      }
+    }
+
+    async function copyEditUserAdmissionLink(text) {
+      const cleanText = String(text || "").trim();
+      if (!cleanText) return false;
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(cleanText);
+          return true;
+        }
+
+        const textarea = document.createElement("textarea");
+        textarea.value = cleanText;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        const copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+
+        return copied;
+      } catch (err) {
+        console.error("Admin/Agent edit user admission link copy failed:", err);
+        return false;
+      }
+    }
     function toggleAll(on) {
       document.querySelectorAll(".perm-toggle").forEach((cb) => {
         if (cb.disabled) return;
         cb.checked = !!on;
       });
     }
+        if (editUserNameInput) {
+      editUserNameInput.addEventListener("input", syncEditUserAdmissionLinkPreview);
+    }
 
+    if (copyEditUserAdmissionLinkBtn) {
+      copyEditUserAdmissionLinkBtn.addEventListener("click", async function () {
+        const link = editUserAdmissionLinkPreview
+  ? editUserAdmissionLinkPreview.textContent.trim()
+  : "";
+if (!link || link === "Type name to generate link") return;
+
+        const oldHtml = copyEditUserAdmissionLinkBtn.innerHTML;
+        copyEditUserAdmissionLinkBtn.disabled = true;
+        copyEditUserAdmissionLinkBtn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+        const copied = await copyEditUserAdmissionLink(link);
+
+        if (copied) {
+          copyEditUserAdmissionLinkBtn.innerHTML = '<i class="bi bi-check2-circle"></i>';
+          copyEditUserAdmissionLinkBtn.title = "Copied";
+        } else {
+          prompt("Copy this admission form link:", link);
+          copyEditUserAdmissionLinkBtn.innerHTML = oldHtml;
+        }
+
+        setTimeout(function () {
+          copyEditUserAdmissionLinkBtn.disabled = false;
+          copyEditUserAdmissionLinkBtn.innerHTML = oldHtml;
+          copyEditUserAdmissionLinkBtn.title = "Copy admission form link";
+          syncEditUserAdmissionLinkPreview();
+        }, 1200);
+      });
+    }
     if (btnSelectAll) btnSelectAll.addEventListener("click", () => toggleAll(true));
     if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));
+
+        syncEditUserAdmissionLinkPreview();
   })();
 </script>
 

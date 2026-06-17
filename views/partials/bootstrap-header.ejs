@@ -454,7 +454,88 @@ html.ivs-ready .ivs-topbar {
       border-top-left-radius:8px;
       border-bottom-left-radius:8px;
     }
+               /* ✅ Minimal sidebar admission form link */
+    .sidebar-admission-link-card{
+      margin: 2px 10px;
+    }
 
+    .sidebar-admission-link-row{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 38px;
+      padding: .50rem .85rem;
+      border-radius: 9px;
+      color: var(--ivs-text);
+      background: transparent;
+      transition: all .2s ease;
+    }
+
+    .sidebar-admission-link-row:hover{
+      background: var(--ivs-hover-bg);
+      color: #fff;
+    }
+
+    .sidebar-admission-link-icon{
+      width: auto;
+      height: auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      color: var(--ivs-text);
+    }
+
+    .sidebar-admission-link-icon i{
+      font-size: .88rem;
+      line-height: 1;
+      color: var(--ivs-text);
+    }
+
+    .sidebar-admission-link-label{
+      flex: 1 1 auto;
+      min-width: 0;
+      color: var(--ivs-text);
+      font-size: .82rem;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar-admission-link-copy{
+      width: 25px;
+      height: 25px;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.10);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 25px;
+      padding: 0;
+      transition: all .16s ease;
+    }
+
+    .sidebar-admission-link-copy i{
+      font-size: .78rem;
+      line-height: 1;
+      color: #fff;
+    }
+
+    .sidebar-admission-link-copy:hover{
+      background: rgba(255,255,255,0.18);
+      transform: translateY(-1px);
+    }
+
+    .sidebar-admission-link-copy:disabled{
+      opacity: .75;
+      cursor: not-allowed;
+      transform: none;
+    }
     .sidebar-footer{
       padding:.90rem .95rem;
       border-top:1px solid var(--ivs-sidebar-border);
@@ -617,6 +698,19 @@ html.ivs-ready .ivs-topbar {
   /* ✅ robust dept check */
   const deptLower = dept.toLowerCase();
   const isSchoolDept = deptLower.includes('school');
+  const isSchoolAccountsDept =
+    deptLower === 'accounts' ||
+    deptLower === 'school accounts' ||
+    deptLower.includes('school accounts');
+
+  const canShowSchoolAdmissionForm = isSchoolDept || isSchoolAccountsDept;
+
+  const sidebarAdmissionFormLink =
+    (typeof currentUserAdmissionLink !== 'undefined' && currentUserAdmissionLink)
+      ? currentUserAdmissionLink
+      : (u && (u.admissionLink || u.admission_link))
+        ? (u.admissionLink || u.admission_link)
+        : '';
 %>
 
 <body class="layout-dashboard" data-theme="<%= themeClass %>">
@@ -753,13 +847,35 @@ html.ivs-ready .ivs-topbar {
           </a>
         <% } %>
 
-        <!-- ✅ Dept Admin/Agent side: show School form if user dept is school -->
-        <% if (isSchoolDept) { %>
+        <!-- ✅ Dept Admin/Agent side: show School form for School + School Accounts only -->
+        <% if (canShowSchoolAdmissionForm) { %>
           <div class="sidebar-section-label mt-3">FORMS</div>
           <a href="https://ivs-admission-form.onrender.com" target="_blank" rel="noopener noreferrer">
             <i class="bi bi-ui-checks-grid"></i> <span>School Admission Form</span>
           </a>
         <% } %>
+      <% } %>
+
+      <% if (sidebarAdmissionFormLink) { %>
+        <div class="sidebar-admission-link-card">
+          <div class="sidebar-admission-link-row">
+            <span class="sidebar-admission-link-icon">
+              <i class="bi bi-link-45deg"></i>
+            </span>
+
+            <span class="sidebar-admission-link-label">Admission Form Link</span>
+
+            <button
+              type="button"
+              class="sidebar-admission-link-copy"
+              id="sidebarAdmissionFormLinkCopyBtn"
+              data-link="<%= sidebarAdmissionFormLink %>"
+              title="Copy admission form link"
+              aria-label="Copy admission form link">
+              <i class="bi bi-clipboard"></i>
+            </button>
+          </div>
+        </div>
       <% } %>
 
       <div class="sidebar-footer">
@@ -787,4 +903,65 @@ html.ivs-ready .ivs-topbar {
 
     <div class="ivs-content flex-grow-1">
       <div class="container-fluid pt-2 pb-4">
+        <script>
+  (function () {
+    async function copySidebarAdmissionLink(text) {
+      const cleanText = String(text || '').trim();
+      if (!cleanText) return false;
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(cleanText);
+          return true;
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = cleanText;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+
+        return copied;
+      } catch (err) {
+        console.error('Sidebar admission link copy failed:', err);
+        return false;
+      }
+    }
+
+    document.addEventListener('click', async function (e) {
+      const btn = e.target.closest('#sidebarAdmissionFormLinkCopyBtn');
+      if (!btn) return;
+
+      e.preventDefault();
+
+      const link = btn.getAttribute('data-link') || '';
+
+      const oldHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+      const copied = await copySidebarAdmissionLink(link);
+
+      if (copied) {
+        btn.innerHTML = '<i class="bi bi-check2-circle"></i>';
+        btn.title = 'Copied';
+      } else {
+        prompt('Copy this admission form link:', link);
+        btn.innerHTML = oldHtml;
+      }
+
+      setTimeout(function () {
+        btn.disabled = false;
+        btn.innerHTML = oldHtml;
+        btn.title = 'Copy admission form link';
+      }, 1200);
+    });
+  })();
+</script>
         <!-- Your page content goes here -->

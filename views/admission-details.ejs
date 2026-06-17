@@ -36,6 +36,16 @@
   const getCurrency = (x) =>
     (x?.currency_code || x?.currencyCode || x?.admission?.currencyCode || x?.admission?.currency_code || '-');
 
+  const getAdmissionBank = (x) =>
+    String(
+      x?.bank_name ||
+      x?.bankName ||
+      x?.admission?.bankName ||
+      x?.admission?.bank_name ||
+      x?.admission?.bank ||
+      ''
+    ).trim();
+
   const getFamilyNo = (x) =>
     String(
       x?.accounts?.familyNumber ||
@@ -668,10 +678,13 @@ if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; f
     (role === 'admin')
       ? '/admin/fee-collection'
       : '/dashboard/super/fee-collection';
+        const isAutoFamilyMatch = !familyNumber && Array.isArray(familyList) && familyList.length > 1;
+  const familyRouteNumber = familyNumber || (isAutoFamilyMatch ? 'auto' : '');
+  const familyRouteAdmissionId = A?.id || (familyList[0]?.id || '');
 %>
 
 <div class="container-fluid py-2 admission-details-page"
-     data-family-number="<%= familyNumber %>"
+     data-family-number="<%= familyRouteNumber %>"
      data-primary-admission-id="<%= A?.id || '' %>"
      data-user-role="<%= String(user?.role || user?.agentType || '').toLowerCase() %>"
      data-details-url="<%= (role === 'admin') ? ('/admin/admission/' + (A?.id || '')) : ('/dashboard/super/admission/' + (A?.id || '')) %>">
@@ -681,10 +694,11 @@ if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; f
       <h4 class="mb-0 page-title">Admission Details</h4>
       <div class="text-muted small">
         Admission ID: <b><%= A.id %></b>
-        <% if (familyNumber) { %>
-          <span class="mx-2">|</span> Family #: <b><%= familyNumber %></b>
-          <span class="mx-2">|</span> Students: <b><%= familyList.length %></b>
-        <% } %>
+        <% if (familyNumber || isAutoFamilyMatch) { %>
+  <span class="mx-2">|</span> Family #:
+  <b><%= familyNumber || 'Auto Matched' %></b>
+  <span class="mx-2">|</span> Students: <b><%= familyList.length %></b>
+<% } %>
       </div>
     </div>
 
@@ -753,6 +767,7 @@ if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; f
          const dept = String(X.dept || '-').trim();
          const grade = String(X.grade || '-').trim();
          const curCode = String(getCurrency(X) || '').trim();
+         const admissionBank = getAdmissionBank(X);
 
          const mm = buildMonthMatrix(X, admissionInfo);
          const monthMatrix = mm.matrix;
@@ -811,6 +826,14 @@ if (regInfo.enabled) {
            ) || '-';
 
          const regNoAccount = getRegistrationNumber(X);
+
+         const admissionComment = String(
+           admissionInfo?.comment ||
+           admissionInfo?.admission_comment ||
+           X?.comment ||
+           X?.admission_comment ||
+           ''
+         ).trim();
 
          const pendingTotal = hasNumericTotal ? totalDues : NaN;
     %>
@@ -911,13 +934,27 @@ if (regInfo.enabled) {
                   </div>
 
                   <div class="drow">
+                    <span class="k">Bank:</span>
+                    <span class="v"><%= admissionBank || '-' %></span>
+                  </div>
+
+                   <div class="drow">
+                    <span class="k">Verification #:</span>
+                    <span class="v">
+                      <%= (accounts.verificationNumber || X?.accounts_verification_number || '-') %>
+                    </span>
+                  </div>
+
+                  <div class="drow">
                     <span class="k">Reg #:</span>
                     <span class="v"><%= (regNoAccount || '-') %></span>
                   </div>
 
                   <div class="drow">
                     <span class="k">Family #:</span>
-                    <span class="v"><%= (accounts.familyNumber || getFamilyNo(X) || '-') %></span>
+                    <span class="v">
+                     <%= (accounts.familyNumber || getFamilyNo(X) || (isAutoFamilyMatch ? 'Auto Matched' : '-')) %>
+                    </span>
                   </div>
 
                   <div class="drow">
@@ -938,6 +975,16 @@ if (regInfo.enabled) {
                       <% } %>
                     </span>
                   </div>
+
+                  <% if (admissionComment) { %>
+                    <div class="admission-comment-box">
+                      <div class="admission-comment-label">
+                        <i class="bi bi-chat-left-text me-1"></i> Comment
+                      </div>
+                      <div class="admission-comment-text"><%= admissionComment %></div>
+                    </div>
+                  <% } %>
+
                   <div class="profile-edit-center">
   <a
     href="<%= (role === 'admin') ? ('/admin/admission/' + X.id + '/edit') : ('/dashboard/super/admission/' + X.id + '/edit') %>"
@@ -957,7 +1004,7 @@ if (regInfo.enabled) {
 
                 <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
   <a
-    href="<%= feeCollectionBaseUrl %>?admissionId=<%= X.id %>&familyNumber=<%= encodeURIComponent(familyNumber || '') %>"
+   href="<%= feeCollectionBaseUrl %>?admissionId=<%= X.id %>&familyNumber=<%= encodeURIComponent(familyRouteNumber || '') %>"
     class="btn btn-fee-collection btn-sm rounded-3"
     title="Open Fee Collection"
   >
@@ -965,15 +1012,15 @@ if (regInfo.enabled) {
   </a>
 
   <button
-    type="button"
-    class="btn btn-outline-secondary btn-sm rounded-3 js-open-pending-challan"
-    data-admission-id="<%= X.id %>"
-    data-family-number="<%= familyNumber %>"
-    data-family-count="<%= familyList.length %>"
-    title="Pending months list + challan"
-  >
-    <i class="bi bi-printer me-1"></i> Print Challan
-  </button>
+  type="button"
+  class="btn btn-outline-secondary btn-sm rounded-3 js-open-pending-challan"
+  data-admission-id="<%= X.id %>"
+  data-family-number="<%= familyRouteNumber %>"
+  data-family-count="<%= familyList.length %>"
+  title="Pending months list + challan"
+>
+  <i class="bi bi-printer me-1"></i> Print Challan
+</button>
 </div>
 
                 <div class="card border-0 inner-card mb-3">
@@ -1705,6 +1752,33 @@ const canPrintPaid =
   padding-top: 18px;
   margin-top: 8px;
 }
+
+.admission-comment-box{
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #f1f5f9;
+  border: 1px solid rgba(148,163,184,.35);
+  box-shadow: 0 8px 16px rgba(15,23,42,.05);
+}
+
+.admission-comment-label{
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 5px;
+}
+
+.admission-comment-text{
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
   .btn-premium-edit{
   color: #fff !important;
   border: 1px solid rgba(124,58,237,.24) !important;
@@ -1876,8 +1950,8 @@ const canPrintPaid =
   </div>
 </div>
 <script>
-  window.__ADMISSION_ID__ = <%- JSON.stringify(A?.id || "") %>;
-  window.__FAMILY_NUMBER__ = <%- JSON.stringify(familyNumber || "") %>;
+  window.__ADMISSION_ID__ = <%- JSON.stringify(familyRouteAdmissionId || "") %>;
+  window.__FAMILY_NUMBER__ = <%- JSON.stringify(familyRouteNumber || "") %>;
   window.__USER_ROLE__ = <%- JSON.stringify(String(user?.role || user?.agentType || '').toLowerCase()) %>;
   window.__DETAILS_PAGE_URL__ = <%- JSON.stringify(
     (role === 'admin')

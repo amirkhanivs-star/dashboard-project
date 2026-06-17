@@ -162,6 +162,7 @@
   registrationFee: 'colRegistrationFee',
   fees: 'colFees',
   currency: 'colCurrency',
+  bank: 'colBank',
   month: 'colMonth',
   totalFees: 'colTotalFees',
   pendingDues: 'colPendingDues',
@@ -299,6 +300,7 @@
   registrationFee: canCol('registrationFee'),
   fees: canCol('fees'),
   currency: canCol('currency'),
+  bank: canCol('bank'),
   month: canCol('month'),
   totalFees: canCol('totalFees'),
   pendingDues: canCol('pendingDues'),
@@ -339,6 +341,7 @@
   registrationFee: canEditField('registrationFee'),
   fees: canEditField('fees'),
   currency: canEditField('currency'),
+  bank: canEditField('bank'),
   month: canEditField('month'),
     }
   };
@@ -817,6 +820,15 @@ function escHtml(value) {
         ''
       ).toString().trim().toUpperCase();
 
+      const bankVal = (
+        (a.admission && (a.admission.bankName || a.admission.bank_name || a.admission.bank)) ||
+        (a.accounts && (a.accounts.bankName || a.accounts.bank_name || a.accounts.bank)) ||
+        a.bankName ||
+        a.bank_name ||
+        a.bank ||
+        ''
+      ).toString().trim();
+
       const monthVal = (a.admission && a.admission.month) || '';
       const totalFeesVal = (a.admission && a.admission.totalFees) || '';
       const pendingDuesVal = (a.admission && a.admission.pendingDues) || '';
@@ -844,9 +856,12 @@ function escHtml(value) {
 
       const currentYearOnly = new Date().getFullYear();
       const cardFields = [
-  { key: 'no', show: true, label: 'No.', value: (startRecord || 1) + index },
-  { key: 'status', show: P.col.status, label: 'Current Status', value: currentStatusVal || '-' },
-  { key: 'feeStatus', show: P.col.feeStatus, label: 'Fee Status', value: feeStatusVal || '-' },
+ { key: 'no', show: true, label: 'No.', value: a.entryNumber || a.entry_number || a.id || '-' },
+{ key: 'registrationNumber', show: P.col.reg, label: 'Reg #', value: regVal || '-' },
+{ key: 'familyNumber', show: P.col.family, label: 'Family #', value: familyVal || '-' },
+{ key: 'verificationNumber', show: P.col.verif, label: 'Verif #', value: verifVal || '-' },
+{ key: 'status', show: P.col.status, label: 'Current Status', value: currentStatusVal || '-' },
+{ key: 'feeStatus', show: P.col.feeStatus, label: 'Fee Status', value: feeStatusVal || '-' },
   { key: 'dept', show: P.col.dept, label: 'Dept', value: deptVal || '-' },
   { key: 'student', show: P.col.student, label: 'Student', value: studentVal || '-' },
   { key: 'father', show: P.col.father, label: 'Father', value: fatherVal || '-' },
@@ -857,12 +872,10 @@ function escHtml(value) {
   { key: 'processedBy', show: P.col.processedBy, label: 'Processed By', value: processedByVal || '-' },
   { key: 'paymentStatus', show: P.col.paymentStatus, label: 'Payment Status', value: payVal || '-' },
   { key: 'paidUpto', show: P.col.paidUpto, label: 'Paid Upto', value: paidUptoVal || '-' },
-  { key: 'verificationNumber', show: P.col.verif, label: 'Verif #', value: verifVal || '-' },
-  { key: 'registrationNumber', show: P.col.reg, label: 'Reg #', value: regVal || '-' },
-  { key: 'familyNumber', show: P.col.family, label: 'Family #', value: familyVal || '-' },
   { key: 'registrationFee', show: P.col.registrationFee, label: 'Registration Fee', value: registrationFeeVal || '-' },
   { key: 'fees', show: P.col.fees, label: 'Monthly Fees', value: feesVal || '-' },
   { key: 'currency', show: P.col.currency, label: 'Currency', value: currencyVal || '-' },
+  { key: 'bank', show: P.col.bank, label: 'Bank', value: bankVal || '-' },
   { key: 'month', show: P.col.month, label: 'Month/Year', value: monthVal || '-' },
   { key: 'totalFees', show: P.col.totalFees, label: 'Total Fees', value: totalFeesVal || '-' },
   { key: 'pendingDues', show: P.col.pendingDues, label: 'Pending Dues', value: pendingDuesVal || '-' },
@@ -3424,6 +3437,30 @@ function escHtml(value) {
   box-shadow: 0 0 0 4px rgba(22, 163, 74, .22), 0 10px 22px rgba(22, 163, 74, .12) !important;
   background: #ecfdf5 !important;
 }
+.admission-field-link[data-field-key="registrationNumber"],
+.admission-field-link[data-field-key="familyNumber"],
+.admission-field-link[data-field-key="verificationNumber"]{
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.admission-field-link[data-field-key="registrationNumber"] .field-label,
+.admission-field-link[data-field-key="familyNumber"] .field-label,
+.admission-field-link[data-field-key="verificationNumber"] .field-label{
+  font-size: 11px;
+  font-weight: 800;
+  color: #166534 !important;
+}
+
+.admission-field-link[data-field-key="registrationNumber"] .field-value,
+.admission-field-link[data-field-key="familyNumber"] .field-value,
+.admission-field-link[data-field-key="verificationNumber"] .field-value{
+  font-size: 13px;
+  font-weight: 900;
+  max-width: 170px;
+}
 </style>
 
 <div id="upload-flash-overlay"
@@ -3504,6 +3541,7 @@ function escHtml(value) {
             <button type="button" class="admin-search-option" data-search-key="registrationFee" data-search-label="Registration Fee">Registration Fee</button>
             <button type="button" class="admin-search-option" data-search-key="fees" data-search-label="Monthly Fees">Monthly Fees</button>
             <button type="button" class="admin-search-option" data-search-key="currency" data-search-label="Currency">Currency</button>
+            <button type="button" class="admin-search-option" data-search-key="bank" data-search-label="Bank">Bank</button>
             <button type="button" class="admin-search-option" data-search-key="month" data-search-label="Month/Year">Month/Year</button>
             <button type="button" class="admin-search-option" data-search-key="totalFees" data-search-label="Total Fees">Total Fees</button>
             <button type="button" class="admin-search-option" data-search-key="pendingDues" data-search-label="Pending Dues">Pending Dues</button>
@@ -5935,6 +5973,7 @@ if (editBillingStatusSaveBtn) {
           registrationFee: 'Registration Fee',
           fees: 'Monthly Fees',
           currency: 'Currency',
+          bank: 'Bank',
           month: 'Month/Year',
           totalFees: 'Total Fees',
           pendingDues: 'Pending Dues',
@@ -7208,6 +7247,7 @@ function applyAdmissionPipelineFileFilter(filter) {
       const a = admission || {};
 
       const map = {
+        no: a.entryNumber || a.entry_number || a.id || "-",
         status: a.status || "-",
         feeStatus: a.feeStatus || "-",
         dept: a.dept || "-",
@@ -7336,6 +7376,7 @@ function applyAdmissionPipelineFileFilter(filter) {
       updateCardHeader(card, admission);
 
       [
+        "no",
         "status",
         "feeStatus",
         "dept",
@@ -7395,51 +7436,37 @@ function applyAdmissionPipelineFileFilter(filter) {
 
     if (updateBtn) {
       updateBtn.addEventListener("click", function () {
-        applyPendingAdmissionUpdates();
+        document.documentElement.classList.add("ivs-loading");
+        window.location.reload();
       });
     }
 
-    socket.on("admission:changed", async function (payload) {
-      const singleId = getAdmissionIdFromPayload(payload);
-      const insertedIds = Array.isArray(payload?.insertedIds) ? payload.insertedIds : [];
-      const deletedIds = Array.isArray(payload?.deletedIds) ? payload.deletedIds : [];
+    socket.on("admission:changed", function (payload) {
+  const singleId = getAdmissionIdFromPayload(payload);
+  const insertedIds = Array.isArray(payload?.insertedIds) ? payload.insertedIds : [];
+  const deletedIds = Array.isArray(payload?.deletedIds) ? payload.deletedIds : [];
 
-      deletedIds.forEach(id => {
-        const card = document.querySelector(`.admission-card[data-admission-id="${CSS.escape(String(id))}"]`);
-        if (card) card.remove();
-      });
+  deletedIds.forEach(id => {
+    const card = document.querySelector(`.admission-card[data-admission-id="${CSS.escape(String(id))}"]`);
+    if (card) card.remove();
+  });
 
-      if (insertedIds.length) {
-        insertedIds.forEach(id => pendingAdmissionIds.add(String(id)));
-        showUpdatesButton();
-        return;
-      }
+  if (insertedIds.length) {
+    insertedIds.forEach(id => pendingAdmissionIds.add(String(id)));
+    showUpdatesButton();
+    return;
+  }
 
-      if (!singleId) {
-        if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
-          window.rebuildAdmissionFilesDropdowns();
-        }
-        return;
-      }
+  if (singleId) {
+    pendingAdmissionIds.add(String(singleId));
+    showUpdatesButton();
+    return;
+  }
 
-      if (isUserBusy()) {
-        pendingAdmissionIds.add(String(singleId));
-        showUpdatesButton();
-        return;
-      }
-
-      try {
-        await refreshAdmissionCard(singleId);
-
-        if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
-          window.rebuildAdmissionFilesDropdowns();
-        }
-      } catch (err) {
-        console.error("Real-time admission update failed:", err);
-        pendingAdmissionIds.add(String(singleId));
-        showUpdatesButton();
-      }
-    });
+  if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
+    window.rebuildAdmissionFilesDropdowns();
+  }
+});
 
     socket.on("user:updated", function (payload) {
       const currentUserId = Number(window.CURRENT_USER?.id || 0);

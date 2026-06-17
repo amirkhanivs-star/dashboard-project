@@ -1,5 +1,78 @@
 <%- include('partials/bootstrap-header', { user, pageTitle: 'Create Admin / Agent / Sub Agent' }) %>
+<style>
+  .create-user-link-preview{
+    margin-top: 8px;
+    width: 100%;
+  }
 
+  .create-user-link-mini{
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 10px;
+    font-size: .70rem;
+    font-weight: 800;
+    line-height: 1.25;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    color: #475569;
+  }
+
+  .create-user-link-mini i{
+    font-size: .74rem;
+    line-height: 1.2;
+    margin-top: 1px;
+    flex: 0 0 auto;
+    color: #64748b;
+  }
+
+  .create-user-link-text{
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: .66rem;
+    font-weight: 800;
+  }
+
+  .create-user-link-copy{
+    width: 23px;
+    height: 23px;
+    border: 0;
+    border-radius: 8px;
+    padding: 0;
+    background: #e5e7eb;
+    color: #475569;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 23px;
+    transition: all .16s ease;
+  }
+
+  .create-user-link-copy i{
+    font-size: .72rem;
+    line-height: 1;
+    color: #475569;
+  }
+
+  .create-user-link-copy:hover{
+    background: #d1d5db;
+    transform: translateY(-1px);
+  }
+
+  .create-user-link-copy:disabled{
+    opacity: .75;
+    cursor: not-allowed;
+    transform: none;
+  }
+</style>
 <div class="container-fluid py-4">
   <a href="/dashboard/super/users" class="small text-danger text-decoration-none mb-3 d-inline-flex align-items-center fw-semibold">
     <i class="bi bi-arrow-left me-1"></i> Back to Users
@@ -98,10 +171,32 @@
                 <input
                   type="text"
                   name="name"
+                  id="createUserNameInput"
                   class="form-control"
                   placeholder=""
                   required
                 >
+
+                <div class="create-user-link-preview">
+                  <div class="create-user-link-mini" title="">
+                    <i class="bi bi-link-45deg"></i>
+
+                    <span
+                      id="createUserAdmissionLinkPreview"
+                      class="create-user-link-text">
+                      Type name to generate link
+                    </span>
+
+                    <button
+                      type="button"
+                      class="create-user-link-copy"
+                      id="copyCreateUserAdmissionLinkBtn"
+                      title="Copy admission form link"
+                      aria-label="Copy admission form link">
+                      <i class="bi bi-clipboard"></i>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div class="col-md-4">
@@ -390,19 +485,27 @@
                           </div>
 
                           <!-- ✅ ADDED: Currency column permission -->
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colCurrency" name="colCurrency" checked>
-                              <label class="form-check-label" for="colCurrency">Currency</label>
-                            </div>
-                          </div>
+<div class="col-md-4">
+  <div class="form-check small">
+    <input class="form-check-input col-toggle" type="checkbox" id="colCurrency" name="colCurrency" checked>
+    <label class="form-check-label" for="colCurrency">Currency</label>
+  </div>
+</div>
 
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colMonth" name="colMonth" checked>
-                              <label class="form-check-label" for="colMonth">Month</label>
-                            </div>
-                          </div>
+<!-- ✅ ADDED: Bank column permission -->
+<div class="col-md-4">
+  <div class="form-check small">
+    <input class="form-check-input col-toggle" type="checkbox" id="colBank" name="colBank" checked>
+    <label class="form-check-label" for="colBank">Bank</label>
+  </div>
+</div>
+
+<div class="col-md-4">
+  <div class="form-check small">
+    <input class="form-check-input col-toggle" type="checkbox" id="colMonth" name="colMonth" checked>
+    <label class="form-check-label" for="colMonth">Month</label>
+  </div>
+</div>
 
                           <div class="col-md-4">
                             <div class="form-check small">
@@ -422,6 +525,13 @@
                             <div class="form-check small">
                               <input class="form-check-input col-toggle" type="checkbox" id="colReceivedPayment" name="colReceivedPayment" checked>
                               <label class="form-check-label" for="colReceivedPayment">Received Payment</label>
+                            </div>
+                          </div>
+
+                          <div class="col-md-4">
+                            <div class="form-check small">
+                              <input class="form-check-input col-toggle" type="checkbox" id="colComment" name="colComment" checked>
+                              <label class="form-check-label" for="colComment">Comment</label>
                             </div>
                           </div>
 
@@ -575,6 +685,11 @@
     const roleSelect = document.getElementById("roleSelect");
     const deptSelect = document.getElementById("deptSelect");
     const agentTypeSelect = document.getElementById("agentTypeSelect");
+        const createUserNameInput = document.getElementById("createUserNameInput");
+    const createUserAdmissionLinkPreview = document.getElementById("createUserAdmissionLinkPreview");
+    const copyCreateUserAdmissionLinkBtn = document.getElementById("copyCreateUserAdmissionLinkBtn");
+
+    const admissionFormBaseUrl = "<%= typeof admissionFormBaseUrl !== 'undefined' ? admissionFormBaseUrl : 'https://ivs-admission-form.onrender.com/' %>";
 
     const assignmentSection = document.getElementById("assignmentSection");
     const assignedAdminSelect = document.getElementById("assignedAdminSelect");
@@ -583,7 +698,62 @@
 
     const btnSelectAll = document.getElementById("btnSelectAll");
     const btnSelectNone = document.getElementById("btnSelectNone");
+    function buildAdmissionLinkFromName(name) {
+      const cleanName = String(name || "").trim();
+      const baseUrl = String(admissionFormBaseUrl || "https://ivs-admission-form.onrender.com/")
+        .trim()
+        .replace(/\?+$/, "")
+        .replace(/\/+$/, "/");
 
+      if (!cleanName) return "";
+
+      return baseUrl + "?sentBy=" + encodeURIComponent(cleanName);
+    }
+
+    function syncCreateUserAdmissionLinkPreview() {
+      if (!createUserNameInput || !createUserAdmissionLinkPreview) return;
+
+      const link = buildAdmissionLinkFromName(createUserNameInput.value);
+      createUserAdmissionLinkPreview.textContent = link || "Type name to generate link";
+
+      const linkWrap = createUserAdmissionLinkPreview.closest(".create-user-link-mini");
+      if (linkWrap) {
+        linkWrap.setAttribute("title", link || "");
+      }
+
+      if (copyCreateUserAdmissionLinkBtn) {
+        copyCreateUserAdmissionLinkBtn.disabled = !link;
+      }
+    }
+
+    async function copyCreateUserAdmissionLink(text) {
+      const cleanText = String(text || "").trim();
+      if (!cleanText) return false;
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(cleanText);
+          return true;
+        }
+
+        const textarea = document.createElement("textarea");
+        textarea.value = cleanText;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        const copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+
+        return copied;
+      } catch (err) {
+        console.error("Create user admission link copy failed:", err);
+        return false;
+      }
+    }
     function filterAssignedAdmins() {
       if (!assignedAdminSelect) return;
 
@@ -666,7 +836,39 @@
         cb.checked = !!on;
       });
     }
+        if (createUserNameInput) {
+      createUserNameInput.addEventListener("input", syncCreateUserAdmissionLinkPreview);
+    }
 
+    if (copyCreateUserAdmissionLinkBtn) {
+      copyCreateUserAdmissionLinkBtn.addEventListener("click", async function () {
+        const link = createUserAdmissionLinkPreview
+          ? createUserAdmissionLinkPreview.textContent.trim()
+          : "";
+        if (!link || link === "Type name to generate link") return;
+
+        const oldHtml = copyCreateUserAdmissionLinkBtn.innerHTML;
+        copyCreateUserAdmissionLinkBtn.disabled = true;
+        copyCreateUserAdmissionLinkBtn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+        const copied = await copyCreateUserAdmissionLink(link);
+
+        if (copied) {
+          copyCreateUserAdmissionLinkBtn.innerHTML = '<i class="bi bi-check2-circle"></i>';
+          copyCreateUserAdmissionLinkBtn.title = "Copied";
+        } else {
+          prompt("Copy this admission form link:", link);
+          copyCreateUserAdmissionLinkBtn.innerHTML = oldHtml;
+        }
+
+        setTimeout(function () {
+          copyCreateUserAdmissionLinkBtn.disabled = false;
+          copyCreateUserAdmissionLinkBtn.innerHTML = oldHtml;
+          copyCreateUserAdmissionLinkBtn.title = "Copy admission form link";
+          syncCreateUserAdmissionLinkPreview();
+        }, 1200);
+      });
+    }
     if (roleSelect) roleSelect.addEventListener("change", syncRoleUI);
     if (deptSelect) deptSelect.addEventListener("change", syncRoleUI);
 
@@ -674,6 +876,7 @@
     if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));
 
     syncRoleUI();
+    syncCreateUserAdmissionLinkPreview();
   })();
 </script>
 

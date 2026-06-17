@@ -104,10 +104,12 @@ const step4Class = isAdmin
   colRegistrationFee: boolPerm(parentPermRaw, 'colRegistrationFee', false),
   colFees: boolPerm(parentPermRaw, 'colFees', false),
   colCurrency: boolPerm(parentPermRaw, 'colCurrency', false),
+  colBank: boolPerm(parentPermRaw, 'colBank', false),
   colMonth: boolPerm(parentPermRaw, 'colMonth', false),
   colTotalFees: boolPerm(parentPermRaw, 'colTotalFees', false),
   colPendingDues: boolPerm(parentPermRaw, 'colPendingDues', false),
 colReceivedPayment: boolPerm(parentPermRaw, 'colReceivedPayment', false),
+colComment: boolPerm(parentPermRaw, 'colComment', false),
 colInvoiceStatus: boolPerm(parentPermRaw, 'colInvoiceStatus', false),
 colInvoiceStatusTimestamp: boolPerm(parentPermRaw, 'colInvoiceStatusTimestamp', false),
 colPaidInvoiceStatus: boolPerm(parentPermRaw, 'colPaidInvoiceStatus', false),
@@ -147,10 +149,12 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
   { name: 'colRegistrationFee',    label: 'Registration Fee' },
   { name: 'colFees',               label: 'Fees' },
   { name: 'colCurrency',           label: 'Currency' },
+  { name: 'colBank',               label: 'Bank' },
   { name: 'colMonth',              label: 'Month' },
   { name: 'colTotalFees',          label: 'Total Fees' },
   { name: 'colPendingDues',        label: 'Pending Dues' },
 { name: 'colReceivedPayment',    label: 'Received Payment' },
+{ name: 'colComment',            label: 'Comment' },
 { name: 'colInvoiceStatus',      label: 'Invoice Status' },
 { name: 'colInvoiceStatusTimestamp', label: 'Invoice Status Timestamp' },
 { name: 'colPaidInvoiceStatus',  label: 'Paid Invoice Status' },
@@ -241,6 +245,78 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
     color: #1d4ed8 !important;
     border: 1px solid rgba(59, 130, 246, 0.30) !important;
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.10);
+  }
+  .create-user-link-preview{
+    margin-top: 8px;
+    width: 100%;
+  }
+
+  .create-user-link-mini{
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 10px;
+    font-size: .70rem;
+    font-weight: 800;
+    line-height: 1.25;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    color: #475569;
+  }
+
+  .create-user-link-mini i{
+    font-size: .74rem;
+    line-height: 1.2;
+    margin-top: 1px;
+    flex: 0 0 auto;
+    color: #64748b;
+  }
+
+  .create-user-link-text{
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: .66rem;
+    font-weight: 800;
+  }
+
+  .create-user-link-copy{
+    width: 23px;
+    height: 23px;
+    border: 0;
+    border-radius: 8px;
+    padding: 0;
+    background: #e5e7eb;
+    color: #475569;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 23px;
+    transition: all .16s ease;
+  }
+
+  .create-user-link-copy i{
+    font-size: .72rem;
+    line-height: 1;
+    color: #475569;
+  }
+
+  .create-user-link-copy:hover{
+    background: #d1d5db;
+    transform: translateY(-1px);
+  }
+
+  .create-user-link-copy:disabled{
+    opacity: .75;
+    cursor: not-allowed;
+    transform: none;
   }
 </style>
 
@@ -354,9 +430,35 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
 
               <div class="col-md-4">
                 <label class="form-label small">Name</label>
-                <input type="text" name="name" class="form-control"
-                       placeholder=""
-                       <%= canCreateUsers ? 'required' : 'disabled' %>>
+                <input
+                  type="text"
+                  name="name"
+                  id="createUserNameInput"
+                  class="form-control"
+                  placeholder=""
+                  <%= canCreateUsers ? 'required' : 'disabled' %>>
+
+                <div class="create-user-link-preview">
+                  <div class="create-user-link-mini" title="">
+                    <i class="bi bi-link-45deg"></i>
+
+                    <span
+                      id="createUserAdmissionLinkPreview"
+                      class="create-user-link-text">
+                      Type name to generate link
+                    </span>
+
+                    <button
+                      type="button"
+                      class="create-user-link-copy"
+                      id="copyCreateUserAdmissionLinkBtn"
+                      title="Copy admission form link"
+                      aria-label="Copy admission form link"
+                      <%= canCreateUsers ? '' : 'disabled' %>>
+                      <i class="bi bi-clipboard"></i>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div class="col-md-4">
@@ -597,15 +699,110 @@ colActionButtons: boolPerm(parentPermRaw, 'colActionButtons', false)
     const btnSelectAll = document.getElementById("btnSelectAll");
     const btnSelectNone = document.getElementById("btnSelectNone");
 
+        const createUserNameInput = document.getElementById("createUserNameInput");
+    const createUserAdmissionLinkPreview = document.getElementById("createUserAdmissionLinkPreview");
+    const copyCreateUserAdmissionLinkBtn = document.getElementById("copyCreateUserAdmissionLinkBtn");
+
+    const admissionFormBaseUrl = "<%= typeof admissionFormBaseUrl !== 'undefined' ? admissionFormBaseUrl : 'https://ivs-admission-form.onrender.com/' %>";
+        function buildAdmissionLinkFromName(name) {
+      const cleanName = String(name || "").trim();
+      const baseUrl = String(admissionFormBaseUrl || "https://ivs-admission-form.onrender.com/")
+        .trim()
+        .replace(/\?+$/, "")
+        .replace(/\/+$/, "/");
+
+      if (!cleanName) return "";
+
+      return baseUrl + "?sentBy=" + encodeURIComponent(cleanName);
+    }
+
+        function syncCreateUserAdmissionLinkPreview() {
+      if (!createUserNameInput || !createUserAdmissionLinkPreview) return;
+
+      const link = buildAdmissionLinkFromName(createUserNameInput.value);
+      createUserAdmissionLinkPreview.textContent = link || "Type name to generate link";
+
+      const linkWrap = createUserAdmissionLinkPreview.closest(".create-user-link-mini");
+      if (linkWrap) {
+        linkWrap.setAttribute("title", link || "");
+      }
+
+      if (copyCreateUserAdmissionLinkBtn) {
+        copyCreateUserAdmissionLinkBtn.disabled = !link || createUserNameInput.disabled;
+      }
+    }
+
+    async function copyCreateUserAdmissionLink(text) {
+      const cleanText = String(text || "").trim();
+      if (!cleanText) return false;
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(cleanText);
+          return true;
+        }
+
+        const textarea = document.createElement("textarea");
+        textarea.value = cleanText;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        const copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+
+        return copied;
+      } catch (err) {
+        console.error("Admin/Agent create user admission link copy failed:", err);
+        return false;
+      }
+    }
     function toggleAll(on) {
       document.querySelectorAll(".perm-toggle, .col-toggle").forEach((cb) => {
         if (cb.disabled) return;
         cb.checked = !!on;
       });
     }
+        if (createUserNameInput) {
+      createUserNameInput.addEventListener("input", syncCreateUserAdmissionLinkPreview);
+    }
 
+    if (copyCreateUserAdmissionLinkBtn) {
+      copyCreateUserAdmissionLinkBtn.addEventListener("click", async function () {
+        const link = createUserAdmissionLinkPreview
+          ? createUserAdmissionLinkPreview.textContent.trim()
+          : "";
+        if (!link || link === "Type name to generate link") return;
+
+        const oldHtml = copyCreateUserAdmissionLinkBtn.innerHTML;
+        copyCreateUserAdmissionLinkBtn.disabled = true;
+        copyCreateUserAdmissionLinkBtn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+        const copied = await copyCreateUserAdmissionLink(link);
+
+        if (copied) {
+          copyCreateUserAdmissionLinkBtn.innerHTML = '<i class="bi bi-check2-circle"></i>';
+          copyCreateUserAdmissionLinkBtn.title = "Copied";
+        } else {
+          prompt("Copy this admission form link:", link);
+          copyCreateUserAdmissionLinkBtn.innerHTML = oldHtml;
+        }
+
+        setTimeout(function () {
+          copyCreateUserAdmissionLinkBtn.disabled = false;
+          copyCreateUserAdmissionLinkBtn.innerHTML = oldHtml;
+          copyCreateUserAdmissionLinkBtn.title = "Copy admission form link";
+          syncCreateUserAdmissionLinkPreview();
+        }, 1200);
+      });
+    }
     if (btnSelectAll) btnSelectAll.addEventListener("click", () => toggleAll(true));
     if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));
+
+    syncCreateUserAdmissionLinkPreview();
   })();
 </script>
 
