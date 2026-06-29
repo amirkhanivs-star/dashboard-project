@@ -1,0 +1,5455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : 'Developer Dashboard' %></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <link
+  href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css"
+  rel="stylesheet"
+>
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/tabLogo.png" />
+
+  <style>
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+    }
+
+    :root{
+      --black:#050505;
+      --dark:#111827;
+      --text:#111827;
+      --muted:#6b7280;
+      --soft:#f8fafc;
+      --soft2:#f3f4f6;
+      --line:#e5e7eb;
+      --line2:#d1d5db;
+      --white:#ffffff;
+      --danger:#991b1b;
+      --danger-bg:#fef2f2;
+      --ok:#166534;
+      --ok-bg:#f0fdf4;
+      --warn:#92400e;
+      --warn-bg:#fffbeb;
+    }
+
+    html{
+      scroll-behavior:smooth;
+    }
+
+    body{
+      min-height:100vh;
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      color:var(--text);
+      background:
+        linear-gradient(rgba(17,24,39,.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(17,24,39,.035) 1px, transparent 1px),
+        #ffffff;
+      background-size:32px 32px;
+      font-size:12px;
+      overflow-x:hidden;
+    }
+
+    body::before{
+      content:"";
+      position:fixed;
+      right:-130px;
+      top:-130px;
+      width:360px;
+      height:360px;
+      border-radius:999px;
+      background:#111827;
+      opacity:.045;
+      z-index:-1;
+    }
+
+    body::after{
+      content:"";
+      position:fixed;
+      left:-130px;
+      bottom:-130px;
+      width:330px;
+      height:330px;
+      border-radius:999px;
+      background:#111827;
+      opacity:.035;
+      z-index:-1;
+    }
+
+    .dev-topbar{
+      position:sticky;
+      top:0;
+      z-index:999;
+      background:rgba(255,255,255,.92);
+      backdrop-filter:blur(18px);
+      -webkit-backdrop-filter:blur(18px);
+      border-bottom:1px solid var(--line);
+    }
+
+    .top-inner{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:10px 16px;
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:9px;
+      min-width:210px;
+    }
+
+    .brand-avatar-button{
+  width:56px;
+  height:56px;
+  border:3px solid #111827;
+  border-radius:50%;
+  padding:0;
+  background:#050505;
+  color:#ffffff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  overflow:hidden;
+  cursor:pointer;
+  position:relative;
+  box-shadow:
+    0 8px 22px rgba(15,23,42,.20),
+    0 0 0 3px rgba(255,255,255,.95);
+  transition:
+    transform .18s ease,
+    box-shadow .18s ease,
+    border-color .18s ease;
+}
+
+.brand-avatar-button:hover,
+.brand-avatar-button:focus{
+  transform:translateY(-1px) scale(1.05);
+  border-color:#7c3aed;
+  box-shadow:0 10px 25px rgba(15,23,42,.25);
+  outline:none;
+}
+
+.brand-avatar-image{
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:cover;
+  object-position:center;
+  image-rendering:auto;
+  filter:none !important;
+  transform:translateZ(0);
+  backface-visibility:hidden;
+}
+
+.brand-avatar-fallback{
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#ffffff;
+  font-size:12px;
+  line-height:1;
+  font-weight:950;
+  letter-spacing:.02em;
+  background:linear-gradient(
+    135deg,
+    #635bff 0%,
+    #a855f7 52%,
+    #ec4899 100%
+  );
+}
+
+    .brand-title{
+      font-size:13px;
+      font-weight:950;
+      letter-spacing:-.2px;
+      color:#050505;
+      line-height:1.1;
+    }
+
+    .brand-sub{
+      font-size:10px;
+      color:var(--muted);
+      font-weight:750;
+      margin-top:2px;
+    }
+
+    .top-actions{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    .nav-strip{
+      display:flex;
+      gap:7px;
+      overflow-x:auto;
+      padding:0 16px 10px;
+      scrollbar-width:thin;
+    }
+
+    .nav-btn{
+      border:1px solid var(--line);
+      background:#fff;
+      color:#111827;
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:11px;
+      font-weight:900;
+      white-space:nowrap;
+      text-decoration:none;
+      transition:.16s ease;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+
+    .nav-btn:hover,
+    .nav-btn.active{
+      background:#050505;
+      color:#fff;
+      border-color:#050505;
+    }
+
+    .tiny-btn{
+      border:1px solid var(--line);
+      background:#fff;
+      color:#111827;
+      border-radius:10px;
+      padding:6px 9px;
+      font-size:11px;
+      font-weight:900;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:5px;
+      text-decoration:none;
+      transition:.16s ease;
+      min-height:30px;
+    }
+
+    .tiny-btn:hover{
+      background:#050505;
+      color:#fff;
+      border-color:#050505;
+    }
+
+    .tiny-btn.dark{
+      background:#050505;
+      color:#fff;
+      border-color:#050505;
+    }
+
+    .tiny-btn.danger{
+      background:#fff;
+      color:#991b1b;
+      border-color:#fecaca;
+    }
+
+    .tiny-btn.danger:hover{
+      background:#991b1b;
+      color:#fff;
+      border-color:#991b1b;
+    }
+
+    .tiny-btn.soft{
+      background:#f9fafb;
+    }
+
+    .top-actions .tiny-btn.soft:hover,
+    .top-actions .tiny-btn.soft:focus{
+      background:#050505;
+      color:#ffffff;
+      border-color:#050505;
+    }
+
+    .top-actions .tiny-btn.soft:hover i,
+    .top-actions .tiny-btn.soft:focus i{
+      color:#ffffff;
+    }
+
+    .dev-shell{
+      max-width:1500px;
+      margin:0 auto;
+      padding:14px 16px 34px;
+    }
+
+    .hero{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.94);
+      border-radius:24px;
+      padding:14px;
+      box-shadow:0 18px 54px rgba(15,23,42,.08);
+      margin-bottom:12px;
+    }
+
+    .hero-grid{
+      display:grid;
+      grid-template-columns:minmax(220px, .9fr) minmax(280px, 1.5fr) minmax(240px, .9fr);
+      gap:12px;
+      align-items:stretch;
+    }
+
+    .hero-title{
+      font-size:22px;
+      line-height:1;
+      font-weight:950;
+      letter-spacing:-.7px;
+      color:#050505;
+      margin-bottom:7px;
+    }
+
+    .hero-text{
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.5;
+      font-weight:650;
+      max-width:520px;
+    }
+
+    .search-box{
+      position:relative;
+    }
+
+    .search-box i{
+      position:absolute;
+      left:12px;
+      top:50%;
+      transform:translateY(-50%);
+      color:#9ca3af;
+      font-size:13px;
+    }
+
+    .search-box input{
+      width:100%;
+      height:36px;
+      border:1px solid var(--line);
+      border-radius:13px;
+      padding:0 12px 0 34px;
+      font-size:12px;
+      font-weight:750;
+      background:#fff;
+      outline:none;
+    }
+
+    .search-box input:focus{
+      border-color:#050505;
+      box-shadow:0 0 0 4px rgba(17,24,39,.08);
+    }
+
+    .quick-box{
+      border:1px solid var(--line);
+      background:#f9fafb;
+      border-radius:18px;
+      padding:11px;
+      height:100%;
+    }
+
+    .quick-title{
+      color:#050505;
+      font-weight:950;
+      font-size:12px;
+      margin-bottom:8px;
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+
+    .quick-list{
+      display:grid;
+      gap:6px;
+    }
+
+    .quick-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      color:#4b5563;
+      font-size:11px;
+      font-weight:800;
+    }
+
+    .quick-row span:last-child{
+      color:#050505;
+      font-weight:950;
+    }
+
+    .section{
+      min-height:calc(100vh - 92px);
+      scroll-margin-top:92px;
+      padding:10px 0 18px;
+    }
+
+    .section-head{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:12px;
+      margin:2px 0 10px;
+    }
+
+    .section-title{
+      font-size:17px;
+      font-weight:950;
+      letter-spacing:-.4px;
+      color:#050505;
+      line-height:1;
+    }
+
+    .section-sub{
+      color:var(--muted);
+      font-size:11px;
+      font-weight:750;
+      margin-top:4px;
+    }
+
+    .section-tools{
+      display:flex;
+      align-items:center;
+      gap:7px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    .card-grid{
+      display:grid;
+      grid-template-columns:repeat(6, minmax(0, 1fr));
+      gap:9px;
+      margin-bottom:10px;
+    }
+
+    .stat-card{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:17px;
+      padding:11px;
+      min-height:86px;
+      box-shadow:0 12px 30px rgba(15,23,42,.045);
+      position:relative;
+      overflow:hidden;
+    }
+
+    .stat-card::after{
+      content:"";
+      position:absolute;
+      right:-22px;
+      top:-22px;
+      width:70px;
+      height:70px;
+      border-radius:999px;
+      background:#050505;
+      opacity:.035;
+    }
+
+    .stat-top{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      margin-bottom:9px;
+    }
+
+    .stat-icon{
+      width:27px;
+      height:27px;
+      border-radius:10px;
+      background:#050505;
+      color:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:13px;
+    }
+
+    .stat-chip{
+      font-size:9px;
+      color:#6b7280;
+      border:1px solid var(--line);
+      background:#f9fafb;
+      border-radius:999px;
+      padding:3px 6px;
+      font-weight:900;
+      white-space:nowrap;
+    }
+
+    .stat-value{
+      font-size:22px;
+      font-weight:950;
+      color:#050505;
+      line-height:1;
+      letter-spacing:-.6px;
+    }
+
+    .stat-label{
+      margin-top:5px;
+      font-size:11px;
+      font-weight:850;
+      color:#4b5563;
+      line-height:1.25;
+    }
+
+    .panel-grid{
+      display:grid;
+      grid-template-columns:1.15fr .85fr;
+      gap:10px;
+      margin-bottom:10px;
+    }
+
+    .panel-grid.three{
+      grid-template-columns:1fr 1fr 1fr;
+    }
+
+    .panel{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:18px;
+      box-shadow:0 12px 30px rgba(15,23,42,.045);
+      overflow:hidden;
+    }
+
+    .panel-head{
+      padding:10px 12px;
+      border-bottom:1px solid var(--line);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      background:#fff;
+    }
+
+    .panel-title{
+      font-size:12px;
+      font-weight:950;
+      color:#050505;
+      display:flex;
+      align-items:center;
+      gap:7px;
+    }
+
+    .panel-title i{
+      color:#050505;
+    }
+
+    .panel-body{
+      padding:11px;
+    }
+
+    .small-chart{
+      width:100%;
+      min-height:180px;
+      display:grid;
+      gap:8px;
+    }
+
+    .bar-row{
+      display:grid;
+      grid-template-columns:96px 1fr 54px;
+      gap:8px;
+      align-items:center;
+      font-size:11px;
+      font-weight:850;
+      color:#374151;
+    }
+
+    .bar-label{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .bar-track{
+      height:11px;
+      border-radius:999px;
+      background:#f3f4f6;
+      overflow:hidden;
+      border:1px solid #e5e7eb;
+    }
+
+    .bar-fill{
+      height:100%;
+      border-radius:999px;
+      background:#050505;
+      min-width:3px;
+      transition:.35s ease;
+    }
+
+    .bar-value{
+      text-align:right;
+      color:#050505;
+      font-weight:950;
+    }
+
+    .mini-table-wrap{
+      overflow:auto;
+      max-height:420px;
+      border-radius:14px;
+      border:1px solid var(--line);
+    }
+
+    table.dev-table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      background:#fff;
+      min-width:780px;
+    }
+
+    .dev-table th,
+    .dev-table td{
+      padding:8px 9px;
+      border-bottom:1px solid var(--line);
+      font-size:11px;
+      vertical-align:middle;
+      white-space:nowrap;
+    }
+
+    .dev-table th{
+      position:sticky;
+      top:0;
+      z-index:2;
+      background:#f9fafb;
+      color:#374151;
+      font-size:10px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      font-weight:950;
+    }
+
+    .dev-table td{
+      color:#111827;
+      font-weight:700;
+    }
+
+    .dev-table tr:hover td{
+      background:#fafafa;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:5px;
+      padding:4px 8px;
+      border-radius:999px;
+      font-size:10px;
+      font-weight:950;
+      border:1px solid var(--line);
+      background:#f9fafb;
+      color:#111827;
+    }
+
+    .pill.ok{
+      background:var(--ok-bg);
+      color:var(--ok);
+      border-color:#bbf7d0;
+    }
+
+    .pill.warn{
+      background:var(--warn-bg);
+      color:var(--warn);
+      border-color:#fde68a;
+    }
+
+    .pill.danger{
+      background:var(--danger-bg);
+      color:var(--danger);
+      border-color:#fecaca;
+    }
+
+    .form-mini{
+      display:grid;
+      gap:8px;
+    }
+
+    .mini-label{
+      font-size:10px;
+      color:#4b5563;
+      font-weight:950;
+      margin-bottom:4px;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+
+    .mini-input,
+    .mini-select,
+    .mini-textarea{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:12px;
+      height:34px;
+      padding:0 10px;
+      font-size:12px;
+      font-weight:750;
+      color:#111827;
+      background:#fff;
+      outline:none;
+    }
+
+    .mini-textarea{
+      height:80px;
+      padding:10px;
+      resize:vertical;
+    }
+
+    .mini-input:focus,
+    .mini-select:focus,
+    .mini-textarea:focus{
+      border-color:#050505;
+      box-shadow:0 0 0 4px rgba(17,24,39,.08);
+    }
+
+    .api-grid{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:9px;
+    }
+
+    .setting-card{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:15px;
+      padding:10px;
+    }
+
+    .setting-key{
+      font-size:10px;
+      color:#6b7280;
+      font-weight:950;
+      letter-spacing:.05em;
+      text-transform:uppercase;
+      margin-bottom:6px;
+    }
+    .input-action-wrap{
+  position:relative;
+  width:100%;
+}
+
+.input-action-wrap .mini-input{
+  padding-right:42px;
+}
+
+.input-action-btn{
+  position:absolute;
+  right:4px;
+  top:50%;
+  transform:translateY(-50%);
+  width:28px;
+  height:27px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:#f9fafb;
+  color:#111827;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  font-size:12px;
+  transition:.16s ease;
+}
+
+.input-action-btn:hover,
+.input-action-btn:focus{
+  background:#050505;
+  border-color:#050505;
+  color:#ffffff;
+  outline:none;
+}
+
+.developer-profile-grid{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:9px;
+}
+
+.setting-note{
+  margin-top:7px;
+  color:#6b7280;
+  font-size:10px;
+  line-height:1.45;
+  font-weight:750;
+}
+
+.security-note{
+  border:1px solid #fde68a;
+  background:#fffbeb;
+  color:#92400e;
+  border-radius:13px;
+  padding:9px 10px;
+  font-size:11px;
+  font-weight:800;
+  line-height:1.5;
+}
+
+@media (max-width:900px){
+  .developer-profile-grid{
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width:620px){
+  .developer-profile-grid{
+    grid-template-columns:1fr;
+  }
+}
+    .footer-nav{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      margin-top:10px;
+      padding-top:10px;
+      border-top:1px solid var(--line);
+    }
+
+    .empty{
+      border:1px dashed #d1d5db;
+      border-radius:14px;
+      padding:18px 12px;
+      color:#6b7280;
+      background:#f9fafb;
+      text-align:center;
+      font-size:12px;
+      font-weight:800;
+    }
+    .perm-grid{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:7px;
+  max-height:260px;
+  overflow:auto;
+  border:1px solid var(--line);
+  background:#f9fafb;
+  border-radius:14px;
+  padding:9px;
+}
+
+.perm-item{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-height:31px;
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:11px;
+  padding:6px 8px;
+  font-size:10px;
+  font-weight:850;
+  color:#111827;
+}
+
+.perm-item input{
+  width:14px;
+  height:14px;
+  accent-color:#050505;
+  flex-shrink:0;
+}
+
+.perm-item span{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.result-box{
+  border:1px solid #bbf7d0;
+  background:#f0fdf4;
+  color:#166534;
+  border-radius:14px;
+  padding:10px;
+  font-size:12px;
+  font-weight:850;
+}
+
+@media (max-width:900px){
+  .perm-grid{
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width:520px){
+  .perm-grid{
+    grid-template-columns:1fr;
+  }
+}
+    .modal-content{
+      border-radius:22px;
+      border:1px solid var(--line);
+      box-shadow:0 26px 80px rgba(0,0,0,.16);
+    }
+
+    .modal-header{
+      border-bottom:1px solid var(--line);
+      padding:12px 14px;
+    }
+
+    .modal-title{
+      font-size:14px;
+      font-weight:950;
+    }
+
+    .modal-body{
+      padding:14px;
+    }
+
+    .modal-footer{
+      border-top:1px solid var(--line);
+      padding:12px 14px;
+    }
+   /* ================== DEVELOPER PROFILE CARD ================== */
+
+.developer-profile-modal .modal-dialog{
+  max-width:980px;
+}
+
+.developer-profile-modal-content{
+  border:0 !important;
+  border-radius:30px !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  overflow:visible;
+}
+
+.developer-profile-card{
+  position:relative;
+  overflow:hidden;
+  border-radius:30px;
+  border:1px solid rgba(255,255,255,.78);
+  background:linear-gradient(
+    135deg,
+    rgba(237,233,254,.99) 0%,
+    rgba(243,232,255,.99) 48%,
+    rgba(252,231,243,.99) 100%
+  );
+  box-shadow:
+    0 35px 100px rgba(23,16,54,.34),
+    0 12px 35px rgba(124,58,237,.17);
+}
+
+.developer-profile-cover{
+  position:relative;
+  min-height:250px;
+  padding:22px 28px 30px;
+  overflow:hidden;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,255,255,0) 0%,
+      rgba(255,255,255,0) 53%,
+      rgba(255,255,255,.45) 53%,
+      rgba(255,255,255,.45) 100%
+    ),
+    radial-gradient(
+      circle at 18% 18%,
+      rgba(255,255,255,.20) 0 2px,
+      transparent 2px 100%
+    ),
+    linear-gradient(
+      115deg,
+      #8174fa 0%,
+      #ae72ee 48%,
+      #eb75bc 100%
+    );
+  background-size:auto, 22px 22px, auto;
+}
+
+.developer-profile-cover::after{
+  content:"";
+  position:absolute;
+  width:280px;
+  height:280px;
+  right:-100px;
+  top:-145px;
+  border-radius:50%;
+  background:rgba(255,255,255,.12);
+  pointer-events:none;
+}
+
+.developer-profile-top-row{
+  position:relative;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.developer-profile-top-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:9px 13px;
+  border-radius:16px;
+  background:rgba(255,255,255,.93);
+  color:#302d49;
+  font-size:11px;
+  font-weight:950;
+  letter-spacing:.03em;
+  box-shadow:0 10px 28px rgba(41,29,90,.16);
+}
+
+.developer-profile-chip-number{
+  min-width:32px;
+  height:30px;
+  padding:0 8px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  color:#ffffff;
+  background:#635bff;
+  font-size:10px;
+  font-weight:950;
+}
+
+.developer-profile-close{
+  width:36px;
+  height:36px;
+  border:1px solid rgba(255,255,255,.7);
+  border-radius:12px;
+  background:rgba(17,24,39,.88);
+  color:#ffffff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  transition:.16s ease;
+}
+
+.developer-profile-close:hover{
+  background:#ffffff;
+  color:#111827;
+  transform:rotate(4deg);
+}
+
+.developer-profile-identity{
+  position:relative;
+  z-index:2;
+  display:flex;
+  align-items:flex-end;
+  gap:25px;
+  margin-top:45px;
+}
+
+.developer-card-avatar-shell{
+  position:relative;
+  width:170px;
+  height:170px;
+  border-radius:30px;
+  flex-shrink:0;
+  border:6px solid rgba(255,255,255,.96);
+  background:#111827;
+  box-shadow:
+    0 22px 38px rgba(37,26,82,.28),
+    0 4px 12px rgba(0,0,0,.12);
+}
+
+.developer-card-avatar-image,
+.developer-card-avatar-fallback{
+  width:100%;
+  height:100%;
+  border-radius:22px;
+}
+
+.developer-card-avatar-image{
+  display:block;
+  object-fit:cover;
+  object-position:center top;
+  background:#ffffff;
+  image-rendering:auto;
+  filter:none !important;
+}
+
+.developer-card-avatar-fallback{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#ffffff;
+  font-size:38px;
+  font-weight:950;
+  letter-spacing:-.04em;
+  background:linear-gradient(
+    135deg,
+    #111827 0%,
+    #5b21b6 48%,
+    #db2777 100%
+  );
+}
+
+.developer-card-camera-button{
+  position:absolute;
+  right:-10px;
+  bottom:-10px;
+  width:42px;
+  height:42px;
+  border:4px solid #ffffff;
+  border-radius:50%;
+  background:#111827;
+  color:#ffffff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  font-size:15px;
+  box-shadow:0 9px 22px rgba(0,0,0,.24);
+  transition:.16s ease;
+}
+
+.developer-card-camera-button:hover{
+  background:#635bff;
+  transform:scale(1.06);
+}
+
+.developer-card-camera-button:disabled{
+  opacity:.6;
+  cursor:not-allowed;
+  transform:none;
+}
+
+.developer-profile-main-info{
+  min-width:0;
+  padding-bottom:7px;
+}
+
+.developer-profile-eyebrow{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:7px;
+}
+
+.developer-profile-role-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.87);
+  color:#5b4fe8;
+  font-size:10px;
+  font-weight:950;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+}
+
+.developer-profile-online{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  color:#059669;
+  font-size:11px;
+  font-weight:950;
+}
+
+.developer-profile-online-dot{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:#10b981;
+  box-shadow:0 0 0 4px rgba(16,185,129,.14);
+}
+
+.developer-profile-name{
+  margin:0;
+  color:#17152d;
+  font-size:38px;
+  line-height:1.05;
+  font-weight:950;
+  letter-spacing:-1.3px;
+  word-break:break-word;
+}
+
+.developer-profile-name-id{
+  color:#6558f5;
+}
+
+.developer-profile-meta-line{
+  display:flex;
+  align-items:center;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-top:11px;
+  color:#706e8c;
+  font-size:13px;
+  font-weight:800;
+}
+
+.developer-profile-meta-line span{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+}
+
+.developer-profile-body{
+  padding:26px 28px 24px;
+}
+
+.developer-card-info-grid{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:15px;
+}
+
+.developer-info-card{
+  min-height:102px;
+  border:1px solid rgba(255,255,255,.80);
+  border-radius:19px;
+  padding:16px;
+  background:rgba(255,255,255,.58);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.88);
+  backdrop-filter:blur(13px);
+  -webkit-backdrop-filter:blur(13px);
+}
+
+.developer-info-head{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:12px;
+  color:#9290b0;
+  font-size:10px;
+  line-height:1;
+  font-weight:950;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+.developer-info-icon{
+  width:32px;
+  height:32px;
+  border-radius:10px;
+  background:#ffffff;
+  color:#6558f5;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  font-size:14px;
+  box-shadow:0 5px 13px rgba(79,70,229,.10);
+}
+
+.developer-info-value{
+  color:#34324a;
+  font-size:14px;
+  line-height:1.4;
+  font-weight:900;
+  overflow-wrap:anywhere;
+}
+
+.developer-profile-divider{
+  height:1px;
+  margin:23px 0 18px;
+  background:rgba(113,99,178,.16);
+}
+
+.developer-profile-footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+}
+
+.developer-profile-dates{
+  display:flex;
+  align-items:center;
+  gap:18px;
+  flex-wrap:wrap;
+  color:#77758e;
+  font-size:10px;
+  font-weight:800;
+}
+
+.developer-profile-dates strong{
+  display:block;
+  margin-top:3px;
+  color:#34324a;
+  font-size:11px;
+  font-weight:950;
+}
+
+.developer-profile-actions{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  flex-wrap:wrap;
+}
+
+.developer-profile-upload-btn{
+  border:0;
+  border-radius:13px;
+  min-height:40px;
+  padding:9px 15px;
+  background:linear-gradient(
+    135deg,
+    #6558f5,
+    #8b5cf6
+  );
+  color:#ffffff;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  font-size:11px;
+  font-weight:950;
+  cursor:pointer;
+  box-shadow:0 10px 22px rgba(99,88,245,.25);
+  transition:.16s ease;
+}
+
+.developer-profile-upload-btn:hover{
+  transform:translateY(-1px);
+  box-shadow:0 13px 26px rgba(99,88,245,.32);
+}
+
+.developer-profile-upload-btn:disabled{
+  opacity:.65;
+  cursor:not-allowed;
+  transform:none;
+}
+
+.developer-profile-close-btn{
+  min-height:40px;
+  padding:9px 15px;
+  border:1px solid rgba(98,87,180,.18);
+  border-radius:13px;
+  background:rgba(255,255,255,.72);
+  color:#34324a;
+  font-size:11px;
+  font-weight:950;
+  cursor:pointer;
+}
+
+.developer-profile-close-btn:hover{
+  background:#ffffff;
+}
+
+.developer-profile-upload-note{
+  margin-top:8px;
+  color:#85829d;
+  font-size:9px;
+  font-weight:750;
+}
+
+@media (max-width:760px){
+  .developer-profile-modal .modal-dialog{
+    margin:10px;
+  }
+
+  .developer-profile-cover{
+    min-height:auto;
+    padding:18px;
+  }
+
+  .developer-profile-identity{
+    align-items:center;
+    flex-direction:column;
+    text-align:center;
+    margin-top:28px;
+  }
+
+  .developer-profile-eyebrow,
+  .developer-profile-meta-line{
+    justify-content:center;
+  }
+
+  .developer-profile-name{
+    font-size:29px;
+  }
+
+  .developer-profile-body{
+    padding:18px;
+  }
+
+  .developer-card-info-grid{
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+  }
+
+  .developer-profile-footer{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+}
+
+@media (max-width:520px){
+  .developer-card-avatar-shell{
+    width:135px;
+    height:135px;
+  }
+
+  .developer-card-info-grid{
+    grid-template-columns:1fr;
+  }
+
+  .developer-profile-actions{
+    width:100%;
+  }
+
+  .developer-profile-upload-btn,
+  .developer-profile-close-btn{
+    flex:1;
+  }
+}
+/* ================== DEVELOPER IMAGE CROPPER ================== */
+
+.developer-crop-modal .modal-dialog{
+  max-width:920px;
+}
+
+.developer-crop-content{
+  overflow:hidden;
+  border:0 !important;
+  border-radius:24px !important;
+  background:#ffffff;
+  box-shadow:0 35px 100px rgba(15,23,42,.35);
+}
+
+.developer-crop-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:15px 18px;
+  border-bottom:1px solid var(--line);
+  background:#ffffff;
+}
+
+.developer-crop-title{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  color:#111827;
+  font-size:15px;
+  font-weight:950;
+}
+
+.developer-crop-title-icon{
+  width:34px;
+  height:34px;
+  border-radius:11px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#ffffff;
+  background:linear-gradient(135deg, #6558f5, #ec4899);
+}
+
+.developer-crop-close{
+  width:34px;
+  height:34px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:#f9fafb;
+  color:#111827;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+
+.developer-crop-close:hover{
+  background:#111827;
+  color:#ffffff;
+}
+
+.developer-crop-body{
+  padding:18px;
+  background:#f8fafc;
+}
+
+.developer-crop-layout{
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) 190px;
+  gap:16px;
+}
+
+.developer-crop-stage{
+  width:100%;
+  height:min(62vh, 570px);
+  min-height:440px;
+  overflow:hidden;
+  border-radius:20px;
+  border:1px solid #1f2937;
+  background:
+    linear-gradient(45deg, #111827 25%, transparent 25%),
+    linear-gradient(-45deg, #111827 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #111827 75%),
+    linear-gradient(-45deg, transparent 75%, #111827 75%),
+    #0b1220;
+  background-size:22px 22px;
+  background-position:0 0, 0 11px, 11px -11px, -11px 0;
+}
+
+#developerCropImage{
+  display:block;
+  max-width:100%;
+  opacity:0;
+}
+
+.developer-crop-side{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.developer-crop-preview-card{
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:17px;
+  background:#ffffff;
+}
+
+.developer-crop-preview-title{
+  margin-bottom:10px;
+  color:#6b7280;
+  font-size:10px;
+  font-weight:950;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+
+.developer-crop-preview{
+  width:132px;
+  height:132px;
+  margin:0 auto;
+  overflow:hidden;
+  border:5px solid #ffffff;
+  border-radius:28px;
+  background:#111827;
+  box-shadow:0 10px 25px rgba(15,23,42,.20);
+}
+
+.developer-crop-help{
+  color:#6b7280;
+  font-size:10px;
+  line-height:1.5;
+  font-weight:750;
+}
+
+.developer-crop-tools{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:8px;
+}
+
+.developer-crop-tool-btn{
+  min-height:38px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#ffffff;
+  color:#111827;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  cursor:pointer;
+  font-size:10px;
+  font-weight:900;
+}
+
+.developer-crop-tool-btn:hover{
+  background:#111827;
+  color:#ffffff;
+  border-color:#111827;
+}
+
+.developer-crop-footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:14px 18px;
+  border-top:1px solid var(--line);
+  background:#ffffff;
+}
+
+.developer-crop-output-note{
+  color:#6b7280;
+  font-size:10px;
+  font-weight:750;
+}
+
+.developer-crop-actions{
+  display:flex;
+  align-items:center;
+  gap:9px;
+}
+
+.developer-crop-cancel-btn,
+.developer-crop-upload-btn{
+  min-height:40px;
+  padding:9px 15px;
+  border-radius:13px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  cursor:pointer;
+  font-size:11px;
+  font-weight:950;
+}
+
+.developer-crop-cancel-btn{
+  border:1px solid var(--line);
+  background:#ffffff;
+  color:#111827;
+}
+
+.developer-crop-upload-btn{
+  border:0;
+  color:#ffffff;
+  background:linear-gradient(135deg, #6558f5, #8b5cf6);
+  box-shadow:0 10px 22px rgba(99,88,245,.26);
+}
+
+.developer-crop-upload-btn:disabled{
+  opacity:.65;
+  cursor:not-allowed;
+}
+
+.developer-crop-modal .cropper-view-box,
+.developer-crop-modal .cropper-face{
+  border-radius:24px;
+}
+
+.developer-crop-modal .cropper-line,
+.developer-crop-modal .cropper-point{
+  background-color:#6558f5;
+}
+
+@media (max-width:760px){
+  .developer-crop-modal .modal-dialog{
+    margin:10px;
+  }
+
+  .developer-crop-layout{
+    grid-template-columns:1fr;
+  }
+
+  .developer-crop-stage{
+    height:460px;
+    min-height:360px;
+  }
+
+  .developer-crop-side{
+    display:grid;
+    grid-template-columns:150px 1fr;
+  }
+
+  .developer-crop-preview{
+    width:110px;
+    height:110px;
+  }
+
+  .developer-crop-footer{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+
+  .developer-crop-actions{
+    width:100%;
+  }
+
+  .developer-crop-cancel-btn,
+  .developer-crop-upload-btn{
+    flex:1;
+  }
+}
+
+@media (max-width:520px){
+  .developer-crop-side{
+    grid-template-columns:1fr;
+  }
+
+  .developer-crop-stage{
+    height:390px;
+    min-height:320px;
+  }
+}
+    .toast-box{
+      position:fixed;
+      right:14px;
+      bottom:14px;
+      z-index:2000;
+      display:grid;
+      gap:8px;
+      width:min(360px, calc(100vw - 28px));
+    }
+
+    .dev-toast{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:16px;
+      padding:10px 12px;
+      box-shadow:0 18px 45px rgba(15,23,42,.16);
+      font-size:12px;
+      font-weight:850;
+      color:#111827;
+      display:flex;
+      align-items:flex-start;
+      gap:9px;
+      animation:toastIn .18s ease-out;
+    }
+
+    .dev-toast.ok{
+      border-color:#bbf7d0;
+      background:#f0fdf4;
+      color:#166534;
+    }
+
+    .dev-toast.danger{
+      border-color:#fecaca;
+      background:#fef2f2;
+      color:#991b1b;
+    }
+
+    @keyframes toastIn{
+      from{ opacity:0; transform:translateY(8px); }
+      to{ opacity:1; transform:translateY(0); }
+    }
+
+    @media (max-width:1200px){
+      .card-grid{
+        grid-template-columns:repeat(3, minmax(0, 1fr));
+      }
+
+      .hero-grid,
+      .panel-grid,
+      .panel-grid.three{
+        grid-template-columns:1fr;
+      }
+    }
+
+    @media (max-width:720px){
+      .top-inner{
+        align-items:flex-start;
+        flex-direction:column;
+      }
+
+      .top-actions{
+        width:100%;
+        justify-content:flex-start;
+      }
+
+      .card-grid{
+        grid-template-columns:repeat(2, minmax(0, 1fr));
+      }
+
+      .api-grid{
+        grid-template-columns:1fr;
+      }
+
+      .section{
+        min-height:auto;
+      }
+    }
+
+    @media (max-width:480px){
+      .dev-shell{
+        padding:12px 10px 28px;
+      }
+
+      .card-grid{
+        grid-template-columns:1fr;
+      }
+
+      .hero-title{
+        font-size:19px;
+      }
+    }
+  </style>
+</head>
+
+<%
+  const devName =
+    (typeof developer !== 'undefined' && developer && developer.name)
+      ? developer.name
+      : 'Developer';
+
+  const devUsername =
+    (typeof developer !== 'undefined' && developer && developer.username)
+      ? developer.username
+      : '';
+
+  const devEmail =
+    (typeof developer !== 'undefined' && developer && developer.email)
+      ? developer.email
+      : '';
+
+  const devProfileImageUrl =
+    (
+      typeof developer !== 'undefined' &&
+      developer &&
+      developer.profileImageUrl
+    )
+      ? developer.profileImageUrl
+      : '';
+
+  const devInitials =
+    String(devName || 'Developer')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0))
+      .join('')
+      .toUpperCase() || 'D';
+%>
+
+<body>
+
+<header class="dev-topbar">
+  <div class="top-inner">
+    <div class="brand">
+  <button
+    class="brand-avatar-button"
+    type="button"
+    id="openDeveloperProfileBtn"
+    title="Open Developer Profile"
+    aria-label="Open Developer Profile"
+    data-developer-name="<%= devName %>"
+    data-developer-username="<%= devUsername %>"
+    data-developer-email="<%= devEmail %>"
+    data-profile-image-url="<%= devProfileImageUrl %>"
+  >
+    <img
+      id="developerHeaderAvatarImage"
+      class="brand-avatar-image <%= devProfileImageUrl ? '' : 'd-none' %>"
+      <% if (devProfileImageUrl) { %>
+        src="<%= devProfileImageUrl %>"
+      <% } %>
+      alt="<%= devName %> profile picture"
+    >
+
+    <span
+      id="developerHeaderAvatarFallback"
+      class="brand-avatar-fallback <%= devProfileImageUrl ? 'd-none' : '' %>"
+    ><%= devInitials %></span>
+  </button>
+
+  <div>
+        <div class="brand-title">Developer Dashboard</div>
+        <div class="brand-sub" id="developerIdentityText">
+  Logged in as <%= devName %>
+  <%= devUsername ? '(' + devUsername + ')' : '' %>
+  <%= devEmail ? ' • ' + devEmail : '' %>
+</div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button class="tiny-btn soft" type="button" id="refreshBtn">
+        <i class="bi bi-arrow-clockwise"></i>
+        Refresh
+      </button>
+
+      <button class="tiny-btn soft" type="button" id="downloadAllBtn">
+        <i class="bi bi-download"></i>
+        Export Data
+      </button>
+
+      <form method="POST" action="/developer/logout" class="m-0">
+        <button class="tiny-btn danger" type="submit">
+          <i class="bi bi-box-arrow-right"></i>
+          Logout
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <nav class="nav-strip" id="navStrip">
+    <a class="nav-btn active" href="#overview"><i class="bi bi-grid"></i>Overview</a>
+    <a class="nav-btn" href="#school"><i class="bi bi-mortarboard"></i>School</a>
+    <a class="nav-btn" href="#quran"><i class="bi bi-book"></i>Quran</a>
+    <a class="nav-btn" href="#tuition"><i class="bi bi-journal-text"></i>Tuition</a>
+    <a class="nav-btn" href="#users"><i class="bi bi-people"></i>Users</a>
+    <a class="nav-btn" href="#payments"><i class="bi bi-cash-stack"></i>Payments</a>
+    <a class="nav-btn" href="#online"><i class="bi bi-wifi"></i>Online</a>
+    <a class="nav-btn" href="#usage"><i class="bi bi-activity"></i>Usage</a>
+    <a class="nav-btn" href="#apis"><i class="bi bi-sliders"></i>APIs</a>
+    <a class="nav-btn" href="#database"><i class="bi bi-database"></i>Database</a>
+  </nav>
+</header>
+
+<main class="dev-shell">
+
+  <section class="hero">
+    <div class="hero-grid">
+      <div>
+        <div class="hero-title">Control Center</div>
+        <div class="hero-text">
+          Compact developer view for users, admissions, payments, online activity, usage, APIs and exports.
+        </div>
+      </div>
+
+      <div class="search-box">
+        <i class="bi bi-search"></i>
+        <input type="search" id="globalSearch" placeholder="Search users, email, role, department, API key, page or any visible data">
+      </div>
+
+      <div class="quick-box">
+        <div class="quick-title">
+          <i class="bi bi-lightning-charge"></i>
+          Live Snapshot
+        </div>
+        <div class="quick-list">
+          <div class="quick-row"><span>Total Users</span><span id="quickUsers">0</span></div>
+          <div class="quick-row"><span>Total Admissions</span><span id="quickAdmissions">0</span></div>
+          <div class="quick-row"><span>Online Now</span><span id="quickOnline">0</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="overview">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Overview</div>
+        <div class="section-sub">Complete website snapshot in small cards.</div>
+      </div>
+      <div class="section-tools">
+        <button class="tiny-btn" type="button" onclick="downloadJSON('developer-stats.json', state.stats)">
+          <i class="bi bi-filetype-json"></i>
+          Stats JSON
+        </button>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="stat-card">
+        <div class="stat-top"><div class="stat-icon"><i class="bi bi-people"></i></div><div class="stat-chip">Users</div></div>
+        <div class="stat-value" data-stat="totalUsers">0</div>
+        <div class="stat-label">Total Users</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-top"><div class="stat-icon"><i class="bi bi-person-check"></i></div><div class="stat-chip">Live</div></div>
+        <div class="stat-value" data-stat="onlineUsers">0</div>
+        <div class="stat-label">Online Users</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-top"><div class="stat-icon"><i class="bi bi-card-checklist"></i></div><div class="stat-chip">Admissions</div></div>
+        <div class="stat-value" data-stat="totalAdmissions">0</div>
+        <div class="stat-label">Total Admissions</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-top"><div class="stat-icon"><i class="bi bi-calendar-day"></i></div><div class="stat-chip">Today</div></div>
+        <div class="stat-value" data-stat="todayUsage">0</div>
+        <div class="stat-label">Today Active Time</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-top"><div class="stat-icon"><i class="bi bi-calendar-week"></i></div><div class="stat-chip">Week</div></div>
+        <div class="stat-value" data-stat="weeklyUsage">0</div>
+        <div class="stat-label">Weekly Active Time</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-top"><div class="stat-icon"><i class="bi bi-calendar4"></i></div><div class="stat-chip">Year</div></div>
+        <div class="stat-value" data-stat="yearlyUsage">0</div>
+        <div class="stat-label">Yearly Active Time</div>
+      </div>
+    </div>
+
+    <div class="panel-grid">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-bar-chart"></i> Admissions by Department</div>
+          <span class="pill">School, Quran, Tuition</span>
+        </div>
+        <div class="panel-body">
+          <div id="deptAdmissionsChart" class="small-chart"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-person-lines-fill"></i> Users by Department</div>
+          <span class="pill">Live DB</span>
+        </div>
+        <div class="panel-body">
+          <div id="deptUsersChart" class="small-chart"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-nav">
+      <span class="pill">Overview complete</span>
+      <a href="#school" class="tiny-btn dark">Next: School <i class="bi bi-arrow-down"></i></a>
+    </div>
+  </section>
+
+  <section class="section" id="school" data-dept="school">
+    <div class="section-head">
+      <div>
+        <div class="section-title">School Department</div>
+        <div class="section-sub">School users, admissions, payments and activity.</div>
+      </div>
+      <div class="section-tools">
+        <button class="tiny-btn" type="button" onclick="exportDept('school')"><i class="bi bi-download"></i>Export School</button>
+      </div>
+    </div>
+
+    <div class="card-grid" id="schoolCards"></div>
+
+    <div class="panel-grid">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-graph-up"></i> School Admissions Timeline</div>
+          <span class="pill warn">Backend timeline ready field</span>
+        </div>
+        <div class="panel-body">
+          <div id="schoolTimeline" class="small-chart"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-cash"></i> School Income</div>
+          <span class="pill">Daily, Weekly, Monthly</span>
+        </div>
+        <div class="panel-body">
+          <div id="schoolIncomeChart" class="small-chart"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-nav">
+      <a href="#overview" class="tiny-btn">Back</a>
+      <a href="#quran" class="tiny-btn dark">Next: Quran <i class="bi bi-arrow-down"></i></a>
+    </div>
+  </section>
+
+  <section class="section" id="quran" data-dept="quran">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Quran Department</div>
+        <div class="section-sub">Quran users, admissions, payments and activity.</div>
+      </div>
+      <div class="section-tools">
+        <button class="tiny-btn" type="button" onclick="exportDept('quran')"><i class="bi bi-download"></i>Export Quran</button>
+      </div>
+    </div>
+
+    <div class="card-grid" id="quranCards"></div>
+
+    <div class="panel-grid">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-graph-up"></i> Quran Admissions Timeline</div>
+          <span class="pill warn">Backend timeline ready field</span>
+        </div>
+        <div class="panel-body">
+          <div id="quranTimeline" class="small-chart"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-cash"></i> Quran Income</div>
+          <span class="pill">Daily, Weekly, Monthly</span>
+        </div>
+        <div class="panel-body">
+          <div id="quranIncomeChart" class="small-chart"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-nav">
+      <a href="#school" class="tiny-btn">Back</a>
+      <a href="#tuition" class="tiny-btn dark">Next: Tuition <i class="bi bi-arrow-down"></i></a>
+    </div>
+  </section>
+
+  <section class="section" id="tuition" data-dept="tuition">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Tuition Department</div>
+        <div class="section-sub">Tuition users, admissions, payments and activity.</div>
+      </div>
+      <div class="section-tools">
+        <button class="tiny-btn" type="button" onclick="exportDept('tuition')"><i class="bi bi-download"></i>Export Tuition</button>
+      </div>
+    </div>
+
+    <div class="card-grid" id="tuitionCards"></div>
+
+    <div class="panel-grid">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-graph-up"></i> Tuition Admissions Timeline</div>
+          <span class="pill warn">Backend timeline ready field</span>
+        </div>
+        <div class="panel-body">
+          <div id="tuitionTimeline" class="small-chart"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-cash"></i> Tuition Income</div>
+          <span class="pill">Daily, Weekly, Monthly</span>
+        </div>
+        <div class="panel-body">
+          <div id="tuitionIncomeChart" class="small-chart"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-nav">
+      <a href="#quran" class="tiny-btn">Back</a>
+      <a href="#users" class="tiny-btn dark">Next: Users <i class="bi bi-arrow-down"></i></a>
+    </div>
+  </section>
+
+  <section class="section" id="users">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Users Control</div>
+        <div class="section-sub">View users, change email, role, department, reset password and delete users.</div>
+      </div>
+      <div class="section-tools">
+        <select class="mini-select" id="userDeptFilter" style="width:150px;">
+          <option value="all">All Departments</option>
+          <option value="school">School</option>
+          <option value="quran">Quran</option>
+          <option value="tuition">Tuition</option>
+          <option value="accounts">Accounts</option>
+        </select>
+
+        <select class="mini-select" id="userRoleFilter" style="width:140px;">
+          <option value="all">All Roles</option>
+          <option value="super_admin">Super Admin</option>
+          <option value="admin">Admin</option>
+          <option value="agent">Agent</option>
+          <option value="sub_agent">Sub Agent</option>
+        </select>
+
+        <button class="tiny-btn" type="button" onclick="downloadUsersCsv()">
+          <i class="bi bi-filetype-csv"></i>
+          Users CSV
+        </button>
+
+        <button class="tiny-btn dark" type="button" onclick="openCreateUserModal()">
+  <i class="bi bi-person-plus"></i>
+  Create User
+</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><i class="bi bi-people"></i> All Users</div>
+        <span class="pill" id="usersCountPill">0 records</span>
+      </div>
+      <div class="panel-body">
+        <div class="mini-table-wrap">
+          <table class="dev-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Password</th>
+                <th>Role</th>
+                <th>Department</th>
+                <th>Agent Type</th>
+                <th>Access</th>
+                <th>Updated</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody">
+              <tr><td colspan="10">Loading users...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-nav">
+      <a href="#tuition" class="tiny-btn">Back</a>
+      <a href="#payments" class="tiny-btn dark">Next: Payments <i class="bi bi-arrow-down"></i></a>
+    </div>
+  </section>
+
+  <section class="section" id="payments">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Payments and Admissions</div>
+        <div class="section-sub">Department wise daily, weekly, monthly and total payment snapshot.</div>
+      </div>
+      <div class="section-tools">
+        <button class="tiny-btn" type="button" onclick="downloadJSON('developer-payments.json', getPaymentsExport())">
+          <i class="bi bi-download"></i>
+          Export Payments
+        </button>
+      </div>
+    </div>
+
+    <div class="panel-grid three">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-mortarboard"></i> School Payments</div>
+          <span class="pill">School</span>
+        </div>
+        <div class="panel-body"><div id="paymentSchoolChart" class="small-chart"></div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-book"></i> Quran Payments</div>
+          <span class="pill">Quran</span>
+        </div>
+        <div class="panel-body"><div id="paymentQuranChart" class="small-chart"></div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-journal-text"></i> Tuition Payments</div>
+          <span class="pill">Tuition</span>
+        </div>
+        <div class="panel-body"><div id="paymentTuitionChart" class="small-chart"></div></div>
+      </div>
+    </div>
+
+    <div class="footer-nav">
+      <a href="#users" class="tiny-btn">Back</a>
+      <a href="#online" class="tiny-btn dark">Next: Online <i class="bi bi-arrow-down"></i></a>
+    </div>
+  </section>
+
+  <section class="section" id="online">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Online Users</div>
+        <div class="section-sub">Users active in the last 2 minutes.</div>
+      </div>
+      <div class="section-tools">
+        <button class="tiny-btn" type="button" onclick="downloadJSON('online-users.json', state.stats.onlineUsers || [])">
+          <i class="bi bi-download"></i>
+          Export Online
+        </button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><i class="bi bi-wifi"></i> Live User Activity</div>
+        <span class="pill ok" id="onlineCountPill">0 online</span>
+      </div>
+      <div class="panel-body">
+        <div class="mini-table-wrap">
+          <table class="dev-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Department</th>
+                <th>Current Page</th>
+                <th>IP</th>
+                <th>Last Seen</th>
+              </tr>
+            </thead>
+            <tbody id="onlineTableBody">
+              <tr><td colspan="7">No online users yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-nav">
+      <a href="#payments" class="tiny-btn">Back</a>
+      <a href="#usage" class="tiny-btn dark">Next: Usage <i class="bi bi-arrow-down"></i></a>
+    </div>
+  </section>
+
+  <section class="section" id="usage">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Website Usage</div>
+        <div class="section-sub">Daily, weekly and yearly active time based on real user activity.</div>
+      </div>
+      <div class="section-tools">
+        <button class="tiny-btn" type="button" onclick="downloadJSON('website-usage.json', state.stats.usage || {})">
+          <i class="bi bi-download"></i>
+          Export Usage
+        </button>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="stat-card">
+        <div class="stat-top"><div class="stat-icon"><i class="bi bi-calendar-day"></i></div><div class="stat-chip">Daily</div></div>
+        <div class="stat-value" data-stat="todayUsage2">0 min</div>
+        <div class="stat-label">Daily Active Time</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-top"><div class="stat-icon"><i class="bi bi-calendar-week"></i></div><div class="stat-chip">Week</div></div>
+        <div class="stat-value" data-stat="weeklyUsage2">0 min</div>
+        <div class="stat-label">Weekly Active Time</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-top"><div class="stat-icon"><i class="bi bi-calendar4"></i></div><div class="stat-chip">Year</div></div>
+        <div class="stat-value" data-stat="yearlyUsage2">0 min</div>
+        <div class="stat-label">Yearly Active Time</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-top"><div class="stat-icon"><i class="bi bi-activity"></i></div><div class="stat-chip">Live</div></div>
+        <div class="stat-value" data-stat="onlineUsers2">0</div>
+        <div class="stat-label">Currently Active</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><i class="bi bi-bar-chart-line"></i> Usage Chart</div>
+        <span class="pill">Active Time</span>
+      </div>
+      <div class="panel-body">
+        <div id="usageChart" class="small-chart"></div>
+      </div>
+    </div>
+
+    <div class="footer-nav">
+      <a href="#online" class="tiny-btn">Back</a>
+      <a href="#apis" class="tiny-btn dark">Next: APIs <i class="bi bi-arrow-down"></i></a>
+    </div>
+  </section>
+
+  <section class="section" id="apis">
+    <div class="section-head">
+      <div>
+        <div class="section-title">API Settings</div>
+        <div class="section-sub">Change server URL, webhook URLs, Gemini key/model and API key.</div>
+      </div>
+      <div class="section-tools">
+        <button class="tiny-btn" type="button" onclick="downloadJSON('api-settings.json', state.apiSettings)">
+          <i class="bi bi-download"></i>
+          Export APIs
+        </button>
+        <button class="tiny-btn dark" type="button" id="saveApiSettingsBtn">
+          <i class="bi bi-save"></i>
+          Save APIs
+        </button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">
+          <i class="bi bi-sliders"></i>
+          Editable API Keys, URLs and Model
+        </div>
+        <span class="pill warn">Handle carefully</span>
+      </div>
+
+      <div class="panel-body">
+        <div class="api-grid" id="apiSettingsGrid">
+          <div class="empty">Loading API settings...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel mt-2" id="developerLoginSettingsPanel">
+      <div class="panel-head">
+        <div class="panel-title">
+          <i class="bi bi-person-lock"></i>
+          Developer Login Settings
+        </div>
+
+        <button
+          class="tiny-btn dark"
+          type="button"
+          id="saveDeveloperProfileBtn"
+        >
+          <i class="bi bi-shield-check"></i>
+          Save Login Settings
+        </button>
+      </div>
+
+      <div class="panel-body">
+        <div class="developer-profile-grid">
+
+          <div class="setting-card">
+            <div class="setting-key">Developer Name</div>
+            <input
+              class="mini-input developer-profile-input"
+              id="developerProfileName"
+              type="text"
+              autocomplete="name"
+              placeholder="Developer name"
+            >
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-key">Developer Username</div>
+            <input
+              class="mini-input developer-profile-input"
+              id="developerProfileUsername"
+              type="text"
+              autocomplete="username"
+              placeholder="Developer username"
+            >
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-key">Developer Email</div>
+            <input
+              class="mini-input developer-profile-input"
+              id="developerProfileEmail"
+              type="email"
+              autocomplete="email"
+              placeholder="developer@email.com"
+            >
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-key">Current Password</div>
+
+            <div class="input-action-wrap">
+              <input
+                class="mini-input"
+                id="developerCurrentPassword"
+                type="password"
+                autocomplete="current-password"
+                placeholder="Enter current password"
+              >
+
+              <button
+                class="input-action-btn"
+                type="button"
+                data-visibility-target="developerCurrentPassword"
+                onclick="toggleInputVisibility(this)"
+                title="Show password"
+                aria-label="Show current password"
+              >
+                <i class="bi bi-eye"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-key">New Password</div>
+
+            <div class="input-action-wrap">
+              <input
+                class="mini-input"
+                id="developerNewPassword"
+                type="password"
+                autocomplete="new-password"
+                placeholder="Leave blank to keep current password"
+              >
+
+              <button
+                class="input-action-btn"
+                type="button"
+                data-visibility-target="developerNewPassword"
+                onclick="toggleInputVisibility(this)"
+                title="Show password"
+                aria-label="Show new password"
+              >
+                <i class="bi bi-eye"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-key">Confirm New Password</div>
+
+            <div class="input-action-wrap">
+              <input
+                class="mini-input"
+                id="developerConfirmPassword"
+                type="password"
+                autocomplete="new-password"
+                placeholder="Confirm new password"
+              >
+
+              <button
+                class="input-action-btn"
+                type="button"
+                data-visibility-target="developerConfirmPassword"
+                onclick="toggleInputVisibility(this)"
+                title="Show password"
+                aria-label="Show confirmed password"
+              >
+                <i class="bi bi-eye"></i>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="security-note mt-2">
+          <i class="bi bi-shield-lock me-1"></i>
+          Your password is stored securely as an encrypted hash,
+           so it cannot be displayed. Enter your current password to make changes.
+           Leave the New Password field blank to update only your name, username, and email.
+
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-nav">
+      <a href="#usage" class="tiny-btn">Back</a>
+      <a href="#database" class="tiny-btn dark">Next: Database <i class="bi bi-arrow-down"></i></a>
+    </div>
+  </section>
+
+  <section class="section" id="database">
+    <div class="section-head">
+      <div>
+        <div class="section-title">Database and Downloads</div>
+        <div class="section-sub">Download developer dashboard data and full database JSON backup.</div>
+      </div>
+      <div class="section-tools">
+        <button class="tiny-btn dark" type="button" id="downloadAllBtn2">
+  <i class="bi bi-database-down"></i>
+  Full DB JSON
+</button>
+      </div>
+    </div>
+
+    <div class="panel-grid three">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-database"></i> Stats Backup</div>
+        </div>
+        <div class="panel-body">
+          <button class="tiny-btn w-100" type="button" onclick="downloadJSON('developer-stats-backup.json', state.stats)">
+            <i class="bi bi-download"></i>
+            Download Stats JSON
+          </button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-people"></i> Users Backup</div>
+        </div>
+        <div class="panel-body">
+          <button class="tiny-btn w-100" type="button" onclick="downloadJSON('developer-users-backup.json', state.users)">
+            <i class="bi bi-download"></i>
+            Download Users JSON
+          </button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title"><i class="bi bi-sliders"></i> APIs Backup</div>
+        </div>
+        <div class="panel-body">
+          <button class="tiny-btn w-100" type="button" onclick="downloadJSON('developer-api-settings-backup.json', state.apiSettings)">
+            <i class="bi bi-download"></i>
+            Download API Settings
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><i class="bi bi-tools"></i> Developer Tools Status</div>
+        <span class="pill">Frontend Ready</span>
+      </div>
+      <div class="panel-body">
+        <div class="mini-table-wrap">
+          <table class="dev-table">
+            <thead>
+              <tr>
+                <th>Feature</th>
+                <th>Status</th>
+                <th>Route Used</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Developer Login</td>
+                <td><span class="pill ok">Ready</span></td>
+                <td>/developer/login</td>
+                <td>Hidden MAK login connected</td>
+              </tr>
+              <tr>
+                <td>Stats</td>
+                <td><span class="pill ok">Ready</span></td>
+                <td>/api/developer/stats</td>
+                <td>Users, admissions, income, online, usage</td>
+              </tr>
+              <tr>
+                <td>User Edit</td>
+                <td><span class="pill ok">Ready</span></td>
+                <td>/api/developer/users/:id/update</td>
+                <td>Name, email, role, dept, access scope</td>
+              </tr>
+              <tr>
+                <td>Password Reset</td>
+                <td><span class="pill ok">Ready</span></td>
+                <td>/api/developer/users/:id/reset-password</td>
+                <td>Existing password cannot be decoded, new temp password shows after reset</td>
+              </tr>
+             <tr>
+  <td>Create User</td>
+  <td><span class="pill ok">Ready</span></td>
+  <td>/api/developer/users/create</td>
+  <td>Developer can create Super Admin, Admin, Agent and Sub Agent</td>
+</tr>
+<tr>
+  <td>Permissions Edit</td>
+  <td><span class="pill ok">Ready</span></td>
+  <td>/api/developer/users/:id/permissions</td>
+  <td>Developer can view and update user permissions</td>
+</tr>
+<tr>
+  <td>Full DB Download</td>
+  <td><span class="pill ok">Ready</span></td>
+  <td>/api/developer/database/export</td>
+  <td>Developer can download full database JSON export</td>
+</tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-nav">
+      <a href="#apis" class="tiny-btn">Back</a>
+      <a href="#overview" class="tiny-btn dark">Back to Top <i class="bi bi-arrow-up"></i></a>
+    </div>
+  </section>
+
+</main>
+
+<div class="modal fade" id="editUserModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-1"></i>Edit User</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editUserId">
+
+        <div class="row g-2">
+          <div class="col-md-6">
+            <div class="mini-label">Name</div>
+            <input class="mini-input" id="editName" type="text">
+          </div>
+
+          <div class="col-md-6">
+            <div class="mini-label">Email</div>
+            <input class="mini-input" id="editEmail" type="email">
+          </div>
+
+          <div class="col-md-4">
+            <div class="mini-label">Role</div>
+            <select class="mini-select" id="editRole">
+              <option value="super_admin">Super Admin</option>
+              <option value="admin">Admin</option>
+              <option value="agent">Agent</option>
+              <option value="sub_agent">Sub Agent</option>
+            </select>
+          </div>
+
+          <div class="col-md-4">
+            <div class="mini-label">Department</div>
+            <select class="mini-select" id="editDept">
+              <option value="school">School</option>
+              <option value="quran">Quran</option>
+              <option value="tuition">Tuition</option>
+              <option value="accounts">Accounts</option>
+              <option value="school accounts">School Accounts</option>
+            </select>
+          </div>
+
+          <div class="col-md-4">
+            <div class="mini-label">Agent Type</div>
+            <input class="mini-input" id="editAgentType" type="text" placeholder="accounts / admission / management">
+          </div>
+
+          <div class="col-md-6">
+            <div class="mini-label">Access Scope</div>
+            <select class="mini-select" id="editAccessScope">
+              <option value="own">Own</option>
+              <option value="team">Team</option>
+              <option value="all">All</option>
+              <option value="school_accounts">School Accounts</option>
+            </select>
+          </div>
+
+          <div class="col-md-6">
+            <div class="mini-label">Password</div>
+            <div class="d-flex gap-2">
+              <input class="mini-input" id="resetPasswordInput" type="text" placeholder="Optional new password">
+              <button type="button" class="tiny-btn" id="resetPasswordBtn">
+                Reset
+              </button>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="empty text-start">
+              Current passwords are protected by bcrypt and cannot be decoded. Use Reset Password to create a new password.
+              Permissions can be managed from the Permissions button in the users table.
+            </div>
+          </div>
+        </div>
+
+        <div id="resetResultBox" class="mt-2 d-none">
+          <div class="setting-card">
+            <div class="setting-key">New Temporary Password</div>
+            <div class="d-flex gap-2">
+              <input class="mini-input" id="resetResultPassword" readonly>
+              <button type="button" class="tiny-btn" onclick="copyResetPassword()">Copy</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="tiny-btn" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="tiny-btn dark" id="saveUserBtn">
+          <i class="bi bi-save"></i>
+          Save User
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal fade" id="createUserModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-person-plus me-1"></i>Create User</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-4">
+            <div class="mini-label">Name</div>
+            <input class="mini-input" id="createName" type="text" placeholder="User name">
+          </div>
+
+          <div class="col-md-4">
+            <div class="mini-label">Email</div>
+            <input class="mini-input" id="createEmail" type="email" placeholder="user@email.com">
+          </div>
+
+          <div class="col-md-4">
+            <div class="mini-label">Password</div>
+            <input class="mini-input" id="createPassword" type="text" placeholder="Optional, auto generate if empty">
+          </div>
+
+          <div class="col-md-3">
+            <div class="mini-label">Role</div>
+            <select class="mini-select" id="createRole">
+              <option value="super_admin">Super Admin</option>
+              <option value="admin">Admin</option>
+              <option value="agent" selected>Agent</option>
+              <option value="sub_agent">Sub Agent</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <div class="mini-label">Department</div>
+            <select class="mini-select" id="createDept">
+              <option value="school" selected>School</option>
+              <option value="quran">Quran</option>
+              <option value="tuition">Tuition</option>
+              <option value="accounts">Accounts</option>
+              <option value="school accounts">School Accounts</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <div class="mini-label">Agent Type</div>
+            <input class="mini-input" id="createAgentType" type="text" placeholder="accounts / admission / management">
+          </div>
+
+          <div class="col-md-3">
+            <div class="mini-label">Access Scope</div>
+            <select class="mini-select" id="createAccessScope">
+              <option value="own" selected>Own</option>
+              <option value="team">Team</option>
+              <option value="all">All</option>
+              <option value="school_accounts">School Accounts</option>
+            </select>
+          </div>
+
+          <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+              <div>
+                <div class="mini-label mb-0">Permissions</div>
+                <div class="section-sub mt-1">Select permissions for this new user.</div>
+              </div>
+              <div class="d-flex gap-1 flex-wrap">
+                <button type="button" class="tiny-btn" onclick="setAllPermissionCheckboxes('#createPermissionsGrid', true)">Select All</button>
+                <button type="button" class="tiny-btn" onclick="setAllPermissionCheckboxes('#createPermissionsGrid', false)">Clear All</button>
+              </div>
+            </div>
+
+            <div class="perm-grid" id="createPermissionsGrid"></div>
+          </div>
+
+          <div class="col-12">
+            <div id="createResultBox" class="result-box d-none">
+              <div class="setting-key">New User Login</div>
+              <div class="row g-2">
+                <div class="col-md-6">
+                  <input class="mini-input" id="createdUserEmail" readonly>
+                </div>
+                <div class="col-md-6">
+                  <div class="d-flex gap-2">
+                    <input class="mini-input" id="createdUserPassword" readonly>
+                    <button type="button" class="tiny-btn" onclick="copyCreatedPassword()">Copy</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="tiny-btn" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="tiny-btn dark" id="createUserBtn">
+          <i class="bi bi-person-plus"></i>
+          Create User
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="permissionsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-shield-check me-1"></i>Edit Permissions</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="permissionsUserId">
+
+        <div class="setting-card mb-2">
+          <div class="setting-key">Selected User</div>
+          <div class="row g-2">
+            <div class="col-md-4">
+              <input class="mini-input" id="permissionsUserName" readonly>
+            </div>
+            <div class="col-md-4">
+              <input class="mini-input" id="permissionsUserEmail" readonly>
+            </div>
+            <div class="col-md-4">
+              <input class="mini-input" id="permissionsUserRole" readonly>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+          <div>
+            <div class="mini-label mb-0">Permissions List</div>
+            <div class="section-sub mt-1">Tick/untick and save. Super Admin permissions are also controlled here; unticked permissions will remain disabled.</div>
+          </div>
+          <div class="d-flex gap-1 flex-wrap">
+            <button type="button" class="tiny-btn" onclick="setAllPermissionCheckboxes('#permissionsGrid', true)">Select All</button>
+            <button type="button" class="tiny-btn" onclick="setAllPermissionCheckboxes('#permissionsGrid', false)">Clear All</button>
+          </div>
+        </div>
+
+        <div class="perm-grid" id="permissionsGrid"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="tiny-btn" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="tiny-btn dark" id="savePermissionsBtn">
+          <i class="bi bi-save"></i>
+          Save Permissions
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<div
+  class="modal fade developer-profile-modal"
+  id="developerProfileModal"
+  tabindex="-1"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
+    <div class="modal-content developer-profile-modal-content">
+
+      <div class="developer-profile-card">
+
+        <div class="developer-profile-cover">
+
+          <div class="developer-profile-top-row">
+            <div></div>
+
+            <div class="d-flex align-items-center gap-2">
+
+              <div class="developer-profile-top-chip">
+                <span
+                  class="developer-profile-chip-number"
+                  id="profileCardTopId"
+                >DEV</span>
+
+                DEVELOPER PROFILE
+              </div>
+
+              <button
+                class="developer-profile-close"
+                type="button"
+                data-bs-dismiss="modal"
+                aria-label="Close Developer profile"
+              >
+                <i class="bi bi-x-lg"></i>
+              </button>
+
+            </div>
+          </div>
+
+          <div class="developer-profile-identity">
+
+            <div class="developer-card-avatar-shell">
+
+              <img
+                class="developer-card-avatar-image d-none"
+                id="developerProfileModalAvatarImage"
+                alt="Developer profile picture"
+              >
+
+              <div
+                class="developer-card-avatar-fallback"
+                id="developerProfileModalAvatarFallback"
+              >
+                D
+              </div>
+
+              <button
+                class="developer-card-camera-button"
+                type="button"
+                id="developerProfileCameraBtn"
+                title="Change profile picture"
+                aria-label="Change Developer profile picture"
+              >
+                <i class="bi bi-camera-fill"></i>
+              </button>
+
+            </div>
+
+            <div class="developer-profile-main-info">
+
+              <div class="developer-profile-eyebrow">
+
+                <span class="developer-profile-role-badge">
+                  <i class="bi bi-code-slash"></i>
+                  Authorized Developer
+                </span>
+
+                <span class="developer-profile-online">
+                  <span class="developer-profile-online-dot"></span>
+                  Online Now
+                </span>
+
+              </div>
+
+              <h2 class="developer-profile-name">
+                <span id="profileCardName">Developer</span>
+
+                <span
+                  class="developer-profile-name-id"
+                  id="profileCardNameId"
+                ></span>
+              </h2>
+
+              <div class="developer-profile-meta-line">
+
+                <span>
+                  <i class="bi bi-envelope"></i>
+                  <span id="profileCardEmailLine">-</span>
+                </span>
+
+                <span>
+                  <i class="bi bi-briefcase"></i>
+                  <span id="profileCardRoleLine">Developer</span>
+                </span>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="developer-profile-body">
+
+          <div class="developer-card-info-grid">
+
+            <div class="developer-info-card">
+              <div class="developer-info-head">
+                <span class="developer-info-icon">
+                  <i class="bi bi-person-vcard"></i>
+                </span>
+                Developer ID
+              </div>
+
+              <div
+                class="developer-info-value"
+                id="profileCardDeveloperId"
+              >-</div>
+            </div>
+
+            <div class="developer-info-card">
+              <div class="developer-info-head">
+                <span class="developer-info-icon">
+                  <i class="bi bi-person-badge"></i>
+                </span>
+                Username
+              </div>
+
+              <div
+                class="developer-info-value"
+                id="profileCardUsername"
+              >-</div>
+            </div>
+
+            <div class="developer-info-card">
+              <div class="developer-info-head">
+                <span class="developer-info-icon">
+                  <i class="bi bi-envelope-at"></i>
+                </span>
+                Email
+              </div>
+
+              <div
+                class="developer-info-value"
+                id="profileCardEmail"
+              >-</div>
+            </div>
+
+            <div class="developer-info-card">
+              <div class="developer-info-head">
+                <span class="developer-info-icon">
+                  <i class="bi bi-code-square"></i>
+                </span>
+                Role
+              </div>
+
+              <div
+                class="developer-info-value"
+                id="profileCardRole"
+              >Developer</div>
+            </div>
+
+            <div class="developer-info-card">
+              <div class="developer-info-head">
+                <span class="developer-info-icon">
+                  <i class="bi bi-shield-check"></i>
+                </span>
+                Account Status
+              </div>
+
+              <div
+                class="developer-info-value"
+                id="profileCardStatus"
+              >Active</div>
+            </div>
+
+            <div class="developer-info-card">
+              <div class="developer-info-head">
+                <span class="developer-info-icon">
+                  <i class="bi bi-clock-history"></i>
+                </span>
+                Last Login
+              </div>
+
+              <div
+                class="developer-info-value"
+                id="profileCardLastLogin"
+              >-</div>
+            </div>
+
+          </div>
+
+          <div class="developer-profile-divider"></div>
+
+          <div class="developer-profile-footer">
+
+            <div>
+              <div class="developer-profile-dates">
+
+                <div>
+                  Account Created
+                  <strong id="profileCardCreatedAt">-</strong>
+                </div>
+
+                <div>
+                  Last Updated
+                  <strong id="profileCardUpdatedAt">-</strong>
+                </div>
+
+              </div>
+
+              <div class="developer-profile-upload-note">
+               Recommended: 1080 × 1080 px · Minimum: 800 × 800 px · JPG, PNG or WebP · Maximum 15 MB.
+             </div>
+            </div>
+
+            <div class="developer-profile-actions">
+
+              <button
+                class="developer-profile-close-btn"
+                type="button"
+                data-bs-dismiss="modal"
+              >
+                Close
+              </button>
+
+              <button
+                class="developer-profile-upload-btn"
+                type="button"
+                id="developerProfileUploadBtn"
+              >
+                <i class="bi bi-cloud-arrow-up-fill"></i>
+                Upload Profile Picture
+              </button>
+
+            </div>
+          </div>
+
+          <input
+            type="file"
+            id="developerProfileImageInput"
+            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+            hidden
+          >
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<div
+  class="modal fade developer-crop-modal"
+  id="developerCropModal"
+  tabindex="-1"
+  aria-hidden="true"
+  data-bs-backdrop="static"
+  data-bs-keyboard="false"
+>
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content developer-crop-content">
+
+      <div class="developer-crop-header">
+        <div class="developer-crop-title">
+          <span class="developer-crop-title-icon">
+            <i class="bi bi-crop"></i>
+          </span>
+
+          Crop Profile Picture
+        </div>
+
+        <button
+          class="developer-crop-close"
+          type="button"
+          data-bs-dismiss="modal"
+          aria-label="Close crop window"
+        >
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+
+      <div class="developer-crop-body">
+        <div class="developer-crop-layout">
+
+          <div class="developer-crop-stage">
+            <img
+              id="developerCropImage"
+              alt="Profile picture selected for cropping"
+            >
+          </div>
+
+          <div class="developer-crop-side">
+
+            <div class="developer-crop-preview-card">
+              <div class="developer-crop-preview-title">
+                Profile Preview
+              </div>
+
+              <div class="developer-crop-preview"></div>
+            </div>
+
+            <div class="developer-crop-preview-card">
+              <div class="developer-crop-preview-title">
+                Crop Controls
+              </div>
+
+              <div class="developer-crop-tools">
+
+                <button
+                  class="developer-crop-tool-btn"
+                  type="button"
+                  id="developerCropZoomInBtn"
+                >
+                  <i class="bi bi-zoom-in"></i>
+                  Zoom In
+                </button>
+
+                <button
+                  class="developer-crop-tool-btn"
+                  type="button"
+                  id="developerCropZoomOutBtn"
+                >
+                  <i class="bi bi-zoom-out"></i>
+                  Zoom Out
+                </button>
+
+                <button
+                  class="developer-crop-tool-btn"
+                  type="button"
+                  id="developerCropRotateLeftBtn"
+                >
+                  <i class="bi bi-arrow-counterclockwise"></i>
+                  Rotate Left
+                </button>
+
+                <button
+                  class="developer-crop-tool-btn"
+                  type="button"
+                  id="developerCropRotateRightBtn"
+                >
+                  <i class="bi bi-arrow-clockwise"></i>
+                  Rotate Right
+                </button>
+
+                <button
+                  class="developer-crop-tool-btn"
+                  type="button"
+                  id="developerCropResetBtn"
+                  style="grid-column:1 / -1;"
+                >
+                  <i class="bi bi-arrow-repeat"></i>
+                  Reset Image
+                </button>
+
+              </div>
+
+              <div class="developer-crop-help mt-2">
+                Image ko mouse se drag karo. Zoom aur rotate controls se face ko square frame ke andar properly set karo.
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="developer-crop-footer">
+
+        <div class="developer-crop-output-note">
+          Final picture: 1080 × 1080 px · High-quality JPG
+        </div>
+
+        <div class="developer-crop-actions">
+
+          <button
+            class="developer-crop-cancel-btn"
+            type="button"
+            id="developerCropCancelBtn"
+            data-bs-dismiss="modal"
+          >
+            Cancel
+          </button>
+
+          <button
+            class="developer-crop-upload-btn"
+            type="button"
+            id="developerCropUploadBtn"
+          >
+            <i class="bi bi-check2-circle"></i>
+            Crop & Upload
+          </button>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<div class="toast-box" id="toastBox"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+  const state = {
+    stats: {},
+    users: [],
+    apiSettings: {},
+    developerProfile: {},
+profileDirty: false,
+profileImageUploading: false,
+
+developerCropper: null,
+developerCropFile: null,
+developerCropObjectUrl: '',
+reopenDeveloperProfileAfterCrop: false,
+
+filteredUsers: [],
+    activeUser: null,
+    loading: false
+  };
+
+  const moneyFormatter = new Intl.NumberFormat('en-PK', {
+    maximumFractionDigits: 0
+  });
+
+  const numberFormatter = new Intl.NumberFormat('en-PK', {
+    maximumFractionDigits: 0
+  });
+
+  const allowedApiKeys = [
+    'APP_BASE_URL',
+    'ADMISSIONS_API_KEY',
+    'N8N_WHATSAPP_WEBHOOK_URL',
+    'N8N_BILLING_WEBHOOK_URL',
+    'GEMINI_API_KEY',
+    'GEMINI_MODEL'
+  ];
+  const HIDDEN_PERMISSION_KEYS = new Set([
+  'viewAdmissions',
+  'viewAccounts',
+  'viewManagement',
+  'colMessageStatus'
+]);
+
+  const ALL_PERMISSION_KEYS = [
+  'colStatus',
+  'colFeeStatus',
+  'colDept',
+  'colStudentName',
+  'colFatherName',
+  'colFatherEmail',
+  'colGrade',
+  'colTuitionGrade',
+  'colPhone',
+  'colProcessedBy',
+
+  'colPaymentStatus',
+  'colPaidUpto',
+  'colVerificationNumber',
+  'colRegistrationNumber',
+  'colFamilyNumber',
+  'colRegistrationFee',
+  'colFees',
+  'colCurrency',
+  'colBank',
+  'colMonth',
+  'colTotalFees',
+  'colPendingDues',
+  'colReceivedPayment',
+  'colComment',
+  'colInvoiceStatus',
+  'colInvoiceStatusTimestamp',
+  'colPaidInvoiceStatus',
+  'colPaidInvoiceStatusTimestamp',
+  'colActionButtons',
+
+  'btnEditRow',
+  'btnDetails',
+  'btnUpdateRow',
+  'btnPdf',
+  'btnBilling',
+  'btnWhatsApp',
+  'btnUpload',
+  'btnFiles',
+
+  'canDeleteFiles',
+  'canDeleteAdmissions'
+];
+
+const PERMISSION_LABELS = {
+  colStatus: 'Current Status Column',
+  colFeeStatus: 'Fee Status Column',
+  colDept: 'Dept Column',
+  colStudentName: 'Student Column',
+  colFatherName: 'Father Column',
+  colFatherEmail: 'Father Email Column',
+  colGrade: 'Grade Column',
+  colTuitionGrade: 'Grade Section Column',
+  colPhone: 'Phone Number Column',
+  colProcessedBy: 'Processed By Column',
+
+  colPaymentStatus: 'Payment Status Column',
+  colPaidUpto: 'Paid Upto Column',
+  colVerificationNumber: 'Verif # Column',
+  colRegistrationNumber: 'Reg # Column',
+  colFamilyNumber: 'Family Num # Column',
+  colRegistrationFee: 'Registration Fee Column',
+  colFees: 'Fees Column',
+  colCurrency: 'Currency Column',
+  colBank: 'Bank Column',
+  colMonth: 'Month Column',
+  colTotalFees: 'Total Fees Column',
+  colPendingDues: 'Pending Dues Column',
+  colReceivedPayment: 'Received Payment Column',
+  colComment: 'Comment Column',
+  colInvoiceStatus: 'Invoice Status Column',
+  colInvoiceStatusTimestamp: 'Invoice Status Timestamp Column',
+  colPaidInvoiceStatus: 'Paid Invoice Status Column',
+  colPaidInvoiceStatusTimestamp: 'Paid Invoice Status Timestamp Column',
+  colActionButtons: 'Action Buttons Column',
+
+  btnEditRow: 'Edit Button',
+  btnDetails: 'View Details Button',
+  btnUpdateRow: 'Update/Save Button',
+  btnPdf: 'PDF Button',
+  btnBilling: 'Billing Button',
+  btnWhatsApp: 'WhatsApp Button',
+  btnUpload: 'Upload Button',
+  btnFiles: 'Files Button',
+
+  canDeleteFiles: 'Delete Files Button',
+  canDeleteAdmissions: 'Delete Admissions Button'
+};
+  function qs(selector){
+    return document.querySelector(selector);
+  }
+
+  function qsa(selector){
+    return Array.from(document.querySelectorAll(selector));
+  }
+
+  function fmtNumber(value){
+    const n = Number(value || 0);
+    return numberFormatter.format(Number.isFinite(n) ? n : 0);
+  }
+
+  function fmtMoney(value){
+    const n = Number(value || 0);
+    return moneyFormatter.format(Number.isFinite(n) ? n : 0);
+  }
+    function fmtActiveTime(value){
+    const minutes = Math.max(0, Math.round(Number(value || 0)));
+
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      return '0 min';
+    }
+
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+
+    if (hours <= 0) {
+      return minutes + ' min';
+    }
+
+    if (mins <= 0) {
+      return hours + 'h';
+    }
+
+    return hours + 'h ' + mins + 'm';
+  }
+
+  function cleanText(value){
+    return String(value || '').trim();
+  }
+
+  function normalize(value){
+    return cleanText(value).toLowerCase();
+  }
+
+  function getDeptData(dept){
+    const stats = state.stats || {};
+    const income = stats.income || {};
+    return {
+      users: Number(stats.usersByDept?.[dept] || 0),
+      admissions: Number(stats.admissionsByDept?.[dept] || 0),
+      income: income[dept] || { daily:0, weekly:0, monthly:0, total:0 },
+      monthlyAdmissions: Number(stats.departmentDetails?.[dept]?.monthlyAdmissions || 0),
+      yearlyAdmissions: Number(stats.departmentDetails?.[dept]?.yearlyAdmissions || 0),
+      dailyAdmissions: Number(stats.departmentDetails?.[dept]?.dailyAdmissions || 0),
+      timeline: stats.departmentDetails?.[dept]?.timeline || {}
+    };
+  }
+
+  function toast(message, type = 'ok'){
+    const box = qs('#toastBox');
+    if (!box) return;
+
+    const el = document.createElement('div');
+    el.className = 'dev-toast ' + (type === 'danger' ? 'danger' : 'ok');
+    el.innerHTML = `
+      <i class="bi ${type === 'danger' ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill'}"></i>
+      <div>${escapeHtml(message)}</div>
+    `;
+    box.appendChild(el);
+
+    setTimeout(() => {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(8px)';
+      setTimeout(() => el.remove(), 200);
+    }, 3500);
+  }
+
+  function escapeHtml(value){
+    return String(value ?? '')
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'","&#039;");
+  }
+
+  async function apiGet(url){
+    const res = await fetch(url, {
+      headers: { 'Accept':'application/json' }
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data.success === false) {
+      throw new Error(data.message || 'Request failed');
+    }
+
+    return data;
+  }
+
+  async function apiPost(url, body){
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{
+        'Accept':'application/json',
+        'Content-Type':'application/json'
+      },
+      body: JSON.stringify(body || {})
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data.success === false) {
+      throw new Error(data.message || 'Request failed');
+    }
+
+    return data;
+  }
+
+  async function loadAll(){
+    if (state.loading) return;
+    state.loading = true;
+
+    try {
+      const [statsRes, usersRes, apiRes, profileRes] = await Promise.all([
+        apiGet('/api/developer/stats'),
+        apiGet('/api/developer/users'),
+        apiGet('/api/developer/api-settings'),
+        apiGet('/api/developer/profile')
+      ]);
+
+      state.stats = statsRes.stats || {};
+      state.users = usersRes.users || [];
+      state.apiSettings = normalizeApiSettings(
+  apiRes.settings ??
+  apiRes.values ??
+  apiRes.data ??
+  apiRes
+);
+      state.developerProfile = profileRes.profile || {};
+
+      renderAll();
+      toast('Developer dashboard refreshed.');
+    } catch (err) {
+      console.error(err);
+      toast(err.message || 'Could not load developer dashboard.', 'danger');
+    } finally {
+      state.loading = false;
+    }
+  }
+
+  function normalizeApiSettings(settings){
+  const out = {};
+
+  function saveSetting(key, rawValue){
+    const cleanKey = String(key || '').trim();
+    if (!cleanKey) return;
+
+    let finalValue = rawValue;
+
+    if (
+      finalValue &&
+      typeof finalValue === 'object' &&
+      !Array.isArray(finalValue)
+    ) {
+      finalValue =
+        finalValue.value ??
+        finalValue.setting_value ??
+        finalValue.settingValue ??
+        finalValue.api_value ??
+        finalValue.apiValue ??
+        finalValue.key_value ??
+        finalValue.current_value ??
+        finalValue.currentValue ??
+        finalValue.val ??
+        '';
+    }
+
+    out[cleanKey] = String(finalValue ?? '');
+  }
+
+  let source = settings;
+
+  // Nested response formats handle karo.
+  if (
+    source &&
+    typeof source === 'object' &&
+    !Array.isArray(source)
+  ) {
+    source =
+      source.values ??
+      source.settings ??
+      source.data ??
+      source;
+  }
+
+  // Array rows format:
+  // [{ key: 'APP_BASE_URL', value: '...' }]
+  if (Array.isArray(source)) {
+    source.forEach((item) => {
+      if (!item || typeof item !== 'object') return;
+
+      const key =
+        item.key ??
+        item.setting_key ??
+        item.settingKey ??
+        item.api_key ??
+        item.apiKey ??
+        item.key_name ??
+        item.name ??
+        item.opt_key;
+
+      const value =
+        item.value ??
+        item.setting_value ??
+        item.settingValue ??
+        item.api_value ??
+        item.apiValue ??
+        item.key_value ??
+        item.current_value ??
+        item.currentValue ??
+        item.val ??
+        '';
+
+      saveSetting(key, value);
+    });
+
+    return out;
+  }
+
+  // Direct object format:
+  // { APP_BASE_URL: '...', ADMISSIONS_API_KEY: '...' }
+  if (source && typeof source === 'object') {
+    Object.entries(source).forEach(([key, value]) => {
+      saveSetting(key, value);
+    });
+  }
+
+  return out;
+}
+
+  function renderAll(){
+    renderOverview();
+    renderDeptSection('school');
+    renderDeptSection('quran');
+    renderDeptSection('tuition');
+    renderUsers();
+    renderPayments();
+    renderOnlineUsers();
+    renderUsage();
+    renderApiSettings();
+    renderDeveloperProfile();
+  }
+
+  function renderOverview(){
+    const totals = state.stats.totals || {};
+    setText('[data-stat="totalUsers"]', fmtNumber(totals.users));
+    setText('[data-stat="onlineUsers"]', fmtNumber(totals.onlineUsers));
+    setText('[data-stat="totalAdmissions"]', fmtNumber(totals.admissions));
+    setText('[data-stat="todayUsage"]', fmtActiveTime(totals.todayUsage));
+    setText('[data-stat="weeklyUsage"]', fmtActiveTime(totals.weeklyUsage));
+    setText('[data-stat="yearlyUsage"]', fmtActiveTime(totals.yearlyUsage));
+
+    setText('#quickUsers', fmtNumber(totals.users));
+    setText('#quickAdmissions', fmtNumber(totals.admissions));
+    setText('#quickOnline', fmtNumber(totals.onlineUsers));
+
+    drawBars('#deptAdmissionsChart', [
+      ['School', state.stats.admissionsByDept?.school || 0],
+      ['Quran', state.stats.admissionsByDept?.quran || 0],
+      ['Tuition', state.stats.admissionsByDept?.tuition || 0]
+    ]);
+
+    drawBars('#deptUsersChart', [
+      ['School', state.stats.usersByDept?.school || 0],
+      ['Quran', state.stats.usersByDept?.quran || 0],
+      ['Tuition', state.stats.usersByDept?.tuition || 0],
+      ['Accounts', state.stats.usersByDept?.accounts || 0]
+    ]);
+  }
+
+  function renderDeptSection(dept){
+    const data = getDeptData(dept);
+    const cards = qs('#' + dept + 'Cards');
+    if (!cards) return;
+
+    cards.innerHTML = `
+      ${statCard('Users', data.users, 'bi-people', 'Total')}
+      ${statCard('Admissions', data.admissions, 'bi-card-checklist', 'Total')}
+      ${statCard('Daily Admissions', data.dailyAdmissions, 'bi-calendar-day', 'Today')}
+      ${statCard('Monthly Admissions', data.monthlyAdmissions, 'bi-calendar-month', 'Month')}
+      ${statCard('Yearly Admissions', data.yearlyAdmissions, 'bi-calendar4', 'Year')}
+      ${statCard('Total Income', fmtMoney(data.income.total), 'bi-cash-stack', 'Paid')}
+    `;
+
+    const timelineData = Object.keys(data.timeline || {}).length
+      ? Object.entries(data.timeline).map(([k,v]) => [k, v])
+      : [
+          ['Daily', data.dailyAdmissions],
+          ['Monthly', data.monthlyAdmissions],
+          ['Yearly', data.yearlyAdmissions],
+          ['Total', data.admissions]
+        ];
+
+    drawBars('#' + dept + 'Timeline', timelineData);
+
+    drawBars('#' + dept + 'IncomeChart', [
+      ['Daily', data.income.daily || 0],
+      ['Weekly', data.income.weekly || 0],
+      ['Monthly', data.income.monthly || 0],
+      ['Total', data.income.total || 0]
+    ], true);
+  }
+
+  function renderPayments(){
+    const income = state.stats.income || {};
+
+    drawBars('#paymentSchoolChart', [
+      ['Daily', income.school?.daily || 0],
+      ['Weekly', income.school?.weekly || 0],
+      ['Monthly', income.school?.monthly || 0],
+      ['Total', income.school?.total || 0]
+    ], true);
+
+    drawBars('#paymentQuranChart', [
+      ['Daily', income.quran?.daily || 0],
+      ['Weekly', income.quran?.weekly || 0],
+      ['Monthly', income.quran?.monthly || 0],
+      ['Total', income.quran?.total || 0]
+    ], true);
+
+    drawBars('#paymentTuitionChart', [
+      ['Daily', income.tuition?.daily || 0],
+      ['Weekly', income.tuition?.weekly || 0],
+      ['Monthly', income.tuition?.monthly || 0],
+      ['Total', income.tuition?.total || 0]
+    ], true);
+  }
+
+  function renderOnlineUsers(){
+    const rows = state.stats.onlineUsers || [];
+    const body = qs('#onlineTableBody');
+
+    setText('#onlineCountPill', fmtNumber(rows.length) + ' online');
+
+    if (!body) return;
+
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="7">No online users yet. Add user-activity.js on protected pages to start heartbeat tracking.</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = rows.map((u) => `
+      <tr>
+        <td>${escapeHtml(u.user_name || '-')}</td>
+        <td>${escapeHtml(u.user_email || '-')}</td>
+        <td><span class="pill">${escapeHtml(formatRole(u.role))}</span></td>
+        <td>${escapeHtml(formatDept(u.dept))}</td>
+        <td title="${escapeHtml(u.current_page || '')}">${escapeHtml(shorten(u.current_page || '-', 42))}</td>
+        <td>${escapeHtml(u.ip_address || '-')}</td>
+        <td>${escapeHtml(formatDate(u.last_seen))}</td>
+      </tr>
+    `).join('');
+  }
+
+  function renderUsage(){
+    const totals = state.stats.totals || {};
+    const usage = state.stats.usage || {};
+    const activeMinutes = usage.activeMinutes || {};
+
+    const dailyMinutes =
+      totals.todayUsage ??
+      activeMinutes.today ??
+      0;
+
+    const weeklyMinutes =
+      totals.weeklyUsage ??
+      activeMinutes.week ??
+      0;
+
+    const yearlyMinutes =
+      totals.yearlyUsage ??
+      activeMinutes.year ??
+      0;
+
+    setText('[data-stat="todayUsage2"]', fmtActiveTime(dailyMinutes));
+    setText('[data-stat="weeklyUsage2"]', fmtActiveTime(weeklyMinutes));
+    setText('[data-stat="yearlyUsage2"]', fmtActiveTime(yearlyMinutes));
+    setText('[data-stat="onlineUsers2"]', fmtNumber(totals.onlineUsers));
+
+    drawTimeBars('#usageChart', [
+      ['Daily Active', dailyMinutes],
+      ['Weekly Active', weeklyMinutes],
+      ['Yearly Active', yearlyMinutes]
+    ]);
+  }
+
+  function renderUsers(){
+    const deptFilter = normalize(qs('#userDeptFilter')?.value || 'all');
+    const roleFilter = normalize(qs('#userRoleFilter')?.value || 'all');
+    const q = normalize(qs('#globalSearch')?.value || '');
+
+    state.filteredUsers = state.users.filter((u) => {
+      const dept = normalize(u.dept);
+      const role = normalize(u.role);
+
+      if (deptFilter !== 'all' && dept !== deptFilter) return false;
+      if (roleFilter !== 'all' && role !== roleFilter) return false;
+
+      if (q) {
+        const haystack = [
+          u.id,
+          u.name,
+          u.email,
+          u.role,
+          u.dept,
+          u.agentType,
+          u.access_scope,
+          u.createdAt,
+          u.updatedAt,
+          u.lastUpdatedAt
+        ].map((x) => String(x || '').toLowerCase()).join(' ');
+
+        if (!haystack.includes(q)) return false;
+      }
+
+      return true;
+    });
+
+    const body = qs('#usersTableBody');
+    setText('#usersCountPill', fmtNumber(state.filteredUsers.length) + ' records');
+
+    if (!body) return;
+
+    if (!state.filteredUsers.length) {
+      body.innerHTML = `<tr><td colspan="10">No users found.</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = state.filteredUsers.map((u) => `
+      <tr>
+        <td>${escapeHtml(u.id)}</td>
+        <td>${escapeHtml(u.name || '-')}</td>
+        <td>${escapeHtml(u.email || '-')}</td>
+        <td><span class="pill warn">${escapeHtml(u.password || 'Protected')}</span></td>
+        <td><span class="pill">${escapeHtml(formatRole(u.role))}</span></td>
+        <td>${escapeHtml(formatDept(u.dept))}</td>
+        <td>${escapeHtml(u.agentType || '-')}</td>
+        <td>${escapeHtml(u.access_scope || '-')}</td>
+        <td>${escapeHtml(formatDate(u.lastUpdatedAt || u.updatedAt || u.createdAt))}</td>
+        <td>
+  <div class="d-flex gap-1 flex-wrap">
+    <button class="tiny-btn" type="button" onclick="openEditUser(${Number(u.id)})">
+      Edit
+    </button>
+    <button class="tiny-btn" type="button" onclick="openPermissionsModal(${Number(u.id)})">
+      Permissions
+    </button>
+    <button class="tiny-btn danger" type="button" onclick="deleteUser(${Number(u.id)})">
+      Delete
+    </button>
+  </div>
+</td>
+      </tr>
+    `).join('');
+  }
+
+  function renderApiSettings(){
+    const grid = qs('#apiSettingsGrid');
+    if (!grid) return;
+
+    grid.innerHTML = allowedApiKeys.map((key) => {
+      const value = state.apiSettings?.[key] || '';
+
+      const inputId =
+        'developerApiInput_' +
+        String(key).replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      return `
+        <div class="setting-card">
+          <div class="setting-key">${escapeHtml(key)}</div>
+
+          <div class="input-action-wrap">
+            <input
+              class="mini-input api-input"
+              id="${escapeHtml(inputId)}"
+              data-api-key="${escapeHtml(key)}"
+              type="password"
+              value="${escapeHtml(value)}"
+              placeholder="${escapeHtml(key)}"
+              autocomplete="off"
+            >
+
+            <button
+              class="input-action-btn"
+              type="button"
+              data-visibility-target="${escapeHtml(inputId)}"
+              onclick="toggleInputVisibility(this)"
+              title="Show value"
+              aria-label="Show ${escapeHtml(key)}"
+            >
+              <i class="bi bi-eye"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function toggleInputVisibility(button){
+    const targetId = String(
+      button?.getAttribute('data-visibility-target') || ''
+    ).trim();
+
+    if (!targetId) return;
+
+    const input = document.getElementById(targetId);
+    if (!input) return;
+
+    const isCurrentlyVisible = input.type === 'text';
+
+    input.type = isCurrentlyVisible ? 'password' : 'text';
+
+    const icon = button.querySelector('i');
+
+    if (icon) {
+      icon.className = isCurrentlyVisible
+        ? 'bi bi-eye'
+        : 'bi bi-eye-slash';
+    }
+
+    button.title = isCurrentlyVisible
+      ? 'Show value'
+      : 'Hide value';
+
+    button.setAttribute(
+      'aria-label',
+      isCurrentlyVisible ? 'Show value' : 'Hide value'
+    );
+  }
+
+ function getDeveloperInitials(value){
+  const parts = cleanText(value)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  const initials = parts
+    .map((part) => part.charAt(0))
+    .join('')
+    .toUpperCase();
+
+  return initials || 'D';
+}
+
+function renderDeveloperAvatar(
+  imageSelector,
+  fallbackSelector,
+  imageUrl,
+  name
+){
+  const image = qs(imageSelector);
+  const fallback = qs(fallbackSelector);
+
+  if (!image || !fallback) return;
+
+  const initials = getDeveloperInitials(name);
+  const cleanImageUrl = cleanText(imageUrl);
+
+  fallback.textContent = initials;
+
+  const showFallback = () => {
+    image.classList.add('d-none');
+    image.removeAttribute('src');
+    fallback.classList.remove('d-none');
+  };
+
+  if (!cleanImageUrl) {
+    showFallback();
+    return;
+  }
+
+  image.onerror = showFallback;
+  image.src = cleanImageUrl;
+  image.classList.remove('d-none');
+  fallback.classList.add('d-none');
+}
+
+function renderDeveloperProfile(){
+  const profile = state.developerProfile || {};
+  const avatarButton = qs('#openDeveloperProfileBtn');
+
+  if (!state.profileDirty) {
+    const nameInput = qs('#developerProfileName');
+    const usernameInput = qs('#developerProfileUsername');
+    const emailInput = qs('#developerProfileEmail');
+
+    if (nameInput) {
+      nameInput.value = profile.name || '';
+    }
+
+    if (usernameInput) {
+      usernameInput.value = profile.username || '';
+    }
+
+    if (emailInput) {
+      emailInput.value = profile.email || '';
+    }
+  }
+
+  const name =
+    cleanText(profile.name) ||
+    cleanText(avatarButton?.dataset.developerName) ||
+    'Developer';
+
+  const username =
+    cleanText(profile.username) ||
+    cleanText(avatarButton?.dataset.developerUsername);
+
+  const email =
+    cleanText(profile.email) ||
+    cleanText(avatarButton?.dataset.developerEmail);
+
+  const imageUrl =
+    cleanText(profile.profileImageUrl) ||
+    cleanText(avatarButton?.dataset.profileImageUrl);
+
+  const developerId = Number(profile.id || 0);
+
+  const displayDeveloperId =
+    developerId
+      ? 'DEV-' + String(developerId).padStart(3, '0')
+      : 'DEV';
+
+  const identityText = qs('#developerIdentityText');
+
+  if (identityText) {
+    const extraParts = [];
+
+    if (username) {
+      extraParts.push(username);
+    }
+
+    if (email) {
+      extraParts.push(email);
+    }
+
+    identityText.textContent =
+      'Logged in as ' +
+      name +
+      (
+        extraParts.length
+          ? ' (' + extraParts.join(' • ') + ')'
+          : ''
+      );
+  }
+
+  if (avatarButton) {
+    avatarButton.dataset.developerName = name;
+    avatarButton.dataset.developerUsername = username;
+    avatarButton.dataset.developerEmail = email;
+    avatarButton.dataset.profileImageUrl = imageUrl;
+  }
+
+  renderDeveloperAvatar(
+    '#developerHeaderAvatarImage',
+    '#developerHeaderAvatarFallback',
+    imageUrl,
+    name
+  );
+
+  renderDeveloperAvatar(
+    '#developerProfileModalAvatarImage',
+    '#developerProfileModalAvatarFallback',
+    imageUrl,
+    name
+  );
+
+  setText(
+    '#profileCardTopId',
+    displayDeveloperId
+  );
+
+  setText(
+    '#profileCardName',
+    name
+  );
+
+  setText(
+    '#profileCardNameId',
+    developerId ? '#' + developerId : ''
+  );
+
+  setText(
+    '#profileCardEmailLine',
+    email || '-'
+  );
+
+  setText(
+    '#profileCardRoleLine',
+    cleanText(profile.role) || 'Developer'
+  );
+
+  setText(
+    '#profileCardDeveloperId',
+    displayDeveloperId
+  );
+
+  setText(
+    '#profileCardUsername',
+    username || '-'
+  );
+
+  setText(
+    '#profileCardEmail',
+    email || '-'
+  );
+
+  setText(
+    '#profileCardRole',
+    cleanText(profile.role) || 'Developer'
+  );
+
+  setText(
+    '#profileCardStatus',
+    profile.isActive === false
+      ? 'Inactive'
+      : 'Active'
+  );
+
+  setText(
+    '#profileCardLastLogin',
+    formatDate(profile.lastLoginAt)
+  );
+
+  setText(
+    '#profileCardCreatedAt',
+    formatDate(profile.createdAt)
+  );
+
+  setText(
+    '#profileCardUpdatedAt',
+    formatDate(profile.updatedAt)
+  );
+}
+
+function openDeveloperProfileModal(){
+  renderDeveloperProfile();
+
+  const modalElement = qs('#developerProfileModal');
+
+  if (!modalElement) {
+    toast(
+      'Developer profile card is unavailable.',
+      'danger'
+    );
+
+    return;
+  }
+
+  const modal =
+    bootstrap.Modal.getOrCreateInstance(
+      modalElement
+    );
+
+  modal.show();
+}
+
+function openDeveloperProfileImagePicker(){
+  if (state.profileImageUploading) {
+    return;
+  }
+
+  const input = qs('#developerProfileImageInput');
+
+  if (input) {
+    input.value = '';
+    input.click();
+  }
+}
+
+function setDeveloperProfileUploadBusy(isBusy){
+  state.profileImageUploading = !!isBusy;
+
+  const uploadButton =
+    qs('#developerProfileUploadBtn');
+
+  const cameraButton =
+    qs('#developerProfileCameraBtn');
+
+  const cropUploadButton =
+    qs('#developerCropUploadBtn');
+
+  if (uploadButton) {
+    uploadButton.disabled = !!isBusy;
+  }
+
+  if (cameraButton) {
+    cameraButton.disabled = !!isBusy;
+  }
+
+  if (cropUploadButton) {
+    cropUploadButton.disabled = !!isBusy;
+
+    cropUploadButton.innerHTML = isBusy
+      ? `
+          <span
+            class="spinner-border spinner-border-sm"
+            aria-hidden="true"
+          ></span>
+          Uploading HD Image...
+        `
+      : `
+          <i class="bi bi-check2-circle"></i>
+          Crop & Upload
+        `;
+  }
+}
+
+function getDeveloperImageDimensions(file){
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      const dimensions = {
+        width:Number(image.naturalWidth || 0),
+        height:Number(image.naturalHeight || 0)
+      };
+
+      URL.revokeObjectURL(objectUrl);
+      resolve(dimensions);
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+
+      reject(
+        new Error(
+          'The selected profile image could not be read.'
+        )
+      );
+    };
+
+    image.src = objectUrl;
+  });
+}
+
+function destroyDeveloperCropperInstance(){
+  if (state.developerCropper) {
+    state.developerCropper.destroy();
+    state.developerCropper = null;
+  }
+}
+
+function cleanupDeveloperCropSession(){
+  destroyDeveloperCropperInstance();
+
+  if (state.developerCropObjectUrl) {
+    URL.revokeObjectURL(
+      state.developerCropObjectUrl
+    );
+
+    state.developerCropObjectUrl = '';
+  }
+
+  state.developerCropFile = null;
+
+  const cropImage = qs('#developerCropImage');
+
+  if (cropImage) {
+    cropImage.removeAttribute('src');
+    cropImage.style.opacity = '0';
+  }
+
+  const input = qs('#developerProfileImageInput');
+
+  if (input) {
+    input.value = '';
+  }
+}
+
+function initializeDeveloperCropper(){
+  const cropImage = qs('#developerCropImage');
+
+  if (!cropImage || !cropImage.src) {
+    return;
+  }
+
+  if (typeof Cropper === 'undefined') {
+    toast(
+      'Image cropper library could not be loaded.',
+      'danger'
+    );
+
+    return;
+  }
+
+  destroyDeveloperCropperInstance();
+
+  const createCropper = () => {
+    destroyDeveloperCropperInstance();
+
+    cropImage.style.opacity = '1';
+
+    state.developerCropper = new Cropper(
+      cropImage,
+      {
+        aspectRatio:1,
+        viewMode:1,
+        dragMode:'move',
+        autoCropArea:1,
+        responsive:true,
+        restore:false,
+        guides:true,
+        center:true,
+        highlight:false,
+        background:false,
+        movable:true,
+        zoomable:true,
+        zoomOnWheel:true,
+        rotatable:true,
+        scalable:false,
+        toggleDragModeOnDblclick:false,
+        preview:'.developer-crop-preview'
+      }
+    );
+  };
+
+  if (
+    cropImage.complete &&
+    cropImage.naturalWidth > 0
+  ) {
+    createCropper();
+  } else {
+    cropImage.onload = createCropper;
+  }
+}
+
+async function handleDeveloperProfileImageSelection(event){
+  const input =
+    event?.target ||
+    qs('#developerProfileImageInput');
+
+  const file = input?.files?.[0];
+
+  if (!file) {
+    return;
+  }
+
+  const allowedTypes = new Set([
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp'
+  ]);
+
+  const allowedExtensions = new Set([
+    'jpg',
+    'jpeg',
+    'png',
+    'webp'
+  ]);
+
+  const fileType =
+    String(file.type || '').toLowerCase();
+
+  const fileExtension =
+    String(file.name || '')
+      .split('.')
+      .pop()
+      .toLowerCase();
+
+  if (
+    !allowedTypes.has(fileType) &&
+    !allowedExtensions.has(fileExtension)
+  ) {
+    toast(
+      'Only JPG, JPEG, PNG and WebP profile images are allowed.',
+      'danger'
+    );
+
+    input.value = '';
+    return;
+  }
+
+  if (
+    Number(file.size || 0) >
+    15 * 1024 * 1024
+  ) {
+    toast(
+      'Profile image must not be larger than 15 MB.',
+      'danger'
+    );
+
+    input.value = '';
+    return;
+  }
+
+  let imageDimensions;
+
+  try {
+    imageDimensions =
+      await getDeveloperImageDimensions(file);
+  } catch (err) {
+    toast(
+      err.message ||
+      'The selected profile image could not be read.',
+      'danger'
+    );
+
+    input.value = '';
+    return;
+  }
+
+  if (
+    imageDimensions.width < 800 ||
+    imageDimensions.height < 800
+  ) {
+    toast(
+      'Please select an original image of at least 800 × 800 pixels. Recommended size is 1080 × 1080 pixels or larger.',
+      'danger'
+    );
+
+    input.value = '';
+    return;
+  }
+
+  cleanupDeveloperCropSession();
+
+  state.developerCropFile = file;
+
+  state.developerCropObjectUrl =
+    URL.createObjectURL(file);
+
+  const cropImage =
+    qs('#developerCropImage');
+
+  const cropModalElement =
+    qs('#developerCropModal');
+
+  if (!cropImage || !cropModalElement) {
+    toast(
+      'Profile image crop window is unavailable.',
+      'danger'
+    );
+
+    cleanupDeveloperCropSession();
+    return;
+  }
+
+  cropImage.src =
+    state.developerCropObjectUrl;
+
+  cropImage.style.opacity = '0';
+
+  state.reopenDeveloperProfileAfterCrop = true;
+
+  const profileModalElement =
+    qs('#developerProfileModal');
+
+  const showCropModal = () => {
+    bootstrap.Modal
+      .getOrCreateInstance(cropModalElement)
+      .show();
+  };
+
+  const profileModal =
+    profileModalElement
+      ? bootstrap.Modal.getInstance(
+          profileModalElement
+        )
+      : null;
+
+  if (profileModal && profileModalElement) {
+    profileModalElement.addEventListener(
+      'hidden.bs.modal',
+      showCropModal,
+      { once:true }
+    );
+
+    profileModal.hide();
+  } else {
+    showCropModal();
+  }
+}
+
+function zoomDeveloperCrop(amount){
+  if (!state.developerCropper) return;
+
+  state.developerCropper.zoom(
+    Number(amount || 0)
+  );
+}
+
+function rotateDeveloperCrop(degrees){
+  if (!state.developerCropper) return;
+
+  state.developerCropper.rotate(
+    Number(degrees || 0)
+  );
+}
+
+function resetDeveloperCrop(){
+  if (!state.developerCropper) return;
+
+  state.developerCropper.reset();
+}
+
+function canvasToDeveloperProfileBlob(
+  canvas,
+  quality
+){
+  return new Promise((resolve) => {
+    canvas.toBlob(
+      resolve,
+      'image/jpeg',
+      quality
+    );
+  });
+}
+
+async function uploadCroppedDeveloperProfileImage(){
+  if (
+    state.profileImageUploading ||
+    !state.developerCropper
+  ) {
+    return;
+  }
+
+  const canvas =
+    state.developerCropper.getCroppedCanvas({
+      width:1080,
+      height:1080,
+      minWidth:1080,
+      minHeight:1080,
+      maxWidth:1080,
+      maxHeight:1080,
+      fillColor:'#ffffff',
+      imageSmoothingEnabled:true,
+      imageSmoothingQuality:'high'
+    });
+
+  if (!canvas) {
+    toast(
+      'The cropped profile picture could not be generated.',
+      'danger'
+    );
+
+    return;
+  }
+
+  let croppedBlob =
+    await canvasToDeveloperProfileBlob(
+      canvas,
+      0.98
+    );
+
+  if (!croppedBlob) {
+    toast(
+      'The cropped profile picture could not be generated.',
+      'danger'
+    );
+
+    return;
+  }
+
+  if (
+    croppedBlob.size >
+    15 * 1024 * 1024
+  ) {
+    croppedBlob =
+      await canvasToDeveloperProfileBlob(
+        canvas,
+        0.90
+      );
+  }
+
+  if (
+    !croppedBlob ||
+    croppedBlob.size >
+      15 * 1024 * 1024
+  ) {
+    toast(
+      'The cropped image is larger than 15 MB.',
+      'danger'
+    );
+
+    return;
+  }
+
+  const formData = new FormData();
+
+  formData.append(
+    'profileImage',
+    croppedBlob,
+    'developer-profile-1080.jpg'
+  );
+
+  setDeveloperProfileUploadBusy(true);
+
+  try {
+    const response = await fetch(
+      '/api/developer/profile/image',
+      {
+        method:'POST',
+        headers:{
+          Accept:'application/json'
+        },
+        body:formData
+      }
+    );
+
+    const result = await response
+      .json()
+      .catch(() => ({}));
+
+    if (
+      !response.ok ||
+      result.success === false
+    ) {
+      throw new Error(
+        result.message ||
+        'Developer profile picture upload failed.'
+      );
+    }
+
+    state.developerProfile =
+      result.profile || {
+        ...state.developerProfile,
+        profileImageUrl:
+          result.profileImageUrl || ''
+      };
+
+    renderDeveloperProfile();
+
+    toast(
+      result.message ||
+      'Cropped HD profile picture uploaded successfully.'
+    );
+
+    const cropModalElement =
+      qs('#developerCropModal');
+
+    if (cropModalElement) {
+      bootstrap.Modal
+        .getOrCreateInstance(cropModalElement)
+        .hide();
+    }
+  } catch (err) {
+    console.error(
+      'Developer cropped image upload error:',
+      err
+    );
+
+    toast(
+      err.message ||
+      'Developer profile picture upload failed.',
+      'danger'
+    );
+  } finally {
+    setDeveloperProfileUploadBusy(false);
+  }
+}
+  async function saveDeveloperProfile(){
+    const name = cleanText(qs('#developerProfileName')?.value);
+    const username = cleanText(
+      qs('#developerProfileUsername')?.value
+    );
+
+    const email = cleanText(
+      qs('#developerProfileEmail')?.value
+    ).toLowerCase();
+
+    const currentPassword =
+      qs('#developerCurrentPassword')?.value || '';
+
+    const newPassword =
+      qs('#developerNewPassword')?.value || '';
+
+    const confirmPassword =
+      qs('#developerConfirmPassword')?.value || '';
+
+    if (!name) {
+      toast('Developer name is required.', 'danger');
+      return;
+    }
+
+    if (!username) {
+      toast('Developer username is required.', 'danger');
+      return;
+    }
+
+    if (!email) {
+      toast('Developer email is required.', 'danger');
+      return;
+    }
+
+    if (!currentPassword) {
+      toast(
+        'Current password is required to save Developer login settings.',
+        'danger'
+      );
+      return;
+    }
+
+    if (
+      (newPassword || confirmPassword) &&
+      newPassword !== confirmPassword
+    ) {
+      toast(
+        'New password and confirm password do not match.',
+        'danger'
+      );
+      return;
+    }
+
+    const button = qs('#saveDeveloperProfileBtn');
+    const originalButtonHtml = button?.innerHTML || '';
+
+    if (button) {
+      button.disabled = true;
+      button.innerHTML =
+        '<span class="spinner-border spinner-border-sm"></span> Saving...';
+    }
+
+    try {
+      const result = await apiPost(
+        '/api/developer/profile/update',
+        {
+          name,
+          username,
+          email,
+          currentPassword,
+          newPassword,
+          confirmPassword
+        }
+      );
+
+      state.developerProfile =
+        result.profile || {
+          ...state.developerProfile,
+          name,
+          username,
+          email
+        };
+
+      state.profileDirty = false;
+
+      const currentPasswordInput =
+        qs('#developerCurrentPassword');
+
+      const newPasswordInput =
+        qs('#developerNewPassword');
+
+      const confirmPasswordInput =
+        qs('#developerConfirmPassword');
+
+      if (currentPasswordInput) {
+        currentPasswordInput.value = '';
+        currentPasswordInput.type = 'password';
+      }
+
+      if (newPasswordInput) {
+        newPasswordInput.value = '';
+        newPasswordInput.type = 'password';
+      }
+
+      if (confirmPasswordInput) {
+        confirmPasswordInput.value = '';
+        confirmPasswordInput.type = 'password';
+      }
+
+      renderDeveloperProfile();
+
+      toast(
+        result.message ||
+        'Developer login settings updated successfully.'
+      );
+    } catch (err) {
+      toast(
+        err.message ||
+        'Developer login settings update failed.',
+        'danger'
+      );
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = originalButtonHtml;
+      }
+    }
+  }
+
+  function statCard(label, value, icon, chip){
+    return `
+      <div class="stat-card">
+        <div class="stat-top">
+          <div class="stat-icon"><i class="bi ${icon}"></i></div>
+          <div class="stat-chip">${escapeHtml(chip || '')}</div>
+        </div>
+        <div class="stat-value">${typeof value === 'number' ? fmtNumber(value) : escapeHtml(value)}</div>
+        <div class="stat-label">${escapeHtml(label)}</div>
+      </div>
+    `;
+  }
+
+  function drawBars(selector, rows, money = false){
+    const el = qs(selector);
+    if (!el) return;
+
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const max = Math.max(...safeRows.map((r) => Number(r[1] || 0)), 1);
+
+    if (!safeRows.length) {
+      el.innerHTML = `<div class="empty">No chart data available.</div>`;
+      return;
+    }
+
+    el.innerHTML = safeRows.map(([label, value]) => {
+      const n = Number(value || 0);
+      const width = Math.max(2, Math.round((n / max) * 100));
+      const display = money ? fmtMoney(n) : fmtNumber(n);
+
+      return `
+        <div class="bar-row">
+          <div class="bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:${width}%"></div>
+          </div>
+          <div class="bar-value">${display}</div>
+        </div>
+      `;
+    }).join('');
+  }
+  function drawTimeBars(selector, rows){
+    const el = qs(selector);
+    if (!el) return;
+
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const max = Math.max(...safeRows.map((r) => Number(r[1] || 0)), 1);
+
+    if (!safeRows.length) {
+      el.innerHTML = `<div class="empty">No usage data available yet.</div>`;
+      return;
+    }
+
+    el.innerHTML = safeRows.map(([label, value]) => {
+      const n = Math.max(0, Math.round(Number(value || 0)));
+      const width = n > 0 ? Math.max(2, Math.round((n / max) * 100)) : 2;
+
+      return `
+        <div class="bar-row">
+          <div class="bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:${width}%"></div>
+          </div>
+          <div class="bar-value">${fmtActiveTime(n)}</div>
+        </div>
+      `;
+    }).join('');
+  }
+  function setText(selector, value){
+    qsa(selector).forEach((el) => {
+      el.textContent = value;
+    });
+  }
+
+  function formatRole(role){
+    const map = {
+      super_admin:'Super Admin',
+      admin:'Admin',
+      agent:'Agent',
+      sub_agent:'Sub Agent'
+    };
+    return map[role] || role || '-';
+  }
+
+  function formatDept(dept){
+    const d = cleanText(dept);
+    if (!d) return '-';
+
+    return d
+      .replaceAll('_',' ')
+      .split(' ')
+      .map((x) => x ? x[0].toUpperCase() + x.slice(1) : '')
+      .join(' ');
+  }
+
+  function formatDate(value){
+    if (!value) return '-';
+
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+
+    return d.toLocaleString();
+  }
+
+  function shorten(value, max){
+    const s = cleanText(value);
+    if (s.length <= max) return s;
+    return s.slice(0, max - 3) + '...';
+  }
+
+  function openEditUser(id){
+    const user = state.users.find((u) => Number(u.id) === Number(id));
+    if (!user) {
+      toast('User not found.', 'danger');
+      return;
+    }
+
+    state.activeUser = user;
+
+    qs('#editUserId').value = user.id || '';
+    qs('#editName').value = user.name || '';
+    qs('#editEmail').value = user.email || '';
+    qs('#editRole').value = user.role || 'agent';
+    qs('#editDept').value = user.dept || 'school';
+    qs('#editAgentType').value = user.agentType || '';
+    qs('#editAccessScope').value = user.access_scope || 'own';
+    qs('#resetPasswordInput').value = '';
+    qs('#resetResultPassword').value = '';
+    qs('#resetResultBox').classList.add('d-none');
+
+    const modal = bootstrap.Modal.getOrCreateInstance(qs('#editUserModal'));
+    modal.show();
+  }
+
+  async function saveActiveUser(){
+    const id = Number(qs('#editUserId').value || 0);
+    if (!id) return;
+
+    try {
+      await apiPost('/api/developer/users/' + id + '/update', {
+        name: qs('#editName').value,
+        email: qs('#editEmail').value,
+        role: qs('#editRole').value,
+        dept: qs('#editDept').value,
+        agentType: qs('#editAgentType').value,
+        access_scope: qs('#editAccessScope').value
+      });
+
+      toast('User updated successfully.');
+      await loadAll();
+    } catch (err) {
+      toast(err.message || 'User update failed.', 'danger');
+    }
+  }
+
+  async function resetActiveUserPassword(){
+    const id = Number(qs('#editUserId').value || 0);
+    if (!id) return;
+
+    if (!confirm('Reset password for this user?')) return;
+
+    try {
+      const result = await apiPost('/api/developer/users/' + id + '/reset-password', {
+        password: qs('#resetPasswordInput').value
+      });
+
+      qs('#resetResultPassword').value = result.temporaryPassword || '';
+      qs('#resetResultBox').classList.remove('d-none');
+
+      toast('Password reset successfully.');
+    } catch (err) {
+      toast(err.message || 'Password reset failed.', 'danger');
+    }
+  }
+
+  async function deleteUser(id){
+    const user = state.users.find((u) => Number(u.id) === Number(id));
+    const label = user ? `${user.name || ''} ${user.email || ''}`.trim() : 'this user';
+
+    if (!confirm('Delete ' + label + '? This action cannot be undone from this page.')) return;
+
+    try {
+      await apiPost('/api/developer/users/' + id + '/delete', {});
+      toast('User deleted successfully.');
+      await loadAll();
+    } catch (err) {
+      toast(err.message || 'User delete failed.', 'danger');
+    }
+  }
+
+  function copyResetPassword(){
+    const input = qs('#resetResultPassword');
+    if (!input || !input.value) return;
+
+    navigator.clipboard.writeText(input.value).then(() => {
+      toast('Password copied.');
+    }).catch(() => {
+      input.select();
+      document.execCommand('copy');
+      toast('Password copied.');
+    });
+  }
+
+  async function saveApiSettings(){
+    const body = {};
+
+    qsa('.api-input').forEach((input) => {
+      body[input.dataset.apiKey] = input.value;
+    });
+
+    try {
+      const result = await apiPost('/api/developer/api-settings/update', body);
+      toast(result.message || 'API settings saved.');
+      await loadAll();
+    } catch (err) {
+      toast(err.message || 'API settings update failed.', 'danger');
+    }
+  }
+
+  function permissionLabel(key){
+  return PERMISSION_LABELS[key] || String(key || '')
+    .replace(/([A-Z])/g, ' $1')
+    .replaceAll('_', ' ')
+    .replace(/^./, function (x) { return x.toUpperCase(); });
+}
+
+function getPermissionKeysFromUsers(){
+  const keys = new Set(ALL_PERMISSION_KEYS);
+
+  state.users.forEach((u) => {
+    Object.keys(u.permissions || {}).forEach((key) => {
+      if (HIDDEN_PERMISSION_KEYS.has(key)) return;
+      keys.add(key);
+    });
+  });
+
+  return Array.from(keys).filter((key) => !HIDDEN_PERMISSION_KEYS.has(key));
+}
+
+function renderPermissionCheckboxes(containerSelector, permissions){
+  const box = qs(containerSelector);
+  if (!box) return;
+
+  const finalPermissions = permissions || {};
+  const keys = getPermissionKeysFromUsers();
+
+  box.innerHTML = keys.map((key) => {
+    const checked = finalPermissions[key] ? 'checked' : '';
+
+    return `
+      <label class="perm-item" title="${escapeHtml(key)}">
+        <input type="checkbox" class="permission-checkbox" data-permission-key="${escapeHtml(key)}" ${checked}>
+        <span>${escapeHtml(permissionLabel(key))}</span>
+      </label>
+    `;
+  }).join('');
+}
+
+function readPermissionCheckboxes(containerSelector){
+  const permissions = {};
+
+  qsa(containerSelector + ' .permission-checkbox').forEach((input) => {
+    const key = input.dataset.permissionKey;
+    if (!key) return;
+    permissions[key] = !!input.checked;
+  });
+
+  return permissions;
+}
+
+function setAllPermissionCheckboxes(containerSelector, checked){
+  qsa(containerSelector + ' .permission-checkbox').forEach((input) => {
+    input.checked = !!checked;
+  });
+}
+
+function applyCreateRolePermissionDefaults(){
+  const role = normalize(
+    qs('#createRole')?.value || ''
+  );
+
+  setAllPermissionCheckboxes(
+    '#createPermissionsGrid',
+    role === 'super_admin'
+  );
+}
+
+function openCreateUserModal(){
+  qs('#createName').value = '';
+  qs('#createEmail').value = '';
+  qs('#createPassword').value = '';
+  qs('#createRole').value = 'agent';
+  qs('#createDept').value = 'school';
+  qs('#createAgentType').value = '';
+  qs('#createAccessScope').value = 'own';
+  qs('#createdUserEmail').value = '';
+  qs('#createdUserPassword').value = '';
+  qs('#createResultBox').classList.add('d-none');
+
+  renderPermissionCheckboxes('#createPermissionsGrid', {});
+  applyCreateRolePermissionDefaults();
+
+  const modal = bootstrap.Modal.getOrCreateInstance(qs('#createUserModal'));
+  modal.show();
+}
+
+async function createDeveloperUser(){
+  const name = cleanText(qs('#createName').value);
+  const email = cleanText(qs('#createEmail').value).toLowerCase();
+
+  if (!name || !email) {
+    toast('Name and email are required.', 'danger');
+    return;
+  }
+
+  try {
+    const result = await apiPost('/api/developer/users/create', {
+      name,
+      email,
+      password: qs('#createPassword').value,
+      role: qs('#createRole').value,
+      dept: qs('#createDept').value,
+      agentType: qs('#createAgentType').value,
+      access_scope: qs('#createAccessScope').value,
+      permissions: readPermissionCheckboxes('#createPermissionsGrid')
+    });
+
+    qs('#createdUserEmail').value = result.email || email;
+    qs('#createdUserPassword').value = result.temporaryPassword || '';
+    qs('#createResultBox').classList.remove('d-none');
+
+    toast(result.message || 'User created successfully.');
+    await loadAll();
+  } catch (err) {
+    toast(err.message || 'User create failed.', 'danger');
+  }
+}
+
+async function openPermissionsModal(id){
+  const localUser = state.users.find((u) => Number(u.id) === Number(id));
+
+  if (!localUser) {
+    toast('User not found.', 'danger');
+    return;
+  }
+
+  try {
+    const result = await apiGet('/api/developer/users/' + id + '/permissions');
+    const user = result.user || localUser;
+
+    qs('#permissionsUserId').value = user.id || localUser.id || '';
+    qs('#permissionsUserName').value = user.name || localUser.name || '';
+    qs('#permissionsUserEmail').value = user.email || localUser.email || '';
+    qs('#permissionsUserRole').value = formatRole(user.role || localUser.role || '');
+
+    renderPermissionCheckboxes('#permissionsGrid', user.permissions || localUser.permissions || {});
+
+    const modal = bootstrap.Modal.getOrCreateInstance(qs('#permissionsModal'));
+    modal.show();
+  } catch (err) {
+    toast(err.message || 'Could not load permissions.', 'danger');
+  }
+}
+
+async function saveUserPermissions(){
+  const id = Number(qs('#permissionsUserId').value || 0);
+
+  if (!id) {
+    toast('Invalid user selected.', 'danger');
+    return;
+  }
+
+  try {
+    const result = await apiPost('/api/developer/users/' + id + '/permissions', {
+      permissions: readPermissionCheckboxes('#permissionsGrid')
+    });
+
+    toast(result.message || 'Permissions updated successfully.');
+    await loadAll();
+  } catch (err) {
+    toast(err.message || 'Permissions update failed.', 'danger');
+  }
+}
+
+function copyCreatedPassword(){
+  const input = qs('#createdUserPassword');
+  if (!input || !input.value) return;
+
+  navigator.clipboard.writeText(input.value).then(() => {
+    toast('Password copied.');
+  }).catch(() => {
+    input.select();
+    document.execCommand('copy');
+    toast('Password copied.');
+  });
+}
+
+function downloadFullDatabase(){
+  window.location.href = '/api/developer/database/export';
+}
+
+  function exportDept(dept){
+    downloadJSON('developer-' + dept + '-data.json', {
+      dept,
+      stats: getDeptData(dept),
+      users: state.users.filter((u) => normalize(u.dept) === dept)
+    });
+  }
+
+  function getPaymentsExport(){
+    return {
+      income: state.stats.income || {},
+      generatedAt: new Date().toISOString()
+    };
+  }
+
+  function downloadAllData(){
+    downloadJSON('developer-dashboard-export.json', {
+      stats: state.stats,
+      users: state.users,
+      apiSettings: state.apiSettings,
+      generatedAt: new Date().toISOString()
+    });
+  }
+
+  function downloadJSON(filename, data){
+    const blob = new Blob([JSON.stringify(data || {}, null, 2)], {
+      type:'application/json'
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadUsersCsv(){
+    const headers = ['id','name','email','role','dept','agentType','access_scope','createdAt','updatedAt','lastUpdatedAt'];
+    const rows = state.filteredUsers.length ? state.filteredUsers : state.users;
+
+    const csv = [
+      headers.join(','),
+      ...rows.map((u) => headers.map((h) => csvCell(u[h])).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'developer-users.csv';
+    a.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  function csvCell(value){
+    const s = String(value ?? '');
+    if (s.includes('"') || s.includes(',') || s.includes('\n')) {
+      return '"' + s.replaceAll('"','""') + '"';
+    }
+    return s;
+  }
+
+  function setupNavSpy(){
+    const links = qsa('.nav-btn');
+    const sections = links
+      .map((link) => qs(link.getAttribute('href')))
+      .filter(Boolean);
+
+    const update = () => {
+      let activeId = 'overview';
+
+      for (const section of sections) {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 130) {
+          activeId = section.id;
+        }
+      }
+
+      links.forEach((link) => {
+        link.classList.toggle('active', link.getAttribute('href') === '#' + activeId);
+      });
+    };
+
+    document.addEventListener('scroll', update, { passive:true });
+    update();
+  }
+
+  function setupEvents(){
+  qs('#refreshBtn')?.addEventListener('click', loadAll);
+  qs('#downloadAllBtn')?.addEventListener('click', downloadAllData);
+  qs('#downloadAllBtn2')?.addEventListener('click', downloadFullDatabase);
+  qs('#saveApiSettingsBtn')?.addEventListener('click', saveApiSettings);
+  qs('#saveDeveloperProfileBtn')?.addEventListener(
+  'click',
+  saveDeveloperProfile
+);
+
+qs('#openDeveloperProfileBtn')?.addEventListener(
+  'click',
+  openDeveloperProfileModal
+);
+
+qs('#developerProfileCameraBtn')?.addEventListener(
+  'click',
+  openDeveloperProfileImagePicker
+);
+
+qs('#developerProfileUploadBtn')?.addEventListener(
+  'click',
+  openDeveloperProfileImagePicker
+);
+
+qs('#developerProfileImageInput')?.addEventListener(
+  'change',
+  handleDeveloperProfileImageSelection
+);
+
+qs('#developerCropZoomInBtn')?.addEventListener(
+  'click',
+  () => zoomDeveloperCrop(0.1)
+);
+
+qs('#developerCropZoomOutBtn')?.addEventListener(
+  'click',
+  () => zoomDeveloperCrop(-0.1)
+);
+
+qs('#developerCropRotateLeftBtn')?.addEventListener(
+  'click',
+  () => rotateDeveloperCrop(-90)
+);
+
+qs('#developerCropRotateRightBtn')?.addEventListener(
+  'click',
+  () => rotateDeveloperCrop(90)
+);
+
+qs('#developerCropResetBtn')?.addEventListener(
+  'click',
+  resetDeveloperCrop
+);
+
+qs('#developerCropUploadBtn')?.addEventListener(
+  'click',
+  uploadCroppedDeveloperProfileImage
+);
+
+qs('#developerCropModal')?.addEventListener(
+  'shown.bs.modal',
+  initializeDeveloperCropper
+);
+
+qs('#developerCropModal')?.addEventListener(
+  'hidden.bs.modal',
+  () => {
+    cleanupDeveloperCropSession();
+
+    if (
+      state.reopenDeveloperProfileAfterCrop
+    ) {
+      state.reopenDeveloperProfileAfterCrop =
+        false;
+
+      const profileModalElement =
+        qs('#developerProfileModal');
+
+      if (profileModalElement) {
+        bootstrap.Modal
+          .getOrCreateInstance(
+            profileModalElement
+          )
+          .show();
+      }
+    }
+  }
+);
+
+qs('#saveUserBtn')?.addEventListener(
+  'click',
+  saveActiveUser
+);
+  qs('#resetPasswordBtn')?.addEventListener('click', resetActiveUserPassword);
+  qs('#createUserBtn')?.addEventListener('click', createDeveloperUser);
+
+  qs('#createRole')?.addEventListener(
+    'change',
+    applyCreateRolePermissionDefaults
+  );
+
+  qs('#savePermissionsBtn')?.addEventListener('click', saveUserPermissions);
+    qsa('.developer-profile-input').forEach((input) => {
+    input.addEventListener('input', () => {
+      state.profileDirty = true;
+    });
+  });
+  qs('#globalSearch')?.addEventListener('input', () => {
+    renderUsers();
+    filterApiSettingsBySearch();
+  });
+
+  qs('#userDeptFilter')?.addEventListener('change', renderUsers);
+  qs('#userRoleFilter')?.addEventListener('change', renderUsers);
+}
+
+  function filterApiSettingsBySearch(){
+    const q = normalize(qs('#globalSearch')?.value || '');
+
+    qsa('#apis .setting-card').forEach((card) => {
+      const text = normalize(card.textContent);
+      card.style.display = !q || text.includes(q) ? '' : 'none';
+    });
+  }
+
+  setupEvents();
+  setupNavSpy();
+  loadAll();
+
+  setInterval(loadAll, 30000);
+</script>
+
+</body>
+</html>

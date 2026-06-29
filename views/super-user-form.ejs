@@ -246,10 +246,10 @@
                 <label class="form-label small">Department</label>
                 <select name="dept" id="deptSelect" class="form-select" required>
                   <option value="">Select department</option>
-                  <option value="quran">Quran</option>
-                  <option value="tuition">Tuition</option>
+                  <option value="quran" disabled>Quran - Coming Soon</option>
+                  <option value="tuition" disabled>Tuition - Coming Soon</option>
                   <option value="school">School</option>
-                  <option value="accounts">School Accounts</option>
+                  <option value="accounts">School Accounts</option> 
                 </select>
                 <small class="text-muted d-block">
                   Assign each user to one primary department.
@@ -260,10 +260,7 @@
                 <label class="form-label small">Pipeline / Agent Type</label>
                <select name="agentType" id="agentTypeSelect" class="form-select">
                <option value="">Select type</option>
-               <option value="accounts">Accounts</option>
-               <option value="admission">Admission</option>
-               <option value="management">Management</option>
-              </select>
+               </select>
                 <small class="text-muted d-block">
                   Only for Agent and Sub Agent. It will be ignored for Admin.
                 </small>
@@ -754,6 +751,45 @@
         return false;
       }
     }
+    const schoolAgentTypeOptions = [
+  { value: "accounts", label: "Accounts" },
+  { value: "admission", label: "Admission" },
+  { value: "management", label: "Management" },
+];
+
+const schoolAccountsAgentTypeOptions = [
+  { value: "print_record_update", label: "Print + Record update" },
+  { value: "verification_registration", label: "Verification & Registration" },
+  { value: "paid_slip", label: "Paid slip" },
+];
+
+function isSchoolAccountsDept(dept) {
+  const d = String(dept || "").trim().toLowerCase();
+  return d === "accounts" || d === "school accounts" || d === "school_accounts";
+}
+
+function syncAgentTypeOptions() {
+  if (!agentTypeSelect) return;
+
+  const dept = deptSelect ? deptSelect.value : "";
+  const currentValue = agentTypeSelect.value;
+
+  const options = isSchoolAccountsDept(dept)
+    ? schoolAccountsAgentTypeOptions
+    : schoolAgentTypeOptions;
+
+  agentTypeSelect.innerHTML = '<option value="">Select type</option>';
+
+  options.forEach((item) => {
+    const opt = document.createElement("option");
+    opt.value = item.value;
+    opt.textContent = item.label;
+    agentTypeSelect.appendChild(opt);
+  });
+
+  const exists = options.some((item) => item.value === currentValue);
+  agentTypeSelect.value = exists ? currentValue : "";
+}
     function filterAssignedAdmins() {
       if (!assignedAdminSelect) return;
 
@@ -790,6 +826,7 @@
     function syncRoleUI() {
       const role = (roleSelect && roleSelect.value) ? roleSelect.value : "";
       const dept = (deptSelect && deptSelect.value) ? deptSelect.value : "";
+      syncAgentTypeOptions();
 
       if (agentTypeSelect) {
         if (role === "admin") {
@@ -870,7 +907,12 @@
       });
     }
     if (roleSelect) roleSelect.addEventListener("change", syncRoleUI);
-    if (deptSelect) deptSelect.addEventListener("change", syncRoleUI);
+    if (deptSelect) {
+    deptSelect.addEventListener("change", function () {
+    syncAgentTypeOptions();
+    syncRoleUI();
+  });
+}
 
     if (btnSelectAll) btnSelectAll.addEventListener("click", () => toggleAll(true));
     if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));

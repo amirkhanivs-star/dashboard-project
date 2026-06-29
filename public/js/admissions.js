@@ -138,7 +138,7 @@ function applyUiPermissions() {
   // Buttons (classes should exist in your EJS)
   toggleByPerm(".btn-whatsapp", "btnWhatsApp");
   toggleByPerm(".btn-billing", "btnBilling");
-  toggleByPerm(".action-pdf", "btnPdf");
+  toggleByPerm(".action-pdf, .mini-pdf", "btnPdf");
   toggleByPerm(".action-upload", "btnUpload");
 
   toggleByPerm(".btn-row-edit", "btnEditRow");
@@ -191,7 +191,10 @@ function toggleBulkChallanByPerm() {
  * 2) Backward:    <th data-col="phone">Phone</th>  (mapped below)
  */
 function applyColumnVisibility() {
-  const table =  document.getElementById("adminAdmissionsTable") || document.getElementById("agentAccountsTable");
+  const table =
+    document.getElementById("superAdmissionsTable") ||
+    document.getElementById("adminAdmissionsTable") ||
+    document.getElementById("agentAccountsTable");
   if (!table) return;
 
   const colKeys = new Set();
@@ -215,12 +218,16 @@ function mapColToPerm(colKey) {
   const k = String(colKey || "").trim();
 
   const map = {
+    status: "colStatus",
+    feeStatus: "colFeeStatus",
     dept: "colDept",
     student: "colStudentName",
     father: "colFatherName",
+    fatherEmail: "colFatherEmail",
     grade: "colGrade",
     tuitionGrade: "colTuitionGrade",
     phone: "colPhone",
+    processedBy: "colProcessedBy",
 
     paymentStatus: "colPaymentStatus",
     paidUpto: "colPaidUpto",
@@ -228,6 +235,7 @@ function mapColToPerm(colKey) {
     registrationNumber: "colRegistrationNumber",
     familyNumber: "colFamilyNumber",
 
+    registrationFee: "colRegistrationFee",
     fees: "colFees",
     currency: "colCurrency",
     bank: "colBank",
@@ -236,7 +244,13 @@ function mapColToPerm(colKey) {
     pendingDues: "colPendingDues",
     receivedPayment: "colReceivedPayment",
 
+    invoiceStatus: "colInvoiceStatus",
+    invoiceStatusTimestamp: "colInvoiceStatusTimestamp",
+    paidInvoiceStatus: "colPaidInvoiceStatus",
+    paidInvoiceStatusTimestamp: "colPaidInvoiceStatusTimestamp",
+
     actions: "colActionButtons",
+    actionButtons: "colActionButtons",
   };
 
   return map[k] || null;
@@ -294,6 +308,37 @@ function finishRowSaveFlow() {
   }, 2000);
 }
 
+function refreshWorkflowCardFromResponse(admissionId, admission = {}) {
+  const cleanId = String(
+    admissionId || admission?.id || ""
+  ).trim();
+
+  if (!cleanId) return;
+
+  const card = document.querySelector(
+    `.admission-card[data-admission-id="${CSS.escape(cleanId)}"]`
+  );
+
+  if (!card) return;
+
+  if (
+    typeof window.updateAdmissionWorkflowCard ===
+    "function"
+  ) {
+    window.updateAdmissionWorkflowCard(card, {
+      ...(admission || {}),
+      id: admission?.id || cleanId,
+    });
+  }
+
+  if (
+    typeof window.updateSchoolForwardCounts ===
+    "function"
+  ) {
+    window.updateSchoolForwardCounts();
+  }
+}
+
 async function submitRowFormAjax(form, formIdOverride = "") {
   if (!form) return;
 
@@ -341,6 +386,22 @@ const res = await fetch(form.action, {
     } else if (!res.ok) {
       throw new Error("Row update failed");
     }
+
+    const savedAdmissionId =
+      data.admissionId ||
+      getAdmissionIdFromFormId(formId) ||
+      "";
+
+    const savedAdmission =
+      data.admission ||
+      data.updatedAdmission ||
+      data.updatedFields ||
+      data;
+
+    refreshWorkflowCardFromResponse(
+      savedAdmissionId,
+      savedAdmission
+    );
 
     clearDirtyRow(formId);
 finishRowSaveFlow();
@@ -646,9 +707,36 @@ function initRowUpdateOverlayBridge() {
 }
 async function loadAdmissions() {
   try {
-    const res = await fetch(API_URL);
-    const data = await res.json();
-    renderAdmissions(data);
+    const res = await fetch(API_URL, {
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data?.success === false) {
+      throw new Error(data?.message || "Admissions load failed");
+    }
+
+    const rows = Array.isArray(data)
+      ? data
+      : (
+          Array.isArray(data?.admissions)
+            ? data.admissions
+            : (
+                Array.isArray(data?.rows)
+                  ? data.rows
+                  : (
+                      Array.isArray(data?.data)
+                        ? data.data
+                        : []
+                    )
+              )
+        );
+
+    renderAdmissions(rows);
   } catch (err) {
     console.error("Error loading admissions:", err);
   }
@@ -659,7 +747,9 @@ function renderAdmissions(rows) {
   if (!tbody) return;
   tbody.innerHTML = "";
 
-  rows.forEach((row, i) => {
+  const safeRows = Array.isArray(rows) ? rows : [];
+
+  safeRows.forEach((row, i) => {
     const tr = document.createElement("tr");
 
     // NOTE: Ye render aapke current table structure par depend karta hai.
@@ -713,7 +803,6 @@ function openConfirmModal({
     cancelBtn.textContent = cancelText;
 
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    modal.show();
 
     let done = false;
 
@@ -794,11 +883,251 @@ if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
   window.rebuildAdmissionFilesDropdowns();
 }
 
+if (typeof window.updateSchoolForwardCounts === "function") {
+  window.updateSchoolForwardCounts();
+}
+
   } catch (err) {
     console.error(err);
     alert("Delete failed");
   }
 });
+function updateForwardButtonAfterUpload(admissionId) {
+  if (!admissionId) return;
+
+  const cleanAdmissionId = String(admissionId);
+
+  const card = document.querySelector(
+    `.admission-card[data-admission-id="${CSS.escape(cleanAdmissionId)}"]`
+  );
+
+  if (!card) return;
+
+  const dept = String(
+    card.getAttribute("data-dept") || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const forwardStatus = String(
+    card.getAttribute("data-forward-status") ||
+    "not_forwarded"
+  )
+    .trim()
+    .toLowerCase();
+
+  const forwardSubStatus = String(
+    card.getAttribute("data-forward-sub-status") ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const currentReturnStatus = String(
+    card.getAttribute("data-school-return-status") ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const activeUser =
+    CURRENT_USER ||
+    window.CURRENT_USER ||
+    {};
+
+  const activeUserDept = String(
+    activeUser.dept ||
+    activeUser.department ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const changedToReupload =
+    (isSuperUser() || activeUserDept === "school") &&
+    dept === "school" &&
+    currentReturnStatus === "not_received";
+
+  const nextReturnStatus =
+    changedToReupload
+      ? "reupload"
+      : currentReturnStatus;
+
+  const currentReuploadTagActive =
+    card.getAttribute(
+      "data-reupload-tag-active"
+    ) === "1";
+
+  const nextReuploadTagActive =
+    changedToReupload ||
+    currentReuploadTagActive ||
+    nextReturnStatus === "reupload";
+
+  const nextWorkflowTag =
+    nextReturnStatus === "not_received"
+      ? "Not Received"
+      : nextReuploadTagActive
+        ? "Reupload"
+        : "";
+
+  const canForwardNow =
+    dept === "school" &&
+    (
+      forwardStatus !== "forwarded" ||
+      nextReturnStatus === "reupload"
+    );
+
+  card.setAttribute(
+    "data-has-upload",
+    "1"
+  );
+
+  card.setAttribute(
+    "data-uploaded-by-current-user",
+    "1"
+  );
+
+  card.setAttribute(
+    "data-school-return-status",
+    nextReturnStatus
+  );
+
+  card.setAttribute(
+    "data-reupload-tag-active",
+    nextReuploadTagActive ? "1" : "0"
+  );
+
+  card.setAttribute(
+    "data-can-forward",
+    canForwardNow ? "1" : "0"
+  );
+
+  card.setAttribute(
+    "data-not-received-visible-for-current-user",
+    nextReturnStatus === "not_received" ||
+    nextReturnStatus === "reupload"
+      ? "1"
+      : "0"
+  );
+
+  const workflowAdmission = {
+    id: cleanAdmissionId,
+    forwardStatus,
+    forwardSubStatus,
+    schoolReturnStatus: nextReturnStatus,
+    school_return_status: nextReturnStatus,
+    reuploadTagActive:
+      nextReuploadTagActive ? 1 : 0,
+    reupload_tag_active:
+      nextReuploadTagActive ? 1 : 0,
+    workflowTag: nextWorkflowTag,
+    canShowForwardButton: canForwardNow,
+    notReceivedVisibleForCurrentUser:
+      nextReturnStatus === "not_received" ||
+      nextReturnStatus === "reupload",
+  };
+
+  if (
+    typeof window.updateAdmissionWorkflowCard ===
+    "function"
+  ) {
+    window.updateAdmissionWorkflowCard(
+      card,
+      workflowAdmission
+    );
+  }
+
+  /*
+   * Manual fallback:
+   * Super/Admin/Agent/Sub Agent dashboard script available
+   * na ho tab bhi Forward button correctly show ho.
+   */
+  if (canForwardNow) {
+    const actions = card.querySelector(
+      ".admission-card-actions"
+    );
+
+    if (actions) {
+      const forwardedDone = actions.querySelector(
+        ".mini-forwarded-done"
+      );
+
+      if (forwardedDone) {
+        forwardedDone.remove();
+      }
+
+      let forwardBtn = actions.querySelector(
+        ".btn-forward-admission"
+      );
+
+      if (!forwardBtn) {
+        forwardBtn =
+          document.createElement("button");
+
+        forwardBtn.type = "button";
+
+        forwardBtn.className =
+          "mini-action-btn mini-forward btn-forward-admission";
+
+        forwardBtn.innerHTML =
+          '<i class="bi bi-send"></i> Forward';
+
+        const deleteBtn = actions.querySelector(
+          ".btn-delete-admission"
+        );
+
+        if (deleteBtn) {
+          actions.insertBefore(
+            forwardBtn,
+            deleteBtn
+          );
+        } else {
+          actions.appendChild(
+            forwardBtn
+          );
+        }
+      }
+
+      const studentTitle = card.querySelector(
+        ".admission-title"
+      );
+
+      const studentName = studentTitle
+        ? String(
+            studentTitle.textContent || ""
+          ).trim()
+        : "";
+
+      forwardBtn.setAttribute(
+        "data-admission-id",
+        cleanAdmissionId
+      );
+
+      forwardBtn.setAttribute(
+        "data-student",
+        studentName || "Student"
+      );
+
+      forwardBtn.classList.remove(
+        "d-none"
+      );
+    }
+  }
+
+  if (
+    typeof window.rebuildAdmissionFilesDropdowns ===
+    "function"
+  ) {
+    window.rebuildAdmissionFilesDropdowns();
+  }
+
+  if (
+    typeof window.updateSchoolForwardCounts ===
+    "function"
+  ) {
+    window.updateSchoolForwardCounts();
+  }
+}
 // ✅ Upload handler (GLOBAL)
 document.addEventListener("change", async (e) => {
   const input = e.target;
@@ -836,6 +1165,8 @@ document.addEventListener("change", async (e) => {
 if (typeof window.rebuildAdmissionFilesDropdowns === "function") {
   window.rebuildAdmissionFilesDropdowns();
 }
+
+updateForwardButtonAfterUpload(admissionId);
 
 input.value = "";
   } catch (err) {
@@ -1094,6 +1425,7 @@ function initBillingModal() {
   const billGrade = document.getElementById("billGrade");
   const billPhone = document.getElementById("billPhone");
   const billId = document.getElementById("billId");
+  const billCurrency = document.getElementById("billCurrency");
   const billSaveBtn = document.getElementById("billSaveBtn");
   const billYearSelect = document.getElementById("billingYearSelect");
 
@@ -1377,7 +1709,7 @@ function setBankSelectValueSafe(selectEl, value) {
   selectEl.value = finalValue;
   selectEl.setAttribute("data-prev-value", finalValue);
 }
-function getLatestChangedVerificationForColumn(nextBilling) {
+function getLatestChangedBillingValues(nextBilling) {
   let latestChangedMonthKey = "";
 
   for (const k of Object.keys(inputs)) {
@@ -1393,6 +1725,7 @@ function getLatestChangedVerificationForColumn(nextBilling) {
     const beforeBank =
       normalizeBillValue(beforeItem.bank) ||
       normalizeBillValue(beforeItem.bankName) ||
+      normalizeBillValue(beforeItem.bank_name) ||
       normalizeBillValue(beforeItem.number);
 
     const afterStatus = normalizeBillValue(afterItem.status);
@@ -1404,7 +1737,7 @@ function getLatestChangedVerificationForColumn(nextBilling) {
       beforeStatus !== afterStatus ||
       beforeAmount !== afterAmount ||
       beforeVerification !== afterVerification ||
-      beforeBank !== afterBank ;
+      beforeBank !== afterBank;
 
     if (changed) {
       latestChangedMonthKey = k;
@@ -1412,21 +1745,54 @@ function getLatestChangedVerificationForColumn(nextBilling) {
   }
 
   if (!latestChangedMonthKey) {
-    return "";
+    return null;
   }
 
-  return normalizeBillValue(nextBilling[latestChangedMonthKey]?.verification);
+  return {
+    verification: normalizeBillValue(
+      nextBilling[latestChangedMonthKey]?.verification
+    ),
+    bank: normalizeBillValue(
+      nextBilling[latestChangedMonthKey]?.bank
+    ),
+  };
 }
 
-function updateCurrentRowVerificationCell(value) {
-  if (!currentRow) return;
+function updateCurrentRowBillingField(fieldKey, value) {
+  if (!currentRow || value === null || typeof value === "undefined") return;
 
-  const verifInput =
-    currentRow.querySelector('td[data-col="verificationNumber"] input') ||
-    currentRow.querySelector('input[name="verificationNumber"]');
+  const selectors = {
+    verificationNumber: [
+      'td[data-col="verificationNumber"] input',
+      'input[name="verificationNumber"]',
+    ],
+    bank: [
+      'td[data-col="bank"] select',
+      'td[data-col="bank"] input',
+      'select[name="bank"]',
+      'select[name="bank_name"]',
+      'input[name="bank"]',
+      'input[name="bank_name"]',
+    ],
+  };
 
-  if (verifInput) {
-    verifInput.value = value || "";
+  const selectorList = selectors[fieldKey] || [];
+  const control = selectorList
+    .map((selector) => currentRow.querySelector(selector))
+    .find(Boolean);
+
+  if (control) {
+    control.value = value || "";
+  }
+
+  const cardField = currentRow.querySelector(
+    `.admission-field-link[data-field-key="${CSS.escape(fieldKey)}"] .field-value`
+  );
+
+  if (cardField) {
+    const displayValue = value || "-";
+    cardField.textContent = displayValue;
+    cardField.setAttribute("title", displayValue);
   }
 }
 
@@ -1434,18 +1800,39 @@ function updateCurrentRowVerificationCell(value) {
     const btn = e.target.closest(".btn-billing");
     if (!btn) return;
 
-    currentAdmissionId = btn.getAttribute("data-admission-id");
+    /*
+     * Card dashboards already own their Billing open/load/save workflow
+     * inside the page-specific EJS scripts. This shared file only owns
+     * the legacy table-row billing flow, otherwise both handlers can
+     * submit the same billing payload.
+     */
     const row = btn.closest("tr");
-    if (!row) return;
+
+    if (!row) {
+      currentAdmissionId = null;
+      currentRow = null;
+      loadedBillingSnapshot = {};
+      return;
+    }
+
+    currentAdmissionId = btn.getAttribute("data-admission-id");
     currentRow = row;
+
     if (billYearSelect && !billYearSelect.value) {
-  billYearSelect.value = String(new Date().getFullYear());
-}
+      billYearSelect.value = String(new Date().getFullYear());
+    }
 
     billStudent.textContent = getRowFieldValue(row, "student") || "-";
     billGrade.textContent = getRowFieldValue(row, "grade") || "-";
     billPhone.textContent = getRowFieldValue(row, "phone") || "-";
     billId.textContent = currentAdmissionId || "-";
+
+    if (billCurrency) {
+      billCurrency.textContent =
+        getRowFieldValue(row, "currency_code") ||
+        getRowFieldValue(row, "currency") ||
+        "-";
+    }
 
     await loadBillingFromDb(currentAdmissionId);
 
@@ -1509,10 +1896,21 @@ const res = await fetch(`/api/billing/${currentAdmissionId}`, {
   ? window.showUploadFlash("success", "Saved", "Data has been saved.")
   : alert("Data has been saved ✅");
 
-const latestVerificationForColumn = getLatestChangedVerificationForColumn(billing);
-updateCurrentRowVerificationCell(latestVerificationForColumn);
+const latestBillingValues = getLatestChangedBillingValues(billing);
 
-// snapshot bhi update kar do taaki next save par comparison sahi rahe
+if (latestBillingValues) {
+  updateCurrentRowBillingField(
+    "verificationNumber",
+    latestBillingValues.verification
+  );
+
+  updateCurrentRowBillingField(
+    "bank",
+    latestBillingValues.bank
+  );
+}
+
+// Snapshot update so the next save compares against the latest values.
 loadedBillingSnapshot = JSON.parse(JSON.stringify(billing || {}));
 
 const inst = bootstrap.Modal.getInstance(modalEl);

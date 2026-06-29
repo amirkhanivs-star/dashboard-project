@@ -649,7 +649,211 @@ body::after{
   white-space:nowrap;
   opacity:1 !important;
   text-shadow:none !important;
-  pointer-events:none;
+  pointer-events:auto;
+  user-select:none;
+}
+
+.mak-key{
+  display:inline;
+  cursor:default;
+  padding:0;
+  border-radius:0;
+  transition:none;
+  color:inherit;
+  background:transparent;
+}
+
+.mak-key:hover{
+  background:transparent;
+  color:inherit;
+}
+/* HIDDEN DEVELOPER LOGIN */
+.developer-modal-overlay{
+  position:fixed;
+  inset:0;
+  z-index:10000;
+  background:rgba(0,0,0,.54);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+}
+
+.developer-modal-overlay.show{
+  display:flex;
+}
+
+.developer-modal{
+  width:min(94vw, 390px);
+  background:#fff;
+  color:#111827;
+  border-radius:24px;
+  border:1px solid rgba(255,255,255,.20);
+  box-shadow:0 30px 90px rgba(0,0,0,.35);
+  overflow:hidden;
+  animation:developerModalIn .22s ease-out;
+}
+
+.developer-modal-top{
+  background:#050505;
+  color:#fff;
+  padding:22px 22px 18px;
+  position:relative;
+}
+
+.developer-modal-icon{
+  width:46px;
+  height:46px;
+  border-radius:16px;
+  background:#fff;
+  color:#000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  margin-bottom:14px;
+}
+
+.developer-modal-title{
+  font-size:28px;
+  font-weight:950;
+  line-height:1;
+  letter-spacing:-.8px;
+  margin-bottom:6px;
+}
+
+.developer-modal-sub{
+  color:#d1d5db;
+  font-size:13px;
+  font-weight:600;
+  line-height:1.5;
+}
+
+.developer-close{
+  position:absolute;
+  right:14px;
+  top:14px;
+  width:34px;
+  height:34px;
+  border:1px solid rgba(255,255,255,.16);
+  background:rgba(255,255,255,.08);
+  color:#fff;
+  border-radius:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.developer-close:hover{
+  background:#fff;
+  color:#000;
+}
+
+.developer-modal-body{
+  padding:22px;
+  background:#fff;
+}
+
+.developer-field{
+  position:relative;
+  margin-bottom:12px;
+}
+
+.developer-field .form-control{
+  height:50px;
+  border-radius:14px;
+  border:1px solid rgba(17,24,39,.16);
+  background:#fff;
+  color:#111827;
+  padding-left:43px;
+}
+
+.developer-field .form-control:focus{
+  border-color:#111827;
+  box-shadow:0 0 0 4px rgba(17,24,39,.10);
+}
+
+.developer-field-icon{
+  position:absolute;
+  left:15px;
+  top:50%;
+  transform:translateY(-50%);
+  color:#6b7280;
+  z-index:3;
+}
+
+.developer-password-field .form-control{
+  padding-right:48px;
+}
+
+.developer-eye-btn{
+  position:absolute;
+  right:10px;
+  top:50%;
+  transform:translateY(-50%);
+  border:0;
+  background:transparent;
+  color:#6b7280;
+  width:34px;
+  height:34px;
+  border-radius:10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:4;
+}
+
+.developer-eye-btn:hover{
+  background:#f3f4f6;
+  color:#000;
+}
+
+.developer-login-btn{
+  width:100%;
+  height:50px;
+  border:0;
+  border-radius:14px;
+  background:#050505;
+  color:#fff;
+  font-weight:900;
+  font-size:15px;
+  margin-top:4px;
+  transition:.2s ease;
+}
+
+.developer-login-btn:hover{
+  background:#111827;
+  transform:translateY(-1px);
+}
+
+.developer-hint{
+  margin-top:12px;
+  color:#6b7280;
+  font-size:12px;
+  text-align:center;
+  font-weight:600;
+}
+
+.developer-error{
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  padding:10px 12px;
+  border-radius:14px;
+  background:#fef2f2;
+  color:#991b1b;
+  border:1px solid rgba(220,38,38,.18);
+  font-size:13px;
+  font-weight:700;
+  line-height:1.4;
+  margin-bottom:12px;
+}
+
+@keyframes developerModalIn{
+  from{ opacity:0; transform:translateY(16px) scale(.96); }
+  to{ opacity:1; transform:translateY(0) scale(1); }
 }
 /* RESPONSIVE */
 @media (max-width: 1200px){
@@ -778,6 +982,11 @@ body::after{
     (typeof error !== 'undefined' && error)
       ? error
       : ((typeof message !== 'undefined' && message) ? message : '');
+
+  const developerError =
+    (typeof devError !== 'undefined' && devError)
+      ? devError
+      : '';
 %>
 
 <body class="<%= themeClass %>">
@@ -888,7 +1097,68 @@ body::after{
 
 </div>
 
-<div class="mak-footer">POWERED AND DESIGN BY MAK</div>
+<div class="mak-footer">
+  POWERED AND DESIGNED BY <span class="mak-key" id="developerTrigger">MAK</span>
+</div>
+
+<div class="developer-modal-overlay" id="developerModal" aria-hidden="true">
+  <div class="developer-modal" role="dialog" aria-modal="true" aria-labelledby="developerModalTitle">
+    <div class="developer-modal-top">
+      <button type="button" class="developer-close" id="developerCloseBtn" aria-label="Close developer login">
+        <i class="bi bi-x-lg"></i>
+      </button>
+
+      <div class="developer-modal-icon">
+        <i class="bi bi-code-slash"></i>
+      </div>
+
+      <div class="developer-modal-title" id="developerModalTitle">Developer access</div>
+      <div class="developer-modal-sub">
+        Private dashboard login for authorized developer only.
+      </div>
+    </div>
+
+    <div class="developer-modal-body">
+      <% if (developerError) { %>
+        <div class="developer-error">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          <span><%= developerError %></span>
+        </div>
+      <% } %>
+
+      <form method="POST" action="/developer/login" autocomplete="off">
+        <div class="developer-field">
+  <i class="bi bi-person-badge developer-field-icon"></i>
+  <input
+    type="text"
+    name="username"
+    class="form-control"
+    placeholder="Developer username or email"
+    autocomplete="username"
+    required
+  >
+</div>
+
+        <div class="developer-field developer-password-field">
+          <i class="bi bi-lock developer-field-icon"></i>
+          <input type="password" name="password" id="developerPasswordInput" class="form-control" placeholder="Developer password" required>
+          <button type="button" class="developer-eye-btn" id="toggleDeveloperPassword" aria-label="Show developer password">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
+
+        <button type="submit" class="developer-login-btn">
+          <i class="bi bi-shield-lock me-1"></i>
+          Login as Developer
+        </button>
+
+        <div class="developer-hint">
+          This panel is not connected with Super, Admin, Agent, or Sub login.
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 <script>
   (function () {
     const passwordInput = document.getElementById('passwordInput');
@@ -905,6 +1175,86 @@ body::after{
         }
       });
     }
+
+    const developerTrigger = document.getElementById('developerTrigger');
+    const developerModal = document.getElementById('developerModal');
+    const developerCloseBtn = document.getElementById('developerCloseBtn');
+    const developerPasswordInput = document.getElementById('developerPasswordInput');
+    const toggleDeveloperPassword = document.getElementById('toggleDeveloperPassword');
+
+    function openDeveloperModal() {
+      if (!developerModal) return;
+
+      developerModal.classList.add('show');
+      developerModal.setAttribute('aria-hidden', 'false');
+
+      const firstInput = developerModal.querySelector('input[name="username"]');
+      if (firstInput) {
+        setTimeout(function () {
+          firstInput.focus();
+        }, 120);
+      }
+    }
+
+    function closeDeveloperModal() {
+      if (!developerModal) return;
+
+      developerModal.classList.remove('show');
+      developerModal.setAttribute('aria-hidden', 'true');
+
+      if (developerPasswordInput) {
+        developerPasswordInput.type = 'password';
+      }
+
+      if (toggleDeveloperPassword) {
+        const icon = toggleDeveloperPassword.querySelector('i');
+        if (icon) {
+          icon.className = 'bi bi-eye';
+        }
+      }
+    }
+
+    if (developerTrigger) {
+      developerTrigger.addEventListener('dblclick', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        openDeveloperModal();
+      });
+    }
+
+    if (developerCloseBtn) {
+      developerCloseBtn.addEventListener('click', closeDeveloperModal);
+    }
+
+    if (developerModal) {
+      developerModal.addEventListener('click', function (event) {
+        if (event.target === developerModal) {
+          closeDeveloperModal();
+        }
+      });
+    }
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && developerModal && developerModal.classList.contains('show')) {
+        closeDeveloperModal();
+      }
+    });
+
+    if (developerPasswordInput && toggleDeveloperPassword) {
+      toggleDeveloperPassword.addEventListener('click', function () {
+        const isPassword = developerPasswordInput.type === 'password';
+        developerPasswordInput.type = isPassword ? 'text' : 'password';
+
+        const icon = toggleDeveloperPassword.querySelector('i');
+        if (icon) {
+          icon.className = isPassword ? 'bi bi-eye-slash' : 'bi bi-eye';
+        }
+      });
+    }
+
+    <% if (developerError) { %>
+      openDeveloperModal();
+    <% } %>
 
     const toast = document.getElementById('loginToast');
     const toastCloseBtn = document.getElementById('toastCloseBtn');

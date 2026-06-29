@@ -6,9 +6,7 @@
   const role = String(U?.role || U?.agentType || '').toLowerCase();
 
   const backUrl =
-    role === 'admin'
-      ? `/admin/admission/${admissionId || ''}`
-      : `/dashboard/super/admission/${admissionId || ''}`;
+    `/dashboard/admission/${admissionId || ''}`;
 
   const feeRowsSafe = Array.isArray(feeRows) ? feeRows : [];
   const rowsSafe = Array.isArray(rows) ? rows : [];
@@ -66,7 +64,25 @@ const familyLabel = cleanFamilyNumber
     U?.isSuperAdmin === true ||
     U?.is_super_admin === true;
 
-  const rawPerms = U?.permissions || U?.perms || U?.permission || U?.permissionMap || {};
+  let rawPerms =
+    (typeof perms !== 'undefined' && perms)
+      ? perms
+      : (
+          U?.permissions ||
+          U?.perms ||
+          U?.permission ||
+          U?.permissionMap ||
+          {}
+        );
+
+  try {
+    if (typeof rawPerms === 'string') {
+      rawPerms = JSON.parse(rawPerms);
+    }
+  } catch (e) {
+    rawPerms = {};
+  }
+
   const canEditVerificationNumber =
     isSuperUser ||
     rawPerms === true ||
@@ -86,6 +102,13 @@ const familyLabel = cleanFamilyNumber
       rawPerms.includes('colBank')
     )) ||
     (rawPerms && typeof rawPerms === 'object' && rawPerms.colBank === true);
+
+  // Paid Slip tick/cross approval workflow is limited to Accounts Agent/Sub-Agent.
+  // Super Admin and Admin keep the existing correction/edit behavior.
+  const isPaidSlipWorkflowUserSafe =
+    typeof isPaidSlipWorkflowUser !== 'undefined'
+      ? !!isPaidSlipWorkflowUser
+      : false;
 %>
 
 <div class="container-fluid py-3 fee-collection-page">
@@ -417,6 +440,12 @@ placeholder="Enter received amount"
   <label for="verificationNumber" class="form-label fw-semibold">Verification Number</label>
 
   <input type="hidden" id="useMasterVerification" name="useMasterVerification" value="true">
+  <input
+    type="hidden"
+    id="verificationApproved"
+    name="verificationApproved"
+    value="<%= isPaidSlipWorkflowUserSafe ? 'false' : 'true' %>"
+  >
 
   <div class="input-group verification-group">
     <input
@@ -431,22 +460,26 @@ placeholder="Enter received amount"
 
     <button
       type="button"
-      class="btn btn-verify-choice verify-yes active"
+      class="btn btn-verify-choice verify-yes <%= isPaidSlipWorkflowUserSafe ? '' : 'active' %>"
       id="verificationUseSavedBtn"
-      title="Use saved verification number"
+      title="<%= isPaidSlipWorkflowUserSafe ? 'Approve saved verification number' : 'Use saved verification number' %>"
     >✓</button>
 
     <button
       type="button"
       class="btn btn-verify-choice verify-no"
       id="verificationEditBtn"
-      title="<%= canEditVerificationNumber ? 'Enter correct verification number' : 'No permission to edit verification number' %>"
-      <%= canEditVerificationNumber ? '' : 'disabled' %>
+      title="<%= isPaidSlipWorkflowUserSafe
+        ? 'Mark verification number incorrect'
+        : (canEditVerificationNumber ? 'Enter correct verification number' : 'No permission to edit verification number') %>"
+      <%= (!isPaidSlipWorkflowUserSafe && !canEditVerificationNumber) ? 'disabled' : '' %>
     >✕</button>
   </div>
 
   <div class="tiny text-muted mt-1" id="verificationHelpText">
-    <% if (canEditVerificationNumber) { %>
+    <% if (isPaidSlipWorkflowUserSafe) { %>
+      Check the saved verification number. Tick ✓ approves it; cross ✕ sends it for correction.
+    <% } else if (canEditVerificationNumber) { %>
       Tick ✓ will use saved verification number. Cross ✕ will allow correction.
     <% } else { %>
       Saved verification number will be used. You do not have permission to change it.
@@ -459,6 +492,12 @@ placeholder="Enter received amount"
 
   <input type="hidden" id="useMasterBank" name="useMasterBank" value="true">
   <input type="hidden" id="collectionAccount" name="collectionAccount" value="<%= masterBankNameSafe %>">
+  <input
+    type="hidden"
+    id="collectionAccountApproved"
+    name="collectionAccountApproved"
+    value="<%= isPaidSlipWorkflowUserSafe ? 'false' : 'true' %>"
+  >
 
   <div class="input-group bank-group">
     <select
@@ -477,22 +516,26 @@ placeholder="Enter received amount"
 
     <button
       type="button"
-      class="btn btn-verify-choice verify-yes active"
+      class="btn btn-verify-choice verify-yes <%= isPaidSlipWorkflowUserSafe ? '' : 'active' %>"
       id="bankUseSavedBtn"
-      title="Use saved bank"
+      title="<%= isPaidSlipWorkflowUserSafe ? 'Approve saved collection account' : 'Use saved bank' %>"
     >✓</button>
 
     <button
       type="button"
       class="btn btn-verify-choice verify-no"
       id="bankEditBtn"
-      title="<%= canEditBank ? 'Select correct bank' : 'No permission to edit bank' %>"
-      <%= canEditBank ? '' : 'disabled' %>
+      title="<%= isPaidSlipWorkflowUserSafe
+        ? 'Mark collection account incorrect'
+        : (canEditBank ? 'Select correct bank' : 'No permission to edit bank') %>"
+      <%= (!isPaidSlipWorkflowUserSafe && !canEditBank) ? 'disabled' : '' %>
     >✕</button>
   </div>
 
   <div class="tiny text-muted mt-1" id="bankHelpText">
-    <% if (canEditBank) { %>
+    <% if (isPaidSlipWorkflowUserSafe) { %>
+      Check the saved collection account. Tick ✓ approves it; cross ✕ sends it for correction.
+    <% } else if (canEditBank) { %>
       Tick ✓ will use saved bank. Cross ✕ will allow bank correction.
     <% } else { %>
       Saved bank will be used. You do not have permission to change it.
@@ -523,8 +566,35 @@ placeholder="Enter received amount"
               ></textarea>
             </div>
 
+            <% if (isPaidSlipWorkflowUserSafe) { %>
+              <div class="paid-slip-approval-panel mb-3" id="paidSlipApprovalPanel">
+                <div class="paid-slip-approval-title">
+                  <i class="bi bi-shield-check"></i>
+                  Paid Slip approvals
+                </div>
+
+                <div class="paid-slip-approval-items">
+                  <span class="paid-slip-approval-chip pending" id="verificationApprovalChip">
+                    Verification Number: Pending
+                  </span>
+
+                  <span class="paid-slip-approval-chip pending" id="bankApprovalChip">
+                    Collection Account: Pending
+                  </span>
+                </div>
+
+                <div class="tiny text-muted mt-2" id="paidSlipApprovalHelp">
+                  For a payment amount, approve both fields before Receive becomes available.
+                </div>
+              </div>
+            <% } %>
+
             <div class="d-grid">
-              <button type="submit" class="btn btn-receive rounded-3" id="receiveBtn">
+              <button
+                type="submit"
+                class="btn btn-receive rounded-3"
+                id="receiveBtn"
+                <%= isPaidSlipWorkflowUserSafe ? 'disabled' : '' %>>
                 <i class="bi bi-cash-coin me-1"></i> Receive
               </button>
             </div>
@@ -540,6 +610,124 @@ placeholder="Enter received amount"
           </div>
 
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Paid Slip correction / Record to Update forwarding modal -->
+<div
+  class="modal fade"
+  id="feeWorkflowForwardModal"
+  tabindex="-1"
+  aria-hidden="true"
+  data-bs-backdrop="static"
+  data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg rounded-4 fee-workflow-modal">
+      <div class="modal-header border-0 pb-2">
+        <div>
+          <h5 class="modal-title mb-1" id="feeWorkflowModalTitle">
+            Forward Admission
+          </h5>
+          <div class="small text-muted" id="feeWorkflowModalDescription">
+            Select the user who should receive this admission.
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="btn-close"
+          id="feeWorkflowModalCloseBtn"
+          data-bs-dismiss="modal"
+          aria-label="Close">
+        </button>
+      </div>
+
+      <div class="modal-body pt-1">
+        <div class="fee-workflow-destination mb-3">
+          <div class="tiny text-uppercase fw-bold text-muted">Destination</div>
+          <div class="fw-bold mt-1" id="feeWorkflowDestinationLabel">-</div>
+        </div>
+
+        <div class="d-none" id="feeWorkflowIssueSection">
+          <label class="form-label fw-semibold mb-2">Incorrect fields</label>
+
+          <div class="d-grid gap-2 mb-3">
+            <label class="fee-workflow-field-option">
+              <input
+                type="checkbox"
+                class="form-check-input"
+                id="feeIssueVerification"
+                value="Verification Number">
+              <span>
+                <b>Verification Number</b>
+                <small>The saved verification/reference number is incorrect.</small>
+              </span>
+            </label>
+
+            <label class="fee-workflow-field-option">
+              <input
+                type="checkbox"
+                class="form-check-input"
+                id="feeIssueCollectionAccount"
+                value="Collection Account">
+              <span>
+                <b>Collection Account</b>
+                <small>The saved bank/collection account is incorrect.</small>
+              </span>
+            </label>
+          </div>
+
+          <div class="mb-3">
+            <label for="feeWorkflowIssueMessage" class="form-label fw-semibold">
+              Correction message
+            </label>
+            <textarea
+              class="form-control premium-input"
+              id="feeWorkflowIssueMessage"
+              rows="3"
+              placeholder="Explain what needs to be corrected"></textarea>
+          </div>
+        </div>
+
+        <div class="mb-2">
+          <label for="feeWorkflowTargetUserId" class="form-label fw-semibold">
+            Assign to Agent / Sub-Agent
+          </label>
+
+          <select
+            class="form-select premium-input"
+            id="feeWorkflowTargetUserId"
+            disabled>
+            <option value="">Select destination first</option>
+          </select>
+
+          <div class="tiny text-muted mt-1" id="feeWorkflowTargetUserHint">
+            Matching users will load automatically.
+          </div>
+        </div>
+
+        <div class="alert alert-danger py-2 px-3 mt-3 mb-0 d-none" id="feeWorkflowModalError"></div>
+      </div>
+
+      <div class="modal-footer border-0 pt-1">
+        <button
+          type="button"
+          class="btn btn-light rounded-pill px-4"
+          id="feeWorkflowCancelBtn"
+          data-bs-dismiss="modal">
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-primary rounded-pill px-4"
+          id="feeWorkflowSubmitBtn">
+          <i class="bi bi-send-check me-1"></i>
+          Forward
+        </button>
       </div>
     </div>
   </div>
@@ -893,6 +1081,111 @@ placeholder="Enter received amount"
       white-space: nowrap;
     }
   }
+
+  /* Paid Slip approval and workflow forwarding */
+  .paid-slip-approval-panel{
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(59,130,246,.20);
+    background: rgba(239,246,255,.82);
+  }
+
+  .paid-slip-approval-title{
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #1e40af;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .paid-slip-approval-items{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 9px;
+  }
+
+  .paid-slip-approval-chip{
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .paid-slip-approval-chip.pending{
+    color: #92400e;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+  }
+
+  .paid-slip-approval-chip.approved{
+    color: #166534;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+  }
+
+  .paid-slip-approval-chip.incorrect{
+    color: #991b1b;
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+  }
+
+  .btn-receive:disabled{
+    opacity: .55;
+    cursor: not-allowed;
+    transform: none !important;
+    filter: grayscale(.15);
+    box-shadow: none;
+  }
+
+  .fee-workflow-modal{
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(255,255,255,.99), rgba(248,250,252,.98));
+  }
+
+  .fee-workflow-destination{
+    padding: 12px 14px;
+    border-radius: 14px;
+    color: #1e40af;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+  }
+
+  .fee-workflow-field-option{
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 11px 12px;
+    border-radius: 13px;
+    border: 1px solid rgba(148,163,184,.28);
+    background: #fff;
+    cursor: pointer;
+  }
+
+  .fee-workflow-field-option input{
+    margin-top: 3px;
+  }
+
+  .fee-workflow-field-option b,
+  .fee-workflow-field-option small{
+    display: block;
+  }
+
+  .fee-workflow-field-option b{
+    color: #0f172a;
+    font-size: 13px;
+  }
+
+  .fee-workflow-field-option small{
+    margin-top: 2px;
+    color: #64748b;
+    line-height: 1.35;
+  }
+
 </style>
 
 <script>
@@ -932,6 +1225,36 @@ const bankEditBtn = document.getElementById('bankEditBtn');
 const bankHelpText = document.getElementById('bankHelpText');
 let savedMasterBankName = <%- JSON.stringify(masterBankNameSafe) %>;
 const canEditBank = <%- JSON.stringify(!!canEditBank) %>;
+const isPaidSlipWorkflowUser = <%- JSON.stringify(!!isPaidSlipWorkflowUserSafe) %>;
+const feeCollectionBackUrl = <%- JSON.stringify(backUrl) %>;
+
+const verificationApprovedInput = document.getElementById('verificationApproved');
+const collectionAccountApprovedInput = document.getElementById('collectionAccountApproved');
+const verificationApprovalChip = document.getElementById('verificationApprovalChip');
+const bankApprovalChip = document.getElementById('bankApprovalChip');
+const paidSlipApprovalHelp = document.getElementById('paidSlipApprovalHelp');
+
+const workflowModalEl = document.getElementById('feeWorkflowForwardModal');
+const workflowModalTitle = document.getElementById('feeWorkflowModalTitle');
+const workflowModalDescription = document.getElementById('feeWorkflowModalDescription');
+const workflowDestinationLabel = document.getElementById('feeWorkflowDestinationLabel');
+const workflowIssueSection = document.getElementById('feeWorkflowIssueSection');
+const workflowIssueVerification = document.getElementById('feeIssueVerification');
+const workflowIssueCollectionAccount = document.getElementById('feeIssueCollectionAccount');
+const workflowIssueMessage = document.getElementById('feeWorkflowIssueMessage');
+const workflowTargetUserId = document.getElementById('feeWorkflowTargetUserId');
+const workflowTargetUserHint = document.getElementById('feeWorkflowTargetUserHint');
+const workflowModalError = document.getElementById('feeWorkflowModalError');
+const workflowSubmitBtn = document.getElementById('feeWorkflowSubmitBtn');
+const workflowCancelBtn = document.getElementById('feeWorkflowCancelBtn');
+const workflowModalCloseBtn = document.getElementById('feeWorkflowModalCloseBtn');
+
+let workflowMode = '';
+let workflowToType = '';
+let pendingWorkflowAdmissionIds = [];
+let workflowUsersRequestToken = 0;
+let receiveInProgress = false;
+let awaitingRecordUpdateForward = false;
 
     const fmt = (v) => {
       const n = Number(v || 0);
@@ -940,8 +1263,179 @@ const canEditBank = <%- JSON.stringify(!!canEditBank) %>;
 
     const getTotalDues = () => Number((summaryDueEl?.textContent || '0').trim() || 0);
 
+    function getEnteredTotalAmount() {
+      const monthlyAmount = Number(amountInput?.value || 0);
+      const registrationAmount = Number(registrationAmountInput?.value || 0);
+
+      return (
+        (Number.isFinite(monthlyAmount) ? monthlyAmount : 0) +
+        (Number.isFinite(registrationAmount) ? registrationAmount : 0)
+      );
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function setApprovalChip(chip, label, state) {
+      if (!chip) return;
+
+      chip.classList.remove('pending', 'approved', 'incorrect');
+      chip.classList.add(state);
+
+      const stateLabel =
+        state === 'approved'
+          ? 'Approved'
+          : state === 'incorrect'
+            ? 'Incorrect'
+            : 'Pending';
+
+      chip.textContent = `${label}: ${stateLabel}`;
+    }
+
+    function updateReceiveAvailability() {
+      if (!receiveBtn) return;
+
+      if (!isPaidSlipWorkflowUser) {
+        receiveBtn.disabled = receiveInProgress;
+        return;
+      }
+
+      const enteredAmount = getEnteredTotalAmount();
+      const requiresApprovals = enteredAmount > 0;
+      const hasSelectedNotAdmittedMonths =
+        !!document.querySelector(
+          '.fc-not-admitted-check:checked'
+        );
+
+      const verificationApproved =
+        verificationApprovedInput?.value === 'true';
+      const collectionAccountApproved =
+        collectionAccountApprovedInput?.value === 'true';
+
+      const approvalsReady =
+        requiresApprovals &&
+        verificationApproved &&
+        collectionAccountApproved;
+
+      const hasValidAction =
+        approvalsReady ||
+        (!requiresApprovals && hasSelectedNotAdmittedMonths);
+
+      receiveBtn.disabled =
+        receiveInProgress ||
+        awaitingRecordUpdateForward ||
+        !hasValidAction;
+
+      if (paidSlipApprovalHelp) {
+        if (awaitingRecordUpdateForward) {
+          paidSlipApprovalHelp.textContent =
+            'Payment received. Forward this admission to Record to Update to finish the workflow.';
+        } else if (!requiresApprovals && hasSelectedNotAdmittedMonths) {
+          paidSlipApprovalHelp.textContent =
+            'Not admitted-only update is ready. Payment approvals are not required.';
+        } else if (!requiresApprovals) {
+          paidSlipApprovalHelp.textContent =
+            'Enter a payment amount, then approve both fields. Not admitted-only updates do not require approvals.';
+        } else if (approvalsReady) {
+          paidSlipApprovalHelp.textContent =
+            'Both fields are approved. Receive is ready.';
+        } else {
+          paidSlipApprovalHelp.textContent =
+            'Approve both Verification Number and Collection Account before receiving payment.';
+        }
+      }
+    }
+
+    function resetPaidSlipApprovals() {
+      if (!isPaidSlipWorkflowUser) return;
+
+      if (verificationApprovedInput) verificationApprovedInput.value = 'false';
+      if (collectionAccountApprovedInput) collectionAccountApprovedInput.value = 'false';
+
+      if (useMasterVerificationInput) useMasterVerificationInput.value = 'true';
+      if (useMasterBankInput) useMasterBankInput.value = 'true';
+
+      if (verificationInput) {
+        verificationInput.value = savedMasterVerificationNumber || '';
+        verificationInput.readOnly = true;
+      }
+
+      if (bankSelect) {
+        bankSelect.value = savedMasterBankName || '';
+        bankSelect.classList.add('bank-locked');
+        bankSelect.setAttribute('aria-disabled', 'true');
+      }
+
+      if (collectionAccountInput) {
+        collectionAccountInput.value = savedMasterBankName || '';
+      }
+
+      verificationUseSavedBtn?.classList.remove('active');
+      verificationEditBtn?.classList.remove('active');
+      bankUseSavedBtn?.classList.remove('active');
+      bankEditBtn?.classList.remove('active');
+
+      setApprovalChip(
+        verificationApprovalChip,
+        'Verification Number',
+        'pending'
+      );
+
+      setApprovalChip(
+        bankApprovalChip,
+        'Collection Account',
+        'pending'
+      );
+
+      if (verificationHelpText) {
+        verificationHelpText.textContent =
+          'Check the saved verification number. Tick ✓ approves it; cross ✕ sends it for correction.';
+      }
+
+      if (bankHelpText) {
+        bankHelpText.textContent =
+          'Check the saved collection account. Tick ✓ approves it; cross ✕ sends it for correction.';
+      }
+
+      updateReceiveAvailability();
+    }
+
     function setVerificationMode(useSaved) {
       if (!verificationInput || !useMasterVerificationInput) return;
+
+      if (isPaidSlipWorkflowUser) {
+        useMasterVerificationInput.value = 'true';
+        verificationInput.value = savedMasterVerificationNumber || '';
+        verificationInput.readOnly = true;
+
+        if (verificationApprovedInput) {
+          verificationApprovedInput.value = useSaved ? 'true' : 'false';
+        }
+
+        verificationUseSavedBtn?.classList.toggle('active', useSaved);
+        verificationEditBtn?.classList.toggle('active', !useSaved);
+
+        setApprovalChip(
+          verificationApprovalChip,
+          'Verification Number',
+          useSaved ? 'approved' : 'incorrect'
+        );
+
+        if (verificationHelpText) {
+          verificationHelpText.textContent = useSaved
+            ? 'Verification Number approved for this receive.'
+            : 'Verification Number marked incorrect. Forward it to Verification & Registration.';
+        }
+
+        updateReceiveAvailability();
+        return;
+      }
 
       useMasterVerificationInput.value = useSaved ? 'true' : 'false';
 
@@ -987,15 +1481,38 @@ const canEditBank = <%- JSON.stringify(!!canEditBank) %>;
       }
     }
 
-    verificationUseSavedBtn?.addEventListener('click', () => setVerificationMode(true));
-        verificationEditBtn?.addEventListener('click', () => {
-      if (!canEditVerificationNumber) return;
-      setVerificationMode(false);
-    });
-    setVerificationMode(true);
-
     function setBankMode(useSaved) {
       if (!bankSelect || !collectionAccountInput || !useMasterBankInput) return;
+
+      if (isPaidSlipWorkflowUser) {
+        useMasterBankInput.value = 'true';
+        bankSelect.value = savedMasterBankName || '';
+        collectionAccountInput.value = savedMasterBankName || '';
+        bankSelect.classList.add('bank-locked');
+        bankSelect.setAttribute('aria-disabled', 'true');
+
+        if (collectionAccountApprovedInput) {
+          collectionAccountApprovedInput.value = useSaved ? 'true' : 'false';
+        }
+
+        bankUseSavedBtn?.classList.toggle('active', useSaved);
+        bankEditBtn?.classList.toggle('active', !useSaved);
+
+        setApprovalChip(
+          bankApprovalChip,
+          'Collection Account',
+          useSaved ? 'approved' : 'incorrect'
+        );
+
+        if (bankHelpText) {
+          bankHelpText.textContent = useSaved
+            ? 'Collection Account approved for this receive.'
+            : 'Collection Account marked incorrect. Forward it to Verification & Registration.';
+        }
+
+        updateReceiveAvailability();
+        return;
+      }
 
       useMasterBankInput.value = useSaved ? 'true' : 'false';
 
@@ -1045,9 +1562,416 @@ const canEditBank = <%- JSON.stringify(!!canEditBank) %>;
       }
     }
 
-    bankUseSavedBtn?.addEventListener('click', () => setBankMode(true));
+    function getWorkflowModalInstance() {
+      if (!workflowModalEl || !window.bootstrap?.Modal) return null;
+
+      return window.bootstrap.Modal.getOrCreateInstance(workflowModalEl, {
+        backdrop: 'static',
+        keyboard: false,
+      });
+    }
+
+    function setWorkflowModalError(message = '') {
+      if (!workflowModalError) return;
+
+      workflowModalError.textContent = String(message || '');
+      workflowModalError.classList.toggle('d-none', !message);
+    }
+
+    async function loadWorkflowTargetUsers(toType) {
+      const requestToken = ++workflowUsersRequestToken;
+
+      if (workflowTargetUserId) {
+        workflowTargetUserId.disabled = true;
+        workflowTargetUserId.innerHTML =
+          '<option value="">Loading users...</option>';
+      }
+
+      if (workflowTargetUserHint) {
+        workflowTargetUserHint.textContent =
+          'Loading matching Accounts Agents and Sub-Agents...';
+      }
+
+      try {
+        const response = await fetch(
+          `/api/accounts/forward-users?toType=${encodeURIComponent(toType)}`,
+          {
+            credentials: 'same-origin',
+            headers: {
+              'Accept': 'application/json',
+            },
+          }
+        );
+
+        const data = await response.json().catch(() => ({}));
+
+        if (requestToken !== workflowUsersRequestToken) return;
+
+        if (!response.ok || data.success === false) {
+          throw new Error(
+            data.message ||
+            'Could not load matching Accounts users.'
+          );
+        }
+
+        const users = Array.isArray(data.users) ? data.users : [];
+
+        if (!workflowTargetUserId) return;
+
+        if (!users.length) {
+          workflowTargetUserId.disabled = true;
+          workflowTargetUserId.innerHTML =
+            '<option value="">No matching user available</option>';
+
+          if (workflowTargetUserHint) {
+            workflowTargetUserHint.textContent =
+              'Create or assign an Agent/Sub-Agent to this pipeline first.';
+          }
+
+          return;
+        }
+
+        workflowTargetUserId.innerHTML = [
+          '<option value="">Select Agent / Sub-Agent</option>',
+          ...users.map((item) => {
+            const id = Number(item?.id || 0);
+            const name = String(
+              item?.name ||
+              item?.email ||
+              'User'
+            ).trim();
+
+            const userRole = String(item?.role || '')
+              .replace(/_/g, ' ')
+              .replace(/\b\w/g, (char) => char.toUpperCase());
+
+            return `
+              <option value="${id}">
+                ${escapeHtml(name)}${userRole ? ` (${escapeHtml(userRole)})` : ''}
+              </option>
+            `;
+          }),
+        ].join('');
+
+        workflowTargetUserId.disabled = false;
+
+        if (workflowTargetUserHint) {
+          workflowTargetUserHint.textContent =
+            `${users.length} matching user${users.length === 1 ? '' : 's'} available.`;
+        }
+      } catch (error) {
+        if (requestToken !== workflowUsersRequestToken) return;
+
+        if (workflowTargetUserId) {
+          workflowTargetUserId.disabled = true;
+          workflowTargetUserId.innerHTML =
+            '<option value="">Users could not be loaded</option>';
+        }
+
+        if (workflowTargetUserHint) {
+          workflowTargetUserHint.textContent =
+            error.message ||
+            'Could not load matching Accounts users.';
+        }
+
+        setWorkflowModalError(
+          error.message ||
+          'Could not load matching Accounts users.'
+        );
+      }
+    }
+
+    function normalizeAdmissionIds(values = []) {
+      return [...new Set(
+        (Array.isArray(values) ? values : [values])
+          .map((value) => Number(value || 0))
+          .filter((value) => value > 0)
+      )];
+    }
+
+    async function openFeeWorkflowModal(mode, options = {}) {
+      if (!isPaidSlipWorkflowUser) return;
+
+      workflowMode = mode;
+      setWorkflowModalError('');
+
+      const fallbackAdmissionId = Number(
+        form?.querySelector('[name="admissionId"]')?.value || 0
+      );
+
+      pendingWorkflowAdmissionIds = normalizeAdmissionIds(
+        options.admissionIds?.length
+          ? options.admissionIds
+          : [fallbackAdmissionId]
+      );
+
+      if (!pendingWorkflowAdmissionIds.length) {
+        showMsg(
+          'error',
+          'Admission could not be identified for forwarding.'
+        );
+        return;
+      }
+
+      if (workflowIssueVerification) {
+        workflowIssueVerification.checked =
+          options.initialIssueField === 'verification' ||
+          !!options.verificationIncorrect;
+      }
+
+      if (workflowIssueCollectionAccount) {
+        workflowIssueCollectionAccount.checked =
+          options.initialIssueField === 'collection_account' ||
+          !!options.collectionAccountIncorrect;
+      }
+
+      if (workflowIssueMessage) {
+        workflowIssueMessage.value = '';
+      }
+
+      if (mode === 'correction') {
+        workflowToType = 'verification_registration';
+
+        if (workflowModalTitle) {
+          workflowModalTitle.textContent = 'Correction Required';
+        }
+
+        if (workflowModalDescription) {
+          workflowModalDescription.textContent =
+            'Select incorrect fields, write a message, and assign this admission to Verification & Registration.';
+        }
+
+        if (workflowDestinationLabel) {
+          workflowDestinationLabel.textContent =
+            'Verification & Registration';
+        }
+
+        workflowIssueSection?.classList.remove('d-none');
+        workflowCancelBtn?.classList.remove('d-none');
+        workflowModalCloseBtn?.classList.remove('d-none');
+
+        if (workflowSubmitBtn) {
+          workflowSubmitBtn.innerHTML =
+            '<i class="bi bi-send-check me-1"></i> Send for Correction';
+        }
+      } else {
+        workflowToType =
+          String(options.toType || 'print_record_update').trim() ||
+          'print_record_update';
+
+        if (workflowModalTitle) {
+          workflowModalTitle.textContent =
+            'Send to Record to Update';
+        }
+
+        if (workflowModalDescription) {
+          workflowModalDescription.textContent =
+            'Payment is received. Select the Print & Record Update Agent/Sub-Agent who should complete the record.';
+        }
+
+        if (workflowDestinationLabel) {
+          workflowDestinationLabel.textContent =
+            String(
+              options.destinationLabel ||
+              'Print & Record Update — Record to Update'
+            );
+        }
+
+        workflowIssueSection?.classList.add('d-none');
+        workflowCancelBtn?.classList.add('d-none');
+        workflowModalCloseBtn?.classList.add('d-none');
+
+        if (workflowSubmitBtn) {
+          workflowSubmitBtn.innerHTML =
+            '<i class="bi bi-send-check me-1"></i> Forward to Record to Update';
+        }
+      }
+
+      if (workflowTargetUserId) {
+        workflowTargetUserId.value = '';
+      }
+
+      getWorkflowModalInstance()?.show();
+      await loadWorkflowTargetUsers(workflowToType);
+    }
+
+    async function forwardWorkflowAdmissions({
+      admissionIds,
+      targetUserId,
+      toType,
+      workflowStage,
+      issueMessage = '',
+      issueFields = [],
+      isIssueReturn = false,
+    }) {
+      const ids = normalizeAdmissionIds(admissionIds);
+
+      for (const admissionId of ids) {
+        const response = await fetch(
+          `/api/admissions/${encodeURIComponent(admissionId)}/forward`,
+          {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+              toType,
+              targetUserId,
+              workflowStage,
+              isIssueReturn,
+              issueMessage,
+              issueFields,
+            }),
+          }
+        );
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok || data.success === false) {
+          throw new Error(
+            data.message ||
+            `Admission #${admissionId} could not be forwarded.`
+          );
+        }
+      }
+    }
+
+    workflowSubmitBtn?.addEventListener('click', async () => {
+      setWorkflowModalError('');
+
+      const targetUserId = Number(workflowTargetUserId?.value || 0);
+
+      if (!targetUserId) {
+        setWorkflowModalError(
+          'Please select the Agent or Sub-Agent who should receive this admission.'
+        );
+        return;
+      }
+
+      const issueFields = [];
+
+      if (workflowIssueVerification?.checked) {
+        issueFields.push('Verification Number');
+      }
+
+      if (workflowIssueCollectionAccount?.checked) {
+        issueFields.push('Collection Account');
+      }
+
+      const issueMessage = String(
+        workflowIssueMessage?.value || ''
+      ).trim();
+
+      if (workflowMode === 'correction') {
+        if (!issueFields.length) {
+          setWorkflowModalError(
+            'Please select at least one incorrect field.'
+          );
+          return;
+        }
+
+        if (!issueMessage) {
+          setWorkflowModalError(
+            'Please write a correction message.'
+          );
+          workflowIssueMessage?.focus();
+          return;
+        }
+      }
+
+      workflowSubmitBtn.disabled = true;
+      const originalButtonHtml = workflowSubmitBtn.innerHTML;
+      workflowSubmitBtn.innerHTML =
+        '<i class="bi bi-hourglass-split me-1"></i> Forwarding...';
+
+      try {
+        await forwardWorkflowAdmissions({
+          admissionIds: pendingWorkflowAdmissionIds,
+          targetUserId,
+          toType: workflowToType,
+          workflowStage:
+            workflowMode === 'record_update'
+              ? 'record_to_update'
+              : 'new_admissions',
+          issueMessage:
+            workflowMode === 'correction'
+              ? issueMessage
+              : '',
+          issueFields:
+            workflowMode === 'correction'
+              ? issueFields
+              : [],
+          isIssueReturn:
+            workflowMode === 'correction',
+        });
+
+        getWorkflowModalInstance()?.hide();
+
+        showMsg(
+          'success',
+          workflowMode === 'correction'
+            ? 'Admission sent to Verification & Registration for correction.'
+            : 'Admission sent to Record to Update successfully.'
+        );
+
+        setTimeout(() => {
+          window.location.href = feeCollectionBackUrl;
+        }, 700);
+      } catch (error) {
+        setWorkflowModalError(
+          error.message ||
+          'Admission could not be forwarded.'
+        );
+      } finally {
+        workflowSubmitBtn.disabled = false;
+        workflowSubmitBtn.innerHTML = originalButtonHtml;
+      }
+    });
+
+    verificationUseSavedBtn?.addEventListener('click', () => {
+      setVerificationMode(true);
+    });
+
+    verificationEditBtn?.addEventListener('click', () => {
+      if (isPaidSlipWorkflowUser) {
+        setVerificationMode(false);
+
+        openFeeWorkflowModal('correction', {
+          initialIssueField: 'verification',
+          verificationIncorrect: true,
+          collectionAccountIncorrect:
+            collectionAccountApprovedInput?.value === 'false' &&
+            bankEditBtn?.classList.contains('active'),
+        });
+
+        return;
+      }
+
+      if (!canEditVerificationNumber) return;
+      setVerificationMode(false);
+    });
+
+    bankUseSavedBtn?.addEventListener('click', () => {
+      setBankMode(true);
+    });
 
     bankEditBtn?.addEventListener('click', () => {
+      if (isPaidSlipWorkflowUser) {
+        setBankMode(false);
+
+        openFeeWorkflowModal('correction', {
+          initialIssueField: 'collection_account',
+          verificationIncorrect:
+            verificationApprovedInput?.value === 'false' &&
+            verificationEditBtn?.classList.contains('active'),
+          collectionAccountIncorrect: true,
+        });
+
+        return;
+      }
+
       if (!canEditBank) return;
       setBankMode(false);
     });
@@ -1060,7 +1984,12 @@ const canEditBank = <%- JSON.stringify(!!canEditBank) %>;
       }
     });
 
-    setBankMode(true);
+    if (isPaidSlipWorkflowUser) {
+      resetPaidSlipApprovals();
+    } else {
+      setVerificationMode(true);
+      setBankMode(true);
+    }
 
 function syncRegistrationFeeInput(rows = []) {
   if (!registrationAmountInput) return;
@@ -1082,22 +2011,30 @@ function syncRegistrationFeeInput(rows = []) {
 }
     function updateRemainingPreview() {
       const totalDues = getTotalDues();
-      const monthlyEntered = Number(amountInput?.value || 0);
-      const registrationEntered = Number(registrationAmountInput?.value || 0);
-
-      const totalEntered =
-        (Number.isFinite(monthlyEntered) ? monthlyEntered : 0) +
-        (Number.isFinite(registrationEntered) ? registrationEntered : 0);
-
+      const totalEntered = getEnteredTotalAmount();
       const remaining = Math.max(0, totalDues - totalEntered);
-      remainingBox.textContent = fmt(remaining);
+
+      if (remainingBox) {
+        remainingBox.textContent = fmt(remaining);
+      }
+
+      updateReceiveAvailability();
     }
 
     amountInput?.addEventListener('input', updateRemainingPreview);
-registrationAmountInput?.addEventListener('input', updateRemainingPreview);
+    registrationAmountInput?.addEventListener('input', updateRemainingPreview);
 
-syncRegistrationFeeInput(<%- JSON.stringify(feeRowsSafe) %>);
-updateRemainingPreview();
+    document.addEventListener('change', (event) => {
+      if (
+        event.target &&
+        event.target.matches('.fc-not-admitted-check')
+      ) {
+        updateReceiveAvailability();
+      }
+    });
+
+    syncRegistrationFeeInput(<%- JSON.stringify(feeRowsSafe) %>);
+    updateRemainingPreview();
 
     function renderRows(rows = []) {
       if (!tableBody) return;
@@ -1260,69 +2197,159 @@ tableBody.innerHTML = `
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
 
-      msgBox.innerHTML = '';
-      receiveBtn.disabled = true;
-      receiveBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Processing...';
+      if (msgBox) msgBox.innerHTML = '';
+
+      const totalEnteredAmount = getEnteredTotalAmount();
+
+      if (
+        isPaidSlipWorkflowUser &&
+        totalEnteredAmount > 0 &&
+        (
+          verificationApprovedInput?.value !== 'true' ||
+          collectionAccountApprovedInput?.value !== 'true'
+        )
+      ) {
+        showMsg(
+          'error',
+          'Please approve both Verification Number and Collection Account before receiving payment.'
+        );
+        updateReceiveAvailability();
+        return;
+      }
+
+      receiveInProgress = true;
+      updateReceiveAvailability();
+
+      if (receiveBtn) {
+        receiveBtn.innerHTML =
+          '<i class="bi bi-hourglass-split me-1"></i> Processing...';
+      }
 
       try {
         const fd = new FormData(form);
         const payload = Object.fromEntries(fd.entries());
 
-        if (payload.useMasterVerification === 'false' && !String(payload.verificationNumber || '').trim()) {
+        payload.verificationApproved =
+          verificationApprovedInput?.value || 'false';
+
+        payload.collectionAccountApproved =
+          collectionAccountApprovedInput?.value || 'false';
+
+        if (
+          !isPaidSlipWorkflowUser &&
+          payload.useMasterVerification === 'false' &&
+          !String(payload.verificationNumber || '').trim()
+        ) {
           throw new Error('Please enter correct verification number.');
         }
 
-        if (payload.useMasterBank === 'false' && !String(payload.collectionAccount || '').trim()) {
+        if (
+          !isPaidSlipWorkflowUser &&
+          payload.useMasterBank === 'false' &&
+          !String(payload.collectionAccount || '').trim()
+        ) {
           throw new Error('Please select correct collection account.');
         }
-        const selectedNotAdmittedMonths = Array.from(
-  document.querySelectorAll('.fc-not-admitted-check:checked')
-).map((el) => ({
-  admissionId: Number(el.getAttribute('data-admission-id') || 0),
-  monthKey: String(el.getAttribute('data-month-key') || '').trim().toLowerCase(),
-}));
 
-payload.selectedNotAdmittedMonths = selectedNotAdmittedMonths;
+        const selectedNotAdmittedMonths = Array.from(
+          document.querySelectorAll('.fc-not-admitted-check:checked')
+        ).map((el) => ({
+          admissionId: Number(
+            el.getAttribute('data-admission-id') || 0
+          ),
+          monthKey: String(
+            el.getAttribute('data-month-key') || ''
+          ).trim().toLowerCase(),
+        }));
+
+        payload.selectedNotAdmittedMonths =
+          selectedNotAdmittedMonths;
 
         const resp = await fetch('/api/fee-collection/receive', {
           method: 'POST',
+          credentials: 'same-origin',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
         });
 
-        const data = await resp.json();
+        const data = await resp.json().catch(() => ({}));
 
         if (!resp.ok || !data?.success) {
-          throw new Error(data?.message || 'Fee collection failed');
+          throw new Error(
+            data?.message ||
+            'Fee collection failed'
+          );
         }
 
-        showMsg('success', data.message || 'Fee received successfully');
+        const webhookSuffix =
+          data.n8nStatus === 'failed'
+            ? ' Payment was saved; the webhook failed, but the workflow can continue.'
+            : '';
 
-                if (payload.useMasterVerification === 'false') {
-          savedMasterVerificationNumber = String(payload.verificationNumber || '').trim();
+        showMsg(
+          'success',
+          `${data.message || 'Fee received successfully'}${webhookSuffix}`
+        );
+
+        if (
+          !isPaidSlipWorkflowUser &&
+          payload.useMasterVerification === 'false'
+        ) {
+          savedMasterVerificationNumber =
+            String(payload.verificationNumber || '').trim();
         }
 
-        if (payload.useMasterBank === 'false') {
-          savedMasterBankName = String(payload.collectionAccount || '').trim();
+        if (
+          !isPaidSlipWorkflowUser &&
+          payload.useMasterBank === 'false'
+        ) {
+          savedMasterBankName =
+            String(payload.collectionAccount || '').trim();
         }
 
-        renderRows(Array.isArray(data.feeRows) ? data.feeRows : []);
-        renderExcludedRows(Array.isArray(data.excludedRows) ? data.excludedRows : []);
-syncRegistrationFeeInput(Array.isArray(data.feeRows) ? data.feeRows : []);
-renderPaidRows(Array.isArray(data.paidRows) ? data.paidRows : []);
-setSummary(data.summary || {});
+        const nextFeeRows =
+          Array.isArray(data.feeRows)
+            ? data.feeRows
+            : [];
+
+        renderRows(nextFeeRows);
+
+        if (Array.isArray(data.excludedRows)) {
+          renderExcludedRows(data.excludedRows);
+        }
+
+        syncRegistrationFeeInput(nextFeeRows);
+
+        renderPaidRows(
+          Array.isArray(data.paidRows)
+            ? data.paidRows
+            : []
+        );
+
+        setSummary(data.summary || {});
+
+        const applied =
+          Array.isArray(data.applied)
+            ? data.applied
+            : [];
+
+        const nextWorkflowAction =
+          data.nextWorkflowAction &&
+          typeof data.nextWorkflowAction === 'object'
+            ? data.nextWorkflowAction
+            : null;
 
         if (resultCard && resultBody) {
-          const applied = Array.isArray(data.applied) ? data.applied : [];
           resultBody.innerHTML = applied.length
-            ? applied.map(a => `
+            ? applied.map((item) => `
                 <div class="mb-2">
-                  <div><b>${a.studentName || '-'}</b> (#${a.admissionId || '-'})</div>
-                  <div>Used Amount: <b>${fmt(a.usedAmount)}</b></div>
-                  <div>Paid Upto: <b>${a.paidUpto || '-'}</b></div>
-                  <div>Updated Months: <b>${(a.touchedMonths || []).map(x => x.monthKey).join(', ') || '-'}</b></div>
+                  <div><b>${escapeHtml(item.studentName || '-')}</b> (#${escapeHtml(item.admissionId || '-')})</div>
+                  <div>Used Amount: <b>${fmt(item.usedAmount)}</b></div>
+                  <div>Paid Upto: <b>${escapeHtml(item.paidUpto || '-')}</b></div>
+                  <div>Updated Months: <b>${escapeHtml((item.touchedMonths || []).map((month) => month.monthKey).join(', ') || '-')}</b></div>
                 </div>
               `).join('')
             : '<div>No rows updated.</div>';
@@ -1330,19 +2357,70 @@ setSummary(data.summary || {});
           resultCard.classList.remove('d-none');
         }
 
+        const appliedAdmissionIds = normalizeAdmissionIds(
+          applied.map((item) => item?.admissionId)
+        );
+
+        const fallbackAdmissionId = Number(
+          form.querySelector('[name="admissionId"]')?.value || 0
+        );
+
         form.reset();
-        setVerificationMode(true);
-        setBankMode(true);
-        const dateInput = document.getElementById('receivingDate');
-        if (dateInput) dateInput.value = new Date().toISOString().slice(0, 10);
+
+        const dateInput =
+          document.getElementById('receivingDate');
+
+        if (dateInput) {
+          dateInput.value =
+            new Date().toISOString().slice(0, 10);
+        }
+
+        if (
+          isPaidSlipWorkflowUser &&
+          data.recordUpdateForwardRequired
+        ) {
+          awaitingRecordUpdateForward = true;
+          resetPaidSlipApprovals();
+
+          openFeeWorkflowModal('record_update', {
+            admissionIds:
+              appliedAdmissionIds.length
+                ? appliedAdmissionIds
+                : [fallbackAdmissionId],
+            toType:
+              nextWorkflowAction?.toType ||
+              'print_record_update',
+            destinationLabel:
+              nextWorkflowAction?.label
+                ? `Print & Record Update — ${nextWorkflowAction.label}`
+                : 'Print & Record Update — Record to Update',
+          });
+        } else if (isPaidSlipWorkflowUser) {
+          resetPaidSlipApprovals();
+        } else {
+          setVerificationMode(true);
+          setBankMode(true);
+        }
+
         updateRemainingPreview();
       } catch (err) {
-        showMsg('error', err.message || 'Fee collection failed');
+        showMsg(
+          'error',
+          err.message ||
+          'Fee collection failed'
+        );
       } finally {
-        receiveBtn.disabled = false;
-        receiveBtn.innerHTML = '<i class="bi bi-cash-coin me-1"></i> Receive';
+        receiveInProgress = false;
+
+        if (receiveBtn) {
+          receiveBtn.innerHTML =
+            '<i class="bi bi-cash-coin me-1"></i> Receive';
+        }
+
+        updateReceiveAvailability();
       }
     });
+
   })();
 </script>
 

@@ -57,7 +57,799 @@ function getAiSettingValue(key, fallback = "") {
     return String(fallback || "").trim();
   }
 }
+// ================== DEVELOPER ACCESS HELPERS ==================
+function ensureDeveloperCoreTables() {
+  try {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS developer_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        email TEXT,
+        profile_image_url TEXT,
+        password_hash TEXT NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        last_login_at TEXT
+      )
+    `).run();
 
+    // Existing database me email column safely add karo.
+    const developerAccountColumns = new Set(
+      db.prepare(`PRAGMA table_info(developer_accounts)`)
+        .all()
+        .map((column) => String(column.name || "").trim())
+    );
+
+    if (!developerAccountColumns.has("email")) {
+      db.prepare(`
+        ALTER TABLE developer_accounts
+        ADD COLUMN email TEXT
+      `).run();
+    }
+
+        // Existing database me Developer profile image column safely add karo.
+    if (!developerAccountColumns.has("profile_image_url")) {
+      db.prepare(`
+        ALTER TABLE developer_accounts
+        ADD COLUMN profile_image_url TEXT
+      `).run();
+    }
+
+    // Agar purana username email format me tha to usko email me backfill karo.
+    db.prepare(`
+      UPDATE developer_accounts
+      SET email = LOWER(TRIM(username))
+      WHERE (
+        email IS NULL
+        OR TRIM(COALESCE(email, '')) = ''
+      )
+      AND TRIM(COALESCE(username, '')) LIKE '%@%'
+    `).run();
+
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_activity (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER UNIQUE,
+        user_name TEXT,
+        user_email TEXT,
+        role TEXT,
+        dept TEXT,
+        current_page TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        last_seen TEXT NOT NULL
+      )
+    `).run();
+
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS usage_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        user_name TEXT,
+        user_email TEXT,
+        role TEXT,
+        dept TEXT,
+        page_url TEXT,
+        event_type TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        created_at TEXT NOT NULL
+      )
+    `).run();
+
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS developer_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        developer_id INTEGER,
+        developer_name TEXT,
+        action TEXT NOT NULL,
+        details TEXT,
+        ip_address TEXT,
+        created_at TEXT NOT NULL
+      )
+    `).run();
+
+    const devUsername = String(
+      process.env.DEVELOPER_USERNAME || "mak"
+    ).trim();
+
+    const devEmail = String(
+      process.env.DEVELOPER_EMAIL ||
+      (devUsername.includes("@") ? devUsername : "")
+    )
+      .trim()
+      .toLowerCase();
+
+    const devPassword = String(
+      process.env.DEVELOPER_PASSWORD || "Mak@2026"
+    ).trim();
+
+    // Sirf tab default Developer create karo jab koi Developer account na ho.
+    // Username dashboard se change hone ke baad restart par duplicate account nahi banega.
+    const existingDev = db.prepare(`
+      SELECT id
+      FROM developer_accounts
+      ORDER BY id ASC
+      LIMIT 1
+    `).get();
+
+    if (!existingDev && devUsername && devPassword) {
+      const passwordHash = bcrypt.hashSync(devPassword, 10);
+
+      db.prepare(`
+        INSERT INTO developer_accounts
+          (
+            name,
+            username,
+            email,
+            password_hash,
+            is_active,
+            created_at
+          )
+        VALUES (?, ?, ?, ?, 1, ?)
+      `).run(
+        "MAK Developer",
+        devUsername,
+        devEmail,
+        passwordHash,
+        new Date().toISOString()
+      );
+
+      console.log(
+        "Developer account created. Please change Developer credentials for production."
+      );
+    }
+  } catch (err) {
+    console.error("ensureDeveloperCoreTables error:", err.message);
+  }
+}
+
+ensureDeveloperCoreTables();
+
+function getClientIp(req) {
+  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwarded || req.socket?.remoteAddress || "";
+}
+
+function mapDeveloperRow(row) {
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    name: row.name || "Developer",
+    username: row.username || "",
+    email: row.email || "",
+
+    role: "Developer",
+    profileImageUrl: row.profile_image_url || "",
+
+    isActive: Number(row.is_active || 0) === 1,
+    createdAt: row.created_at || "",
+    lastLoginAt: row.last_login_at || "",
+    updatedAt: row.updated_at || "",
+  };
+}
+
+function requireDeveloperLogin(req, res, next) {
+  const dev = req.session.developer;
+
+  if (!dev?.id) {
+    return res.redirect("/login");
+  }
+
+  try {
+    const row = db.prepare(`
+      SELECT *
+      FROM developer_accounts
+      WHERE id = ?
+        AND is_active = 1
+      LIMIT 1
+    `).get(dev.id);
+
+    if (!row) {
+      delete req.session.developer;
+      return res.redirect("/login");
+    }
+
+    req.developer = mapDeveloperRow(row);
+    res.locals.developer = req.developer;
+  } catch (err) {
+    console.error("requireDeveloperLogin error:", err.message);
+    return res.redirect("/login");
+  }
+
+  next();
+}
+
+function logDeveloperAction(req, action, details = {}) {
+  try {
+    const dev = req.session.developer || req.developer || {};
+
+    db.prepare(`
+      INSERT INTO developer_logs
+        (developer_id, developer_name, action, details, ip_address, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      dev.id || null,
+      dev.name || dev.username || "Developer",
+      action,
+      JSON.stringify(details || {}),
+      getClientIp(req),
+      new Date().toISOString()
+    );
+  } catch (err) {
+    console.error("logDeveloperAction error:", err.message);
+  }
+}
+
+function tableExists(tableName) {
+  try {
+    const row = db.prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND name = ?
+      LIMIT 1
+    `).get(tableName);
+
+    return !!row;
+  } catch {
+    return false;
+  }
+}
+
+function getTableColumnsSafe(tableName) {
+  try {
+    return db.prepare(`PRAGMA table_info(${tableName})`).all()
+      .map((c) => String(c.name || "").trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function sqlSafeColumn(col) {
+  return `"${String(col || "").replaceAll('"', '""')}"`;
+}
+
+function countByDeptFromTable(tableName) {
+  const out = { school: 0, quran: 0, tuition: 0, accounts: 0 };
+
+  try {
+    const hasIsDeleted = getTableColumnsSafe(tableName).includes("is_deleted");
+
+    const rows = db.prepare(`
+      SELECT LOWER(TRIM(COALESCE(dept, ''))) AS dept, COUNT(*) AS total
+      FROM ${tableName}
+      ${hasIsDeleted ? "WHERE COALESCE(is_deleted, 0) = 0" : ""}
+      GROUP BY LOWER(TRIM(COALESCE(dept, '')))
+    `).all();
+
+    for (const row of rows) {
+      let dept = String(row.dept || "").trim().toLowerCase();
+
+      if (
+        dept === "school accounts" ||
+        dept === "school_accounts" ||
+        dept === "account"
+      ) {
+        dept = "accounts";
+      }
+
+      if (Object.prototype.hasOwnProperty.call(out, dept)) {
+        out[dept] = Number(row.total || 0);
+      }
+    }
+  } catch (err) {
+    console.error(`countByDeptFromTable ${tableName} error:`, err.message);
+  }
+
+  return out;
+}
+
+function getDeveloperUsersList() {
+  try {
+    const rows = db.prepare(`
+      SELECT
+        id,
+        name,
+        email,
+        role,
+        dept,
+        agentType,
+        managerId,
+        assigned_admin_id,
+        created_by,
+        access_scope,
+        permissions,
+        createdAt,
+        updatedAt,
+        lastUpdatedAt,
+        lastUpdatedBy,
+        lastUpdatedByRole
+      FROM users
+      ORDER BY id DESC
+    `).all();
+
+    return rows.map((u) => {
+  const parsedPermissions = safeJsonParse(u.permissions) || {};
+  const finalPermissions = normalizeDeveloperControlledPermissions(parsedPermissions, u.role);
+
+  return {
+    ...u,
+    password: "Protected. Use Reset Password.",
+    permissions: finalPermissions,
+        permissionsCount: Object.values(finalPermissions).filter(Boolean).length,
+        enabledPermissions: Object.entries(finalPermissions)
+          .filter(([, value]) => !!value)
+          .map(([key]) => key),
+        canResetPassword: true,
+        canEdit: true,
+        canDelete: true,
+        canEditPermissions: true,
+      };
+    });
+  } catch (err) {
+    console.error("getDeveloperUsersList error:", err.message);
+    return [];
+  }
+}
+
+function getDeveloperOnlineUsers() {
+  try {
+    return db.prepare(`
+      SELECT
+        user_id,
+        user_name,
+        user_email,
+        role,
+        dept,
+        current_page,
+        ip_address,
+        last_seen
+      FROM user_activity
+      WHERE datetime(last_seen) >= datetime('now', '-2 minutes')
+      ORDER BY datetime(last_seen) DESC
+    `).all();
+  } catch (err) {
+    console.error("getDeveloperOnlineUsers error:", err.message);
+    return [];
+  }
+}
+
+function getUsageCounts() {
+  try {
+    const getPeriodStats = (whereSql) => {
+      return db.prepare(`
+        SELECT
+          COUNT(*) AS events,
+          COUNT(DISTINCT actor_key) AS uniqueUsers,
+          COUNT(DISTINCT actor_key || '|' || minute_bucket) AS activeMinutes
+        FROM (
+          SELECT
+            COALESCE(
+              NULLIF(TRIM(CAST(user_id AS TEXT)), ''),
+              NULLIF(TRIM(user_email), ''),
+              NULLIF(TRIM(ip_address), ''),
+              'unknown'
+            ) AS actor_key,
+            strftime('%Y-%m-%d %H:%M', created_at) AS minute_bucket
+          FROM usage_events
+          WHERE ${whereSql}
+        )
+      `).get();
+    };
+
+    const todayStats = getPeriodStats(`
+      date(created_at) = date('now')
+    `);
+
+    const weekStats = getPeriodStats(`
+      date(created_at) >= date('now', '-6 days')
+    `);
+
+    const monthStats = getPeriodStats(`
+      strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+    `);
+
+    const yearStats = getPeriodStats(`
+      strftime('%Y', created_at) = strftime('%Y', 'now')
+    `);
+
+    return {
+      // Raw heartbeat/activity events
+      today: Number(todayStats?.events || 0),
+      week: Number(weekStats?.events || 0),
+      month: Number(monthStats?.events || 0),
+      year: Number(yearStats?.events || 0),
+
+      // Unique active users
+      uniqueUsers: {
+        today: Number(todayStats?.uniqueUsers || 0),
+        week: Number(weekStats?.uniqueUsers || 0),
+        month: Number(monthStats?.uniqueUsers || 0),
+        year: Number(yearStats?.uniqueUsers || 0),
+      },
+
+      // Final professional usage metric:
+      // 1 user active for 1 minute = 1 active minute
+      activeMinutes: {
+        today: Number(todayStats?.activeMinutes || 0),
+        week: Number(weekStats?.activeMinutes || 0),
+        month: Number(monthStats?.activeMinutes || 0),
+        year: Number(yearStats?.activeMinutes || 0),
+      },
+    };
+  } catch (err) {
+    console.error("getUsageCounts error:", err.message);
+
+    return {
+      today: 0,
+      week: 0,
+      month: 0,
+      year: 0,
+      uniqueUsers: {
+        today: 0,
+        week: 0,
+        month: 0,
+        year: 0,
+      },
+      activeMinutes: {
+        today: 0,
+        week: 0,
+        month: 0,
+        year: 0,
+      },
+    };
+  }
+}
+
+function getIncomeTotalsByDept() {
+  const empty = {
+    school: { daily: 0, weekly: 0, monthly: 0, total: 0 },
+    quran: { daily: 0, weekly: 0, monthly: 0, total: 0 },
+    tuition: { daily: 0, weekly: 0, monthly: 0, total: 0 },
+  };
+
+  try {
+    const totalRows = db.prepare(`
+      SELECT
+        LOWER(TRIM(COALESCE(dept, ''))) AS dept,
+        COALESCE(SUM(CAST(COALESCE(NULLIF(admission_total_paid, ''), '0') AS REAL)), 0) AS total
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+      GROUP BY LOWER(TRIM(COALESCE(dept, '')))
+    `).all();
+
+    for (const row of totalRows) {
+      const dept = String(row.dept || "").trim().toLowerCase();
+      if (empty[dept]) {
+        empty[dept].total = Number(row.total || 0);
+      }
+    }
+
+    if (!tableExists("admission_billing")) {
+      return empty;
+    }
+
+    const cols = getTableColumnsSafe("admission_billing");
+    const amountCols = [
+      "amount",
+      "amountReceived",
+      "amount_received",
+      "registrationFeeReceived",
+      "registration_fee_received",
+    ].filter((c) => cols.includes(c));
+
+    const dateCols = [
+      "paymentDate",
+      "payment_date",
+      "paidOn",
+      "paid_on",
+      "updated_at",
+      "updatedAt",
+      "created_at",
+      "createdAt",
+    ].filter((c) => cols.includes(c));
+
+    if (!amountCols.length || !dateCols.length) {
+      return empty;
+    }
+
+    const amountExpr = amountCols
+      .map((c) => `CAST(COALESCE(NULLIF(ab.${sqlSafeColumn(c)}, ''), '0') AS REAL)`)
+      .join(" + ");
+
+    const dateExpr = `COALESCE(${dateCols.map((c) => `NULLIF(ab.${sqlSafeColumn(c)}, '')`).join(", ")})`;
+
+    const fillPeriod = (key, conditionSql) => {
+      const rows = db.prepare(`
+        SELECT
+          LOWER(TRIM(COALESCE(a.dept, ''))) AS dept,
+          COALESCE(SUM(${amountExpr}), 0) AS total
+        FROM admission_billing ab
+        INNER JOIN admissions a
+          ON a.id = ab.admission_id
+        WHERE COALESCE(a.is_deleted, 0) = 0
+          AND ${conditionSql}
+        GROUP BY LOWER(TRIM(COALESCE(a.dept, '')))
+      `).all();
+
+      for (const row of rows) {
+        const dept = String(row.dept || "").trim().toLowerCase();
+        if (empty[dept]) {
+          empty[dept][key] = Number(row.total || 0);
+        }
+      }
+    };
+
+    fillPeriod("daily", `date(${dateExpr}) = date('now')`);
+    fillPeriod("weekly", `date(${dateExpr}) >= date('now', '-6 days')`);
+    fillPeriod("monthly", `strftime('%Y-%m', ${dateExpr}) = strftime('%Y-%m', 'now')`);
+
+    return empty;
+  } catch (err) {
+    console.error("getIncomeTotalsByDept error:", err.message);
+    return empty;
+  }
+}
+function getAdmissionDateSqlExpression(alias = "") {
+  const prefix = alias ? `${alias}.` : "";
+  const cols = getTableColumnsSafe("admissions");
+
+  const candidates = [
+    "registration_date",
+    "created_at",
+    "createdAt",
+    "updated_at",
+    "updatedAt",
+  ].filter((col) => cols.includes(col));
+
+  if (!candidates.length) {
+    return "datetime('now')";
+  }
+
+  return `COALESCE(${candidates.map((col) => `NULLIF(TRIM(${prefix}${sqlSafeColumn(col)}), '')`).join(", ")}, datetime('now'))`;
+}
+
+function makeEmptyDeveloperDepartmentDetails() {
+  return {
+    school: {
+      dailyAdmissions: 0,
+      monthlyAdmissions: 0,
+      yearlyAdmissions: 0,
+      timeline: {},
+    },
+    quran: {
+      dailyAdmissions: 0,
+      monthlyAdmissions: 0,
+      yearlyAdmissions: 0,
+      timeline: {},
+    },
+    tuition: {
+      dailyAdmissions: 0,
+      monthlyAdmissions: 0,
+      yearlyAdmissions: 0,
+      timeline: {},
+    },
+  };
+}
+
+function getDeveloperDepartmentDetails() {
+  const out = makeEmptyDeveloperDepartmentDetails();
+
+  try {
+    const dateExpr = getAdmissionDateSqlExpression("");
+
+    const rows = db.prepare(`
+      SELECT
+        LOWER(TRIM(COALESCE(dept, ''))) AS dept,
+
+        SUM(
+          CASE
+            WHEN date(${dateExpr}) = date('now') THEN 1
+            ELSE 0
+          END
+        ) AS dailyAdmissions,
+
+        SUM(
+          CASE
+            WHEN strftime('%Y-%m', ${dateExpr}) = strftime('%Y-%m', 'now') THEN 1
+            ELSE 0
+          END
+        ) AS monthlyAdmissions,
+
+        SUM(
+          CASE
+            WHEN strftime('%Y', ${dateExpr}) = strftime('%Y', 'now') THEN 1
+            ELSE 0
+          END
+        ) AS yearlyAdmissions
+
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+      GROUP BY LOWER(TRIM(COALESCE(dept, '')))
+    `).all();
+
+    for (const row of rows) {
+      const dept = String(row.dept || "").trim().toLowerCase();
+
+      if (!out[dept]) continue;
+
+      out[dept].dailyAdmissions = Number(row.dailyAdmissions || 0);
+      out[dept].monthlyAdmissions = Number(row.monthlyAdmissions || 0);
+      out[dept].yearlyAdmissions = Number(row.yearlyAdmissions || 0);
+    }
+
+    const timelineRows = db.prepare(`
+      SELECT
+        LOWER(TRIM(COALESCE(dept, ''))) AS dept,
+        strftime('%Y-%m', ${dateExpr}) AS period,
+        COUNT(*) AS total
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND date(${dateExpr}) >= date('now', '-11 months')
+      GROUP BY
+        LOWER(TRIM(COALESCE(dept, ''))),
+        strftime('%Y-%m', ${dateExpr})
+      ORDER BY period ASC
+    `).all();
+
+    for (const row of timelineRows) {
+      const dept = String(row.dept || "").trim().toLowerCase();
+      const period = String(row.period || "").trim();
+
+      if (!out[dept] || !period) continue;
+
+      out[dept].timeline[period] = Number(row.total || 0);
+    }
+
+    return out;
+  } catch (err) {
+    console.error("getDeveloperDepartmentDetails error:", err.message);
+    return out;
+  }
+}
+
+function getDeveloperDatabaseExportPayload() {
+  const exportData = {
+    generatedAt: new Date().toISOString(),
+    generatedBy: "developer",
+    tables: {},
+  };
+
+  try {
+    const tables = db.prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND name NOT LIKE 'sqlite_%'
+      ORDER BY name ASC
+    `).all();
+
+    for (const item of tables) {
+      const tableName = String(item.name || "").trim();
+      if (!tableName) continue;
+
+      const safeTableName = `"${tableName.replaceAll('"', '""')}"`;
+      const rows = db.prepare(`SELECT * FROM ${safeTableName}`).all();
+
+      exportData.tables[tableName] = {
+        totalRows: rows.length,
+        rows,
+      };
+    }
+  } catch (err) {
+    exportData.error = err.message;
+    console.error("getDeveloperDatabaseExportPayload error:", err.message);
+  }
+
+  return exportData;
+}
+
+function normalizeDeveloperControlledPermissions(rawPermissions = {}, role = "agent") {
+  const source =
+    typeof rawPermissions === "string"
+      ? safeJsonParse(rawPermissions) || {}
+      : rawPermissions || {};
+
+  // ✅ Super Admin permissions must also be controlled by Developer Dashboard.
+  // Do NOT auto-give all permissions here.
+  if (role === "super_admin") {
+    const permissions = {};
+
+    for (const key of PERMISSION_KEYS) {
+      permissions[key] =
+        source[key] === true ||
+        source[key] === "true" ||
+        source[key] === "on" ||
+        source[key] === 1 ||
+        source[key] === "1";
+    }
+
+    return permissions;
+  }
+
+  return normalizePermissions(source, role);
+}
+
+function getDeveloperPermissionsFromBody(body = {}, role = "agent") {
+  const incoming =
+    body.permissions && typeof body.permissions === "object"
+      ? body.permissions
+      : body;
+
+  const permissions = {};
+
+  for (const key of PERMISSION_KEYS) {
+    permissions[key] =
+      incoming[key] === true ||
+      incoming[key] === "true" ||
+      incoming[key] === "on" ||
+      incoming[key] === 1 ||
+      incoming[key] === "1";
+  }
+
+  return normalizeDeveloperControlledPermissions(permissions, role);
+}
+function getDeveloperDashboardStats() {
+  const usersByDept = countByDeptFromTable("users");
+  const admissionsByDept = countByDeptFromTable("admissions");
+  const onlineUsers = getDeveloperOnlineUsers();
+  const usage = getUsageCounts();
+  const income = getIncomeTotalsByDept();
+  const departmentDetails = getDeveloperDepartmentDetails();
+
+  let totalUsers = 0;
+  let totalAdmissions = 0;
+
+  try {
+    totalUsers = Number(db.prepare(`SELECT COUNT(*) AS total FROM users`).get()?.total || 0);
+  } catch {}
+
+  try {
+    totalAdmissions = Number(
+      db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM admissions
+        WHERE COALESCE(is_deleted, 0) = 0
+      `).get()?.total || 0
+    );
+  } catch {}
+
+  return {
+    totals: {
+      users: totalUsers,
+      admissions: totalAdmissions,
+      onlineUsers: onlineUsers.length,
+
+      // Final usage display = active minutes, not percentage
+      todayUsage: usage.activeMinutes?.today || 0,
+      weeklyUsage: usage.activeMinutes?.week || 0,
+      monthlyUsage: usage.activeMinutes?.month || 0,
+      yearlyUsage: usage.activeMinutes?.year || 0,
+
+      // Extra details for developer dashboard/export
+      todayUsageEvents: usage.today || 0,
+      weeklyUsageEvents: usage.week || 0,
+      monthlyUsageEvents: usage.month || 0,
+      yearlyUsageEvents: usage.year || 0,
+
+      todayUniqueUsers: usage.uniqueUsers?.today || 0,
+      weeklyUniqueUsers: usage.uniqueUsers?.week || 0,
+      monthlyUniqueUsers: usage.uniqueUsers?.month || 0,
+      yearlyUniqueUsers: usage.uniqueUsers?.year || 0,
+    },
+    usersByDept,
+    admissionsByDept,
+    departmentDetails,
+    income,
+    onlineUsers,
+    usage,
+  };
+}
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -163,8 +955,112 @@ function safeUnlink(absPath) {
     console.error("unlink failed:", absPath, e.message);
   }
 }
-// serve uploaded files
-app.use("/uploads", express.static(uploadsDir));
+// Serve public system files, but protect admission uploads.
+const uploadsStatic = express.static(uploadsDir);
+
+app.use("/uploads", (req, res, next) => {
+  // POST /uploads aur doosre non-file requests ko normal routes tak jane do.
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    return next();
+  }
+
+  let relativePath = "";
+
+  try {
+    relativePath = decodeURIComponent(String(req.path || ""))
+      .replace(/^\/+/, "")
+      .replaceAll("\\", "/");
+  } catch {
+    return res.status(400).send("Invalid file path");
+  }
+
+  if (!relativePath || relativePath.includes("..")) {
+    return res.status(400).send("Invalid file path");
+  }
+
+  // Ye files dashboard se bahar bhi use hoti hain.
+  const isPublicSystemFile =
+    relativePath.startsWith("developer-profile/") ||
+    relativePath.startsWith("challans/");
+
+  if (isPublicSystemFile) {
+    return uploadsStatic(req, res, next);
+  }
+
+  const sessionUser = req.session.user;
+
+  if (!sessionUser?.id) {
+    return res.status(401).send("Login required");
+  }
+
+  const freshUserRow = db.prepare(`
+    SELECT *
+    FROM users
+    WHERE id = ?
+    LIMIT 1
+  `).get(sessionUser.id);
+
+  if (!freshUserRow) {
+    return req.session.destroy(() => {
+      res.status(401).send("Login required");
+    });
+  }
+
+  const user = mapUserRow(freshUserRow);
+  req.session.user = user;
+
+  const perms = getPerm(user);
+
+  if (!perms?.btnFiles) {
+    return res.status(403).send("Not allowed");
+  }
+
+  const windowsRelativePath = relativePath.replaceAll("/", "\\");
+
+  const uploadRow = db.prepare(`
+    SELECT
+      u.id,
+      u.admission_id,
+      u.stored_name,
+      a.id AS linked_admission_id,
+      a.dept,
+      a.processed_by,
+      a.is_deleted
+    FROM uploads u
+    LEFT JOIN admissions a
+      ON a.id = u.admission_id
+    WHERE u.stored_name = ?
+       OR u.stored_name = ?
+    LIMIT 1
+  `).get(relativePath, windowsRelativePath);
+
+  if (!uploadRow) {
+    return res.status(404).send("File not found");
+  }
+
+  if (uploadRow.admission_id) {
+    if (
+      !uploadRow.linked_admission_id ||
+      Number(uploadRow.is_deleted || 0) === 1
+    ) {
+      return res.status(404).send("Admission not found");
+    }
+
+    if (
+      !canAccessAdmissionRow(user, {
+        id: uploadRow.linked_admission_id,
+        dept: uploadRow.dept,
+        processed_by: uploadRow.processed_by || "",
+      })
+    ) {
+      return res.status(403).send("Not allowed");
+    }
+  } else if (user.role !== "super_admin") {
+    return res.status(403).send("Not allowed");
+  }
+
+  return uploadsStatic(req, res, next);
+});
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -219,7 +1115,101 @@ const upload = multer({
     cb(null, true);
   },
 });
+// ================== DEVELOPER PROFILE IMAGE UPLOAD ==================
 
+const developerProfileDir = path.join(
+  uploadsDir,
+  "developer-profile"
+);
+
+if (!fs.existsSync(developerProfileDir)) {
+  fs.mkdirSync(developerProfileDir, {
+    recursive: true,
+  });
+}
+
+const developerProfileMimeExtensions = new Map([
+  ["image/jpeg", ".jpg"],
+  ["image/jpg", ".jpg"],
+  ["image/png", ".png"],
+  ["image/webp", ".webp"],
+]);
+
+const developerProfileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, developerProfileDir);
+  },
+
+  filename: (req, file, cb) => {
+    const developerId =
+      Number(req.developer?.id || 0) || "developer";
+
+    const safeExtension =
+      developerProfileMimeExtensions.get(file.mimetype) ||
+      ".jpg";
+
+    const randomPart = crypto
+      .randomBytes(8)
+      .toString("hex");
+
+    cb(
+      null,
+      `developer-${developerId}-${Date.now()}-${randomPart}${safeExtension}`
+    );
+  },
+});
+
+const developerProfileUpload = multer({
+  storage: developerProfileStorage,
+
+  // Original file bytes save honge; resize/compression nahi hogi.
+  limits: {
+    fileSize: 15 * 1024 * 1024,
+    files: 1,
+  },
+
+  fileFilter: (req, file, cb) => {
+    if (
+      !developerProfileMimeExtensions.has(
+        String(file.mimetype || "").toLowerCase()
+      )
+    ) {
+      return cb(
+        new Error(
+          "Only JPG, JPEG, PNG and WebP profile images are allowed."
+        )
+      );
+    }
+
+    cb(null, true);
+  },
+});
+
+function getDeveloperProfileImageAbsolutePath(imageUrl = "") {
+  const cleanUrl = String(imageUrl || "")
+    .trim()
+    .split("?")[0];
+
+  const requiredPrefix =
+    "/uploads/developer-profile/";
+
+  if (!cleanUrl.startsWith(requiredPrefix)) {
+    return "";
+  }
+
+  const fileName = path.basename(
+    cleanUrl.slice(requiredPrefix.length)
+  );
+
+  if (!fileName) {
+    return "";
+  }
+
+  return path.join(
+    developerProfileDir,
+    fileName
+  );
+}
 function requireSuperAdmin(req, res, next) {
   const user = req.session.user;
   if (!user || user.role !== "super_admin") {
@@ -343,6 +1333,135 @@ function ensureAdmissionCommentColumn() {
 
 ensureAdmissionCommentColumn();
 
+function ensureAdmissionForwardColumns() {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(admissions)`).all();
+    const existing = new Set(cols.map((c) => String(c.name || "").trim()));
+
+    const addColumn = (name, type) => {
+      if (!existing.has(name)) {
+        db.prepare(`ALTER TABLE admissions ADD COLUMN ${name} ${type}`).run();
+        existing.add(name);
+      }
+    };
+
+    addColumn("forward_status", "TEXT DEFAULT 'not_forwarded'");
+    addColumn("forwarded_to_department", "TEXT");
+    addColumn("forwarded_to_type", "TEXT");
+    addColumn("forwarded_at", "TEXT");
+
+    // Latest forwarding source. This is required because all three
+    // School Accounts pipelines use the same main department value.
+    addColumn("forwarded_from_department", "TEXT");
+    addColumn("forwarded_from_type", "TEXT");
+
+    // Current School Accounts stage:
+    // new_admissions | record_to_update | old_admissions
+    addColumn("accounts_workflow_stage", "TEXT DEFAULT 'new_admissions'");
+
+    // Latest correction / issue details.
+    addColumn("accounts_issue_message", "TEXT");
+    addColumn("accounts_issue_fields", "TEXT");
+    addColumn("accounts_issue_by_id", "INTEGER");
+    addColumn("accounts_issue_by_name", "TEXT");
+    addColumn("accounts_issue_by_role", "TEXT");
+    addColumn("accounts_issue_at", "TEXT");
+
+    // Record Update completion information.
+    addColumn("accounts_completed_at", "TEXT");
+    addColumn("accounts_completed_by_id", "INTEGER");
+    addColumn("accounts_completed_by_name", "TEXT");
+    addColumn("accounts_completed_by_role", "TEXT");
+
+    // Kis user ne forward kiya
+    addColumn("forwarded_by_id", "INTEGER");
+    addColumn("forwarded_by_name", "TEXT");
+    addColumn("forwarded_by_role", "TEXT");
+
+    // Kis selected user ke pipeline mein admission show honi chahiye
+    addColumn("forwarded_owner_user_id", "INTEGER");
+    addColumn("forwarded_owner_user_name", "TEXT");
+    addColumn("forwarded_owner_user_role", "TEXT");
+
+    // Existing records ko safe defaults do. No current forwarding data is removed.
+    db.prepare(`
+      UPDATE admissions
+      SET accounts_workflow_stage = 'new_admissions'
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND (
+          accounts_workflow_stage IS NULL
+          OR TRIM(COALESCE(accounts_workflow_stage, '')) = ''
+        )
+    `).run();
+
+    db.prepare(`
+      UPDATE admissions
+      SET forwarded_from_department = 'School Department',
+          forwarded_from_type = 'school'
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND LOWER(TRIM(COALESCE(forward_status, ''))) = 'forwarded'
+        AND (
+          forwarded_from_type IS NULL
+          OR TRIM(COALESCE(forwarded_from_type, '')) = ''
+        )
+    `).run();
+
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS admission_accounts_workflow_users (
+        admission_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        user_name TEXT,
+        user_role TEXT,
+        agent_type TEXT,
+        first_assigned_at TEXT NOT NULL,
+        last_assigned_at TEXT NOT NULL,
+        PRIMARY KEY (admission_id, user_id)
+      )
+    `).run();
+  } catch (e) {
+    console.error("ensureAdmissionForwardColumns error:", e.message);
+  }
+}
+
+ensureAdmissionForwardColumns();
+
+function ensureAdmissionWorkflowTriggers() {
+  try {
+    db.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_admissions_registration_workflow
+      AFTER UPDATE OF accounts_registration_number ON admissions
+      FOR EACH ROW
+      WHEN TRIM(COALESCE(OLD.accounts_registration_number, '')) !=
+           TRIM(COALESCE(NEW.accounts_registration_number, ''))
+      BEGIN
+        UPDATE admissions
+        SET accounts_registration_number_assigned_at =
+              CASE
+                WHEN TRIM(COALESCE(OLD.accounts_registration_number, '')) = ''
+                 AND TRIM(COALESCE(NEW.accounts_registration_number, '')) != ''
+                 AND TRIM(COALESCE(NEW.accounts_registration_number_assigned_at, '')) = ''
+                THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                ELSE NEW.accounts_registration_number_assigned_at
+              END,
+            registration_number_removed =
+              CASE
+                WHEN TRIM(COALESCE(OLD.accounts_registration_number, '')) != ''
+                 AND TRIM(COALESCE(NEW.accounts_registration_number, '')) = ''
+                THEN 1
+                WHEN TRIM(COALESCE(NEW.accounts_registration_number, '')) != ''
+                THEN 0
+                ELSE COALESCE(NEW.registration_number_removed, 0)
+              END
+        WHERE id = NEW.id;
+      END;
+    `);
+  } catch (e) {
+    console.error("ensureAdmissionWorkflowTriggers error:", e.message);
+  }
+}
+
+ensureAdmissionWorkflowTriggers();
+
 function touchAdmissionActivity(admissionId) {
   try {
     const id = Number(admissionId || 0);
@@ -411,9 +1530,13 @@ ensureUserAssignmentColumns();
 function isAccountsUser(user) {
   const dept = String(user?.dept || "").trim().toLowerCase();
 
-  // ✅ Sirf Department = accounts ko School Accounts user samjho.
+  // ✅ Sirf Department se School Accounts access milega.
   // Pipeline / Agent Type = accounts ko special accounts access nahi milega.
-  return dept === "accounts";
+  return (
+    dept === "accounts" ||
+    dept === "school accounts" ||
+    dept === "school_accounts"
+  );
 }
 
 function getUserAccessScope(user) {
@@ -493,17 +1616,68 @@ function canAccessAdmissionRow(user, row) {
   // Super Admin = full access
   if (user.role === "super_admin") return true;
 
-  // ✅ School Accounts users = only School admissions
-  if (isAccountsUser(user)) {
-  const rowDept = String(row.dept || "").trim().toLowerCase();
-  return rowDept === "school";
-}
   const userDept = String(user.dept || "").trim().toLowerCase();
   const rowDept = String(row.dept || "").trim().toLowerCase();
 
+  // School Accounts users can access only admissions that are currently
+  // inside a School Accounts pipeline. Unforwarded School admissions remain hidden.
+  if (isAccountsUser(user)) {
+    if (rowDept !== "school") return false;
+
+    const forwardStatus = String(
+      row.forward_status || row.forwardStatus || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    if (forwardStatus !== "forwarded") return false;
+
+    const pipelineType = getAccountsPipelineTypeFromRow(row);
+    if (!pipelineType) return false;
+
+    const workflowStage = getAccountsWorkflowStageFromRow(row);
+
+    // Accounts Admin sees all currently forwarded Accounts admissions.
+    if (user.role === "admin") return true;
+
+    if (user.role === "agent" || user.role === "sub_agent") {
+      if (workflowStage === "old_admissions") {
+        return canSeeCompletedAccountsOldAdmission(user, row);
+      }
+
+      const userType = normalizeAgentTypeForDept(
+        user.agentType || "",
+        user.dept || ""
+      );
+
+      if (!userType || userType !== pipelineType) return false;
+
+      const viewerId = Number(user.id || 0);
+      const ownerId = Number(
+        row.forwarded_owner_user_id || row.forwardedOwnerUserId || 0
+      );
+
+      if (viewerId && ownerId) {
+        return viewerId === ownerId;
+      }
+
+      // Legacy fallback for old records that only have owner name.
+      const viewerName = String(user.name || "").trim().toLowerCase();
+      const ownerName = String(
+        row.forwarded_owner_user_name || row.forwardedOwnerUserName || ""
+      )
+        .trim()
+        .toLowerCase();
+
+      return !!viewerName && !!ownerName && viewerName === ownerName;
+    }
+
+    return false;
+  }
+
   if (!userDept || !rowDept || userDept !== rowDept) return false;
 
-  const processedBy = String(row.processed_by || "").trim();
+  const processedBy = String(row.processed_by || row.processedBy || "").trim();
   const userName = String(user.name || "").trim();
 
   // Admin = only assigned team admissions
@@ -686,7 +1860,7 @@ function pickPaymentStatus(body, fallback = "") {
   return String(val ?? fallback).trim();
 }
 
-// 🔐 Login check + force logout if user updated after login
+// 🔐 Login check + refresh updated user session without forcing logout
 function requireLogin(req, res, next) {
   if (!req.session.user) {
     return res.redirect("/login");
@@ -695,51 +1869,64 @@ function requireLogin(req, res, next) {
   const sessionUser = req.session.user;
 
   try {
-   const row = db.prepare("SELECT * FROM users WHERE id = ?").get(sessionUser.id);
+    const row = db.prepare("SELECT * FROM users WHERE id = ?").get(sessionUser.id);
 
-if (!row) {
-  return req.session.destroy(() => res.redirect("/login"));
-}
+    if (!row) {
+      return req.session.destroy(() => res.redirect("/login"));
+    }
 
-const freshUser = mapUserRow(row);
+    const freshUser = mapUserRow(row);
 
-// ✅ if user updated, refresh session (no logout)
-if (freshUser.lastUpdatedAt && freshUser.lastUpdatedAt !== sessionUser.lastUpdatedAt) {
-  req.session.user = freshUser;
+    // Normal dashboard users update karein to public updater timestamp change hota hai.
+    const publicUpdateChanged =
+      !!freshUser.lastUpdatedAt &&
+      freshUser.lastUpdatedAt !== sessionUser.lastUpdatedAt;
 
-  // optional: same “update notice” logic here so user ko popup mile
- if (freshUser.updateNoticeUnread) {
-  const byName = freshUser.lastUpdatedBy || "an administrator";
-  const roleMap = {
-    super_admin: "Super Admin",
-    admin: "Admin",
-    agent: "Agent",
-    sub_agent: "Sub Agent"
-  };
-  const byRoleLabel =
-    roleMap[freshUser.lastUpdatedByRole] ||
-    freshUser.lastUpdatedByRole ||
-    "Admin / Manager";
-  const when = freshUser.lastUpdatedAt || "";
+    // Developer updates ke liye sirf technical timestamp change hota hai.
+    // Is se session silently refresh hogi, lekin popup nahi aayega.
+    const silentDeveloperUpdateChanged =
+      !!freshUser.updatedAt &&
+      freshUser.updatedAt !== sessionUser.updatedAt;
 
-  let msg = `Your account permissions were updated by ${byName} (${byRoleLabel}).`;
-  if (when) msg += ` Time: ${when}`;
+    if (publicUpdateChanged || silentDeveloperUpdateChanged) {
+      req.session.user = freshUser;
+    }
 
-  const liveFlash = {
-    type: "info",
-    title: "Account updated",
-    message: msg,
-  };
+    // Popup sirf Super Admin/Admin/Agent/Sub Agent ki public update par show hoga.
+    if (publicUpdateChanged && freshUser.updateNoticeUnread) {
+      const byName = freshUser.lastUpdatedBy || "an administrator";
+      const roleMap = {
+        super_admin: "Super Admin",
+        admin: "Admin",
+        agent: "Agent",
+        sub_agent: "Sub Agent",
+      };
 
-  res.locals.flash = liveFlash;
-  delete req.session.flash;
+      const byRoleLabel =
+        roleMap[freshUser.lastUpdatedByRole] ||
+        freshUser.lastUpdatedByRole ||
+        "Admin / Manager";
 
-  db.prepare("UPDATE users SET updateNoticeUnread = 0 WHERE id = ?").run(freshUser.id);
+      const when = freshUser.lastUpdatedAt || "";
 
-  freshUser.updateNoticeUnread = 0;
-  req.session.user = freshUser;
-}
-}
+      let msg = `Your account permissions were updated by ${byName} (${byRoleLabel}).`;
+      if (when) msg += ` Time: ${when}`;
+
+      res.locals.flash = {
+        type: "info",
+        title: "Account updated",
+        message: msg,
+      };
+
+      delete req.session.flash;
+
+      db.prepare(
+        "UPDATE users SET updateNoticeUnread = 0 WHERE id = ?"
+      ).run(freshUser.id);
+
+      freshUser.updateNoticeUnread = 0;
+      req.session.user = freshUser;
+    }
   } catch (err) {
     console.error("requireLogin check error:", err);
   }
@@ -772,18 +1959,19 @@ const isOn = (v) => {
 };
 
 
-// ✅ default = all false (non-super). super_admin always all true via normalizePermissions
+// ✅ default = all false
 const DEFAULT_PERMS = Object.fromEntries(PERMISSION_KEYS.map((k) => [k, false]));
 
 // ✅ Always return ONLY new keys (col*/btn*) and never fall back to old "true" defaults
 function getPerm(user) {
   const p = {
     ...DEFAULT_PERMS,
-    ...(normalizePermissions(user?.permissions, user?.role) || {}),
+    ...(
+      user?.role === "super_admin"
+        ? normalizeDeveloperControlledPermissions(user?.permissions, user?.role)
+        : normalizePermissions(user?.permissions, user?.role)
+    ),
   };
-
-  // super admin always full
-  if (user?.role === "super_admin") return p;
 
   // ✅ Auto-derive view flags from allowed UI (so agent never gets blocked wrongly)
   const anyAccountsUi =
@@ -837,9 +2025,8 @@ function getPerm(user) {
 function requirePerm(flag) {
   return (req, res, next) => {
     const user = req.session.user;
-    if (user?.role === "super_admin") return next();
-
     const perms = getPerm(user);
+
     if (perms?.[flag]) return next();
 
     return res.status(403).send("Not allowed");
@@ -974,13 +2161,23 @@ if (out.admission) {
 }
 
 
-function fetchAdmissionsForUser(user) {
+function fetchAdmissionsForUser(user, options = {}) {
   const perms = getPerm(user);
   const scope = getUserAccessScope(user);
 
+  const requestedAccountsView = normalizeAccountsWorkflowStage(
+    options.accountsView || "new_admissions"
+  );
+
+  const accountsView =
+    requestedAccountsView === "old_admissions"
+      ? "old_admissions"
+      : "new_admissions";
+
   let rows = [];
 
-  // Super Admin = all admissions
+  // Super Admin = all admissions. Accounts-specific filtering is applied
+  // by /api/admissions only when an Accounts view is requested.
   if (scope === "all") {
     rows = db.prepare(`
       SELECT *
@@ -990,15 +2187,100 @@ function fetchAdmissionsForUser(user) {
     `).all();
   }
 
-  // ✅ School Accounts = only School admissions
+  // School Accounts Admin sees all forwarded Accounts admissions.
+  // Agent/Sub-Agent rows are restricted in SQL to their own pipeline and assignment.
   else if (scope === "school_accounts") {
-    rows = db.prepare(`
-      SELECT *
-      FROM admissions
-      WHERE LOWER(TRIM(COALESCE(dept, ''))) = 'school'
-        AND COALESCE(is_deleted, 0) = 0
-      ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
-    `).all();
+    const stageSql =
+      accountsView === "old_admissions"
+        ? `LOWER(TRIM(COALESCE(accounts_workflow_stage, 'new_admissions'))) = 'old_admissions'`
+        : `LOWER(TRIM(COALESCE(accounts_workflow_stage, 'new_admissions'))) != 'old_admissions'`;
+
+    if (user.role === "admin") {
+      rows = db.prepare(`
+        SELECT *
+        FROM admissions
+        WHERE LOWER(TRIM(COALESCE(dept, ''))) = 'school'
+          AND LOWER(TRIM(COALESCE(forward_status, ''))) = 'forwarded'
+          AND ${stageSql}
+          AND (
+            LOWER(TRIM(COALESCE(forwarded_to_type, ''))) IN (
+              'print_record_update',
+              'verification_registration',
+              'paid_slip'
+            )
+            OR LOWER(TRIM(COALESCE(forwarded_to_department, ''))) IN (
+              'print + record update',
+              'print & record update',
+              'verification & registration',
+              'paid slip'
+            )
+          )
+          AND COALESCE(is_deleted, 0) = 0
+        ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
+      `).all();
+    } else {
+      const userType = normalizeAgentTypeForDept(
+        user.agentType || "",
+        user.dept || ""
+      );
+
+      const ownId = Number(user.id || 0);
+      const ownName = String(user.name || "").trim().toLowerCase();
+      const pipelineLabel = forwardTypeToDepartmentLabel(userType).toLowerCase();
+      const alternatePipelineLabel =
+        userType === "print_record_update"
+          ? "print & record update"
+          : pipelineLabel;
+
+      if (!userType || !ownId) {
+        rows = [];
+      } else if (accountsView === "old_admissions") {
+        rows = db.prepare(`
+          SELECT *
+          FROM admissions
+          WHERE LOWER(TRIM(COALESCE(dept, ''))) = 'school'
+            AND LOWER(TRIM(COALESCE(forward_status, ''))) = 'forwarded'
+            AND LOWER(TRIM(COALESCE(accounts_workflow_stage, 'new_admissions'))) = 'old_admissions'
+            AND (
+              accounts_completed_by_id = ?
+              OR (
+                COALESCE(accounts_completed_by_id, 0) = 0
+                AND LOWER(TRIM(COALESCE(accounts_completed_by_name, ''))) = ?
+              )
+            )
+            AND COALESCE(is_deleted, 0) = 0
+          ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
+        `).all(ownId, ownName);
+      } else {
+        rows = db.prepare(`
+          SELECT *
+          FROM admissions
+          WHERE LOWER(TRIM(COALESCE(dept, ''))) = 'school'
+            AND LOWER(TRIM(COALESCE(forward_status, ''))) = 'forwarded'
+            AND ${stageSql}
+            AND (
+              LOWER(TRIM(COALESCE(forwarded_to_type, ''))) = ?
+              OR LOWER(TRIM(COALESCE(forwarded_to_department, ''))) = ?
+              OR LOWER(TRIM(COALESCE(forwarded_to_department, ''))) = ?
+            )
+            AND (
+              forwarded_owner_user_id = ?
+              OR (
+                COALESCE(forwarded_owner_user_id, 0) = 0
+                AND LOWER(TRIM(COALESCE(forwarded_owner_user_name, ''))) = ?
+              )
+            )
+            AND COALESCE(is_deleted, 0) = 0
+          ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
+        `).all(
+          userType,
+          pipelineLabel,
+          alternatePipelineLabel,
+          ownId,
+          ownName
+        );
+      }
+    }
   }
 
   // Admin = only assigned team admissions
@@ -1048,9 +2330,53 @@ function fetchAdmissionsForUser(user) {
   return rowsWithDuplicateFlags.map((row) => {
     const latestUpload = getLatestUploadForAdmission(row.id, user);
 
+    const latestUploadByCurrentUser =
+      user?.role === "super_admin"
+        ? !!latestUpload
+        : user?.role === "admin"
+          ? !!latestUpload && canAccessAdmissionRow(user, row)
+          : !!latestUpload?.uploadedByCurrentUser;
+
+    const latestUploadForDashboard = makeLatestUploadForDashboard(
+      latestUpload,
+      user,
+      perms
+    );
+
+    const forwardedByCurrentUser =
+      isForwardedByCurrentUser(user, row);
+
+    const notForwardedVisibleForCurrentUser =
+      isNotForwardedVisibleForCurrentUser(user, row);
+
+    const notReceivedVisibleForCurrentUser =
+      isNotReceivedVisibleForCurrentUser(user, row);
+
     const mapped = mapAdmissionRow({
       ...row,
-      latestUpload,
+
+      latestUpload: latestUploadForDashboard,
+
+      latestUploadByCurrentUser: perms?.btnFiles
+        ? latestUploadByCurrentUser
+        : false,
+
+      forwardedByCurrentUser,
+      notForwardedVisibleForCurrentUser,
+      notReceivedVisibleForCurrentUser,
+
+      forwardScopeVisibleForCurrentUser:
+        forwardedByCurrentUser ||
+        notForwardedVisibleForCurrentUser ||
+        notReceivedVisibleForCurrentUser,
+
+      // Forwarding ke server logic ke liye original latestUpload use hoga.
+      canShowForwardButton:
+        canCurrentUserUseForwardForRow(
+          user,
+          row,
+          latestUpload
+        ),
     });
 
     mapped.latestBillingVerificationNumber =
@@ -1145,6 +2471,375 @@ function logAudit(eventType, actor, payload = {}) {
   } catch (err) {
     console.error("audit log error:", err);
   }
+}
+// ================== AUDIT CHANGE HELPERS ==================
+function normalizeAuditValue(value) {
+  if (value === null || typeof value === "undefined") return "";
+
+  if (typeof value === "boolean") {
+    return value ? "On" : "Off";
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : "";
+  }
+
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value || "").trim();
+  }
+}
+
+function makeAuditChange(
+  key,
+  label,
+  beforeValue,
+  afterValue,
+  category = "data"
+) {
+  const before = normalizeAuditValue(beforeValue);
+  const after = normalizeAuditValue(afterValue);
+
+  if (before === after) return null;
+
+  return {
+    key,
+    label,
+    category,
+    before,
+    after,
+  };
+}
+
+function humanizeAuditKey(value = "") {
+  return String(value || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .replace(/\bPdf\b/g, "PDF")
+    .replace(/\bWhatsapp\b/g, "WhatsApp");
+}
+
+function getAuditPermissionLabel(key = "") {
+  const cleanKey = String(key || "").trim();
+
+  if (cleanKey.startsWith("col")) {
+    return `${humanizeAuditKey(cleanKey.slice(3))} Column`;
+  }
+
+  if (cleanKey.startsWith("btn")) {
+    return `${humanizeAuditKey(cleanKey.slice(3))} Button`;
+  }
+
+  if (cleanKey.startsWith("can")) {
+    return `${humanizeAuditKey(cleanKey.slice(3))} Button`;
+  }
+
+  return humanizeAuditKey(cleanKey);
+}
+
+function auditPermissionEnabled(value) {
+  const finalValue = Array.isArray(value)
+    ? value[value.length - 1]
+    : value;
+
+  return (
+    finalValue === true ||
+    finalValue === 1 ||
+    finalValue === "1" ||
+    finalValue === "true" ||
+    finalValue === "on"
+  );
+}
+
+function getAuditPermissionState(rawPermissions = {}) {
+  const source =
+    typeof rawPermissions === "string"
+      ? safeJsonParse(rawPermissions) || {}
+      : rawPermissions || {};
+
+  return Object.fromEntries(
+    PERMISSION_KEYS.map((key) => [
+      key,
+      auditPermissionEnabled(source[key]),
+    ])
+  );
+}
+
+const ADMISSION_AUDIT_FIELDS = [
+  ["status", "Status", "admission"],
+  ["feeStatus", "Fee Status", "admission"],
+  ["dept", "Department", "admission"],
+  ["student_name", "Student Name", "admission"],
+  ["father_name", "Father Name", "admission"],
+  ["father_email", "Father Email", "admission"],
+  ["grade", "Grade", "admission"],
+  ["tuition_grade", "Tuition Grade", "admission"],
+  ["phone", "Phone", "admission"],
+  ["processed_by", "Processed By", "admission"],
+
+  ["accounts_payment_status", "Payment Status", "accounts"],
+  ["accounts_paid_upto", "Paid Upto", "accounts"],
+  [
+    "accounts_verification_number",
+    "Verification Number",
+    "accounts",
+  ],
+    [
+    "accounts_registration_number",
+    "Registration Number",
+    "accounts",
+  ],
+  [
+    "accounts_registration_number_assigned_at",
+    "Registration Number Assigned Date",
+    "accounts",
+  ],
+  [
+    "registration_number_removed",
+    "Registration Number Removed",
+    "accounts",
+  ],
+  ["accounts_family_number", "Family Number", "accounts"],
+
+  [
+    "admission_registration_fee",
+    "Registration Fee",
+    "fees",
+  ],
+  ["admission_fees", "Monthly Fee", "fees"],
+  ["currency_code", "Currency", "fees"],
+  ["bank_name", "Bank", "fees"],
+  ["admission_month", "Admission Month", "fees"],
+  ["admission_total_fees", "Total Fees", "fees"],
+  ["admission_pending_dues", "Pending Dues", "fees"],
+  [
+    "admission_total_paid",
+    "Received Payment",
+    "fees",
+  ],
+  ["admission_comment", "Comment", "admission"],
+
+  [
+    "admission_invoice_status",
+    "Invoice Status",
+    "invoice",
+  ],
+  [
+    "admission_invoice_status_timestamp",
+    "Invoice Status Time",
+    "invoice",
+  ],
+  [
+    "admission_paid_invoice_status",
+    "Paid Invoice Status",
+    "invoice",
+  ],
+  [
+    "admission_paid_invoice_status_timestamp",
+    "Paid Invoice Status Time",
+    "invoice",
+  ],
+];
+
+function buildAdmissionAuditChanges(
+  beforeRow = {},
+  afterRow = {}
+) {
+  const changes = [];
+
+  for (const [key, label, category] of ADMISSION_AUDIT_FIELDS) {
+    const change = makeAuditChange(
+      key,
+      label,
+      beforeRow?.[key],
+      afterRow?.[key],
+      category
+    );
+
+    if (change) changes.push(change);
+  }
+
+  return changes;
+}
+
+function buildUserAuditChanges(
+  beforeRow = {},
+  afterRow = {},
+  options = {}
+) {
+  const changes = [];
+
+  const userFields = [
+    ["name", "Name"],
+    ["email", "Email"],
+    ["role", "Role"],
+    ["dept", "Department"],
+    ["agentType", "Agent Type"],
+    ["access_scope", "Access Scope"],
+  ];
+
+  for (const [key, label] of userFields) {
+    const change = makeAuditChange(
+      key,
+      label,
+      beforeRow?.[key],
+      afterRow?.[key],
+      "user"
+    );
+
+    if (change) changes.push(change);
+  }
+
+  const beforeAssignedAdminId =
+    beforeRow?.assigned_admin_id ??
+    beforeRow?.managerId ??
+    "";
+
+  const afterAssignedAdminId =
+    afterRow?.assigned_admin_id ??
+    afterRow?.managerId ??
+    "";
+
+  const assignedAdminChange = makeAuditChange(
+    "assignedAdminId",
+    "Assigned Admin",
+    beforeAssignedAdminId,
+    afterAssignedAdminId,
+    "user"
+  );
+
+  if (assignedAdminChange) {
+    changes.push(assignedAdminChange);
+  }
+
+  if (options.passwordChanged) {
+    changes.push({
+      key: "password",
+      label: "Password",
+      category: "security",
+      before: "Protected",
+      after: "Changed",
+    });
+  }
+
+  const beforePermissions = getAuditPermissionState(
+    beforeRow?.permissions
+  );
+
+  const afterPermissions = getAuditPermissionState(
+    afterRow?.permissions
+  );
+
+  for (const key of PERMISSION_KEYS) {
+    if (
+      beforePermissions[key] === afterPermissions[key]
+    ) {
+      continue;
+    }
+
+    changes.push({
+      key: `permissions.${key}`,
+      label: getAuditPermissionLabel(key),
+      category: key.startsWith("col")
+        ? "column_permission"
+        : "button_permission",
+      before: beforePermissions[key] ? "On" : "Off",
+      after: afterPermissions[key] ? "On" : "Off",
+    });
+  }
+
+  return changes;
+}
+
+function buildBillingAuditChanges(
+  beforeBilling = {},
+  afterBilling = {}
+) {
+  const changes = [];
+
+  const billingFields = [
+    ["status", "Status", "billing"],
+    ["amount", "Received Amount", "billing"],
+    ["feeOverride", "Fee", "billing"],
+    [
+      "verification",
+      "Verification Number",
+      "billing",
+    ],
+    ["bank", "Bank", "billing"],
+    ["paymentDate", "Payment Date", "billing"],
+
+    [
+      "registrationFeeTotal",
+      "Registration Fee Total",
+      "registration_fee",
+    ],
+    [
+      "registrationFeeReceived",
+      "Registration Fee Received",
+      "registration_fee",
+    ],
+    [
+      "registrationFeeStatus",
+      "Registration Fee Status",
+      "registration_fee",
+    ],
+    [
+      "registrationFeeVerification",
+      "Registration Fee Verification",
+      "registration_fee",
+    ],
+    [
+      "registrationFeeBank",
+      "Registration Fee Bank",
+      "registration_fee",
+    ],
+    [
+      "registrationFeePaymentDate",
+      "Registration Fee Payment Date",
+      "registration_fee",
+    ],
+  ];
+
+  for (const month of BILLING_MONTHS) {
+    const monthKey = String(month.key || "")
+      .trim()
+      .toLowerCase();
+
+    const monthLabel =
+      month.label || humanizeAuditKey(monthKey);
+
+    const beforeMonth =
+      beforeBilling?.[monthKey] || {};
+
+    const afterMonth =
+      afterBilling?.[monthKey] || {};
+
+    for (
+      const [fieldKey, fieldLabel, category]
+      of billingFields
+    ) {
+      const change = makeAuditChange(
+        `billing.${monthKey}.${fieldKey}`,
+        `${monthLabel} - ${fieldLabel}`,
+        beforeMonth?.[fieldKey],
+        afterMonth?.[fieldKey],
+        category
+      );
+
+      if (change) changes.push(change);
+    }
+  }
+
+  return changes;
 }
 // ================== DROPDOWN OPTIONS HELPERS ==================
 function getOptions(tableName) {
@@ -1568,24 +3263,1204 @@ function getLatestUploadForAdmission(admissionId, viewerUser = null) {
     if (!row) return null;
 
     const seenByCurrentUser = hasUserSeenUpload(row.id, viewerUser?.id);
+    const viewerId = Number(viewerUser?.id || 0);
+    const uploaderId = Number(row.uploaded_by_id || 0);
+    const uploadedByCurrentUser = !!viewerId && !!uploaderId && viewerId === uploaderId;
 
-return {
-  id: row.id,
-  admissionId: row.admission_id,
-  fileName: row.original_name || row.stored_name || "File",
-  fileUrl: row.file_url || "",
-  mimeType: row.mime_type || "",
-  size: row.size || 0,
-  addedBy: row.uploaded_by_name || row.uploaded_by_role || "System / Old Record",
-  addedByRole: row.uploaded_by_role || (row.uploaded_by_name ? "" : "Old file record"),
-  uploadedAt: row.uploaded_at || "",
-  isUrl: row.mime_type === "text/url",
-  seenByCurrentUser,
-};
+    return {
+      id: row.id,
+      admissionId: row.admission_id,
+      fileName: row.original_name || row.stored_name || "File",
+      fileUrl: row.file_url || "",
+      mimeType: row.mime_type || "",
+      size: row.size || 0,
+      addedBy: row.uploaded_by_name || row.uploaded_by_role || "System / Old Record",
+      addedByRole: row.uploaded_by_role || (row.uploaded_by_name ? "" : "Old file record"),
+      uploadedAt: row.uploaded_at || "",
+      uploadedById: row.uploaded_by_id || null,
+      uploadedByName: row.uploaded_by_name || "",
+      uploadedByRole: row.uploaded_by_role || "",
+      uploadedByCurrentUser,
+      isUrl: row.mime_type === "text/url",
+      seenByCurrentUser,
+    };
   } catch (e) {
     console.error("getLatestUploadForAdmission error:", e.message);
     return null;
   }
+}
+
+function makeLatestUploadForDashboard(
+  latestUpload,
+  viewerUser,
+  viewerPerms = null
+) {
+  if (!latestUpload) return null;
+
+  const perms = viewerPerms || getPerm(viewerUser);
+
+  if (perms?.btnFiles) {
+    return latestUpload;
+  }
+
+  // Permission off:
+  // icon visible rahe, lekin file metadata template ko na mile.
+  return {
+    available: true,
+  };
+}
+
+const ADMISSION_FORWARD_DEPARTMENTS = [
+  "Print + Record update",
+  "Verification & Registration",
+  "Paid slip",
+];
+const SCHOOL_AGENT_TYPES = ["accounts", "admission", "management"];
+
+const SCHOOL_ACCOUNTS_AGENT_TYPES = [
+  "print_record_update",
+  "verification_registration",
+  "paid_slip",
+];
+
+const SCHOOL_ACCOUNTS_WORKFLOW_STAGES = [
+  "new_admissions",
+  "record_to_update",
+  "old_admissions",
+];
+
+const SCHOOL_ACCOUNTS_SOURCE_TYPES = [
+  "school",
+  "print_record_update",
+  "verification_registration",
+  "paid_slip",
+  "record_to_update",
+  "internal_department",
+];
+
+function normalizeAccountsWorkflowStage(value = "") {
+  const clean = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  const aliases = {
+    new: "new_admissions",
+    new_admission: "new_admissions",
+    new_admissions: "new_admissions",
+    record_update: "record_to_update",
+    record_to_update: "record_to_update",
+    recordtoupdate: "record_to_update",
+    old: "old_admissions",
+    old_admission: "old_admissions",
+    old_admissions: "old_admissions",
+    completed: "old_admissions",
+  };
+
+  const finalStage = aliases[clean] || clean;
+
+  return SCHOOL_ACCOUNTS_WORKFLOW_STAGES.includes(finalStage)
+    ? finalStage
+    : "new_admissions";
+}
+
+function normalizeAccountsSourceType(value = "") {
+  const raw = String(value || "").trim();
+  const lower = raw.toLowerCase();
+
+  const aliases = {
+    school: "school",
+    "school department": "school",
+    school_department: "school",
+
+    "internal department": "internal_department",
+    internal_department: "internal_department",
+    internal: "internal_department",
+
+    "print + record update": "print_record_update",
+    "print & record update": "print_record_update",
+    print_record_update: "print_record_update",
+
+    "verification & registration": "verification_registration",
+    verification_registration: "verification_registration",
+
+    "paid slip": "paid_slip",
+    "fee slip": "paid_slip",
+    paid_slip: "paid_slip",
+    fee_slip: "paid_slip",
+
+    "record to update": "record_to_update",
+    record_to_update: "record_to_update",
+  };
+
+  const normalized = aliases[lower] || aliases[lower.replace(/[\s-]+/g, "_")] || "";
+
+  return SCHOOL_ACCOUNTS_SOURCE_TYPES.includes(normalized)
+    ? normalized
+    : "";
+}
+
+function getAccountsPipelineTypeFromRow(row = {}) {
+  return normalizeForwardType(
+    row.forwarded_to_type ||
+    row.forwardedToType ||
+    row.forwarded_to_department ||
+    row.forwardedToDepartment ||
+    ""
+  );
+}
+
+function getAccountsWorkflowStageFromRow(row = {}) {
+  return normalizeAccountsWorkflowStage(
+    row.accounts_workflow_stage ||
+    row.accountsWorkflowStage ||
+    "new_admissions"
+  );
+}
+
+function getAccountsSourceTypeFromRow(row = {}) {
+  const savedSource = normalizeAccountsSourceType(
+    row.forwarded_from_type ||
+    row.forwardedFromType ||
+    row.forwarded_from_department ||
+    row.forwardedFromDepartment ||
+    ""
+  );
+
+  if (savedSource) {
+    const pipelineType = getAccountsPipelineTypeFromRow(row);
+
+    if (
+      pipelineType &&
+      savedSource === pipelineType &&
+      getAccountsWorkflowStageFromRow(row) !== "old_admissions"
+    ) {
+      return "internal_department";
+    }
+
+    return savedSource;
+  }
+
+  // Safe fallback for admissions forwarded before source tracking was added.
+  return "school";
+}
+
+function isAccountsInternalDepartmentRow(row = {}) {
+  if (!row) return false;
+
+  const workflowStage = getAccountsWorkflowStageFromRow(row);
+  if (workflowStage === "old_admissions") return false;
+
+  const pipelineType = getAccountsPipelineTypeFromRow(row);
+  const rawSource = normalizeAccountsSourceType(
+    row.forwarded_from_type ||
+    row.forwardedFromType ||
+    row.forwarded_from_department ||
+    row.forwardedFromDepartment ||
+    ""
+  );
+
+  return !!pipelineType && !!rawSource && pipelineType === rawSource;
+}
+
+function accountsSourceTypeToDepartmentLabel(type = "") {
+  const clean = normalizeAccountsSourceType(type);
+
+  const map = {
+    school: "School Department",
+    print_record_update: "Print + Record update",
+    verification_registration: "Verification & Registration",
+    paid_slip: "Paid slip",
+    record_to_update: "Record to Update",
+    internal_department: "Internal Department",
+  };
+
+  return map[clean] || "";
+}
+
+function isPaidSlipAgentOrSubAgent(user) {
+  if (!user || !isAccountsUser(user)) return false;
+  if (user.role !== "agent" && user.role !== "sub_agent") return false;
+
+  return normalizeAgentTypeForDept(
+    user.agentType || "",
+    user.dept || ""
+  ) === "paid_slip";
+}
+
+function isTruthyRequestFlag(value) {
+  const finalValue = Array.isArray(value)
+    ? value[value.length - 1]
+    : value;
+
+  return [true, 1, "1", "true", "yes", "on", "approved"].includes(
+    typeof finalValue === "string"
+      ? finalValue.trim().toLowerCase()
+      : finalValue
+  );
+}
+
+function isSchoolAccountsDeptValue(dept = "") {
+  const d = String(dept || "").trim().toLowerCase();
+  return d === "accounts" || d === "school accounts" || d === "school_accounts";
+}
+
+function getAllowedAgentTypesForDept(dept = "") {
+  if (isSchoolAccountsDeptValue(dept)) {
+    return SCHOOL_ACCOUNTS_AGENT_TYPES;
+  }
+
+  return SCHOOL_AGENT_TYPES;
+}
+
+function normalizeAgentTypeForDept(agentType = "", dept = "") {
+  const clean = String(agentType || "").trim();
+  const lower = clean.toLowerCase();
+
+  const labelToKey = {
+    "print + record update": "print_record_update",
+    "print & record update": "print_record_update",
+    "verification & registration": "verification_registration",
+    "paid slip": "paid_slip",
+    "fee slip": "paid_slip",
+  };
+
+  const finalType = labelToKey[lower] || clean;
+  const allowedTypes = getAllowedAgentTypesForDept(dept);
+
+  return allowedTypes.includes(finalType) ? finalType : allowedTypes[0];
+}
+function canCurrentUserUseForwardForRow(
+  user,
+  row,
+  latestUpload = null
+) {
+  if (!user || !row) return false;
+
+  const rowDept = String(
+    row.dept || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const userDept = String(
+    user.dept || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const schoolReturnStatus = String(
+    row.school_return_status || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (rowDept !== "school") {
+    return false;
+  }
+
+  /*
+   * Not Received mein purani file ki wajah se
+   * Forward button show nahi hona chahiye.
+   * Reupload ke baad status "reupload" hoga,
+   * phir Forward button allow hoga.
+   */
+  if (schoolReturnStatus === "not_received") {
+    return false;
+  }
+
+  if (
+    user.role !== "super_admin" &&
+    userDept !== "school" &&
+    !isAccountsUser(user)
+  ) {
+    return false;
+  }
+
+  /*
+   * Normal School admission ke liye Super Admin
+   * aur School Accounts ka existing access same rahega.
+   */
+  if (
+    user.role === "super_admin" ||
+    isAccountsUser(user)
+  ) {
+    return canAccessAdmissionRow(
+      user,
+      row
+    );
+  }
+
+  // School users ke liye upload required hai.
+  if (!latestUpload) {
+    return false;
+  }
+
+  // School Admin apni accessible/team admission forward karega.
+  if (user.role === "admin") {
+    return canAccessAdmissionRow(
+      user,
+      row
+    );
+  }
+
+  /*
+   * School Agent/Sub Agent sirf apni uploaded
+   * file wali admission forward kar sakta hai.
+   */
+  const viewerId =
+    Number(user.id || 0);
+
+  const uploaderId =
+    Number(
+      latestUpload?.uploadedById || 0
+    );
+
+  return (
+    !!viewerId &&
+    !!uploaderId &&
+    viewerId === uploaderId
+  );
+}
+function findUserByNameForForwardOwner(name = "") {
+  try {
+    const cleanName = String(name || "").trim();
+    if (!cleanName) return null;
+
+    return db.prepare(`
+      SELECT id, name, email, role, dept
+      FROM users
+      WHERE LOWER(TRIM(COALESCE(name, ''))) = LOWER(TRIM(?))
+      LIMIT 1
+    `).get(cleanName);
+  } catch (e) {
+    console.error("findUserByNameForForwardOwner error:", e.message);
+    return null;
+  }
+}
+
+function getForwardOwnerForAdmission({ actorUser, row, latestUpload }) {
+  const actorRole = String(actorUser?.role || "").trim();
+
+  // Agent/Sub Agent khud forward kare to owner wahi current user hoga.
+  if (actorRole === "agent" || actorRole === "sub_agent") {
+    return {
+      id: actorUser?.id || null,
+      name: actorUser?.name || actorUser?.email || "",
+      role: actorUser?.role || "",
+    };
+  }
+
+  // Super Admin/Admin forward kare to owner admission ka processed_by user hoga.
+  const processedByName = String(row?.processed_by || "").trim();
+  const processedUser = findUserByNameForForwardOwner(processedByName);
+
+  if (processedUser) {
+    return {
+      id: processedUser.id || null,
+      name: processedUser.name || processedUser.email || processedByName,
+      role: processedUser.role || "",
+    };
+  }
+
+  // Fallback: latest uploader internal user ho to owner latest uploader hoga.
+  if (latestUpload?.uploadedById) {
+    return {
+      id: latestUpload.uploadedById || null,
+      name: latestUpload.uploadedByName || "",
+      role: latestUpload.uploadedByRole || "",
+    };
+  }
+
+  // Last fallback: actor ko owner bana do.
+  return {
+    id: actorUser?.id || null,
+    name: actorUser?.name || actorUser?.email || "",
+    role: actorUser?.role || "",
+  };
+}
+
+function getRequestedForwardOwnerId(body = {}) {
+  const raw =
+    body.targetUserId ??
+    body.toUserId ??
+    body.assignedUserId ??
+    body.forwardedOwnerUserId ??
+    body.forwarded_owner_user_id ??
+    body.recipientUserId ??
+    "";
+
+  return Number(raw || 0) || 0;
+}
+
+function getSelectedAccountsForwardOwner(body = {}, toType = "") {
+  const targetUserId = getRequestedForwardOwnerId(body);
+  const cleanToType = normalizeForwardType(toType);
+
+  if (!targetUserId || !cleanToType) return null;
+
+  const targetUser = db.prepare(`
+    SELECT id, name, email, role, dept, agentType, assigned_admin_id, managerId
+    FROM users
+    WHERE id = ?
+      AND role IN ('agent', 'sub_agent')
+    LIMIT 1
+  `).get(targetUserId);
+
+  if (!targetUser || !isAccountsUser(targetUser)) return null;
+
+  const targetType = normalizeAgentTypeForDept(
+    targetUser.agentType || "",
+    targetUser.dept || ""
+  );
+
+  if (targetType !== cleanToType) return null;
+
+  return {
+    id: targetUser.id,
+    name: targetUser.name || targetUser.email || "",
+    role: targetUser.role || "",
+    dept: targetUser.dept || "",
+    agentType: targetType,
+  };
+}
+
+function getForwardSourceForAdmission(row, actorUser) {
+  const currentPipelineType = getAccountsPipelineTypeFromRow(row);
+
+  if (currentPipelineType) {
+    return {
+      type: currentPipelineType,
+      department: forwardTypeToDepartmentLabel(currentPipelineType),
+    };
+  }
+
+  const actorType = isAccountsUser(actorUser)
+    ? normalizeAgentTypeForDept(
+        actorUser?.agentType || "",
+        actorUser?.dept || ""
+      )
+    : "";
+
+  if (actorType) {
+    return {
+      type: actorType,
+      department: forwardTypeToDepartmentLabel(actorType),
+    };
+  }
+
+  return {
+    type: "school",
+    department: "School Department",
+  };
+}
+
+function normalizeIssueFields(value) {
+  const incoming = Array.isArray(value)
+    ? value
+    : String(value || "")
+        .split(",")
+        .map((item) => item.trim());
+
+  return [...new Set(
+    incoming
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+  )];
+}
+
+function rememberAccountsWorkflowUser(admissionId, user, assignedAt = "") {
+  try {
+    const cleanAdmissionId = Number(admissionId || 0);
+    const cleanUserId = Number(user?.id || 0);
+
+    if (!cleanAdmissionId || !cleanUserId || !isAccountsUser(user)) {
+      return;
+    }
+
+    const when = String(assignedAt || new Date().toISOString()).trim();
+    const agentType = normalizeAgentTypeForDept(
+      user.agentType || "",
+      user.dept || ""
+    );
+
+    db.prepare(`
+      INSERT INTO admission_accounts_workflow_users (
+        admission_id,
+        user_id,
+        user_name,
+        user_role,
+        agent_type,
+        first_assigned_at,
+        last_assigned_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(admission_id, user_id)
+      DO UPDATE SET
+        user_name = excluded.user_name,
+        user_role = excluded.user_role,
+        agent_type = excluded.agent_type,
+        last_assigned_at = excluded.last_assigned_at
+    `).run(
+      cleanAdmissionId,
+      cleanUserId,
+      user.name || user.email || "",
+      user.role || "",
+      agentType || "",
+      when,
+      when
+    );
+  } catch (err) {
+    console.error("rememberAccountsWorkflowUser error:", err.message);
+  }
+}
+
+function hasAccountsWorkflowHistoryForUser(admissionId, userId) {
+  try {
+    const cleanAdmissionId = Number(admissionId || 0);
+    const cleanUserId = Number(userId || 0);
+
+    if (!cleanAdmissionId || !cleanUserId) return false;
+
+    const row = db.prepare(`
+      SELECT admission_id
+      FROM admission_accounts_workflow_users
+      WHERE admission_id = ?
+        AND user_id = ?
+      LIMIT 1
+    `).get(cleanAdmissionId, cleanUserId);
+
+    return !!row;
+  } catch (err) {
+    console.error("hasAccountsWorkflowHistoryForUser error:", err.message);
+    return false;
+  }
+}
+function canSeeCompletedAccountsOldAdmission(user, row) {
+  if (!user || !row) return false;
+
+  const workflowStage = getAccountsWorkflowStageFromRow(row);
+  if (workflowStage !== "old_admissions") return false;
+
+  const status = String(row.forward_status || row.forwardStatus || "")
+    .trim()
+    .toLowerCase();
+  if (status !== "forwarded") return false;
+
+  if (user.role === "super_admin") return true;
+  if (!isAccountsUser(user)) return false;
+
+  if (user.role === "admin") return true;
+
+  if (user.role !== "agent" && user.role !== "sub_agent") {
+    return false;
+  }
+
+  const viewerId = Number(user.id || 0);
+  const completedById = Number(
+    row.accounts_completed_by_id ||
+    row.accountsCompletedById ||
+    0
+  );
+
+  if (viewerId && completedById) {
+    return viewerId === completedById;
+  }
+
+  const viewerName = String(user.name || "").trim().toLowerCase();
+  const completedByName = String(
+    row.accounts_completed_by_name ||
+    row.accountsCompletedByName ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+
+  return !!viewerName && !!completedByName && viewerName === completedByName;
+}
+
+function buildForwardDisplayText(row) {
+  const status = String(row?.forward_status || "").trim().toLowerCase();
+  if (status !== "forwarded") return "";
+
+  const byName = String(row?.forwarded_by_name || "").trim() || "Unknown user";
+  const toDept = String(row?.forwarded_to_department || "").trim() || "department";
+  const ownerName = String(row?.forwarded_owner_user_name || "").trim();
+
+  if (ownerName && ownerName.toLowerCase() !== byName.toLowerCase()) {
+    return `Forwarded by ${byName} to ${toDept} for ${ownerName}`;
+  }
+
+  return `Forwarded by ${byName} to ${toDept}`;
+}
+function isForwardedByCurrentUser(user, row) {
+  if (!user || !row) return false;
+
+  const status = String(row.forward_status || "").trim().toLowerCase();
+  if (status !== "forwarded") return false;
+
+  if (getForwardSubStatus(row) === "not_received") {
+    return isNotReceivedVisibleForCurrentUser(user, row);
+  }
+
+  // Super Admin ko sab forwarded admissions show hon.
+  if (user.role === "super_admin") {
+    return true;
+  }
+
+  // School Department users keep seeing their own/team admission even after
+  // School Accounts transfers it internally to another pipeline.
+  if (isSchoolDepartmentUser(user)) {
+    return canAccessAdmissionRow(user, row);
+  }
+
+  // Accounts Admin sees all currently accessible forwarded admissions.
+  if (user.role === "admin") {
+    return canAccessAdmissionRow(user, row);
+  }
+
+  const viewerId = Number(user.id || 0);
+  const ownerUserId = Number(row.forwarded_owner_user_id || 0);
+  const forwardedById = Number(row.forwarded_by_id || 0);
+
+  return (
+    !!viewerId &&
+    (
+      (!!ownerUserId && viewerId === ownerUserId) ||
+      (!!forwardedById && viewerId === forwardedById)
+    )
+  );
+}
+function normalizeForwardDepartment(value) {
+  const clean = String(value || "").trim();
+
+  const found = ADMISSION_FORWARD_DEPARTMENTS.find(
+    (x) => x.toLowerCase() === clean.toLowerCase()
+  );
+
+  return found || "";
+}
+function normalizeForwardType(value = "") {
+  const clean = String(value || "").trim();
+  const lower = clean.toLowerCase();
+
+  const labelToKey = {
+    "print + record update": "print_record_update",
+    "print & record update": "print_record_update",
+    "verification & registration": "verification_registration",
+    "paid slip": "paid_slip",
+    "fee slip": "paid_slip",
+  };
+
+  const finalType = labelToKey[lower] || clean;
+  return SCHOOL_ACCOUNTS_AGENT_TYPES.includes(finalType) ? finalType : "";
+}
+
+function forwardTypeToDepartmentLabel(type = "") {
+  const cleanType = normalizeForwardType(type);
+
+  const map = {
+    print_record_update: "Print + Record update",
+    verification_registration: "Verification & Registration",
+    paid_slip: "Paid slip",
+  };
+
+  return map[cleanType] || "";
+}
+function isSchoolDepartmentUser(user) {
+  return String(user?.dept || "").trim().toLowerCase() === "school";
+}
+
+function isSchoolReturnTarget(value = "") {
+  const clean = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  return [
+    "school",
+    "school_department",
+    "school_return",
+    "return_to_school",
+  ].includes(clean);
+}
+
+function canUseSchoolForwardFilters(user) {
+  return !!user && (
+    user.role === "super_admin" ||
+    isSchoolDepartmentUser(user)
+  );
+}
+
+function getSchoolReturnOwnerForAdmission(row) {
+  const processedByName = String(row?.processed_by || "").trim();
+  const processedUser = findUserByNameForForwardOwner(processedByName);
+
+  if (
+    processedUser &&
+    String(processedUser.dept || "").trim().toLowerCase() === "school"
+  ) {
+    return {
+      id: processedUser.id || null,
+      name: processedUser.name || processedUser.email || processedByName,
+      role: processedUser.role || "",
+    };
+  }
+
+  const existingOwnerId = Number(row?.forwarded_owner_user_id || 0);
+
+  if (existingOwnerId) {
+    const existingOwner = db.prepare(`
+      SELECT id, name, email, role, dept
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    `).get(existingOwnerId);
+
+    if (
+      existingOwner &&
+      String(existingOwner.dept || "").trim().toLowerCase() === "school"
+    ) {
+      return {
+        id: existingOwner.id || null,
+        name: existingOwner.name || existingOwner.email || "",
+        role: existingOwner.role || "",
+      };
+    }
+  }
+
+  return {
+    id: null,
+    name: processedByName,
+    role: "",
+  };
+}
+
+function getForwardSubStatus(row) {
+  const returnStatus = String(
+    row?.school_return_status || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (
+    returnStatus === "not_received" ||
+    returnStatus === "reupload"
+  ) {
+    return "not_received";
+  }
+
+  return String(
+    row?.accounts_registration_number || ""
+  ).trim()
+    ? "verified"
+    : "not_verified";
+}
+
+function getAdmissionWorkflowTag(row) {
+  const returnStatus = String(
+    row?.school_return_status || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const reuploadTagActive =
+    Number(
+      row?.reupload_tag_active || 0
+    ) === 1;
+
+  const registrationNumberRemoved =
+    Number(
+      row?.registration_number_removed || 0
+    ) === 1;
+
+  /*
+   * Not Received ko highest priority milegi.
+   * Is stage mein orange Reupload tag temporarily
+   * red Not Received tag ke peeche hidden rahega.
+   */
+  if (returnStatus === "not_received") {
+    return "Not Received";
+  }
+
+  /*
+   * Forward ke baad return status empty ho sakta hai,
+   * lekin persistent flag ki wajah se tag rahega.
+   */
+  if (
+    returnStatus === "reupload" ||
+    reuploadTagActive
+  ) {
+    return "Reupload";
+  }
+
+  if (registrationNumberRemoved) {
+    return "Registration Number Removed";
+  }
+
+  return "";
+}
+
+function isNotReceivedVisibleForCurrentUser(user, row) {
+  if (!user || !row || !canUseSchoolForwardFilters(user)) {
+    return false;
+  }
+
+  const returnStatus = String(row.school_return_status || "")
+    .trim()
+    .toLowerCase();
+
+  if (returnStatus !== "not_received" && returnStatus !== "reupload") {
+    return false;
+  }
+
+  if (user.role === "super_admin") {
+    return true;
+  }
+
+  if (user.role === "admin") {
+    return canAccessAdmissionRow(user, row);
+  }
+
+  const viewerId = Number(user.id || 0);
+  const returnedToUserId = Number(row.school_returned_to_user_id || 0);
+
+  if (viewerId && returnedToUserId) {
+    return viewerId === returnedToUserId;
+  }
+
+  return canAccessAdmissionRow(user, row);
+}
+
+function toWorkflowDateOnly(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const directMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (directMatch) return directMatch[1];
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+
+  return parsed.toISOString().slice(0, 10);
+}
+
+function matchesWorkflowDateFilters(admission, filters = {}) {
+  const registrationDate = toWorkflowDateOnly(
+    admission?.registrationDate ||
+    admission?.registration_date
+  );
+
+  const assignedDate = toWorkflowDateOnly(
+    admission?.registrationNumberAssignedAt ||
+    admission?.accounts_registration_number_assigned_at ||
+    admission?.accounts?.registrationNumberAssignedAt
+  );
+
+  const registrationExact = String(filters.registrationExact || "").trim();
+  const registrationFrom = String(filters.registrationFrom || "").trim();
+  const registrationTo = String(filters.registrationTo || "").trim();
+
+  const assignedExact = String(filters.assignedExact || "").trim();
+  const assignedFrom = String(filters.assignedFrom || "").trim();
+  const assignedTo = String(filters.assignedTo || "").trim();
+
+  if (registrationExact && registrationDate !== registrationExact) {
+    return false;
+  }
+
+  if (
+    registrationFrom &&
+    (!registrationDate || registrationDate < registrationFrom)
+  ) {
+    return false;
+  }
+
+  if (
+    registrationTo &&
+    (!registrationDate || registrationDate > registrationTo)
+  ) {
+    return false;
+  }
+
+  if (assignedExact && assignedDate !== assignedExact) {
+    return false;
+  }
+
+  if (
+    assignedFrom &&
+    (!assignedDate || assignedDate < assignedFrom)
+  ) {
+    return false;
+  }
+
+  if (
+    assignedTo &&
+    (!assignedDate || assignedDate > assignedTo)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+function canSeeSchoolAccountsAdmission(user, row, requestedView = "new_admissions") {
+  if (!user || !row) return false;
+
+  const rowDept = String(row.dept || "").trim().toLowerCase();
+  const status = String(row.forward_status || row.forwardStatus || "")
+    .trim()
+    .toLowerCase();
+
+  const pipelineType = getAccountsPipelineTypeFromRow(row);
+  const workflowStage = getAccountsWorkflowStageFromRow(row);
+  const wantedView = normalizeAccountsWorkflowStage(requestedView);
+
+  if (rowDept !== "school") return false;
+  if (status !== "forwarded") return false;
+  if (!pipelineType) return false;
+
+  if (wantedView === "old_admissions") {
+    if (workflowStage !== "old_admissions") return false;
+
+    if (user.role === "super_admin") return true;
+    if (!isAccountsUser(user)) return false;
+
+    return canSeeCompletedAccountsOldAdmission(user, row);
+  }
+
+  if (workflowStage === "old_admissions") {
+    return false;
+  }
+
+  if (user.role === "super_admin") return true;
+  if (!isAccountsUser(user)) return false;
+
+  return canAccessAdmissionRow(user, row);
+}
+
+function matchesSchoolAccountsPipelineFilter(row, filterValue = "") {
+  const filterType = normalizeForwardType(filterValue);
+  if (!filterType) return true;
+
+  return getAccountsPipelineTypeFromRow(row) === filterType;
+}
+
+function matchesSchoolAccountsSourceFilter(row, filterValue = "") {
+  const cleanFilter = normalizeAccountsSourceType(filterValue);
+  if (!cleanFilter) return true;
+
+  const workflowStage = getAccountsWorkflowStageFromRow(row);
+
+  if (cleanFilter === "record_to_update") {
+    return (
+      workflowStage === "record_to_update" &&
+      getAccountsPipelineTypeFromRow(row) === "print_record_update"
+    );
+  }
+
+  if (cleanFilter === "internal_department") {
+    return isAccountsInternalDepartmentRow(row);
+  }
+
+  return getAccountsSourceTypeFromRow(row) === cleanFilter;
+}
+function makeEmptySchoolAccountsPipelineCounts() {
+  return {
+    newAdmissions: 0,
+    oldAdmissions: 0,
+    internalDepartment: 0,
+    pipelines: {
+      print_record_update: 0,
+      verification_registration: 0,
+      paid_slip: 0,
+    },
+    sources: {
+      school: 0,
+      print_record_update: 0,
+      verification_registration: 0,
+      paid_slip: 0,
+      record_to_update: 0,
+      internal_department: 0,
+    },
+  };
+}
+
+function buildSchoolAccountsPipelineCounts(user) {
+  const counts = makeEmptySchoolAccountsPipelineCounts();
+
+  try {
+    if (!user || (user.role !== "super_admin" && !isAccountsUser(user))) {
+      return counts;
+    }
+
+    const newAdmissions = fetchAdmissionsForUser(user, {
+      accountsView: "new_admissions",
+    }).filter((admission) =>
+      canSeeSchoolAccountsAdmission(
+        user,
+        admission,
+        "new_admissions"
+      )
+    );
+
+    const oldAdmissions = fetchAdmissionsForUser(user, {
+      accountsView: "old_admissions",
+    }).filter((admission) =>
+      canSeeSchoolAccountsAdmission(
+        user,
+        admission,
+        "old_admissions"
+      )
+    );
+
+    counts.newAdmissions = newAdmissions.length;
+    counts.oldAdmissions = oldAdmissions.length;
+
+    for (const admission of newAdmissions) {
+      const pipelineType = getAccountsPipelineTypeFromRow(admission);
+      if (Object.prototype.hasOwnProperty.call(counts.pipelines, pipelineType)) {
+        counts.pipelines[pipelineType] += 1;
+      }
+
+      if (matchesSchoolAccountsSourceFilter(admission, "internal_department")) {
+        counts.internalDepartment += 1;
+        counts.sources.internal_department += 1;
+        continue;
+      }
+
+      if (matchesSchoolAccountsSourceFilter(admission, "record_to_update")) {
+        counts.sources.record_to_update += 1;
+        continue;
+      }
+
+      const sourceType = getAccountsSourceTypeFromRow(admission);
+      if (Object.prototype.hasOwnProperty.call(counts.sources, sourceType)) {
+        counts.sources[sourceType] += 1;
+      }
+    }
+  } catch (err) {
+    console.error("buildSchoolAccountsPipelineCounts error:", err.message);
+  }
+
+  return counts;
+}
+
+function getAdmissionForwardSnapshot(row) {
+  const status = String(row?.forward_status || "not_forwarded").trim();
+  const finalStatus = status === "forwarded" ? "forwarded" : "not_forwarded";
+
+  const workflowStage = getAccountsWorkflowStageFromRow(row);
+  const sourceType = getAccountsSourceTypeFromRow(row);
+
+  return {
+    status: finalStatus,
+    subStatus: getForwardSubStatus(row),
+
+    toDepartment: String(row?.forwarded_to_department || "").trim(),
+    toType: String(row?.forwarded_to_type || "").trim(),
+    forwardedAt: String(row?.forwarded_at || "").trim(),
+
+    fromDepartment: String(
+      row?.forwarded_from_department ||
+      accountsSourceTypeToDepartmentLabel(sourceType) ||
+      ""
+    ).trim(),
+    fromType: sourceType,
+
+    workflowStage,
+    isRecordToUpdate: workflowStage === "record_to_update",
+    isOldAdmission: workflowStage === "old_admissions",
+
+    issueMessage: String(row?.accounts_issue_message || "").trim(),
+    issueFields: safeJsonParse(row?.accounts_issue_fields) || [],
+    issueById: row?.accounts_issue_by_id || null,
+    issueByName: String(row?.accounts_issue_by_name || "").trim(),
+    issueByRole: String(row?.accounts_issue_by_role || "").trim(),
+    issueAt: String(row?.accounts_issue_at || "").trim(),
+
+    completedAt: String(row?.accounts_completed_at || "").trim(),
+    completedById: row?.accounts_completed_by_id || null,
+    completedByName: String(row?.accounts_completed_by_name || "").trim(),
+    completedByRole: String(row?.accounts_completed_by_role || "").trim(),
+
+    forwardedById: row?.forwarded_by_id || null,
+    forwardedByName: String(row?.forwarded_by_name || "").trim(),
+    forwardedByRole: String(row?.forwarded_by_role || "").trim(),
+
+    forwardedOwnerUserId: row?.forwarded_owner_user_id || null,
+    forwardedOwnerUserName: String(row?.forwarded_owner_user_name || "").trim(),
+    forwardedOwnerUserRole: String(row?.forwarded_owner_user_role || "").trim(),
+
+    schoolReturnStatus: String(row?.school_return_status || "").trim(),
+    schoolReturnedToUserId: row?.school_returned_to_user_id || null,
+    schoolReturnedAt: String(row?.school_returned_at || "").trim(),
+    schoolReuploadedAt:
+      String(
+        row?.school_reuploaded_at || ""
+      ).trim(),
+
+    reuploadTagActive:
+      Number(
+        row?.reupload_tag_active || 0
+      ),
+
+    reupload_tag_active:
+      Number(
+        row?.reupload_tag_active || 0
+      ),
+
+    workflowTag:
+      getAdmissionWorkflowTag(row),
+
+    displayText:
+      finalStatus === "forwarded"
+        ? buildForwardDisplayText(row)
+        : "",
+  };
+}
+
+function isNotForwardedVisibleForCurrentUser(user, row) {
+  if (!user || !row) return false;
+
+  const rowDept = String(row.dept || "").trim().toLowerCase();
+  const userDept = String(user.dept || "").trim().toLowerCase();
+  const status = String(row.forward_status || "not_forwarded").trim().toLowerCase();
+
+  // Ye forwarding system sirf School admissions ke liye hai.
+  if (rowDept !== "school") return false;
+
+  // Agar admission forwarded ho chuki hai to Not Forwarded mein show nahi hogi.
+  if (status === "forwarded") return false;
+
+  // Super Admin ko sab unforwarded School admissions show hon.
+  if (user.role === "super_admin") return true;
+
+  // Sirf School department users ko Not Forwarded filter ka access mile.
+  // Quran, Tuition, School Accounts/Accounts ko ye buttons/filter access nahi milega.
+  if (userDept !== "school") return false;
+
+  // Admin = apni assigned team admissions
+  // Agent/Sub-agent = apni admissions
+  return canAccessAdmissionRow(user, row);
+}
+function canForwardAdmission(user, row) {
+  if (!user || !row) return false;
+
+  const rowDept = String(row.dept || "").trim().toLowerCase();
+  const userDept = String(user.dept || "").trim().toLowerCase();
+
+  if (rowDept !== "school") return false;
+
+  // Super Admin, School CSR, aur School Accounts users forward kar sakte hain.
+if (
+  user.role !== "super_admin" &&
+  userDept !== "school" &&
+  !isAccountsUser(user)
+) {
+  return false;
+}
+
+  return canAccessAdmissionRow(user, row);
 }
 function getAdmissionUploadsForViewer(viewerUser = null, filter = "all") {
   try {
@@ -1736,9 +4611,88 @@ function insertUploadRecord({
 
   return info;
 }
+
+function markSchoolReturnReuploaded(admissionId, user) {
+  try {
+    const id = Number(admissionId || 0);
+    if (!id || !user) return false;
+
+    if (
+      user.role !== "super_admin" &&
+      !isSchoolDepartmentUser(user)
+    ) {
+      return false;
+    }
+
+    const row = getActiveAdmissionById(id);
+    if (!row) return false;
+
+    if (
+      String(row.school_return_status || "")
+        .trim()
+        .toLowerCase() !== "not_received"
+    ) {
+      return false;
+    }
+
+    if (
+      user.role !== "super_admin" &&
+      !canAccessAdmissionRow(user, row)
+    ) {
+      return false;
+    }
+
+    const now = new Date().toISOString();
+
+    const result = db.prepare(`
+      UPDATE admissions
+      SET school_return_status = 'reupload',
+          school_reuploaded_at = @school_reuploaded_at,
+          reupload_tag_active = 1
+      WHERE id = @id
+        AND COALESCE(is_deleted, 0) = 0
+        AND LOWER(
+          TRIM(
+            COALESCE(
+              school_return_status,
+              ''
+            )
+          )
+        ) = 'not_received'
+    `).run({
+      id,
+      school_reuploaded_at: now,
+    });
+
+    if (result.changes > 0) {
+      logAudit("school_return_file_reuploaded", user, {
+        dept: row.dept || "",
+        details: {
+          admissionId: id,
+          studentName: row.student_name || "",
+          previousStatus: "not_received",
+          newStatus: "reupload",
+          reuploadedAt: now,
+          reuploadTagActive: 1,
+        },
+      });
+
+      return true;
+    }
+
+    return false;
+  } catch (e) {
+    console.error(
+      "markSchoolReturnReuploaded error:",
+      e.message
+    );
+
+    return false;
+  }
+}
+
 function getDeleteAdmissionAccess(user, row) {
   if (!user || !row) return false;
-  if (user.role === "super_admin") return true;
 
   const perms = getPerm(user);
   if (!perms?.canDeleteAdmissions) return false;
@@ -1825,14 +4779,130 @@ duplicateWithId: row.duplicateWithId || "",
     contactNumber: row.phone || row.guardian_whatsapp || "",
     processedBy: row.processed_by || "",
     processed_by: row.processed_by || "",
-        latestUpload: row.latestUpload || null,
+
+    registrationDate: row.registration_date || "",
+    registration_date: row.registration_date || "",
+
+    registrationNumberAssignedAt:
+      row.accounts_registration_number_assigned_at || "",
+
+    accounts_registration_number_assigned_at:
+      row.accounts_registration_number_assigned_at || "",
+
+    registrationNumberRemoved:
+      Number(row.registration_number_removed || 0),
+
+    registration_number_removed:
+      Number(row.registration_number_removed || 0),
+
+    schoolReturnStatus:
+      row.school_return_status || "",
+
+    school_return_status:
+      row.school_return_status || "",
+
+    schoolReturnedToUserId:
+      row.school_returned_to_user_id || null,
+
+    school_returned_to_user_id:
+      row.school_returned_to_user_id || null,
+
+    schoolReturnedAt:
+      row.school_returned_at || "",
+
+    school_returned_at:
+      row.school_returned_at || "",
+
+    schoolReuploadedAt:
+      row.school_reuploaded_at || "",
+
+    school_reuploaded_at:
+      row.school_reuploaded_at || "",
+
+    reuploadTagActive:
+      Number(
+        row.reupload_tag_active || 0
+      ),
+
+    reupload_tag_active:
+      Number(
+        row.reupload_tag_active || 0
+      ),
+
+    forwardSubStatus:
+      getForwardSubStatus(row),
+
+    notReceivedVisibleForCurrentUser:
+      !!row.notReceivedVisibleForCurrentUser,
+
+    workflowTag:
+      getAdmissionWorkflowTag(row),
+
+    latestUpload: row.latestUpload || null,
     hasLatestUpload: !!row.latestUpload,
+    latestUploadByCurrentUser: !!row.latestUploadByCurrentUser,
+    uploadedByCurrentUser: !!row.latestUploadByCurrentUser,
+    forwardStatus: row.forward_status || "not_forwarded",
+    forwardedToDepartment: row.forwarded_to_department || "",
+    forwardedToType: row.forwarded_to_type || "",
+    forwardedAt: row.forwarded_at || "",
+
+    forwardedFromDepartment:
+      row.forwarded_from_department ||
+      accountsSourceTypeToDepartmentLabel(getAccountsSourceTypeFromRow(row)) ||
+      "",
+    forwardedFromType: getAccountsSourceTypeFromRow(row),
+
+    accountsWorkflowStage: getAccountsWorkflowStageFromRow(row),
+    accounts_workflow_stage: getAccountsWorkflowStageFromRow(row),
+    isRecordToUpdate:
+      getAccountsWorkflowStageFromRow(row) === "record_to_update",
+    isOldAdmission:
+      getAccountsWorkflowStageFromRow(row) === "old_admissions",
+
+    accountsIssueMessage: row.accounts_issue_message || "",
+    accountsIssueFields: safeJsonParse(row.accounts_issue_fields) || [],
+    accountsIssueById: row.accounts_issue_by_id || null,
+    accountsIssueByName: row.accounts_issue_by_name || "",
+    accountsIssueByRole: row.accounts_issue_by_role || "",
+    accountsIssueAt: row.accounts_issue_at || "",
+
+    accountsCompletedAt: row.accounts_completed_at || "",
+    accountsCompletedById: row.accounts_completed_by_id || null,
+    accountsCompletedByName: row.accounts_completed_by_name || "",
+    accountsCompletedByRole: row.accounts_completed_by_role || "",
+
+    forwardedById: row.forwarded_by_id || null,
+    forwardedByName: row.forwarded_by_name || "",
+    forwardedByRole: row.forwarded_by_role || "",
+
+    forwardedOwnerUserId: row.forwarded_owner_user_id || null,
+    forwardedOwnerUserName: row.forwarded_owner_user_name || "",
+    forwardedOwnerUserRole: row.forwarded_owner_user_role || "",
+
+    forwardedByCurrentUser: !!row.forwardedByCurrentUser,
+    notForwardedVisibleForCurrentUser: !!row.notForwardedVisibleForCurrentUser,
+    forwardScopeVisibleForCurrentUser: !!row.forwardScopeVisibleForCurrentUser,
+    forwardDisplayText: buildForwardDisplayText(row),
+    canShowForwardButton: !!row.canShowForwardButton,
+    forward: getAdmissionForwardSnapshot(row),
    accounts: {
      paymentStatus: row.accounts_payment_status || "",
      paidUpto: row.accounts_paid_upto || "",
-     verificationNumber: row.accounts_verification_number || "",
-     registrationNumber: row.accounts_registration_number || "",
-     familyNumber: row.accounts_family_number || "",
+     verificationNumber:
+       row.accounts_verification_number || "",
+
+     registrationNumber:
+       row.accounts_registration_number || "",
+
+     registrationNumberAssignedAt:
+       row.accounts_registration_number_assigned_at || "",
+
+     registrationNumberRemoved:
+       Number(row.registration_number_removed || 0),
+
+     familyNumber:
+       row.accounts_family_number || "",
   },
     admission: {
   registrationFee: row.admission_registration_fee || "",
@@ -1908,6 +4978,8 @@ function attachDuplicateFlagsToRawRows(rows = []) {
   });
 }
 function fetchAdmissionsForDept(dept, viewerUser = null) {
+  const viewerPerms = getPerm(viewerUser);
+
   const rows = dept
     ? db.prepare(`
         SELECT *
@@ -1926,11 +4998,63 @@ function fetchAdmissionsForDept(dept, viewerUser = null) {
   const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
 
   return rowsWithDuplicateFlags.map((row) => {
-    const latestUpload = getLatestUploadForAdmission(row.id, viewerUser);
+    const latestUpload =
+      getLatestUploadForAdmission(row.id, viewerUser);
+
+    const latestUploadByCurrentUser =
+      viewerUser?.role === "super_admin"
+        ? !!latestUpload
+        : viewerUser?.role === "admin"
+          ? !!latestUpload &&
+            canAccessAdmissionRow(viewerUser, row)
+          : !!latestUpload?.uploadedByCurrentUser;
+
+    const latestUploadForDashboard =
+      makeLatestUploadForDashboard(
+        latestUpload,
+        viewerUser,
+        viewerPerms
+      );
+
+    const forwardedByCurrentUser =
+      isForwardedByCurrentUser(viewerUser, row);
+
+    const notForwardedVisibleForCurrentUser =
+      isNotForwardedVisibleForCurrentUser(
+        viewerUser,
+        row
+      );
+
+    const notReceivedVisibleForCurrentUser =
+      isNotReceivedVisibleForCurrentUser(
+        viewerUser,
+        row
+      );
 
     const mapped = mapAdmissionRow({
       ...row,
-      latestUpload,
+
+      latestUpload: latestUploadForDashboard,
+
+      latestUploadByCurrentUser: viewerPerms?.btnFiles
+        ? latestUploadByCurrentUser
+        : false,
+
+            forwardedByCurrentUser,
+      notForwardedVisibleForCurrentUser,
+      notReceivedVisibleForCurrentUser,
+
+      forwardScopeVisibleForCurrentUser:
+        forwardedByCurrentUser ||
+        notForwardedVisibleForCurrentUser ||
+        notReceivedVisibleForCurrentUser,
+
+      canShowForwardButton:
+        canCurrentUserUseForwardForRow(
+          viewerUser,
+          row,
+          latestUpload
+        ),
     });
 
     mapped.latestBillingVerificationNumber =
@@ -1941,7 +5065,13 @@ function fetchAdmissionsForDept(dept, viewerUser = null) {
 }
 
 function fetchAdmissionsPage({ dept = null, page = 1, limit = 200, perms = null, viewerUser = null }) {
-  const safePage = Math.max(parseInt(page, 10) || 1, 1);
+  const dashboardPerms =
+    perms || (viewerUser ? getPerm(viewerUser) : null);
+
+  const safePage = Math.max(
+    parseInt(page, 10) || 1,
+    1
+  );
   const safeLimit = Math.max(parseInt(limit, 10) || 200, 1);
   const offset = (safePage - 1) * safeLimit;
 
@@ -1995,11 +5125,64 @@ function fetchAdmissionsPage({ dept = null, page = 1, limit = 200, perms = null,
   const rowsWithDuplicateFlags = attachDuplicateFlagsToRawRows(rows);
 
   const mappedRows = rowsWithDuplicateFlags.map((row) => {
-    const latestUpload = getLatestUploadForAdmission(row.id, viewerUser);
+    const latestUpload =
+      getLatestUploadForAdmission(row.id, viewerUser);
+
+    const latestUploadByCurrentUser =
+      viewerUser?.role === "super_admin"
+        ? !!latestUpload
+        : viewerUser?.role === "admin"
+          ? !!latestUpload &&
+            canAccessAdmissionRow(viewerUser, row)
+          : !!latestUpload?.uploadedByCurrentUser;
+
+    const latestUploadForDashboard =
+      makeLatestUploadForDashboard(
+        latestUpload,
+        viewerUser,
+        dashboardPerms
+      );
+
+    const forwardedByCurrentUser =
+      isForwardedByCurrentUser(viewerUser, row);
+
+        const notForwardedVisibleForCurrentUser =
+      isNotForwardedVisibleForCurrentUser(
+        viewerUser,
+        row
+      );
+
+    const notReceivedVisibleForCurrentUser =
+      isNotReceivedVisibleForCurrentUser(
+        viewerUser,
+        row
+      );
 
     const mapped = mapAdmissionRow({
       ...row,
-      latestUpload,
+
+      latestUpload: latestUploadForDashboard,
+
+      latestUploadByCurrentUser:
+        dashboardPerms?.btnFiles
+          ? latestUploadByCurrentUser
+          : false,
+
+      forwardedByCurrentUser,
+      notForwardedVisibleForCurrentUser,
+      notReceivedVisibleForCurrentUser,
+
+      forwardScopeVisibleForCurrentUser:
+        forwardedByCurrentUser ||
+        notForwardedVisibleForCurrentUser ||
+        notReceivedVisibleForCurrentUser,
+
+      canShowForwardButton:
+        canCurrentUserUseForwardForRow(
+          viewerUser,
+          row,
+          latestUpload
+        ),
     });
 
     mapped.latestBillingVerificationNumber =
@@ -2814,13 +5997,104 @@ function buildPipelineSnapshotFromRow(row) {
     tuitionGrade: row.tuition_grade,
     phone: row.phone,
     processedBy: row.processed_by || "",
+
+    registrationDate:
+      row.registration_date || "",
+
+    registration_date:
+      row.registration_date || "",
+
+    registrationNumberAssignedAt:
+      row.accounts_registration_number_assigned_at || "",
+
+    accounts_registration_number_assigned_at:
+      row.accounts_registration_number_assigned_at || "",
+
+    registrationNumberRemoved:
+      Number(row.registration_number_removed || 0),
+
+    registration_number_removed:
+      Number(row.registration_number_removed || 0),
+
+    schoolReturnStatus:
+      row.school_return_status || "",
+
+    school_return_status:
+      row.school_return_status || "",
+
+    schoolReturnedToUserId:
+      row.school_returned_to_user_id || null,
+
+    school_returned_to_user_id:
+      row.school_returned_to_user_id || null,
+
+    schoolReturnedAt:
+      row.school_returned_at || "",
+
+    school_returned_at:
+      row.school_returned_at || "",
+
+    schoolReuploadedAt:
+      row.school_reuploaded_at || "",
+
+    school_reuploaded_at:
+      row.school_reuploaded_at || "",
+
+    reuploadTagActive:
+      Number(
+        row.reupload_tag_active || 0
+      ),
+
+    reupload_tag_active:
+      Number(
+        row.reupload_tag_active || 0
+      ),
+
+    forwardSubStatus:
+      getForwardSubStatus(row),
+
+    workflowTag:
+      getAdmissionWorkflowTag(row),
+
+    forwardedFromDepartment:
+      row.forwarded_from_department ||
+      accountsSourceTypeToDepartmentLabel(getAccountsSourceTypeFromRow(row)) ||
+      "",
+    forwardedFromType:
+      getAccountsSourceTypeFromRow(row),
+    forwardedToDepartment:
+      row.forwarded_to_department || "",
+    forwardedToType:
+      getAccountsPipelineTypeFromRow(row),
+    accountsWorkflowStage:
+      getAccountsWorkflowStageFromRow(row),
+    accountsIssueMessage:
+      row.accounts_issue_message || "",
+    accountsIssueFields:
+      safeJsonParse(row.accounts_issue_fields) || [],
+
     accounts: {
-  paymentStatus: row.accounts_payment_status || "",
-  paidUpto: row.accounts_paid_upto || "",
-  verificationNumber: row.accounts_verification_number || "",
-  registrationNumber: row.accounts_registration_number || "",
-  familyNumber: row.accounts_family_number || "",
-},
+      paymentStatus:
+        row.accounts_payment_status || "",
+
+      paidUpto:
+        row.accounts_paid_upto || "",
+
+      verificationNumber:
+        row.accounts_verification_number || "",
+
+      registrationNumber:
+        row.accounts_registration_number || "",
+
+      registrationNumberAssignedAt:
+        row.accounts_registration_number_assigned_at || "",
+
+      registrationNumberRemoved:
+        Number(row.registration_number_removed || 0),
+
+      familyNumber:
+        row.accounts_family_number || "",
+    },
     admissionPanel: {
   registrationFee: row.admission_registration_fee || "",
   fees: row.admission_fees || "",
@@ -5406,26 +8680,11 @@ app.post("/api/billing/:id", requireLogin, requireSaveBilling, async (req, res) 
     if (!canAccessAdmissionRow(user, row)) {
       return res.status(403).json({ success: false, message: "Not allowed" });
     }
-   // ✅ ALWAYS first
-    const beforeBillingArr = getAdmissionBillingByYear(id, billingYear);
-const beforeBilling = {};
-
-for (const item of beforeBillingArr) {
-  beforeBilling[item.month] = {
-    status: item.status || "",
-    amount: String(item.amount || ""),
-    feeOverride: String(item.fee || ""),
-    verification: String(item.verificationNumber || ""),
-    bank: String(item.bank || ""),
-
-    registrationFeeTotal: String(item.registrationFeeTotal || ""),
-    registrationFeeReceived: String(item.registrationFeeReceived || ""),
-    registrationFeeStatus: String(item.registrationFeeStatus || ""),
-    registrationFeeVerification: String(item.registrationFeeVerification || ""),
-    registrationFeeBank: String(item.registrationFeeBank || ""),
-    registrationFeePaymentDate: String(item.registrationFeePaymentDate || ""),
-  };
-}
+    // ✅ Existing billing_json + admission_billing ka complete merged snapshot
+    const beforeBilling = getBillingJsonByAdmissionId(
+      id,
+      billingYear
+    );
 
    // (optional) agar aap still paidUptoBefore rakhna chahen
    const paidUptoBefore =
@@ -5726,19 +8985,63 @@ admission_total_paid: String(receivedPayment || 0),
       accounts_verification_number: latestVerificationForColumn,
     });
 
-    logAudit("billing_update", user, {
-      dept: row.dept,
-      details: {
-        admissionId: id,
-        beforeBilling,
-        afterBilling: billingJson,
-        calc: { baseFee, ...dues, paidUpto },
-      },
-    });
-   touchAdmissionActivity(id);
-   emitAdmissionChanged(req, { type: "billing_update", admissionId: id, dept: row.dept });
+const updatedRow = db
+  .prepare("SELECT * FROM admissions WHERE id = ?")
+  .get(id);
 
-const updatedRow = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
+const billingChanges = buildBillingAuditChanges(
+  beforeBilling,
+  billingJson
+);
+
+const billingSummaryKeys = new Set([
+  "accounts_paid_upto",
+  "accounts_verification_number",
+  "admission_total_fees",
+  "admission_pending_dues",
+  "admission_total_paid",
+]);
+
+const billingSummaryChanges = updatedRow
+  ? buildAdmissionAuditChanges(row, updatedRow).filter(
+      (change) => billingSummaryKeys.has(change.key)
+    )
+  : [];
+
+const monthlyFeeChange = updatedRow
+  ? makeAuditChange(
+      "monthly_fee_current",
+      "Monthly Fee",
+      row.monthly_fee_current,
+      updatedRow.monthly_fee_current,
+      "billing"
+    )
+  : null;
+
+const changes = [
+  ...billingChanges,
+  ...(monthlyFeeChange ? [monthlyFeeChange] : []),
+  ...billingSummaryChanges,
+];
+
+if (changes.length) {
+  logAudit("billing_update", user, {
+    dept: row.dept,
+    details: {
+      admissionId: id,
+      billingYear,
+      changes,
+    },
+  });
+}
+
+touchAdmissionActivity(id);
+
+emitAdmissionChanged(req, {
+  type: "billing_update",
+  admissionId: id,
+  dept: row.dept,
+});
 
 const familyNumber = String(updatedRow?.accounts_family_number || "").trim();
 
@@ -5924,7 +9227,7 @@ function handleSuperFullUpdate(req, res) {
     return res.status(404).send("Not found");
   }
 
-  const before = buildPipelineSnapshotFromRow(row);
+  const beforeRowForAudit = { ...row };
 
  const {
   status,
@@ -6245,13 +9548,46 @@ admission_total_paid: String(receivedPaymentAfterAdmissionMonth || 0),
     monthly_fee_current: incomingFeeNumber > 0 ? incomingFeeNumber : (dues.currentFee || baseFee || 0),
   });
 
-  const afterRow = { ...row, ...updated };
-  const after = buildPipelineSnapshotFromRow(afterRow);
+  const afterRow =
+    getActiveAdmissionById(id) ||
+    { ...row, ...updated };
 
-  logAudit("pipeline_super_update", user, {
-    dept: updated.dept,
-    details: { admissionId: id, before, after },
-  });
+  const after =
+    buildPipelineSnapshotFromRow(afterRow);
+
+  const changes = buildAdmissionAuditChanges(
+    beforeRowForAudit,
+    afterRow
+  );
+
+  if (changes.length) {
+    const permanentEntryNumber =
+      afterRow.entry_number ||
+      row.entry_number ||
+      id;
+
+    const studentName = String(
+      afterRow.student_name ||
+      row.student_name ||
+      ""
+    ).trim();
+
+    logAudit("pipeline_super_update", user, {
+      targetUserId: permanentEntryNumber,
+      targetUserName:
+        studentName ||
+        `Admission ${permanentEntryNumber}`,
+
+      dept: afterRow.dept || row.dept,
+
+      details: {
+        databaseAdmissionId: id,
+        entryNumber: permanentEntryNumber,
+        studentName,
+        changes,
+      },
+    });
+  }
   touchAdmissionActivity(id);
   emitAdmissionChanged(req, { type: "super_update", admissionId: id });
 
@@ -6521,34 +9857,25 @@ if (!canAccessAdmissionRow(user, row)) return res.status(403).send("Not allowed"
 // =====================================================
 function canUseDetailsFeature(user, perms) {
   if (!user) return false;
-  if (user.role === "super_admin") return true;
   return !!perms?.btnDetails;
 }
 
 function ensureAdmissionRouteAccess(user, perms, row) {
   if (!user || !row) return false;
 
-  // Super Admin: full access
-  if (user.role === "super_admin") return true;
-
-  // Other users must have details permission
   if (!perms?.btnDetails) return false;
 
   return canAccessAdmissionRow(user, row);
 }
+
 function canUseEditFeature(user, perms) {
   if (!user) return false;
-  if (user.role === "super_admin") return true;
   return !!perms?.btnEditRow;
 }
 
 function ensureAdmissionEditRouteAccess(user, perms, row) {
   if (!user || !row) return false;
 
-  // Super Admin: full access
-  if (user.role === "super_admin") return true;
-
-  // Other users must have Edit button permission
   if (!perms?.btnEditRow) return false;
 
   return canAccessAdmissionRow(user, row);
@@ -6859,6 +10186,7 @@ const familyLabelForView =
       excludedRows,
       summary,
       bankOptions: getBankOptions(),
+      isPaidSlipWorkflowUser: isPaidSlipAgentOrSubAgent(user),
     });
   } catch (err) {
     console.error("renderFeeCollectionPage error:", err);
@@ -7740,6 +11068,8 @@ app.post("/api/fee-collection/receive", requireLogin, requireSaveBilling, async 
   verificationNumber,
   verificationMode,
   verificationChoice,
+  verificationApproved,
+  collectionAccountApproved,
   useMasterVerification,
   useMasterBank,
   bankMode,
@@ -7756,7 +11086,24 @@ app.post("/api/fee-collection/receive", requireLogin, requireSaveBilling, async 
 const amount = Number(receivingAmount || 0);
 const totalInputAmount = registrationAmount + amount;
     const cleanFamilyNumber = String(familyNumber || "").trim();
-        const cleanVerificationNumber = String(verificationNumber || "").trim();
+    const cleanVerificationNumber = String(verificationNumber || "").trim();
+
+    const requiresPaidSlipApprovals =
+      isPaidSlipAgentOrSubAgent(user) && totalInputAmount > 0;
+
+    if (
+      requiresPaidSlipApprovals &&
+      (
+        !isTruthyRequestFlag(verificationApproved) ||
+        !isTruthyRequestFlag(collectionAccountApproved)
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please approve both Verification Number and Collection Account before receiving payment.",
+      });
+    }
 
     const verificationDecision = String(
       useMasterVerification || verificationMode || verificationChoice || ""
@@ -7783,6 +11130,21 @@ const totalInputAmount = registrationAmount + amount;
       "current",
       "saved",
     ].includes(bankDecision);
+
+    const canEditVerificationNumber =
+      user?.role === "super_admin" ||
+      perms?.colVerificationNumber === true;
+
+    if (
+      totalInputAmount > 0 &&
+      !shouldUseMasterVerification &&
+      !canEditVerificationNumber
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to change verification number",
+      });
+    }
 
     const canEditBank =
       user?.role === "super_admin" ||
@@ -8065,12 +11427,21 @@ const applied = Array.from(appliedMap.values())
         ? buildFeeCollectionRowsForFamily(refreshedRows, billingYear)
         : buildFeeCollectionRowsForAdmission(refreshedRows[0], billingYear);
 
+    const refreshedExcludedRows =
+      mode === "family"
+        ? buildExcludedFeeCollectionRowsForFamily(refreshedRows, billingYear)
+        : buildExcludedFeeCollectionRowsForAdmission(refreshedRows[0], billingYear);
+
     const refreshedPaidRows =
       mode === "family"
         ? buildPaidFeeCollectionRowsForFamily(refreshedRows, billingYear)
         : buildPaidFeeCollectionRowsForAdmission(refreshedRows[0], billingYear);
 
-    const summary = summarizeFeeCollectionRows(refreshedRows, billingYear, currentMonthKey());
+    const summary = summarizeFeeCollectionRows(
+      refreshedRows,
+      billingYear,
+      currentMonthKey()
+    );
    const receipts = [];
 
 const rowInfoMap = new Map(
@@ -8262,16 +11633,29 @@ return res.json({
   mode,
   billingYear,
   totalInputAmount,
-registrationInputAmount: registrationAmount,
-monthlyInputAmount: amount,
-unallocatedAmount: registrationRemaining + remaining,
+  registrationInputAmount: registrationAmount,
+  monthlyInputAmount: amount,
+  unallocatedAmount: registrationRemaining + remaining,
   applied,
   receipts,
   n8nStatus,
   n8nResponse: n8nResponseText,
-    feeRows: refreshedFeeRows,
+  feeRows: refreshedFeeRows,
+  excludedRows: refreshedExcludedRows,
   paidRows: refreshedPaidRows,
   summary,
+
+  // Paid Slip Agent/Sub-Agent will open the existing forwarding modal
+  // after this successful response and select a Print & Record Update user.
+  recordUpdateForwardRequired: requiresPaidSlipApprovals,
+  nextWorkflowAction: requiresPaidSlipApprovals
+    ? {
+        toType: "print_record_update",
+        toDepartment: "Print + Record update",
+        workflowStage: "record_to_update",
+        label: "Record to Update",
+      }
+    : null,
 });
   } catch (err) {
     console.error("POST /api/fee-collection/receive error:", err);
@@ -8405,6 +11789,34 @@ app.get("/api/admissions/:id", requireLogin, (req, res) => {
     const safe = maskAdmissionMapped(full, perms);
     attachComputedMonthFees(row, safe, billingYear);
 
+    safe.forwardStatus =
+      row.forward_status || "not_forwarded";
+
+    safe.forwardSubStatus =
+      getForwardSubStatus(row);
+
+    safe.forward =
+      getAdmissionForwardSnapshot(row);
+
+    safe.notReceivedVisibleForCurrentUser =
+      isNotReceivedVisibleForCurrentUser(
+        user,
+        row
+      );
+
+    safe.reuploadTagActive =
+      Number(
+        row.reupload_tag_active || 0
+      );
+
+    safe.reupload_tag_active =
+      Number(
+        row.reupload_tag_active || 0
+      );
+
+    safe.workflowTag =
+      getAdmissionWorkflowTag(row);
+
     return res.json({
       success: true,
       admission: safe,
@@ -8431,23 +11843,1194 @@ app.get("/api/me", requireLogin, (req, res) => {
     perms: getPerm(u),
   });
 });
+app.post("/api/admissions/:id/forward", requireLogin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const admissionId = Number(req.params.id || 0);
+
+    const rawTarget =
+      req.body?.toType ??
+      req.body?.toDepartment ??
+      "";
+
+    const returnFlag = String(
+      req.body?.returnToSchool ?? ""
+    )
+      .trim()
+      .toLowerCase();
+
+    const wantsSchoolReturn =
+      isSchoolReturnTarget(rawTarget) ||
+      ["1", "true", "on", "yes"].includes(returnFlag);
+
+    const isReturnToSchool =
+      wantsSchoolReturn &&
+      (
+        user?.role === "super_admin" ||
+        isAccountsUser(user)
+      );
+
+    const toType = isReturnToSchool
+      ? "school_return"
+      : normalizeForwardType(rawTarget);
+
+    const toDepartment = isReturnToSchool
+      ? "School Department"
+      : forwardTypeToDepartmentLabel(toType);
+
+    const requestedWorkflowStage = normalizeAccountsWorkflowStage(
+      req.body?.workflowStage ??
+      req.body?.accountsWorkflowStage ??
+      req.body?.accounts_workflow_stage ??
+      "new_admissions"
+    );
+
+    const nextAccountsWorkflowStage = isReturnToSchool
+      ? getAccountsWorkflowStageFromRow({
+          accounts_workflow_stage: req.body?.currentWorkflowStage || "new_admissions",
+        })
+      : (
+          toType === "print_record_update" &&
+          requestedWorkflowStage === "record_to_update"
+            ? "record_to_update"
+            : "new_admissions"
+        );
+
+    const issueMessage = String(
+      req.body?.issueMessage ??
+      req.body?.message ??
+      req.body?.correctionMessage ??
+      ""
+    ).trim();
+
+    const issueFields = normalizeIssueFields(
+      req.body?.issueFields ??
+      req.body?.incorrectFields ??
+      []
+    );
+
+    const issueReturnRequested =
+      isTruthyRequestFlag(req.body?.isIssueReturn) ||
+      isTruthyRequestFlag(req.body?.withIssue) ||
+      !!issueMessage ||
+      issueFields.length > 0;
+
+    if (!admissionId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid admission id",
+      });
+    }
+
+    if (wantsSchoolReturn && !isReturnToSchool) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Only School Accounts users or Super Admin can return an admission to the School Department.",
+      });
+    }
+
+    if (!toDepartment) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a valid department.",
+        allowedDepartments: [
+          ...ADMISSION_FORWARD_DEPARTMENTS,
+          "School Department",
+        ],
+      });
+    }
+
+    const row = getActiveAdmissionById(admissionId);
+
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        message: "Admission not found",
+      });
+    }
+
+    if (!canForwardAdmission(user, row)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not allowed",
+      });
+    }
+
+    if (
+      issueReturnRequested &&
+      !isReturnToSchool &&
+      !issueMessage
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please write a message explaining the issue.",
+      });
+    }
+
+    const currentReturnStatus = String(
+      row.school_return_status || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    if (
+      !isReturnToSchool &&
+      currentReturnStatus === "not_received" &&
+      (
+        user?.role === "super_admin" ||
+        isSchoolDepartmentUser(user)
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please upload or re-upload the required file before forwarding this admission again.",
+      });
+    }
+
+    if (
+      !isReturnToSchool &&
+      currentReturnStatus &&
+      isAccountsUser(user)
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This admission has already been returned to the School Department.",
+      });
+    }
+
+    const latestUpload =
+      getLatestUploadForAdmission(
+        admissionId,
+        user
+      );
+
+    if (
+      user.role !== "super_admin" &&
+      !isAccountsUser(user) &&
+      !latestUpload
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please upload a file first. Forward button is allowed only after file upload.",
+      });
+    }
+
+    if (
+      !canCurrentUserUseForwardForRow(
+        user,
+        row,
+        latestUpload
+      )
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You are not allowed to forward this admission.",
+      });
+    }
+
+    const selectedAccountsOwner = isReturnToSchool
+      ? null
+      : getSelectedAccountsForwardOwner(req.body || {}, toType);
+
+    if (!isReturnToSchool && !selectedAccountsOwner) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please select a valid Agent or Sub-Agent from the selected School Accounts pipeline.",
+      });
+    }
+
+    const forwardOwner = isReturnToSchool
+      ? getSchoolReturnOwnerForAdmission(row)
+      : selectedAccountsOwner;
+
+    const forwardSource = getForwardSourceForAdmission(row, user);
+
+    if (
+      isPaidSlipAgentOrSubAgent(user) &&
+      issueReturnRequested &&
+      toType !== "verification_registration"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Paid Slip issues must be returned to Verification & Registration.",
+      });
+    }
+
+    if (
+      nextAccountsWorkflowStage === "record_to_update" &&
+      forwardSource.type !== "paid_slip"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Record to Update can only receive an admission from the Paid Slip pipeline.",
+      });
+    }
+
+    const forwardedAt =
+      new Date().toISOString();
+
+    const isReuploadForward =
+      !isReturnToSchool &&
+      currentReturnStatus === "reupload" &&
+      (
+        user?.role === "super_admin" ||
+        isSchoolDepartmentUser(user)
+      );
+
+    const nextSchoolReturnStatus =
+      isReturnToSchool
+        ? "not_received"
+        : isReuploadForward
+          ? ""
+          : String(
+              row.school_return_status || ""
+            ).trim();
+
+    const nextSchoolReturnedToUserId =
+      isReturnToSchool
+        ? (forwardOwner.id || null)
+        : isReuploadForward
+          ? null
+          : (
+              row.school_returned_to_user_id ||
+              null
+            );
+
+    const nextSchoolReturnedAt =
+      isReturnToSchool
+        ? forwardedAt
+        : isReuploadForward
+          ? null
+          : (
+              row.school_returned_at ||
+              null
+            );
+
+    const nextSchoolReuploadedAt =
+      isReturnToSchool
+        ? null
+        : isReuploadForward
+          ? null
+          : (
+              row.school_reuploaded_at ||
+              null
+            );
+
+    const nextReuploadTagActive =
+      isReuploadForward
+        ? 1
+        : Number(
+            row.reupload_tag_active || 0
+          ) === 1
+          ? 1
+          : 0;
+
+    const nextWorkflowTag =
+      getAdmissionWorkflowTag({
+        ...row,
+
+        school_return_status:
+          nextSchoolReturnStatus,
+
+        reupload_tag_active:
+          nextReuploadTagActive,
+      });
+
+    const savedIssueMessage = issueReturnRequested
+      ? issueMessage
+      : "";
+
+    const savedIssueFields = issueReturnRequested
+      ? JSON.stringify(issueFields)
+      : "";
+
+    db.prepare(`
+      UPDATE admissions
+      SET forward_status = 'forwarded',
+          forwarded_to_department =
+            @forwarded_to_department,
+          forwarded_to_type =
+            @forwarded_to_type,
+          forwarded_at =
+            @forwarded_at,
+
+          forwarded_from_department =
+            @forwarded_from_department,
+          forwarded_from_type =
+            @forwarded_from_type,
+          accounts_workflow_stage =
+            @accounts_workflow_stage,
+
+          accounts_issue_message =
+            @accounts_issue_message,
+          accounts_issue_fields =
+            @accounts_issue_fields,
+          accounts_issue_by_id =
+            @accounts_issue_by_id,
+          accounts_issue_by_name =
+            @accounts_issue_by_name,
+          accounts_issue_by_role =
+            @accounts_issue_by_role,
+          accounts_issue_at =
+            @accounts_issue_at,
+
+          accounts_completed_at = NULL,
+          accounts_completed_by_id = NULL,
+          accounts_completed_by_name = '',
+          accounts_completed_by_role = '',
+
+          forwarded_by_id =
+            @forwarded_by_id,
+          forwarded_by_name =
+            @forwarded_by_name,
+          forwarded_by_role =
+            @forwarded_by_role,
+
+          forwarded_owner_user_id =
+            @forwarded_owner_user_id,
+          forwarded_owner_user_name =
+            @forwarded_owner_user_name,
+          forwarded_owner_user_role =
+            @forwarded_owner_user_role,
+
+          school_return_status =
+            @school_return_status,
+          school_returned_to_user_id =
+            @school_returned_to_user_id,
+          school_returned_at =
+            @school_returned_at,
+          school_reuploaded_at =
+            @school_reuploaded_at,
+          reupload_tag_active =
+            @reupload_tag_active
+      WHERE id = @id
+        AND COALESCE(is_deleted, 0) = 0
+    `).run({
+      id: admissionId,
+
+      forwarded_to_department:
+        toDepartment,
+
+      forwarded_to_type:
+        toType,
+
+      forwarded_at:
+        forwardedAt,
+
+      forwarded_from_department:
+        forwardSource.department,
+
+      forwarded_from_type:
+        forwardSource.type,
+
+      accounts_workflow_stage:
+        nextAccountsWorkflowStage,
+
+      accounts_issue_message:
+        savedIssueMessage,
+
+      accounts_issue_fields:
+        savedIssueFields,
+
+      accounts_issue_by_id:
+        issueReturnRequested
+          ? (user?.id || null)
+          : null,
+
+      accounts_issue_by_name:
+        issueReturnRequested
+          ? (user?.name || user?.email || "")
+          : "",
+
+      accounts_issue_by_role:
+        issueReturnRequested
+          ? (user?.role || "")
+          : "",
+
+      accounts_issue_at:
+        issueReturnRequested
+          ? forwardedAt
+          : null,
+
+      forwarded_by_id:
+        user?.id || null,
+
+      forwarded_by_name:
+        user?.name ||
+        user?.email ||
+        "",
+
+      forwarded_by_role:
+        user?.role || "",
+
+      forwarded_owner_user_id:
+        forwardOwner.id || null,
+
+      forwarded_owner_user_name:
+        forwardOwner.name || "",
+
+      forwarded_owner_user_role:
+        forwardOwner.role || "",
+
+      school_return_status:
+        nextSchoolReturnStatus,
+
+      school_returned_to_user_id:
+        nextSchoolReturnedToUserId,
+
+      school_returned_at:
+        nextSchoolReturnedAt,
+
+      school_reuploaded_at:
+        nextSchoolReuploadedAt,
+
+      reupload_tag_active:
+        nextReuploadTagActive,
+    });
+
+    if (!isReturnToSchool) {
+      rememberAccountsWorkflowUser(
+        admissionId,
+        selectedAccountsOwner,
+        forwardedAt
+      );
+
+      if (isAccountsUser(user)) {
+        rememberAccountsWorkflowUser(
+          admissionId,
+          user,
+          forwardedAt
+        );
+      }
+    }
+
+    touchAdmissionActivity(admissionId);
+
+    const eventType = isReturnToSchool
+      ? "admission_returned_to_school"
+      : issueReturnRequested
+        ? "accounts_admission_returned_with_issue"
+        : nextAccountsWorkflowStage === "record_to_update"
+          ? "accounts_admission_forwarded_to_record_update"
+          : isReuploadForward
+            ? "admission_reforwarded_after_reupload"
+            : "admission_forwarded";
+
+    const forwardDisplayText =
+      isReturnToSchool
+        ? (
+            forwardOwner.name
+              ? `Returned by ${
+                  user?.name ||
+                  user?.email ||
+                  "Unknown user"
+                } to School Department for ${
+                  forwardOwner.name
+                }`
+              : `Returned by ${
+                  user?.name ||
+                  user?.email ||
+                  "Unknown user"
+                } to School Department`
+          )
+        : (
+            `Forwarded by ${
+              user?.name ||
+              user?.email ||
+              "Unknown user"
+            } from ${forwardSource.department} to ${toDepartment} for ${
+              forwardOwner.name || "selected user"
+            }`
+          );
+
+    logAudit(eventType, user, {
+      targetUserId:
+        forwardOwner.id || null,
+
+      targetUserName:
+        forwardOwner.name || "",
+
+      dept:
+        row.dept || "",
+
+      details: {
+        admissionId,
+
+        studentName:
+          row.student_name || "",
+
+        processedBy:
+          row.processed_by || "",
+
+        forwardedFromDepartment:
+          forwardSource.department,
+
+        forwardedFromType:
+          forwardSource.type,
+
+        forwardedToDepartment:
+          toDepartment,
+
+        forwardedToType:
+          toType,
+
+        accountsWorkflowStage:
+          nextAccountsWorkflowStage,
+
+        issueMessage:
+          savedIssueMessage,
+
+        issueFields,
+
+        forwardedById:
+          user?.id || null,
+
+        forwardedByName:
+          user?.name ||
+          user?.email ||
+          "",
+
+        forwardedByRole:
+          user?.role || "",
+
+        forwardedOwnerUserId:
+          forwardOwner.id || null,
+
+        forwardedOwnerUserName:
+          forwardOwner.name || "",
+
+        forwardedOwnerUserRole:
+          forwardOwner.role || "",
+
+        schoolReturnStatus:
+          nextSchoolReturnStatus,
+
+        schoolReturnedAt:
+          nextSchoolReturnedAt,
+
+        schoolReuploadedAt:
+          nextSchoolReuploadedAt,
+
+        reuploadTagActive:
+          nextReuploadTagActive,
+
+        workflowTag:
+          nextWorkflowTag,
+
+        displayText:
+          forwardDisplayText,
+      },
+    });
+
+    emitAdmissionChanged(req, {
+      type: eventType,
+
+      admissionId,
+
+      dept:
+        row.dept || "",
+
+      forwardedFromDepartment:
+        forwardSource.department,
+
+      forwardedFromType:
+        forwardSource.type,
+
+      forwardedToDepartment:
+        toDepartment,
+
+      forwardedToType:
+        toType,
+
+      accountsWorkflowStage:
+        nextAccountsWorkflowStage,
+
+      issueMessage:
+        savedIssueMessage,
+
+      issueFields,
+
+      forwardedById:
+        user?.id || null,
+
+      forwardedByName:
+        user?.name ||
+        user?.email ||
+        "",
+
+      forwardedOwnerUserId:
+        forwardOwner.id || null,
+
+      forwardedOwnerUserName:
+        forwardOwner.name || "",
+
+      schoolReturnStatus:
+        nextSchoolReturnStatus,
+
+      reuploadTagActive:
+        nextReuploadTagActive,
+
+      reupload_tag_active:
+        nextReuploadTagActive,
+
+      workflowTag:
+        nextWorkflowTag,
+
+      forwardSubStatus:
+        isReturnToSchool
+          ? "not_received"
+          : getForwardSubStatus({
+              ...row,
+              school_return_status:
+                nextSchoolReturnStatus,
+            }),
+    });
+
+    return res.json({
+      success: true,
+
+      message: isReturnToSchool
+        ? "Admission returned to the School Department."
+        : nextAccountsWorkflowStage === "record_to_update"
+          ? "Admission forwarded to Record to Update."
+          : issueReturnRequested
+            ? `Admission returned to ${toDepartment} with issue details.`
+            : `Admission forwarded to ${toDepartment}.`,
+
+      admissionId,
+
+      forwardStatus:
+        "forwarded",
+
+      forwardSubStatus:
+        isReturnToSchool
+          ? "not_received"
+          : getForwardSubStatus({
+              ...row,
+              school_return_status:
+                nextSchoolReturnStatus,
+            }),
+
+      forwardedFromDepartment:
+        forwardSource.department,
+
+      forwardedFromType:
+        forwardSource.type,
+
+      forwardedToDepartment:
+        toDepartment,
+
+      forwardedToType:
+        toType,
+
+      accountsWorkflowStage:
+        nextAccountsWorkflowStage,
+
+      issueMessage:
+        savedIssueMessage,
+
+      issueFields,
+
+      forwardedById:
+        user?.id || null,
+
+      forwardedByName:
+        user?.name ||
+        user?.email ||
+        "",
+
+      forwardedByRole:
+        user?.role || "",
+
+      forwardedOwnerUserId:
+        forwardOwner.id || null,
+
+      forwardedOwnerUserName:
+        forwardOwner.name || "",
+
+      forwardedOwnerUserRole:
+        forwardOwner.role || "",
+
+      schoolReturnStatus:
+        nextSchoolReturnStatus,
+
+      schoolReturnedToUserId:
+        nextSchoolReturnedToUserId,
+
+      schoolReturnedAt:
+        nextSchoolReturnedAt,
+
+      schoolReuploadedAt:
+        nextSchoolReuploadedAt,
+
+      reuploadTagActive:
+        nextReuploadTagActive,
+
+      reupload_tag_active:
+        nextReuploadTagActive,
+
+      workflowTag:
+        nextWorkflowTag,
+
+      forwardDisplayText,
+    });
+  } catch (err) {
+    console.error(
+      "POST /api/admissions/:id/forward error:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Could not forward admission",
+    });
+  }
+});
+
+// Return valid destination users for the existing forwarding modal.
+app.get("/api/accounts/forward-users", requireLogin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const toType = normalizeForwardType(
+      req.query.toType || req.query.toDepartment || ""
+    );
+
+    if (!toType) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid School Accounts pipeline.",
+      });
+    }
+
+    if (
+      user?.role !== "super_admin" &&
+      !isSchoolDepartmentUser(user) &&
+      !isAccountsUser(user)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Not allowed",
+      });
+    }
+
+    const rows = db.prepare(`
+      SELECT id, name, email, role, dept, agentType, assigned_admin_id, managerId
+      FROM users
+      WHERE role IN ('agent', 'sub_agent')
+      ORDER BY name ASC
+    `).all();
+
+    const users = rows
+      .filter((item) => isAccountsUser(item))
+      .filter(
+        (item) =>
+          normalizeAgentTypeForDept(
+            item.agentType || "",
+            item.dept || ""
+          ) === toType
+      )
+      .map((item) => ({
+        id: item.id,
+        name: item.name || item.email || "",
+        email: item.email || "",
+        role: item.role || "",
+        dept: item.dept || "",
+        agentType: toType,
+      }));
+
+    return res.json({
+      success: true,
+      toType,
+      toDepartment: forwardTypeToDepartmentLabel(toType),
+      users,
+    });
+  } catch (err) {
+    console.error("GET /api/accounts/forward-users error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Could not load forwarding users.",
+    });
+  }
+});
+
+// Record to Update completion moves the admission to Old Admissions.
+app.post(
+  "/api/admissions/:id/accounts/complete-record-update",
+  requireLogin,
+  (req, res) => {
+    try {
+      const user = req.session.user;
+      const admissionId = Number(req.params.id || 0);
+
+      if (!admissionId) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid admission id",
+        });
+      }
+
+      const row = getActiveAdmissionById(admissionId);
+
+      if (!row) {
+        return res.status(404).json({
+          success: false,
+          message: "Admission not found",
+        });
+      }
+
+      if (!canAccessAdmissionRow(user, row)) {
+        return res.status(403).json({
+          success: false,
+          message: "Not allowed",
+        });
+      }
+
+      const pipelineType = getAccountsPipelineTypeFromRow(row);
+      const workflowStage = getAccountsWorkflowStageFromRow(row);
+
+      if (
+        pipelineType !== "print_record_update" ||
+        workflowStage !== "record_to_update"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Only an admission in the Record to Update pipeline can be completed.",
+        });
+      }
+
+      const allowedRole =
+        user?.role === "super_admin" ||
+        (
+          isAccountsUser(user) &&
+          ["admin", "agent", "sub_agent"].includes(user.role)
+        );
+
+      if (!allowedRole) {
+        return res.status(403).json({
+          success: false,
+          message: "Not allowed",
+        });
+      }
+
+      const completedAt = new Date().toISOString();
+
+      db.prepare(`
+        UPDATE admissions
+        SET accounts_workflow_stage = 'old_admissions',
+            accounts_completed_at = @accounts_completed_at,
+            accounts_completed_by_id = @accounts_completed_by_id,
+            accounts_completed_by_name = @accounts_completed_by_name,
+            accounts_completed_by_role = @accounts_completed_by_role
+        WHERE id = @id
+          AND COALESCE(is_deleted, 0) = 0
+      `).run({
+        id: admissionId,
+        accounts_completed_at: completedAt,
+        accounts_completed_by_id: user?.id || null,
+        accounts_completed_by_name: user?.name || user?.email || "",
+        accounts_completed_by_role: user?.role || "",
+      });
+
+      touchAdmissionActivity(admissionId);
+
+      logAudit("accounts_record_update_completed", user, {
+        dept: row.dept || "",
+        details: {
+          admissionId,
+          studentName: row.student_name || "",
+          previousStage: workflowStage,
+          newStage: "old_admissions",
+          completedAt,
+        },
+      });
+
+      emitAdmissionChanged(req, {
+        type: "accounts_record_update_completed",
+        admissionId,
+        dept: row.dept || "",
+        accountsWorkflowStage: "old_admissions",
+        completedAt,
+      });
+
+      return res.json({
+        success: true,
+        message: "Record update completed. Admission moved to Old Admissions.",
+        admissionId,
+        accountsWorkflowStage: "old_admissions",
+        completedAt,
+      });
+    } catch (err) {
+      console.error(
+        "POST /api/admissions/:id/accounts/complete-record-update error:",
+        err
+      );
+
+      return res.status(500).json({
+        success: false,
+        message: "Could not complete Record Update.",
+      });
+    }
+  }
+);
 
 // Simple JSON list (admissions.js table ke liye)
 app.get("/api/admissions", requireLogin, (req, res) => {
   try {
     const user = req.session.user;
-    const admissions = fetchAdmissionsForUser(user);
+
+    const forwardStatus = String(
+      req.query.forwardStatus || "all"
+    )
+      .trim()
+      .toLowerCase();
+
+    const forwardSubStatus = String(
+      req.query.forwardSubStatus ||
+      req.query.forwardView ||
+      ""
+    )
+      .trim()
+      .toLowerCase();
+
+    const view = String(
+      req.query.view || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    const accountsPipelineFilter = String(
+      req.query.accountsPipeline ||
+      req.query.pipelineType ||
+      req.query.forwardedToType ||
+      ""
+    ).trim();
+
+    const accountsSourceFilter = String(
+      req.query.accountsSource ||
+      req.query.sourceType ||
+      req.query.forwardedFromType ||
+      ""
+    ).trim();
+
+    const isAccountsOldView = [
+      "old_admissions",
+      "accounts_old_admissions",
+    ].includes(view);
+
+    const isAccountsNewView = [
+      "new_admissions",
+      "accounts_new_admissions",
+    ].includes(view);
+
+    const dateFilters = {
+      registrationExact: String(
+        req.query.registrationDateExact ||
+        req.query.registration_date_exact ||
+        ""
+      ).trim(),
+
+      registrationFrom: String(
+        req.query.registrationDateFrom ||
+        req.query.registration_date_from ||
+        ""
+      ).trim(),
+
+      registrationTo: String(
+        req.query.registrationDateTo ||
+        req.query.registration_date_to ||
+        ""
+      ).trim(),
+
+      assignedExact: String(
+        req.query.assignedDateExact ||
+        req.query.registrationAssignedDateExact ||
+        req.query.assigned_date_exact ||
+        ""
+      ).trim(),
+
+      assignedFrom: String(
+        req.query.assignedDateFrom ||
+        req.query.registrationAssignedDateFrom ||
+        req.query.assigned_date_from ||
+        ""
+      ).trim(),
+
+      assignedTo: String(
+        req.query.assignedDateTo ||
+        req.query.registrationAssignedDateTo ||
+        req.query.assigned_date_to ||
+        ""
+      ).trim(),
+    };
+
+    let admissions = fetchAdmissionsForUser(user, {
+      accountsView: isAccountsOldView
+        ? "old_admissions"
+        : "new_admissions",
+    });
+
+    if (isAccountsNewView || isAccountsOldView) {
+      const requestedAccountsView = isAccountsOldView
+        ? "old_admissions"
+        : "new_admissions";
+
+      admissions = admissions.filter(
+        (admission) =>
+          canSeeSchoolAccountsAdmission(
+            user,
+            admission,
+            requestedAccountsView
+          )
+      );
+
+      if (accountsPipelineFilter) {
+        admissions = admissions.filter(
+          (admission) =>
+            matchesSchoolAccountsPipelineFilter(
+              admission,
+              accountsPipelineFilter
+            )
+        );
+      }
+
+      if (accountsSourceFilter) {
+        admissions = admissions.filter(
+          (admission) =>
+            matchesSchoolAccountsSourceFilter(
+              admission,
+              accountsSourceFilter
+            )
+        );
+      }
+    }
+
+    if (forwardStatus === "forwarded") {
+      admissions = admissions.filter(
+        (admission) => {
+          const status = String(
+            admission.forwardStatus || ""
+          ).toLowerCase();
+
+          const dept = String(
+            admission.dept || ""
+          )
+            .trim()
+            .toLowerCase();
+
+          if (user?.role === "super_admin") {
+            return (
+              dept === "school" &&
+              status === "forwarded"
+            );
+          }
+
+          return (
+            dept === "school" &&
+            status === "forwarded" &&
+            !!admission.forwardedByCurrentUser
+          );
+        }
+      );
+    }
+
+    if (forwardStatus === "not_forwarded") {
+      admissions = admissions.filter(
+        (admission) => {
+          const hasFile =
+            !!admission.latestUpload ||
+            !!admission.hasLatestUpload;
+
+          const status = String(
+            admission.forwardStatus ||
+            "not_forwarded"
+          ).toLowerCase();
+
+          const dept = String(
+            admission.dept || ""
+          )
+            .trim()
+            .toLowerCase();
+
+          if (user?.role === "super_admin") {
+            return (
+              dept === "school" &&
+              hasFile &&
+              status !== "forwarded"
+            );
+          }
+
+          return (
+            dept === "school" &&
+            hasFile &&
+            !!admission.latestUploadByCurrentUser &&
+            status !== "forwarded"
+          );
+        }
+      );
+    }
+
+    if (
+      forwardSubStatus &&
+      canUseSchoolForwardFilters(user)
+    ) {
+      const allowedSubStatuses = new Set([
+        "not_verified",
+        "verified",
+        "not_received",
+      ]);
+
+      if (
+        allowedSubStatuses.has(
+          forwardSubStatus
+        )
+      ) {
+        admissions = admissions.filter(
+          (admission) =>
+            String(
+              admission.forwardStatus || ""
+            )
+              .trim()
+              .toLowerCase() === "forwarded" &&
+            String(
+              admission.forwardSubStatus || ""
+            )
+              .trim()
+              .toLowerCase() ===
+                forwardSubStatus
+        );
+      }
+    }
+
+    admissions = admissions.filter(
+      (admission) =>
+        matchesWorkflowDateFilters(
+          admission,
+          dateFilters
+        )
+    );
 
     return res.json(admissions);
   } catch (err) {
-    console.error("GET /api/admissions error:", err);
+    console.error(
+      "GET /api/admissions error:",
+      err
+    );
+
     return res.status(500).json({
       success: false,
       message: "DB select failed",
     });
   }
 });
-
 
 
 app.post("/api/admissions/invoice-status", checkApiKey, (req, res) => {
@@ -8940,21 +13523,14 @@ if ((!amt || amt <= 0) && (!regFeePaid || regFeePaid <= 0)) {
   const fileUrl = `${getBaseUrl(req)}/uploads/${relStored}`;
 
   const info = insertUploadRecord({
-  admissionId,
-  originalName: `${labelPrefix} (${monthKey})`,
-  storedName: relStored,
-  fileUrl,
-  mimeType: "application/pdf",
-  size: pdfBuffer.length || 0,
-  user: req.session.user,
-}).run(
     admissionId,
-    `${labelPrefix} (${monthKey})`,
-    relStored,
+    originalName: `${labelPrefix} (${monthKey})`,
+    storedName: relStored,
     fileUrl,
-    "application/pdf",
-    pdfBuffer.length || 0
-  );
+    mimeType: "application/pdf",
+    size: pdfBuffer.length || 0,
+    user: req.session.user,
+  });
 
   return {
     skipped: false,
@@ -9294,8 +13870,35 @@ app.post("/api/admissions/update-row", checkApiKey, (req, res) => {
       cleanUpdates.admission_invoice_status_timestamp = now;
     }
 
-    if (Object.prototype.hasOwnProperty.call(cleanUpdates, "admission_paid_invoice_status")) {
-      cleanUpdates.admission_paid_invoice_status_timestamp = now;
+        if (
+      Object.prototype.hasOwnProperty.call(
+        cleanUpdates,
+        "admission_paid_invoice_status"
+      )
+    ) {
+      cleanUpdates.admission_paid_invoice_status_timestamp =
+        now;
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(
+        cleanUpdates,
+        "accounts_registration_number"
+      )
+    ) {
+      const duplicateRegistration =
+        checkDuplicateRegistrationNumber(
+          cleanUpdates.accounts_registration_number,
+          row.id
+        );
+
+      if (duplicateRegistration) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "This registration number is already in use. Please enter another number.",
+        });
+      }
     }
 
     const setClause = Object.keys(cleanUpdates)
@@ -9313,7 +13916,15 @@ app.post("/api/admissions/update-row", checkApiKey, (req, res) => {
       WHERE id = @id
     `).run(params);
 
-    const updatedRow = db.prepare("SELECT * FROM admissions WHERE id = ?").get(row.id);
+    touchAdmissionActivity(row.id);
+
+    const updatedRow = db
+      .prepare(`
+        SELECT *
+        FROM admissions
+        WHERE id = ?
+      `)
+      .get(row.id);
 
     emitAdmissionChanged(req, {
       type: "admission_update_row",
@@ -10684,6 +15295,1227 @@ app.post("/api-settings/update", requireLogin, requireSuperAdmin, (req, res) => 
     return res.redirect("/api-settings");
   }
 });
+/* ==================== DEVELOPER ROUTES ==================== */
+
+app.post("/developer/login", async (req, res) => {
+  try {
+    const loginId = String(
+      req.body.username ||
+      req.body.email ||
+      ""
+    ).trim();
+
+    const password = String(req.body.password || "");
+
+    if (!loginId || !password) {
+      return res.render("login", {
+        error: null,
+        devError: "Developer username/email and password are required.",
+        type: null,
+      });
+    }
+
+    const row = db.prepare(`
+      SELECT *
+      FROM developer_accounts
+      WHERE (
+        LOWER(TRIM(username)) = LOWER(TRIM(?))
+        OR LOWER(TRIM(COALESCE(email, ''))) = LOWER(TRIM(?))
+      )
+      LIMIT 1
+    `).get(loginId, loginId);
+
+    if (!row || Number(row.is_active || 0) !== 1) {
+      return res.render("login", {
+        error: null,
+        devError: "Invalid developer username/email or password.",
+        type: null,
+      });
+    }
+
+    const passwordOk = await bcrypt.compare(
+      password,
+      row.password_hash
+    );
+
+    if (!passwordOk) {
+      return res.render("login", {
+        error: null,
+        devError: "Invalid developer username/email or password.",
+        type: null,
+      });
+    }
+
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      UPDATE developer_accounts
+      SET last_login_at = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).run(now, now, row.id);
+
+    const refreshedRow = db.prepare(`
+      SELECT *
+      FROM developer_accounts
+      WHERE id = ?
+      LIMIT 1
+    `).get(row.id);
+
+    const developer = mapDeveloperRow(refreshedRow || row);
+
+    req.session.developer = developer;
+
+    logDeveloperAction(req, "developer_login", {
+      loginId,
+    });
+
+    return res.redirect("/developer/welcome");
+  } catch (err) {
+    console.error("POST /developer/login error:", err);
+
+    return res.render("login", {
+      error: null,
+      devError: "Developer login failed. Please try again.",
+      type: null,
+    });
+  }
+});
+
+app.get("/developer/welcome", requireDeveloperLogin, (req, res) => {
+  return res.render("developer-welcome", {
+    developer: req.developer,
+    pageTitle: "Welcome Developer",
+  });
+});
+
+app.get("/developer/dashboard", requireDeveloperLogin, (req, res) => {
+  return res.render("developer-dashboard", {
+    developer: req.developer,
+    pageTitle: "Developer Dashboard",
+  });
+});
+
+app.post("/developer/logout", requireDeveloperLogin, (req, res) => {
+  logDeveloperAction(req, "developer_logout");
+
+  delete req.session.developer;
+
+  return res.redirect("/login");
+});
+
+app.get("/api/developer/stats", requireDeveloperLogin, (req, res) => {
+  try {
+    return res.json({
+      success: true,
+      stats: getDeveloperDashboardStats(),
+    });
+  } catch (err) {
+    console.error("GET /api/developer/stats error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Could not load developer stats.",
+    });
+  }
+});
+
+app.get("/api/developer/users", requireDeveloperLogin, (req, res) => {
+  try {
+    return res.json({
+      success: true,
+      users: getDeveloperUsersList(),
+    });
+  } catch (err) {
+    console.error("GET /api/developer/users error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Could not load users.",
+    });
+  }
+});
+app.post("/api/developer/users/create", requireDeveloperLogin, async (req, res) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const role = String(req.body.role || "agent").trim();
+    const dept = String(req.body.dept || "school").trim().toLowerCase();
+    const agentType = String(req.body.agentType || "").trim();
+    const accessScope = String(req.body.access_scope || "own").trim();
+    const assignedAdminId = Number(req.body.assigned_admin_id || req.body.managerId || 0) || null;
+
+    const allowedRoles = ["super_admin", "admin", "agent", "sub_agent"];
+    const allowedDepts = ["school", "quran", "tuition", "accounts", "school accounts", "school_accounts"];
+
+    if (!name || !email) {
+      return res.status(400).json({
+        success: false,
+        message: "Name and email are required.",
+      });
+    }
+
+    if (!allowedRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid role selected.",
+      });
+    }
+
+    if (!allowedDepts.includes(dept)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid department selected.",
+      });
+    }
+
+    const duplicate = db.prepare(`
+      SELECT id
+      FROM users
+      WHERE LOWER(TRIM(email)) = LOWER(TRIM(?))
+      LIMIT 1
+    `).get(email);
+
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        message: "This email is already used by another user.",
+      });
+    }
+
+    const temporaryPassword =
+      String(req.body.password || "").trim() ||
+      `IVS-${crypto.randomBytes(4).toString("hex")}`;
+
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+    const permissions = getDeveloperPermissionsFromBody(req.body, role);
+
+    const result = db.prepare(`
+      INSERT INTO users
+        (name, email, password_hash, role, dept, agentType, managerId, assigned_admin_id, created_by, access_scope, permissions)
+      VALUES
+        (@name, @email, @password_hash, @role, @dept, @agentType, @managerId, @assigned_admin_id, @created_by, @access_scope, @permissions)
+    `).run({
+      name,
+      email,
+      password_hash: passwordHash,
+      role,
+      dept,
+      agentType: role === "agent" || role === "sub_agent"
+        ? normalizeAgentTypeForDept(agentType, dept)
+        : null,
+      managerId: assignedAdminId,
+      assigned_admin_id: assignedAdminId,
+      created_by: null,
+      access_scope: accessScope || getUserAccessScope({ role, dept }),
+      permissions: JSON.stringify(permissions),
+    });
+
+    logDeveloperAction(req, "developer_user_created", {
+      userId: result.lastInsertRowid,
+      name,
+      email,
+      role,
+      dept,
+    });
+
+    return res.json({
+      success: true,
+      message: "User created successfully.",
+      userId: result.lastInsertRowid,
+      email,
+      temporaryPassword,
+    });
+  } catch (err) {
+    console.error("POST /api/developer/users/create error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "User create failed.",
+    });
+  }
+});
+
+app.get("/api/developer/users/:id/permissions", requireDeveloperLogin, (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user id.",
+      });
+    }
+
+    const row = db.prepare(`
+      SELECT id, name, email, role, dept, permissions
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    `).get(id);
+
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    const permissions = normalizeDeveloperControlledPermissions(safeJsonParse(row.permissions) || {}, row.role);
+
+    return res.json({
+      success: true,
+      user: {
+        id: row.id,
+        name: row.name || "",
+        email: row.email || "",
+        role: row.role || "",
+        dept: row.dept || "",
+        permissions,
+      },
+    });
+  } catch (err) {
+    console.error("GET /api/developer/users/:id/permissions error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Could not load permissions.",
+    });
+  }
+});
+
+app.post("/api/developer/users/:id/permissions", requireDeveloperLogin, (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user id.",
+      });
+    }
+
+    const existing = db.prepare(`
+      SELECT id, name, email, role, dept
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    `).get(id);
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    let permissions = getDeveloperPermissionsFromBody(req.body, existing.role);
+
+    if (req.body.fullAccess === true || req.body.fullAccess === "true") {
+  permissions = Object.fromEntries(PERMISSION_KEYS.map((key) => [key, true]));
+  permissions = normalizeDeveloperControlledPermissions(permissions, existing.role);
+}
+
+    db.prepare(`
+      UPDATE users
+      SET
+        permissions = @permissions,
+        updatedAt = @updatedAt
+      WHERE id = @id
+    `).run({
+      id,
+      permissions: JSON.stringify(permissions),
+      updatedAt: new Date().toISOString(),
+    });
+
+    logDeveloperAction(req, "developer_user_permissions_updated", {
+      userId: id,
+      userEmail: existing.email,
+      enabledCount: Object.values(permissions).filter(Boolean).length,
+    });
+
+    try {
+      const ioRef = req.app.get("io");
+      if (ioRef) {
+        ioRef.emit("user:permissions-updated", { userId: id, ts: Date.now() });
+      }
+    } catch {}
+
+    return res.json({
+      success: true,
+      message: "Permissions updated successfully.",
+      permissions,
+    });
+  } catch (err) {
+    console.error("POST /api/developer/users/:id/permissions error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Permissions update failed.",
+    });
+  }
+});
+
+app.get("/api/developer/database/export", requireDeveloperLogin, (req, res) => {
+  try {
+    const data = getDeveloperDatabaseExportPayload();
+    const fileName = `developer-database-export-${Date.now()}.json`;
+
+    logDeveloperAction(req, "developer_database_export", {
+      tables: Object.keys(data.tables || {}),
+    });
+
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+
+    return res.send(JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.error("GET /api/developer/database/export error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Database export failed.",
+    });
+  }
+});
+app.post("/api/developer/users/:id/update", requireDeveloperLogin, (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user id.",
+      });
+    }
+
+    const existing = db.prepare(`
+      SELECT *
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    `).get(id);
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    const name = String(req.body.name || existing.name || "").trim();
+    const email = String(req.body.email || existing.email || "").trim().toLowerCase();
+    const role = String(req.body.role || existing.role || "").trim();
+    const dept = String(req.body.dept || existing.dept || "").trim().toLowerCase();
+    const agentType = String(req.body.agentType || existing.agentType || "").trim();
+    const accessScope = String(req.body.access_scope || existing.access_scope || "own").trim();
+
+    if (!name || !email || !role) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, email and role are required.",
+      });
+    }
+
+    const duplicateEmail = db.prepare(`
+      SELECT id
+      FROM users
+      WHERE LOWER(TRIM(email)) = LOWER(TRIM(?))
+        AND id != ?
+      LIMIT 1
+    `).get(email, id);
+
+    if (duplicateEmail) {
+      return res.status(409).json({
+        success: false,
+        message: "This email is already used by another user.",
+      });
+    }
+
+    db.prepare(`
+      UPDATE users
+      SET
+        name = @name,
+        email = @email,
+        role = @role,
+        dept = @dept,
+        agentType = @agentType,
+        access_scope = @access_scope,
+        updatedAt = @updatedAt
+      WHERE id = @id
+    `).run({
+      id,
+      name,
+      email,
+      role,
+      dept,
+      agentType: agentType || null,
+      access_scope: accessScope || "own",
+      updatedAt: new Date().toISOString(),
+    });
+
+    logDeveloperAction(req, "developer_user_updated", {
+      userId: id,
+      email,
+      role,
+      dept,
+    });
+
+    try {
+      const ioRef = req.app.get("io");
+      if (ioRef) {
+        ioRef.emit("user:updated", { userId: id, ts: Date.now() });
+      }
+    } catch {}
+
+    return res.json({
+      success: true,
+      message: "User updated successfully.",
+    });
+  } catch (err) {
+    console.error("POST /api/developer/users/:id/update error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "User update failed.",
+    });
+  }
+});
+
+app.post("/api/developer/users/:id/reset-password", requireDeveloperLogin, async (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user id.",
+      });
+    }
+
+    const userRow = db.prepare(`
+      SELECT id, name, email
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    `).get(id);
+
+    if (!userRow) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    const temporaryPassword =
+      String(req.body.password || "").trim() ||
+      `IVS-${crypto.randomBytes(4).toString("hex")}`;
+
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+
+    db.prepare(`
+      UPDATE users
+      SET
+        password_hash = @password_hash,
+        updatedAt = @updatedAt
+      WHERE id = @id
+    `).run({
+      id,
+      password_hash: passwordHash,
+      updatedAt: new Date().toISOString(),
+    });
+
+    logDeveloperAction(req, "developer_user_password_reset", {
+      userId: id,
+      userEmail: userRow.email,
+    });
+
+    return res.json({
+      success: true,
+      message: "Password reset successfully.",
+      email: userRow.email,
+      temporaryPassword,
+    });
+  } catch (err) {
+    console.error("POST /api/developer/users/:id/reset-password error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Password reset failed.",
+    });
+  }
+});
+
+app.post("/api/developer/users/:id/delete", requireDeveloperLogin, (req, res) => {
+  try {
+    const id = Number(req.params.id || 0);
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user id.",
+      });
+    }
+
+    const userRow = db.prepare(`
+      SELECT id, name, email, role, dept
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    `).get(id);
+
+    if (!userRow) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    db.prepare(`
+      DELETE FROM users
+      WHERE id = ?
+    `).run(id);
+
+    logDeveloperAction(req, "developer_user_deleted", {
+      userId: id,
+      name: userRow.name,
+      email: userRow.email,
+      role: userRow.role,
+      dept: userRow.dept,
+    });
+
+    try {
+      const ioRef = req.app.get("io");
+      if (ioRef) {
+        ioRef.emit("user:deleted", { userId: id, ts: Date.now() });
+      }
+    } catch {}
+
+    return res.json({
+      success: true,
+      message: "User deleted successfully.",
+    });
+  } catch (err) {
+    console.error("POST /api/developer/users/:id/delete error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "User delete failed.",
+    });
+  }
+});
+
+app.get("/api/developer/api-settings", requireDeveloperLogin, (req, res) => {
+  try {
+    const allowedKeys = [
+      "APP_BASE_URL",
+      "ADMISSIONS_API_KEY",
+      "N8N_WHATSAPP_WEBHOOK_URL",
+      "N8N_BILLING_WEBHOOK_URL",
+      "GEMINI_API_KEY",
+      "GEMINI_MODEL",
+    ];
+
+    const fallbackValues = {
+      APP_BASE_URL:
+        process.env.APP_BASE_URL || "",
+
+      ADMISSIONS_API_KEY:
+        process.env.ADMISSIONS_API_KEY || "",
+
+      N8N_WHATSAPP_WEBHOOK_URL:
+        process.env.N8N_WHATSAPP_WEBHOOK_URL || "",
+
+      N8N_BILLING_WEBHOOK_URL:
+        process.env.N8N_BILLING_WEBHOOK_URL || "",
+
+      GEMINI_API_KEY:
+        process.env.GEMINI_API_KEY || "",
+
+      GEMINI_MODEL:
+        process.env.GEMINI_MODEL || "gemini-2.5-flash-lite",
+    };
+
+    const settings = {};
+
+    for (const key of allowedKeys) {
+      const fallback = fallbackValues[key] || "";
+
+      settings[key] = String(
+        getApiSetting(key, fallback) || fallback
+      ).trim();
+    }
+
+    return res.json({
+      success: true,
+      settings,
+    });
+  } catch (err) {
+    console.error("GET /api/developer/api-settings error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Could not load API settings.",
+    });
+  }
+});
+
+app.post(
+  "/api/developer/api-settings/update",
+  requireDeveloperLogin,
+  (req, res) => {
+    try {
+      const body = req.body || {};
+
+      const allowedKeys = [
+        "APP_BASE_URL",
+        "ADMISSIONS_API_KEY",
+        "N8N_WHATSAPP_WEBHOOK_URL",
+        "N8N_BILLING_WEBHOOK_URL",
+        "GEMINI_API_KEY",
+        "GEMINI_MODEL",
+      ];
+
+      const updatedKeys = [];
+
+      for (const key of allowedKeys) {
+        if (Object.prototype.hasOwnProperty.call(body, key)) {
+          updateApiSetting(
+            key,
+            body[key],
+            req.developer?.name || "Developer"
+          );
+
+          updatedKeys.push(key);
+        }
+      }
+
+      logDeveloperAction(
+        req,
+        "developer_api_settings_updated",
+        {
+          updatedKeys,
+        }
+      );
+
+      return res.json({
+        success: true,
+        message: "API settings updated successfully.",
+        updatedKeys,
+      });
+    } catch (err) {
+      console.error(
+        "POST /api/developer/api-settings/update error:",
+        err
+      );
+
+      return res.status(500).json({
+        success: false,
+        message: "API settings update failed.",
+      });
+    }
+  }
+);
+
+// ================== DEVELOPER PROFILE SETTINGS ==================
+
+app.get(
+  "/api/developer/profile",
+  requireDeveloperLogin,
+  (req, res) => {
+    try {
+      const row = db.prepare(`
+        SELECT
+          id,
+          name,
+          username,
+          email,
+          profile_image_url,
+          is_active,
+          created_at,
+          updated_at,
+          last_login_at
+        FROM developer_accounts
+        WHERE id = ?
+        LIMIT 1
+      `).get(req.developer.id);
+
+      if (!row) {
+        return res.status(404).json({
+          success: false,
+          message: "Developer account not found.",
+        });
+      }
+
+      return res.json({
+        success: true,
+        profile: mapDeveloperRow(row),
+      });
+    } catch (err) {
+      console.error("GET /api/developer/profile error:", err);
+
+      return res.status(500).json({
+        success: false,
+        message: "Could not load Developer profile.",
+      });
+    }
+  }
+);
+
+app.post(
+  "/api/developer/profile/update",
+  requireDeveloperLogin,
+  async (req, res) => {
+    try {
+      const developerId = Number(req.developer?.id || 0);
+      const body = req.body || {};
+
+      const name = String(body.name || "").trim();
+      const username = String(body.username || "").trim();
+      const email = String(body.email || "")
+        .trim()
+        .toLowerCase();
+
+      const currentPassword = String(
+        body.currentPassword || ""
+      );
+
+      const newPassword = String(
+        body.newPassword || ""
+      );
+
+      const confirmPassword = String(
+        body.confirmPassword || ""
+      );
+
+      if (!developerId) {
+        return res.status(401).json({
+          success: false,
+          message: "Developer session is invalid.",
+        });
+      }
+
+      if (!name) {
+        return res.status(400).json({
+          success: false,
+          message: "Developer name is required.",
+        });
+      }
+
+      if (!username || username.length < 3) {
+        return res.status(400).json({
+          success: false,
+          message: "Username must contain at least 3 characters.",
+        });
+      }
+
+      
+
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+      if (!email || !emailPattern.test(email)) {
+        return res.status(400).json({
+          success: false,
+          message: "Please enter a valid Developer email.",
+        });
+      }
+
+      if (!currentPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "Current password is required.",
+        });
+      }
+
+      const existingRow = db.prepare(`
+        SELECT *
+        FROM developer_accounts
+        WHERE id = ?
+        LIMIT 1
+      `).get(developerId);
+
+      if (!existingRow) {
+        return res.status(404).json({
+          success: false,
+          message: "Developer account not found.",
+        });
+      }
+
+      const currentPasswordOk = await bcrypt.compare(
+        currentPassword,
+        existingRow.password_hash
+      );
+
+      if (!currentPasswordOk) {
+        return res.status(400).json({
+          success: false,
+          message: "Current password is incorrect.",
+        });
+      }
+
+      const usernameTaken = db.prepare(`
+        SELECT id
+        FROM developer_accounts
+        WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))
+          AND id != ?
+        LIMIT 1
+      `).get(username, developerId);
+
+      if (usernameTaken) {
+        return res.status(409).json({
+          success: false,
+          message: "This Developer username is already in use.",
+        });
+      }
+
+      const emailTaken = db.prepare(`
+        SELECT id
+        FROM developer_accounts
+        WHERE LOWER(TRIM(COALESCE(email, ''))) = LOWER(TRIM(?))
+          AND id != ?
+        LIMIT 1
+      `).get(email, developerId);
+
+      if (emailTaken) {
+        return res.status(409).json({
+          success: false,
+          message: "This Developer email is already in use.",
+        });
+      }
+
+      const wantsPasswordChange =
+        !!newPassword ||
+        !!confirmPassword;
+
+      if (
+        wantsPasswordChange &&
+        newPassword.length < 8
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "New password must contain at least 8 characters.",
+        });
+      }
+
+      if (
+        wantsPasswordChange &&
+        newPassword !== confirmPassword
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "New password and confirmation do not match.",
+        });
+      }
+
+      const passwordHash = wantsPasswordChange
+        ? await bcrypt.hash(newPassword, 10)
+        : existingRow.password_hash;
+
+      const now = new Date().toISOString();
+
+      db.prepare(`
+        UPDATE developer_accounts
+        SET name = ?,
+            username = ?,
+            email = ?,
+            password_hash = ?,
+            updated_at = ?
+        WHERE id = ?
+      `).run(
+        name,
+        username,
+        email,
+        passwordHash,
+        now,
+        developerId
+      );
+
+      const updatedRow = db.prepare(`
+        SELECT *
+        FROM developer_accounts
+        WHERE id = ?
+        LIMIT 1
+      `).get(developerId);
+
+      const updatedDeveloper = mapDeveloperRow(updatedRow);
+
+      req.session.developer = updatedDeveloper;
+      req.developer = updatedDeveloper;
+      res.locals.developer = updatedDeveloper;
+
+      logDeveloperAction(
+        req,
+        "developer_profile_updated",
+        {
+          nameChanged:
+            String(existingRow.name || "") !== name,
+
+          usernameChanged:
+            String(existingRow.username || "") !== username,
+
+          emailChanged:
+            String(existingRow.email || "").toLowerCase() !== email,
+
+          passwordChanged:
+            wantsPasswordChange,
+        }
+      );
+
+      return res.json({
+        success: true,
+        message: wantsPasswordChange
+          ? "Developer profile and password updated successfully."
+          : "Developer profile updated successfully.",
+        profile: updatedDeveloper,
+      });
+    } catch (err) {
+      console.error(
+        "POST /api/developer/profile/update error:",
+        err
+      );
+
+      return res.status(500).json({
+        success: false,
+        message: "Developer profile update failed.",
+      });
+    }
+  }
+);
+app.post(
+  "/api/developer/profile/image",
+  requireDeveloperLogin,
+  (req, res) => {
+    developerProfileUpload.single("profileImage")(
+      req,
+      res,
+      (uploadError) => {
+        if (uploadError) {
+          console.error(
+            "Developer profile image upload validation error:",
+            uploadError
+          );
+
+          const isSizeError =
+            uploadError instanceof multer.MulterError &&
+            uploadError.code === "LIMIT_FILE_SIZE";
+
+          return res.status(400).json({
+            success: false,
+            message: isSizeError
+              ? "Profile image must not be larger than 15 MB."
+              : (
+                  uploadError.message ||
+                  "Profile image upload failed."
+                ),
+          });
+        }
+
+        const uploadedFile = req.file;
+
+        if (!uploadedFile) {
+          return res.status(400).json({
+            success: false,
+            message: "Please select a profile image.",
+          });
+        }
+
+        let databaseUpdated = false;
+
+        try {
+          const developerId = Number(
+            req.developer?.id || 0
+          );
+
+          if (!developerId) {
+            safeUnlink(uploadedFile.path);
+
+            return res.status(401).json({
+              success: false,
+              message: "Developer session is invalid.",
+            });
+          }
+
+          const existingRow = db.prepare(`
+            SELECT *
+            FROM developer_accounts
+            WHERE id = ?
+              AND is_active = 1
+            LIMIT 1
+          `).get(developerId);
+
+          if (!existingRow) {
+            safeUnlink(uploadedFile.path);
+
+            return res.status(404).json({
+              success: false,
+              message: "Developer account not found.",
+            });
+          }
+
+          const relativeStoredPath = toPosix(
+            path.relative(
+              uploadsDir,
+              uploadedFile.path
+            )
+          );
+
+          const profileImageUrl =
+            `/uploads/${relativeStoredPath}`;
+
+          const now = new Date().toISOString();
+
+          db.prepare(`
+            UPDATE developer_accounts
+            SET profile_image_url = ?,
+                updated_at = ?
+            WHERE id = ?
+          `).run(
+            profileImageUrl,
+            now,
+            developerId
+          );
+
+          databaseUpdated = true;
+
+          const updatedRow = db.prepare(`
+            SELECT *
+            FROM developer_accounts
+            WHERE id = ?
+            LIMIT 1
+          `).get(developerId);
+
+          if (!updatedRow) {
+            throw new Error(
+              "Updated Developer account could not be loaded."
+            );
+          }
+
+          const updatedDeveloper =
+            mapDeveloperRow(updatedRow);
+
+          req.session.developer =
+            updatedDeveloper;
+
+          req.developer =
+            updatedDeveloper;
+
+          res.locals.developer =
+            updatedDeveloper;
+
+          logDeveloperAction(
+            req,
+            "developer_profile_image_updated",
+            {
+              profileImageUrl,
+              originalFileName:
+                uploadedFile.originalname || "",
+              mimeType:
+                uploadedFile.mimetype || "",
+              size:
+                uploadedFile.size || 0,
+            }
+          );
+
+          const oldImagePath =
+            getDeveloperProfileImageAbsolutePath(
+              existingRow.profile_image_url
+            );
+
+          if (
+            oldImagePath &&
+            path.resolve(oldImagePath) !==
+              path.resolve(uploadedFile.path)
+          ) {
+            safeUnlink(oldImagePath);
+          }
+
+          return res.json({
+            success: true,
+            message:
+              "Developer profile picture updated successfully.",
+            profileImageUrl,
+            profile: updatedDeveloper,
+          });
+        } catch (err) {
+          console.error(
+            "POST /api/developer/profile/image error:",
+            err
+          );
+
+          // Database update fail ho to newly uploaded unused image remove karo.
+          if (!databaseUpdated) {
+            safeUnlink(uploadedFile.path);
+          }
+
+          return res.status(500).json({
+            success: false,
+            message:
+              "Developer profile picture could not be updated.",
+          });
+        }
+      }
+    );
+  }
+);
+app.post("/api/user-activity/heartbeat", requireLogin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const currentPage = String(req.body.currentPage || req.headers.referer || "").trim();
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO user_activity
+        (user_id, user_name, user_email, role, dept, current_page, ip_address, user_agent, last_seen)
+      VALUES
+        (@user_id, @user_name, @user_email, @role, @dept, @current_page, @ip_address, @user_agent, @last_seen)
+      ON CONFLICT(user_id) DO UPDATE SET
+        user_name = excluded.user_name,
+        user_email = excluded.user_email,
+        role = excluded.role,
+        dept = excluded.dept,
+        current_page = excluded.current_page,
+        ip_address = excluded.ip_address,
+        user_agent = excluded.user_agent,
+        last_seen = excluded.last_seen
+    `).run({
+      user_id: user.id,
+      user_name: user.name || "",
+      user_email: user.email || "",
+      role: user.role || "",
+      dept: user.dept || "",
+      current_page: currentPage,
+      ip_address: getClientIp(req),
+      user_agent: String(req.headers["user-agent"] || ""),
+      last_seen: now,
+    });
+
+    db.prepare(`
+      INSERT INTO usage_events
+        (user_id, user_name, user_email, role, dept, page_url, event_type, ip_address, user_agent, created_at)
+      VALUES
+        (@user_id, @user_name, @user_email, @role, @dept, @page_url, @event_type, @ip_address, @user_agent, @created_at)
+    `).run({
+      user_id: user.id,
+      user_name: user.name || "",
+      user_email: user.email || "",
+      role: user.role || "",
+      dept: user.dept || "",
+      page_url: currentPage,
+      event_type: "heartbeat",
+      ip_address: getClientIp(req),
+      user_agent: String(req.headers["user-agent"] || ""),
+      created_at: now,
+    });
+
+    return res.json({
+      success: true,
+    });
+  } catch (err) {
+    console.error("POST /api/user-activity/heartbeat error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Heartbeat failed.",
+    });
+  }
+});
 /* ==================== Auth Routes ==================== */
 
 // Login page (with role boxes)
@@ -10787,7 +16619,7 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
   dept: null,
   page,
   limit,
-  perms: null,
+  perms,
   viewerUser: user,
 });
 
@@ -10802,6 +16634,7 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
     currencyOptions: getCurrencyOptions(),
     bankOptions: getBankOptions(),
     classOptions,
+    accountsPipelineCounts: buildSchoolAccountsPipelineCounts(user),
     pagination: {
       page: admissionsPage.page,
       limit: admissionsPage.limit,
@@ -10829,6 +16662,9 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
     endRecord: totalRecords === 0 ? 0 : Math.min(offset + limit, totalRecords),
   };
 
+  const accountsPipelineCounts =
+    buildSchoolAccountsPipelineCounts(user);
+
 if (user.role === "admin") {
   return res.render("dashboard-admin", {
     user,
@@ -10839,7 +16675,8 @@ if (user.role === "admin") {
     statusOptionsFee,
     currencyOptions: getCurrencyOptions(),
     bankOptions: getBankOptions(),
-    classOptions,
+        classOptions,
+    accountsPipelineCounts,
     pagination: {
       page: deptAdmissionsPage.page,
       limit: deptAdmissionsPage.limit,
@@ -10861,7 +16698,8 @@ if (user.role === "sub_agent") {
     statusOptionsFee,
     currencyOptions: getCurrencyOptions(),
     bankOptions: getBankOptions(),
-    classOptions,
+        classOptions,
+    accountsPipelineCounts,
     pagination: {
       page: deptAdmissionsPage.page,
       limit: deptAdmissionsPage.limit,
@@ -10883,7 +16721,8 @@ if (user.role === "agent") {
     statusOptionsFee,
     currencyOptions: getCurrencyOptions(),
     bankOptions: getBankOptions(),
-    classOptions,
+        classOptions,
+    accountsPipelineCounts,
     pagination: {
       page: deptAdmissionsPage.page,
       limit: deptAdmissionsPage.limit,
@@ -11065,8 +16904,8 @@ app.post("/dashboard/admin/users/:id/edit", requireLogin, (req, res) => {
     });
   }
 
-  const allowedAgentTypes = ["accounts", "admission", "management"];
-  const safeAgentType = allowedAgentTypes.includes(agentType) ? agentType : row.agentType;
+  const allowedAgentTypes = getAllowedAgentTypesForDept(row?.dept || current?.dept || "");
+const safeAgentType = normalizeAgentTypeForDept(agentType, row?.dept || current?.dept || "");
 
   // ✅ IMPORTANT: admin can only grant permissions that admin has
   const parentPerms = getPerm(current);
@@ -11104,12 +16943,33 @@ app.post("/dashboard/admin/users/:id/edit", requireLogin, (req, res) => {
     if (ioRef) ioRef.emit("user:updated", { userId: id, ts: Date.now() });
   } catch (e) {}
 
-  logAudit("user_updated_by_admin", current, {
-    targetUserId: id,
-    targetUserName: name,
-    dept: row.dept,
-    details: { agentType: safeAgentType, permissions: newPerms },
-  });
+  const afterUserForAudit = {
+    ...row,
+
+    name: String(name || "").trim(),
+
+    email: String(email || "").trim(),
+
+    agentType: safeAgentType || null,
+
+    permissions: newPerms,
+  };
+
+  const changes = buildUserAuditChanges(
+    row,
+    afterUserForAudit
+  );
+
+  if (changes.length) {
+    logAudit("user_updated_by_admin", current, {
+      targetUserId: id,
+      targetUserName: afterUserForAudit.name,
+      dept: row.dept,
+      details: {
+        changes,
+      },
+    });
+  }
 
   req.session.flash = {
     type: "success",
@@ -11284,7 +17144,13 @@ app.get("/dashboard/agent/agents/new", requireLogin, (req, res) => {
   });
 });
 // ✅ Delete ALL uploads (DB + disk) - SUPER ADMIN ONLY
-app.post("/dashboard/super/files/delete-all", requireLogin, requireSuperAdmin, (req, res) => {
+app.post(
+  "/dashboard/super/files/delete-all",
+  requireLogin,
+  requireSuperAdmin,
+  requireViewFiles,
+  requireDeleteFiles,
+  (req, res) => {
   try {
     // 1) fetch all stored files from DB
     const rows = db.prepare("SELECT id, stored_name FROM uploads ORDER BY id DESC").all();
@@ -11351,10 +17217,14 @@ app.post("/dashboard/admin/agents", requireLogin, async (req, res) => {
     if (newRole !== "agent" && newRole !== "sub_agent") newRole = "agent";
 
     // agentType rules
-    const allowedAgentTypes = ["accounts", "admission", "management"];
-    let agentType = String(req.body.agentType || "accounts").trim();
-    if (user.role === "agent") agentType = user.agentType || "accounts";
-    if (!allowedAgentTypes.includes(agentType)) agentType = "accounts";
+    const allowedAgentTypes = getAllowedAgentTypesForDept(dept || user?.dept || "");
+let agentType = String(req.body.agentType || "").trim();
+
+if (user.role === "agent") {
+  agentType = user.agentType || "";
+}
+
+agentType = normalizeAgentTypeForDept(agentType, dept || user?.dept || "");
 
     const parentPerms = getPerm(user);
 
@@ -11384,12 +17254,23 @@ app.post("/dashboard/admin/agents", requireLogin, async (req, res) => {
       permissions: JSON.stringify(finalPerms),
     });
 
-    logAudit(user.role === "agent" ? "user_created_by_agent" : "user_created_by_admin", user, {
-      targetUserId: info.lastInsertRowid,
-      targetUserName: name,
-      dept,
-      details: { role: newRole, agentType, permissions: finalPerms },
-    });
+    logAudit(
+      user.role === "agent"
+        ? "user_created_by_agent"
+        : "user_created_by_admin",
+      user,
+      {
+        targetUserId: info.lastInsertRowid,
+        targetUserName: name,
+        dept,
+        details: {
+          action: "User created",
+          role: newRole,
+          dept,
+          agentType: agentType || "",
+        },
+      }
+    );
 
     req.session.flash = {
       type: "success",
@@ -11455,8 +17336,16 @@ insertUploadRecord({
   user,
 });
 
+const changedToReupload =
+  markSchoolReturnReuploaded(
+    admissionId,
+    user
+  );
+
 emitAdmissionChanged(req, {
-  type: "upload_added",
+  type: changedToReupload
+    ? "school_return_reuploaded"
+    : "upload_added",
   admissionId,
   dept: user?.dept || "",
 });
@@ -11581,7 +17470,12 @@ if (admissionId) {
   }
 });
 // ✅ ADMIN: DELETE FILE (only if canDeleteFiles + same dept)
-app.delete("/admin/files/:id", requireLogin, requireDeleteFiles, (req, res) => {
+app.delete(
+  "/admin/files/:id",
+  requireLogin,
+  requireViewFiles,
+  requireDeleteFiles,
+  (req, res) => {
   try {
     const user = req.session.user;
 
@@ -11626,7 +17520,12 @@ app.delete("/admin/files/:id", requireLogin, requireDeleteFiles, (req, res) => {
   }
 });
 
-app.post("/dashboard/super/files/link", requireLogin, requireSuperAdmin, (req, res) => {
+app.post(
+  "/dashboard/super/files/link",
+  requireLogin,
+  requireSuperAdmin,
+  requirePerm("btnUpload"),
+  (req, res) => {
   // same code as /api/url/save
   try {
     const user = req.session.user;
@@ -11849,6 +17748,7 @@ app.post(
   "/dashboard/super/files/link/:uploadId/edit",
   requireLogin,
   requireSuperAdmin,
+  requirePerm("btnUpload"),
   (req, res) => editUrlInUploads(req, res, "super_admin")
 );
 
@@ -11881,6 +17781,7 @@ app.post(
 app.post( "/dashboard/super/uploads",
   requireLogin,
   requireSuperAdmin,
+  requirePerm("btnUpload"),
   upload.single("file"),
   (req, res) => {
     try {
@@ -11905,8 +17806,16 @@ insertUploadRecord({
   user: req.session.user,
 });
 
+const changedToReupload =
+  markSchoolReturnReuploaded(
+    admissionId,
+    req.session.user
+  );
+
 emitAdmissionChanged(req, {
-  type: "upload_added",
+  type: changedToReupload
+    ? "school_return_reuploaded"
+    : "upload_added",
   admissionId,
   dept: req.session.user?.dept || "",
 });
@@ -11918,7 +17827,12 @@ emitAdmissionChanged(req, {
   }
 );
 
-app.get("/dashboard/super/files", requireLogin, requireSuperAdmin, (req, res) => {
+app.get(
+  "/dashboard/super/files",
+  requireLogin,
+  requireSuperAdmin,
+  requireViewFiles,
+  (req, res) => {
   try {
     const admissionId = req.query.admission_id
   ? parseInt(req.query.admission_id, 10)
@@ -12001,7 +17915,13 @@ if (admissionId) {
 });
 
 // ✅ DELETE FILE (DB + uploads folder) (super only)
-app.delete("/dashboard/super/files/:id", requireLogin, requireSuperAdmin, (req, res) => {
+app.delete(
+  "/dashboard/super/files/:id",
+  requireLogin,
+  requireSuperAdmin,
+  requireViewFiles,
+  requireDeleteFiles,
+  (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!id) {
@@ -12151,9 +18071,10 @@ app.post("/dashboard/super/users", requireLogin, async (req, res) => {
 });
   }
 
-  const allowedDepts = ["quran", "tuition", "school", "accounts"];
-  const allowedAgentTypes = ["accounts", "admission", "management"];
-  const isPipelineRole = role === "sub_agent" || role === "agent";
+const allowedDepts = ["quran", "tuition", "school", "accounts", "school_accounts"];
+const safeDept = allowedDepts.includes(dept) ? dept : null;
+const allowedAgentTypes = getAllowedAgentTypesForDept(safeDept);
+const isPipelineRole = role === "sub_agent" || role === "agent";
 
   const passwordHash = await bcrypt.hash(password, 10);
     let assignedAdminId = null;
@@ -12190,11 +18111,10 @@ app.post("/dashboard/super/users", requireLogin, async (req, res) => {
   admissionFormBaseUrl: getAdmissionFormBaseUrl(),
 });
   }
-  const safeDept = allowedDepts.includes(dept) ? dept : null;
   const safeAccessScope =
-    role === "admin"
-      ? (safeDept === "accounts" ? "all" : "team")
-      : "own";
+  role === "admin"
+    ? (isSchoolAccountsDeptValue(safeDept) ? "all" : "team")
+    : "own";
 
  const permissions = {
   // Columns
@@ -12259,11 +18179,9 @@ canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
       password_hash: passwordHash,
       role,
       dept: safeDept,
-      agentType: isPipelineRole
-        ? allowedAgentTypes.includes(agentType)
-          ? agentType
-          : "accounts"
-        : null,
+     agentType: isPipelineRole
+  ? normalizeAgentTypeForDept(agentType, safeDept)
+  : null,
       managerId: assignedAdminId || current.id,
       assigned_admin_id: assignedAdminId,
       created_by: current.id,
@@ -12275,7 +18193,14 @@ canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
     targetUserId: result.lastInsertRowid,
     targetUserName: name,
     dept: allowedDepts.includes(dept) ? dept : null,
-    details: { role, dept, agentType, permissions },
+    details: {
+      action: "User created",
+      role,
+      dept: safeDept || "",
+      agentType: isPipelineRole
+        ? normalizeAgentTypeForDept(agentType, safeDept)
+        : "",
+    },
   });
 
   req.session.flash = {
@@ -12366,8 +18291,9 @@ app.post("/dashboard/super/users/:id/edit", requireLogin, async (req, res) => {
     });
   }
 
-    const allowedDepts = ["quran", "tuition", "school", "accounts"];
-  const allowedAgentTypes = ["accounts", "admission", "management"];
+   const allowedDepts = ["quran", "tuition", "school", "accounts", "school_accounts"];
+const safeDept = allowedDepts.includes(dept) ? dept : null;
+const allowedAgentTypes = getAllowedAgentTypesForDept(safeDept);
   const isPipelineRole = role === "agent" || role === "sub_agent";
 
   let passwordHash = existingRow.password_hash;
@@ -12415,11 +18341,9 @@ app.post("/dashboard/super/users/:id/edit", requireLogin, async (req, res) => {
       });
     }
   }
-
-  const safeDept = allowedDepts.includes(dept) ? dept : null;
   const safeAccessScope =
     role === "admin"
-      ? (safeDept === "accounts" ? "all" : "team")
+      ? (isSchoolAccountsDeptValue(safeDept) ? "all" : "team")
       : "own";
  const permissions = {
   // Columns
@@ -12469,12 +18393,7 @@ canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
 };
 
 
-  const before = {
-    role: existingRow.role,
-    dept: existingRow.dept,
-    agentType: existingRow.agentType,
-    permissions: existingRow.permissions,
-  };
+  const beforeUserForAudit = { ...existingRow };
 
   db.prepare(`
     UPDATE users
@@ -12501,10 +18420,8 @@ canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
     role,
     dept: safeDept,
     agentType: isPipelineRole
-      ? allowedAgentTypes.includes(agentType)
-        ? agentType
-        : "accounts"
-      : null,
+  ? normalizeAgentTypeForDept(agentType, safeDept)
+  : null,
     permissions: JSON.stringify(permissions),
         managerId: assignedAdminId || existingRow.managerId || current.id,
     assigned_admin_id: assignedAdminId,
@@ -12520,23 +18437,57 @@ canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
   }
 } catch (e) {}
 
-  const after = {
+  const afterUserForAudit = {
+    ...existingRow,
+
+    name: String(name || "").trim(),
+
+        email: String(email || "").trim(),
+
     role,
-    dept: allowedDepts.includes(dept) ? dept : null,
+
+    dept: safeDept,
+
     agentType: isPipelineRole
-      ? allowedAgentTypes.includes(agentType)
-        ? agentType
-        : "accounts"
+      ? normalizeAgentTypeForDept(
+          agentType,
+          safeDept
+        )
       : null,
+
+    managerId:
+      assignedAdminId ||
+      existingRow.managerId ||
+      current.id,
+
+    assigned_admin_id: assignedAdminId,
+
+    access_scope: safeAccessScope,
+
     permissions,
   };
 
-  logAudit("user_updated", current, {
-    targetUserId: id,
-    targetUserName: name,
-    dept: after.dept,
-    details: { before, after },
-  });
+  const changes = buildUserAuditChanges(
+    beforeUserForAudit,
+    afterUserForAudit,
+    {
+      passwordChanged: !!(
+        password &&
+        password.trim()
+      ),
+    }
+  );
+
+  if (changes.length) {
+    logAudit("user_updated", current, {
+      targetUserId: id,
+      targetUserName: afterUserForAudit.name,
+      dept: afterUserForAudit.dept,
+      details: {
+        changes,
+      },
+    });
+  }
 
   req.session.flash = {
     type: "success",
@@ -12589,42 +18540,90 @@ app.post("/dashboard/super/users/:id/delete", requireLogin, (req, res) => {
 // ----------------- SUPER ADMIN: SYSTEM HISTORY PAGE -----------------
 app.get("/dashboard/super/history", requireLogin, (req, res) => {
   const current = req.session.user;
+
   if (!current || current.role !== "super_admin") {
     return res.status(403).send("Not allowed");
   }
 
-  const { dept = "", role = "", eventType = "", q = "" } = req.query;
+  const {
+    dept = "",
+    role = "",
+    eventType = "",
+    q = "",
+    from = "",
+    to = "",
+  } = req.query;
+
+  const cleanDept = String(dept || "").trim();
+  const cleanRole = String(role || "").trim();
+  const cleanEventType = String(eventType || "").trim();
+  const cleanQuery = String(q || "").trim();
+
+  const rawFrom = String(from || "").trim();
+  const rawTo = String(to || "").trim();
+
+  // Sirf valid YYYY-MM-DD date ko SQL filter mein use karein.
+  const cleanFrom = /^\d{4}-\d{2}-\d{2}$/.test(rawFrom)
+    ? rawFrom
+    : "";
+
+  const cleanTo = /^\d{4}-\d{2}-\d{2}$/.test(rawTo)
+    ? rawTo
+    : "";
 
   const where = [];
   const params = {};
 
-  if (dept) {
+  if (cleanDept) {
     where.push("a.dept = @dept");
-    params.dept = dept;
+    params.dept = cleanDept;
   }
 
-  if (role) {
+  if (cleanRole) {
     where.push("a.actorRole = @role");
-    params.role = role;
+    params.role = cleanRole;
   }
 
-  if (eventType) {
+  if (cleanEventType) {
     where.push("a.eventType = @eventType");
-    params.eventType = eventType;
+    params.eventType = cleanEventType;
   }
 
-  if (q) {
-    where.push(
-      "(a.actorName LIKE @q OR a.actorDept LIKE @q OR a.targetUserName LIKE @q OR a.details LIKE @q)"
-    );
-    params.q = `%${q}%`;
+  if (cleanQuery) {
+    where.push(`
+      (
+        a.actorName LIKE @q
+        OR a.actorDept LIKE @q
+        OR a.targetUserName LIKE @q
+        OR a.eventType LIKE @q
+        OR a.dept LIKE @q
+        OR a.details LIKE @q
+        OR CAST(a.id AS TEXT) LIKE @q
+        OR CAST(a.targetUserId AS TEXT) LIKE @q
+      )
+    `);
+
+    params.q = `%${cleanQuery}%`;
   }
 
-  const whereSql = where.length ? "WHERE " + where.join(" AND ") : "";
+  // From date bhi results mein include hogi.
+  if (cleanFrom) {
+    where.push("date(a.createdAt) >= date(@from)");
+    params.from = cleanFrom;
+  }
+
+  // To date bhi poore din ke saath results mein include hogi.
+  if (cleanTo) {
+    where.push("date(a.createdAt) <= date(@to)");
+    params.to = cleanTo;
+  }
+
+  const whereSql = where.length
+    ? `WHERE ${where.join(" AND ")}`
+    : "";
 
   const logs = db
-    .prepare(
-      `
+    .prepare(`
       SELECT
         a.id,
         a.createdAt,
@@ -12640,37 +18639,61 @@ app.get("/dashboard/super/history", requireLogin, (req, res) => {
       ${whereSql}
       ORDER BY a.id DESC
       LIMIT 200
-    `
-    )
+    `)
     .all(params);
 
   const depts = db
-    .prepare(
-      "SELECT DISTINCT dept FROM audit_logs WHERE dept IS NOT NULL AND dept <> '' ORDER BY dept"
-    )
+    .prepare(`
+      SELECT DISTINCT dept
+      FROM audit_logs
+      WHERE dept IS NOT NULL
+        AND TRIM(dept) <> ''
+      ORDER BY dept
+    `)
     .all()
-    .map((r) => r.dept);
+    .map((row) => row.dept);
 
   const roles = db
-    .prepare(
-      "SELECT DISTINCT actorRole FROM audit_logs WHERE actorRole IS NOT NULL AND actorRole <> '' ORDER BY actorRole"
-    )
+    .prepare(`
+      SELECT DISTINCT actorRole
+      FROM audit_logs
+      WHERE actorRole IS NOT NULL
+        AND TRIM(actorRole) <> ''
+      ORDER BY actorRole
+    `)
     .all()
-    .map((r) => r.actorRole);
+    .map((row) => row.actorRole);
 
   const events = db
-    .prepare(
-      "SELECT DISTINCT eventType FROM audit_logs WHERE eventType IS NOT NULL AND eventType <> '' ORDER BY eventType"
-    )
+    .prepare(`
+      SELECT DISTINCT eventType
+      FROM audit_logs
+      WHERE eventType IS NOT NULL
+        AND TRIM(eventType) <> ''
+      ORDER BY eventType
+    `)
     .all()
-    .map((r) => r.eventType);
+    .map((row) => row.eventType);
 
   return res.render("super-history", {
     user: current,
     logs,
     pageTitle: "System Activity History",
-    filters: { dept, role, eventType, q },
-    filterMeta: { depts, roles, events },
+
+    filters: {
+      dept: cleanDept,
+      role: cleanRole,
+      eventType: cleanEventType,
+      q: cleanQuery,
+      from: cleanFrom,
+      to: cleanTo,
+    },
+
+    filterMeta: {
+      depts,
+      roles,
+      events,
+    },
   });
 });
 
@@ -12737,11 +18760,13 @@ const classOptions = getBulkChallanClassOptions();
     return res.status(404).send("Not found");
   }
 
-  const deptAdmissionsPage = fetchAdmissionsPage({
+  const perms = getPerm(user);
+
+const deptAdmissionsPage = fetchAdmissionsPage({
   dept,
   page,
   limit,
-  perms: null,
+  perms,
   viewerUser: user,
 });
 
@@ -12762,7 +18787,7 @@ const classOptions = getBulkChallanClassOptions();
  return res.render("dashboard-super", {
   user,
   users: allUsers,
-  perms: getPerm(user),
+  perms,
   admissions: deptAdmissionsPage.rows,
 pagination: {
   page: deptAdmissionsPage.page,
@@ -12809,7 +18834,7 @@ if (user.role !== "admin" && !perms.btnUpdateRow) {
     return res.status(404).send("Not found");
   }
 
-  const before = buildPipelineSnapshotFromRow(row);
+  const beforeRowForAudit = { ...row };
 
   const {
     status,
@@ -13082,13 +19107,46 @@ admission_month: canAdmissions
     ...billingStringsAfterAdmissionMonth,
   });
 
-  const afterRow = { ...row, ...updated };
-  const after = buildPipelineSnapshotFromRow(afterRow);
+   const afterRow =
+    getActiveAdmissionById(id) ||
+    { ...row, ...updated };
 
-  logAudit("pipeline_admin_update", user, {
-    dept: row.dept,
-    details: { admissionId: id, before, after },
-  });
+  const after =
+    buildPipelineSnapshotFromRow(afterRow);
+
+  const changes = buildAdmissionAuditChanges(
+    beforeRowForAudit,
+    afterRow
+  );
+
+  if (changes.length) {
+    const permanentEntryNumber =
+      afterRow.entry_number ||
+      row.entry_number ||
+      id;
+
+    const studentName = String(
+      afterRow.student_name ||
+      row.student_name ||
+      ""
+    ).trim();
+
+    logAudit("pipeline_admin_update", user, {
+      targetUserId: permanentEntryNumber,
+      targetUserName:
+        studentName ||
+        `Admission ${permanentEntryNumber}`,
+
+      dept: afterRow.dept || row.dept,
+
+      details: {
+        databaseAdmissionId: id,
+        entryNumber: permanentEntryNumber,
+        studentName,
+        changes,
+      },
+    });
+  }
   touchAdmissionActivity(id);
   // ✅ NEW: Real-time notify all dashboards
   emitAdmissionChanged(req, { type: "admin_update", admissionId: id, dept: row.dept });
@@ -13117,7 +19175,7 @@ app.post("/pipeline/update/:id", requireLogin, requirePerm("btnUpdateRow"), (req
 
   const row = db.prepare("SELECT * FROM admissions WHERE id = ?").get(id);
   if (!row) return res.status(404).send("Not found");
-  const before = buildPipelineSnapshotFromRow(row);
+  const beforeRowForAudit = { ...row };
 
   // ✅ dept restriction for non-super
   if (user?.role !== "super_admin") {
@@ -13248,7 +19306,15 @@ for (const m of BILLING_MONTHS) {
   : row.accounts_payment_status,
     accounts_paid_upto: perms.colPaidUpto ? (paidUpto ?? row.accounts_paid_upto) : row.accounts_paid_upto,
     accounts_verification_number: perms.colVerificationNumber ? (verificationNumber ?? row.accounts_verification_number) : row.accounts_verification_number,
-    accounts_registration_number: perms.colRegistrationNumber ? (cleanRegistrationNumber || row.accounts_registration_number) : row.accounts_registration_number,
+    accounts_registration_number:
+      perms.colRegistrationNumber
+        ? (
+            typeof registrationNumber !== "undefined" &&
+            registrationNumber !== null
+              ? cleanRegistrationNumber
+              : row.accounts_registration_number
+          )
+        : row.accounts_registration_number,
     accounts_family_number: perms.colFamilyNumber ? (familyNumber ?? row.accounts_family_number) : row.accounts_family_number,
    admission_registration_fee: perms.colRegistrationFee
   ? ((typeof registrationFee !== "undefined" && registrationFee !== null && String(registrationFee).trim() !== "")
@@ -13333,20 +19399,51 @@ admission_month: perms.colMonth ? (month ?? row.admission_month) : row.admission
     ...updated,
     ...billingStringsAfterAdmissionMonth,
   });
-  const afterRow = { ...row, ...updated };
-const after = buildPipelineSnapshotFromRow(afterRow);
+  const afterRow =
+    getActiveAdmissionById(id) ||
+    { ...row, ...updated };
+
+const after =
+  buildPipelineSnapshotFromRow(afterRow);
+
+const changes = buildAdmissionAuditChanges(
+  beforeRowForAudit,
+  afterRow
+);
 
 const eventType =
-  user?.role === "sub_agent" ? "pipeline_sub_agent_update" : "pipeline_agent_update";
+  user?.role === "sub_agent"
+    ? "pipeline_sub_agent_update"
+    : "pipeline_agent_update";
 
-logAudit(eventType, user, {
-  dept: row.dept,
-  details: {
-    admissionId: id,
-    before,
-    after,
-  },
-});
+if (changes.length) {
+  const permanentEntryNumber =
+    afterRow.entry_number ||
+    row.entry_number ||
+    id;
+
+  const studentName = String(
+    afterRow.student_name ||
+    row.student_name ||
+    ""
+  ).trim();
+
+  logAudit(eventType, user, {
+    targetUserId: permanentEntryNumber,
+    targetUserName:
+      studentName ||
+      `Admission ${permanentEntryNumber}`,
+
+    dept: afterRow.dept || row.dept,
+
+    details: {
+      databaseAdmissionId: id,
+      entryNumber: permanentEntryNumber,
+      studentName,
+      changes,
+    },
+  });
+}
 
   touchAdmissionActivity(id);
   emitAdmissionChanged(req, { type: "pipeline_update", admissionId: id, dept: row.dept });
@@ -13396,8 +19493,17 @@ app.post("/uploads", requireLogin, requirePerm("btnUpload"), upload.single("file
   size: f.size || 0,
   user,
 });
+
+const changedToReupload =
+  markSchoolReturnReuploaded(
+    admissionId,
+    user
+  );
+
 emitAdmissionChanged(req, {
-  type: "upload_added",
+  type: changedToReupload
+    ? "school_return_reuploaded"
+    : "upload_added",
   admissionId,
   dept: user?.dept || "",
 });
@@ -13472,7 +19578,12 @@ if (familyAdmissionIds.length > 0) {
   }
 });
 
-app.delete("/files/:id", requireLogin, requirePerm("canDeleteFiles"), (req, res) => {
+app.delete(
+  "/files/:id",
+  requireLogin,
+  requireViewFiles,
+  requireDeleteFiles,
+  (req, res) => {
   try {
     const user = req.session.user;
 
@@ -13668,11 +19779,9 @@ app.post("/dashboard/agent/users/:id/edit", requireLogin, (req, res) => {
     const name = String(req.body.name || "").trim();
     const email = String(req.body.email || "").trim().toLowerCase();
 
-    const allowedAgentTypes = ["accounts", "admission", "management"];
+    const allowedAgentTypes = getAllowedAgentTypesForDept(user?.dept || owned?.dept || "");
     const agentTypeRaw = String(req.body.agentType || "").trim();
-    const safeAgentType = allowedAgentTypes.includes(agentTypeRaw)
-      ? agentTypeRaw
-      : (owned.agentType || null);
+    const safeAgentType = normalizeAgentTypeForDept(agentTypeRaw || owned.agentType, user?.dept || owned?.dept || "");
 
 // ✅ Agent can assign only the permissions that are already allowed for his own account.
 // Extra/tampered permissions from frontend will be ignored.
@@ -13716,13 +19825,34 @@ for (const key of PERMISSION_KEYS) {
   }
 } catch (e) {}
 
-    // ✅ audit
-    logAudit("user_updated_by_agent", user, {
-      targetUserId: id,
-      targetUserName: name,
-      dept: user.dept,
-      details: { agentType: safeAgentType || null, permissions: finalPerms },
-    });
+    // ✅ audit: sirf actual changed user fields / permissions save hongi
+    const afterUserForAudit = {
+      ...owned,
+
+      name,
+
+      email,
+
+      agentType: safeAgentType || null,
+
+      permissions: finalPerms,
+    };
+
+    const changes = buildUserAuditChanges(
+      owned,
+      afterUserForAudit
+    );
+
+    if (changes.length) {
+      logAudit("user_updated_by_agent", user, {
+        targetUserId: id,
+        targetUserName: name,
+        dept: user.dept,
+        details: {
+          changes,
+        },
+      });
+    }
 
     req.session.flash = {
       type: "success",

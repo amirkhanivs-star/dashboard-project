@@ -8,9 +8,10 @@
 
   // Quick stats
   const totalCount = logsSafe.length;
-  const createCount = logsSafe.filter(l => String(l.eventType || '').toLowerCase().includes('create') || String(l.eventType || '').toLowerCase().includes('created')).length;
+    const createCount = logsSafe.filter(l => String(l.eventType || '').toLowerCase().includes('create') || String(l.eventType || '').toLowerCase().includes('created')).length;
   const updateCount = logsSafe.filter(l => String(l.eventType || '').toLowerCase().includes('update') || String(l.eventType || '').toLowerCase().includes('updated')).length;
   const deleteCount = logsSafe.filter(l => String(l.eventType || '').toLowerCase().includes('delete') || String(l.eventType || '').toLowerCase().includes('deleted')).length;
+  const forwardCount = logsSafe.filter(l => String(l.eventType || '').toLowerCase().includes('forward')).length;
 
   function niceDate(rawDate) {
     if (!rawDate) return '-';
@@ -54,6 +55,7 @@
     if (e.includes('delete') || e.includes('deleted')) return 'evt-delete';
     if (e.includes('update') || e.includes('updated')) return 'evt-update';
     if (e.includes('upload')) return 'evt-upload';
+    if (e.includes('forward')) return 'evt-forward';
     if (e.includes('billing') || e.includes('payment') || e.includes('invoice')) return 'evt-billing';
     if (e.includes('whatsapp') || e.includes('message')) return 'evt-wa';
     return 'evt-neutral';
@@ -64,33 +66,450 @@
   }
 
   function parseDetails(detailsStr) {
-    let parsed = null;
-    try { parsed = JSON.parse(detailsStr); } catch (e) {}
-    return parsed;
+    if (!detailsStr) return null;
+
+    if (typeof detailsStr === 'object') {
+      return detailsStr;
+    }
+
+    try {
+      return JSON.parse(detailsStr);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function humanizeHistoryKey(value) {
+    return String(value || '')
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, function(letter) {
+        return letter.toUpperCase();
+      })
+      .replace(/\bId\b/g, 'ID')
+      .replace(/\bPdf\b/g, 'PDF')
+      .replace(/\bWhatsapp\b/g, 'WhatsApp');
+  }
+
+  function historyPermissionLabel(key) {
+    const cleanKey = String(key || '')
+      .replace(/^permissions\./, '')
+      .trim();
+
+    if (cleanKey.indexOf('col') === 0) {
+      return humanizeHistoryKey(cleanKey.slice(3)) + ' Column';
+    }
+
+    if (cleanKey.indexOf('btn') === 0) {
+      return humanizeHistoryKey(cleanKey.slice(3)) + ' Button';
+    }
+
+    if (cleanKey.indexOf('can') === 0) {
+      return humanizeHistoryKey(cleanKey.slice(3)) + ' Button';
+    }
+
+    return humanizeHistoryKey(cleanKey);
+  }
+
+    function historyPathLabel(pathValue) {
+    const path = String(pathValue || '').trim();
+
+    if (
+      path === 'entryNumber' ||
+      path === 'entry_number' ||
+      path === 'admissionNumber' ||
+      path === 'admission_number'
+    ) {
+      return 'Admission Number';
+    }
+
+    if (
+      path === 'databaseAdmissionId' ||
+      path === 'database_admission_id'
+    ) {
+      return 'Database Admission ID';
+    }
+
+    if (path.indexOf('permissions.') === 0) {
+      return historyPermissionLabel(path);
+    }
+
+    const parts = path.split('.').filter(Boolean);
+    const lastPart = parts.length
+      ? parts[parts.length - 1]
+      : path;
+
+    const prefixMap = {
+      accounts: 'Accounts',
+      admissionPanel: 'Admission',
+      admission: 'Admission',
+      billing: 'Billing'
+    };
+
+    const prefix =
+      parts.length > 1
+        ? prefixMap[parts[0]]
+        : '';
+
+    const label = humanizeHistoryKey(lastPart);
+
+    return prefix
+      ? prefix + ' - ' + label
+      : label;
+  }
+
+  function historyValue(value) {
+    if (value === null || typeof value === 'undefined') {
+      return 'Not set';
+    }
+
+    if (typeof value === 'boolean') {
+      return value ? 'On' : 'Off';
+    }
+
+    if (Array.isArray(value)) {
+      if (!value.length) return 'None';
+
+      return value.map(function(item) {
+        if (item && typeof item === 'object') {
+          return (
+            item.label ||
+            item.name ||
+            item.studentName ||
+            item.monthLabel ||
+            item.monthKey ||
+            item.status ||
+            'Recorded item'
+          );
+        }
+
+        return String(item);
+      }).join(', ');
+    }
+
+    if (typeof value === 'object') {
+      const simpleParts = Object.keys(value)
+        .filter(function(key) {
+          const oneValue = value[key];
+          return (
+            oneValue === null ||
+            typeof oneValue === 'undefined' ||
+            typeof oneValue === 'string' ||
+            typeof oneValue === 'number' ||
+            typeof oneValue === 'boolean'
+          );
+        })
+        .slice(0, 6)
+        .map(function(key) {
+          return humanizeHistoryKey(key) + ': ' + historyValue(value[key]);
+        });
+
+      return simpleParts.length ? simpleParts.join(' · ') : 'Recorded';
+    }
+
+    const finalValue = String(value).trim();
+    return finalValue || 'Not set';
+  }
+
+  function shortHistoryValue(value, maxLength) {
+    const text = historyValue(value);
+    const limit = Number(maxLength || 90);
+
+    return text.length > limit
+      ? text.slice(0, limit - 1) + '…'
+      : text;
+  }
+
+  function flattenHistoryObject(value, prefix, output) {
+    const result = output || {};
+    const cleanPrefix = prefix || '';
+
+    if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value)
+    ) {
+      Object.keys(value).forEach(function(key) {
+        const nextPath = cleanPrefix ? cleanPrefix + '.' + key : key;
+        flattenHistoryObject(value[key], nextPath, result);
+      });
+
+      return result;
+    }
+
+    result[cleanPrefix] = value;
+    return result;
+  }
+
+  function buildLegacyChanges(before, after) {
+    if (!before || !after) return [];
+
+    const beforeFlat = flattenHistoryObject(before);
+    const afterFlat = flattenHistoryObject(after);
+    const allKeys = Array.from(
+      new Set(
+        Object.keys(beforeFlat).concat(Object.keys(afterFlat))
+      )
+    );
+
+    const ignoredKeys = new Set([
+      'id',
+      'entryNumber',
+      'entry_number',
+      'lastActivityAt',
+      'last_activity_at',
+      'statusMeta.key',
+      'statusMeta.label',
+      'statusMeta.color',
+      'feeStatusMeta.key',
+      'feeStatusMeta.label',
+      'feeStatusMeta.color'
+    ]);
+
+    return allKeys
+      .filter(function(key) {
+        if (!key || ignoredKeys.has(key)) return false;
+
+        return (
+          JSON.stringify(beforeFlat[key] ?? '') !==
+          JSON.stringify(afterFlat[key] ?? '')
+        );
+      })
+      .map(function(key) {
+        return {
+          key,
+          label: historyPathLabel(key),
+          category: 'legacy',
+          before: historyValue(beforeFlat[key]),
+          after: historyValue(afterFlat[key])
+        };
+      });
+  }
+
+  function buildDetailRows(root) {
+    if (!root || typeof root !== 'object') return [];
+
+    const hasPermanentAdmissionNumber = !!(
+      root.entryNumber ||
+      root.entry_number ||
+      root.admissionNumber ||
+      root.admission_number
+    );
+
+    const hiddenKeys = new Set([
+      'changes',
+      'before',
+      'after',
+      'permissions',
+      'billing',
+      'calc',
+      'pipeline',
+      'admission',
+
+      // Internal database ID Super Admin ko display nahi karni.
+      'databaseAdmissionId',
+      'database_admission_id'
+    ]);
+
+    const priorityKeys = [
+      'action',
+
+      // Permanent card number sab se pehle show hoga.
+      'entryNumber',
+      'entry_number',
+      'admissionNumber',
+      'admission_number',
+
+      'studentName',
+      'userName',
+      'role',
+      'dept',
+      'agentType',
+      'billingYear',
+      'monthKey',
+      'status',
+      'displayText',
+      'processedBy',
+      'forwardedToDepartment',
+      'forwardedByName',
+      'forwardedOwnerUserName',
+      'collectionAccount',
+      'receivingDate',
+      'receiveAmount',
+      'appliedAmount',
+      'remainingAmount',
+      'note',
+
+      // Sirf old records ke fallback ke liye.
+      'admissionId',
+      'admission_id'
+    ];
+
+    const keys = Object.keys(root)
+      .filter(function(key) {
+        if (hiddenKeys.has(key)) {
+          return false;
+        }
+
+        // New record mein permanent number available ho to
+        // old/internal admissionId display nahi karni.
+        if (
+          hasPermanentAdmissionNumber &&
+          (
+            key === 'admissionId' ||
+            key === 'admission_id'
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort(function(a, b) {
+        const ai = priorityKeys.indexOf(a);
+        const bi = priorityKeys.indexOf(b);
+
+        if (ai === -1 && bi === -1) {
+          return a.localeCompare(b);
+        }
+
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+
+        return ai - bi;
+      });
+
+    return keys
+      .map(function(key) {
+        return {
+          key,
+          label: historyPathLabel(key),
+          value: historyValue(root[key])
+        };
+      })
+      .filter(function(item) {
+        return item.value !== 'Not set';
+      });
   }
 
   function buildSummaryFromDetails(parsed) {
-    const root = parsed && (parsed.details || parsed);
-    const before = root && root.before ? root.before : null;
-    const after = root && root.after ? root.after : null;
-    const admissionId = root && (root.admissionId || root.admission_id || root.admission) ? (root.admissionId || root.admission_id || root.admission) : null;
+    const root =
+      parsed && typeof parsed === 'object'
+        ? (parsed.details || parsed)
+        : {};
 
-    let changedFields = [];
-    if (before && after) {
-      try {
-        Object.keys(before).forEach(function(k) {
-          const b = before[k];
-          const a = after[k];
-          if (JSON.stringify(b) !== JSON.stringify(a)) changedFields.push(k);
-        });
-        Object.keys(after).forEach(function(k) {
-          if (typeof before[k] === 'undefined' && changedFields.indexOf(k) === -1) changedFields.push(k);
-        });
-      } catch (e) {}
-    }
+    const before =
+      root && root.before
+        ? root.before
+        : null;
 
-    return { before, after, admissionId, changedFields };
+    const after =
+      root && root.after
+        ? root.after
+        : null;
+
+    const directChanges = Array.isArray(root.changes)
+      ? root.changes
+      : [];
+
+    const changes = (
+      directChanges.length
+        ? directChanges
+        : buildLegacyChanges(before, after)
+    ).map(function(change) {
+      return {
+        key: change.key || '',
+
+        label:
+          change.label ||
+          historyPathLabel(
+            change.key || 'Changed field'
+          ),
+
+        category: change.category || 'data',
+        before: historyValue(change.before),
+        after: historyValue(change.after)
+      };
+    });
+
+    // Dashboard card wala permanent NO.
+    const admissionNumber =
+      root && (
+        root.entryNumber ||
+        root.entry_number ||
+        root.admissionNumber ||
+        root.admission_number
+      )
+        ? (
+            root.entryNumber ||
+            root.entry_number ||
+            root.admissionNumber ||
+            root.admission_number
+          )
+        : null;
+
+    // Internal DB ID sirf technical fallback ke liye rakhen.
+    // Isko page par display nahi karenge.
+    const databaseAdmissionId =
+      root && (
+        root.databaseAdmissionId ||
+        root.database_admission_id ||
+        root.admissionId ||
+        root.admission_id
+      )
+        ? (
+            root.databaseAdmissionId ||
+            root.database_admission_id ||
+            root.admissionId ||
+            root.admission_id
+          )
+        : null;
+
+    return {
+      admissionNumber,
+      databaseAdmissionId,
+      changes,
+
+      detailRows: buildDetailRows(root),
+
+      displayText:
+        root && root.displayText
+          ? String(root.displayText || '').trim()
+          : '',
+
+      studentName:
+        root && root.studentName
+          ? String(root.studentName || '').trim()
+          : '',
+
+      processedBy:
+        root && root.processedBy
+          ? String(root.processedBy || '').trim()
+          : '',
+
+      forwardedToDepartment:
+        root && root.forwardedToDepartment
+          ? String(
+              root.forwardedToDepartment || ''
+            ).trim()
+          : '',
+
+      forwardedByName:
+        root && root.forwardedByName
+          ? String(root.forwardedByName || '').trim()
+          : '',
+
+      forwardedOwnerUserName:
+        root && root.forwardedOwnerUserName
+          ? String(
+              root.forwardedOwnerUserName || ''
+            ).trim()
+          : ''
+    };
   }
+
 %>
 
 <style>
@@ -207,23 +626,161 @@
   .evt-update{ background: rgba(245,158,11,.16); color: #92400e; border-color: rgba(245,158,11,.30); }
   .evt-delete{ background: rgba(220,38,38,.12); color: #b91c1c; border-color: rgba(220,38,38,.25); }
   .evt-upload{ background: rgba(59,130,246,.12); color: #1d4ed8; border-color: rgba(59,130,246,.25); }
+  .evt-forward{ background: rgba(34,197,94,.12); color: #15803d; border-color: rgba(34,197,94,.25); }
   .evt-billing{ background: rgba(124,58,237,.12); color: #6d28d9; border-color: rgba(124,58,237,.25); }
   .evt-wa{ background: rgba(14,165,233,.12); color: #0369a1; border-color: rgba(14,165,233,.25); }
   .evt-neutral{ background: rgba(107,114,128,.12); color: #374151; border-color: rgba(107,114,128,.22); }
 
-  /* Summary pills */
-  .field-pill{
-    border: 1px solid rgba(15,23,42,.10);
-    background: rgba(248,250,252,.95);
-    color: rgba(15,23,42,.78);
-    border-radius: 999px;
-    font-size: 12px;
-    padding: 4px 10px;
+  /* Simple readable change summary */
+  .forward-summary-line{
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    margin-right: 6px;
-    margin-top: 6px;
+    gap: 7px;
+    padding: 7px 11px;
+    border-radius: 10px;
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.35;
+  }
+
+  .forward-summary-line i{
+    font-size: 14px;
+  }
+
+  .summary-mini-line{
+    margin-top: 7px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .admission-ref{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    margin-bottom:7px;
+    color:#475569;
+    font-size:12px;
+    font-weight:700;
+  }
+
+  .change-summary-box{
+    border:1px solid #e2e8f0;
+    border-radius:12px;
+    background:#fff;
+    overflow:hidden;
+  }
+
+  .change-summary-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:7px 10px;
+    background:#f8fafc;
+    border-bottom:1px solid #e2e8f0;
+    color:#334155;
+    font-size:12px;
+    font-weight:800;
+  }
+
+  .change-preview-row{
+    display:grid;
+    grid-template-columns:minmax(125px,.9fr) minmax(110px,1fr) 20px minmax(110px,1fr);
+    align-items:center;
+    gap:8px;
+    padding:8px 10px;
+    border-bottom:1px solid #f1f5f9;
+    font-size:12px;
+  }
+
+  .change-preview-row:last-child{
+    border-bottom:0;
+  }
+
+  .change-preview-label{
+    color:#334155;
+    font-weight:800;
+  }
+
+  .change-preview-value{
+    min-width:0;
+    padding:5px 7px;
+    border-radius:7px;
+    word-break:break-word;
+    line-height:1.35;
+  }
+
+  .change-preview-before{
+    background:#fff7ed;
+    color:#9a3412;
+  }
+
+  .change-preview-after{
+    background:#f0fdf4;
+    color:#166534;
+  }
+
+  .change-preview-arrow{
+    color:#94a3b8;
+    text-align:center;
+  }
+
+  .simple-summary-list{
+    border:1px solid #e2e8f0;
+    border-radius:10px;
+    overflow:hidden;
+    background:#fff;
+  }
+
+  .simple-summary-row{
+    display:grid;
+    grid-template-columns:minmax(120px,.8fr) minmax(140px,1.4fr);
+    gap:10px;
+    padding:7px 10px;
+    border-bottom:1px solid #f1f5f9;
+    font-size:12px;
+    line-height:1.4;
+  }
+
+  .simple-summary-row:last-child{
+    border-bottom:0;
+  }
+
+  .simple-summary-label{
+    color:#64748b;
+    font-weight:700;
+  }
+
+  .simple-summary-value{
+    color:#0f172a;
+    font-weight:700;
+    word-break:break-word;
+  }
+
+  .more-line{
+    padding:7px 10px;
+    background:#f8fafc;
+    color:#64748b;
+    font-size:11px;
+    font-weight:700;
+    border-top:1px solid #e2e8f0;
+  }
+
+  @media (max-width: 991px){
+    .change-preview-row{
+      grid-template-columns:1fr;
+      gap:5px;
+    }
+
+    .change-preview-arrow{
+      text-align:left;
+      transform:rotate(90deg);
+      width:max-content;
+    }
   }
 
   /* Sticky header */
@@ -247,18 +804,143 @@
   }
   .details-btn:hover{ background: rgba(37,99,235,.10) !important; }
 
-  /* Modal JSON */
-  pre.jsonbox{
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 65vh;
-    overflow: auto;
-    border-radius: 14px;
-    border: 1px solid rgba(15,23,42,.10);
-    background: rgba(248,250,252,.95);
-    padding: 12px;
-    margin: 0;
-    font-size: 12px;
+  /* Simple modal details */
+  .history-section-title{
+    color:#0f172a;
+    font-size:13px;
+    font-weight:800;
+    margin-bottom:10px;
+  }
+
+  .history-change-list{
+    display:grid;
+    gap:10px;
+  }
+
+  .history-change-card{
+    border:1px solid #e2e8f0;
+    border-radius:12px;
+    background:#fff;
+    overflow:hidden;
+  }
+
+  .history-change-title{
+    padding:9px 12px;
+    background:#f8fafc;
+    border-bottom:1px solid #e2e8f0;
+    color:#0f172a;
+    font-size:13px;
+    font-weight:800;
+  }
+
+  .history-change-values{
+    display:grid;
+    grid-template-columns:1fr 34px 1fr;
+    align-items:stretch;
+    gap:0;
+  }
+
+  .history-value-box{
+    padding:11px 12px;
+    min-width:0;
+  }
+
+  .history-value-box.before{
+    background:#fffaf5;
+  }
+
+  .history-value-box.after{
+    background:#f6fff8;
+  }
+
+  .history-value-caption{
+    color:#64748b;
+    font-size:10px;
+    font-weight:800;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    margin-bottom:4px;
+  }
+
+  .history-value-text{
+    color:#0f172a;
+    font-size:13px;
+    font-weight:700;
+    line-height:1.45;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+
+  .history-change-arrow{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#94a3b8;
+    background:#fff;
+    border-left:1px solid #f1f5f9;
+    border-right:1px solid #f1f5f9;
+  }
+
+  .history-info-list{
+    border:1px solid #e2e8f0;
+    border-radius:12px;
+    overflow:hidden;
+    background:#fff;
+  }
+
+  .history-info-row{
+    display:grid;
+    grid-template-columns:minmax(150px,.8fr) minmax(180px,1.5fr);
+    gap:12px;
+    padding:10px 12px;
+    border-bottom:1px solid #f1f5f9;
+  }
+
+  .history-info-row:last-child{
+    border-bottom:0;
+  }
+
+  .history-info-label{
+    color:#64748b;
+    font-size:12px;
+    font-weight:800;
+  }
+
+  .history-info-value{
+    color:#0f172a;
+    font-size:13px;
+    font-weight:700;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+
+  .history-empty{
+    border:1px dashed #cbd5e1;
+    border-radius:12px;
+    background:#f8fafc;
+    color:#64748b;
+    padding:18px;
+    text-align:center;
+    font-size:13px;
+  }
+
+  @media (max-width: 767px){
+    .history-change-values{
+      grid-template-columns:1fr;
+    }
+
+    .history-change-arrow{
+      min-height:30px;
+      transform:rotate(90deg);
+      border:0;
+      border-top:1px solid #f1f5f9;
+      border-bottom:1px solid #f1f5f9;
+    }
+
+    .history-info-row{
+      grid-template-columns:1fr;
+      gap:4px;
+    }
   }
 
   /* Make filters super easy */
@@ -294,6 +976,10 @@
 
           <span class="hist-chip">
             <i class="bi bi-trash3"></i> Delete: <strong><%= deleteCount %></strong>
+          </span>
+
+          <span class="hist-chip">
+            <i class="bi bi-send-check"></i> Forward: <strong><%= forwardCount %></strong>
           </span>
 
           <span class="hist-chip">
@@ -436,14 +1122,48 @@
                 const targetName = log.targetUserName || log.targetAdmissionName || log.target || '-';
                 const targetId = log.targetUserId || log.targetAdmissionId || log.targetId || '';
 
-                const parsed = log.details ? parseDetails(log.details) : null;
-                const sum = parsed ? buildSummaryFromDetails(parsed) : { before:null, after:null, admissionId:null, changedFields:[] };
+                const parsed = log.details
+                  ? parseDetails(log.details)
+                  : null;
 
-                const fields = (sum.changedFields || []).slice(0, 6);
+                const sum = parsed
+                  ? buildSummaryFromDetails(parsed)
+                  : {
+                      admissionNumber: null,
+                      databaseAdmissionId: null,
+                      changes: [],
+                      detailRows: [],
+                      displayText: '',
+                      studentName: '',
+                      processedBy: ''
+                    };
+
+                const previewChanges =
+                  (sum.changes || []).slice(0, 3);
+
+                const previewDetails =
+                  (sum.detailRows || []).slice(0, 4);
+
+                // Admission update mein permanent card NO use hoga.
+                // User update mein normal user ID use hogi.
+                const targetDisplayId =
+                  sum.admissionNumber ||
+                  targetId;
+
+                const targetIdLabel =
+                  sum.admissionNumber
+                    ? 'NO'
+                    : 'ID';
 
                 const modalId = 'histDetailsModal';
-                const jsonPretty = parsed ? JSON.stringify(parsed, null, 2) : (log.details || '');
-                const safeJson = String(jsonPretty).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                const modalPayload = encodeURIComponent(
+                  JSON.stringify({
+                    changes: sum.changes || [],
+                    detailRows: sum.detailRows || []
+                  })
+                );
+
               %>
 
               <tr class="<%= (idx % 2 === 0) ? 'row-soft' : '' %>">
@@ -472,37 +1192,108 @@
                 </td>
 
                 <td>
-                  <div class="small fw-semibold"><%= targetName %></div>
-                  <% if (targetId) { %>
-                    <div class="text-muted xsmall">ID: <%= targetId %></div>
+                  <div class="small fw-semibold">
+                    <%= targetName %>
+                  </div>
+
+                  <% if (targetDisplayId) { %>
+                    <div class="text-muted xsmall">
+                      <%= targetIdLabel %>:
+                      <%= targetDisplayId %>
+                    </div>
                   <% } %>
                 </td>
 
-                <td style="max-width:560px;">
-                  <div class="small">
-                    <% if (sum.admissionId) { %>
-                      <span class="field-pill">
-                        <i class="bi bi-hash"></i> Admission #<%= sum.admissionId %>
-                      </span>
-                    <% } %>
+                <td style="max-width:620px;">
+                  <% if (sum.admissionNumber) { %>
+                    <div class="admission-ref">
+                      <i class="bi bi-hash"></i>
+                      Admission No.
+                      <%= sum.admissionNumber %>
+                    </div>
+                  <% } %>
 
-                    <% if (fields && fields.length > 0) { %>
-                      <% fields.forEach(function(field) { %>
-                        <span class="field-pill text-capitalize">
-                          <i class="bi bi-dot"></i>
-                          <%= String(field).replace(/([A-Z])/g, ' $1').replace(/_/g,' ') %>
+                  <% if (String(eventRaw || '').toLowerCase().includes('forward') && sum.displayText) { %>
+                    <div class="forward-summary-line">
+                      <i class="bi bi-send-check"></i>
+                      <span><%= sum.displayText %></span>
+                    </div>
+
+                    <div class="summary-mini-line">
+                      <% if (sum.studentName) { %>
+                        Student: <strong><%= sum.studentName %></strong>
+                      <% } %>
+                      <% if (sum.processedBy) { %>
+                        · Processed By: <strong><%= sum.processedBy %></strong>
+                      <% } %>
+                    </div>
+
+                  <% } else if (previewChanges.length > 0) { %>
+                    <div class="change-summary-box">
+                      <div class="change-summary-head">
+                        <span>
+                          <i class="bi bi-pencil-square me-1"></i>
+                          <%= (sum.changes || []).length %>
+                          field<%= (sum.changes || []).length === 1 ? '' : 's' %> changed
                         </span>
+                        <span class="text-muted">Before → After</span>
+                      </div>
+
+                      <% previewChanges.forEach(function(change) { %>
+                        <div class="change-preview-row">
+                          <div class="change-preview-label">
+                            <%= change.label || 'Changed field' %>
+                          </div>
+
+                          <div class="change-preview-value change-preview-before">
+                            <%= shortHistoryValue(change.before, 80) %>
+                          </div>
+
+                          <div class="change-preview-arrow">
+                            <i class="bi bi-arrow-right"></i>
+                          </div>
+
+                          <div class="change-preview-value change-preview-after">
+                            <%= shortHistoryValue(change.after, 80) %>
+                          </div>
+                        </div>
                       <% }) %>
 
-                      <% if ((sum.changedFields || []).length > 6) { %>
-                        <span class="field-pill text-muted">
-                          +<%= (sum.changedFields || []).length - 6 %> more
-                        </span>
+                      <% if ((sum.changes || []).length > previewChanges.length) { %>
+                        <div class="more-line">
+                          +<%= (sum.changes || []).length - previewChanges.length %>
+                          more change<%= ((sum.changes || []).length - previewChanges.length) === 1 ? '' : 's' %>.
+                          Open View for complete details.
+                        </div>
                       <% } %>
-                    <% } else { %>
-                      <span class="text-muted xsmall">Change details recorded.</span>
-                    <% } %>
-                  </div>
+                    </div>
+
+                  <% } else if (previewDetails.length > 0) { %>
+                    <div class="simple-summary-list">
+                      <% previewDetails.forEach(function(item) { %>
+                        <div class="simple-summary-row">
+                          <div class="simple-summary-label">
+                            <%= item.label %>
+                          </div>
+                          <div class="simple-summary-value">
+                            <%= shortHistoryValue(item.value, 120) %>
+                          </div>
+                        </div>
+                      <% }) %>
+
+                      <% if ((sum.detailRows || []).length > previewDetails.length) { %>
+                        <div class="more-line">
+                          +<%= (sum.detailRows || []).length - previewDetails.length %>
+                          more detail<%= ((sum.detailRows || []).length - previewDetails.length) === 1 ? '' : 's' %>.
+                        </div>
+                      <% } %>
+                    </div>
+
+                  <% } else { %>
+                    <span class="text-muted xsmall">
+                      Activity recorded. Open View for details.
+                    </span>
+                  <% } %>
                 </td>
 
                 <td class="text-end">
@@ -516,9 +1307,9 @@
                       data-actor="<%= String(actorName).replace(/"/g,'&quot;') %>"
                       data-event="<%= String(eventLabel(eventRaw)).replace(/"/g,'&quot;') %>"
                       data-date="<%= String(dt).replace(/"/g,'&quot;') %>"
-                      data-json="<%= safeJson.replace(/"/g,'&quot;') %>"
+                      data-details="<%= modalPayload %>"
                     >
-                      <i class="bi bi-braces me-1"></i> View
+                      <i class="bi bi-eye me-1"></i> View
                     </button>
                   <% } else { %>
                     <span class="text-muted xsmall">—</span>
@@ -536,21 +1327,39 @@
 
 <!-- MODAL -->
 <div class="modal fade" id="histDetailsModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable">
-    <div class="modal-content" style="border-radius:18px; overflow:hidden;">
-      <div class="modal-header" style="background:linear-gradient(180deg,#0f172a,#111827); color:#fff;">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden; border:1px solid #e2e8f0;">
+      <div class="modal-header bg-white">
         <div>
-          <div class="fw-semibold">Activity Details</div>
-          <div class="xsmall text-white-50" id="histModalMeta">—</div>
+          <div class="fw-bold text-dark">Activity Details</div>
+          <div class="xsmall text-muted mt-1" id="histModalMeta">—</div>
         </div>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
 
-      <div class="modal-body">
-        <pre class="jsonbox" id="histModalJson">—</pre>
+      <div class="modal-body" style="background:#f8fafc;">
+        <div id="histModalChangesSection" class="d-none mb-3">
+          <div class="history-section-title">
+            <i class="bi bi-arrow-left-right me-1"></i>
+            Changed Information
+          </div>
+          <div class="history-change-list" id="histModalChanges"></div>
+        </div>
+
+        <div id="histModalInfoSection" class="d-none">
+          <div class="history-section-title">
+            <i class="bi bi-info-circle me-1"></i>
+            Recorded Information
+          </div>
+          <div class="history-info-list" id="histModalInfo"></div>
+        </div>
+
+        <div class="history-empty d-none" id="histModalEmpty">
+          No additional details are available for this activity.
+        </div>
       </div>
 
-      <div class="modal-footer">
+      <div class="modal-footer bg-white">
         <button type="button" class="btn btn-outline-secondary btn-pill px-3" data-bs-dismiss="modal">
           Close
         </button>
@@ -559,13 +1368,21 @@
   </div>
 </div>
 
+
 <script>
   (function () {
     const modal = document.getElementById('histDetailsModal');
     if (!modal) return;
 
     const metaEl = document.getElementById('histModalMeta');
-    const jsonEl = document.getElementById('histModalJson');
+
+    const changesSection = document.getElementById('histModalChangesSection');
+    const changesEl = document.getElementById('histModalChanges');
+
+    const infoSection = document.getElementById('histModalInfoSection');
+    const infoEl = document.getElementById('histModalInfo');
+
+    const emptyEl = document.getElementById('histModalEmpty');
 
     modal.addEventListener('show.bs.modal', function (event) {
       const btn = event.relatedTarget;
@@ -575,17 +1392,147 @@
       const actor = btn.getAttribute('data-actor') || '';
       const ev = btn.getAttribute('data-event') || '';
       const dt = btn.getAttribute('data-date') || '';
-      const json = btn.getAttribute('data-json') || '';
+      const rawDetails = btn.getAttribute('data-details') || '';
 
-      if (metaEl) metaEl.textContent = `Log ID: ${id}  |  ${dt}  |  ${actor}  |  ${ev}`;
-      if (jsonEl) jsonEl.textContent = decodeHtml(json);
+      let payload = {
+        changes: [],
+        detailRows: []
+      };
+
+      try {
+        payload = JSON.parse(decodeURIComponent(rawDetails));
+      } catch (e) {
+        payload = {
+          changes: [],
+          detailRows: []
+        };
+      }
+
+      if (metaEl) {
+        metaEl.textContent =
+          `Log ID: ${id}  |  ${dt}  |  ${actor}  |  ${ev}`;
+      }
+
+      renderChanges(
+        Array.isArray(payload.changes)
+          ? payload.changes
+          : []
+      );
+
+      renderInformation(
+        Array.isArray(payload.detailRows)
+          ? payload.detailRows
+          : []
+      );
+
+      const hasChanges =
+        Array.isArray(payload.changes) &&
+        payload.changes.length > 0;
+
+      const hasInformation =
+        Array.isArray(payload.detailRows) &&
+        payload.detailRows.length > 0;
+
+      if (emptyEl) {
+        emptyEl.classList.toggle(
+          'd-none',
+          hasChanges || hasInformation
+        );
+      }
     });
 
-    function decodeHtml(str) {
-      if (!str) return '';
-      const txt = document.createElement('textarea');
-      txt.innerHTML = str;
-      return txt.value;
+    function renderChanges(changes) {
+      if (!changesSection || !changesEl) return;
+
+      if (!changes.length) {
+        changesSection.classList.add('d-none');
+        changesEl.innerHTML = '';
+        return;
+      }
+
+      changesSection.classList.remove('d-none');
+
+      changesEl.innerHTML = changes.map(function (change) {
+        const label = escapeHtml(
+          change.label || 'Changed field'
+        );
+
+        const before = escapeHtml(
+          displayValue(change.before)
+        );
+
+        const after = escapeHtml(
+          displayValue(change.after)
+        );
+
+        return `
+          <div class="history-change-card">
+            <div class="history-change-title">
+              ${label}
+            </div>
+
+            <div class="history-change-values">
+              <div class="history-value-box before">
+                <div class="history-value-caption">Before</div>
+                <div class="history-value-text">${before}</div>
+              </div>
+
+              <div class="history-change-arrow">
+                <i class="bi bi-arrow-right"></i>
+              </div>
+
+              <div class="history-value-box after">
+                <div class="history-value-caption">After</div>
+                <div class="history-value-text">${after}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderInformation(rows) {
+      if (!infoSection || !infoEl) return;
+
+      if (!rows.length) {
+        infoSection.classList.add('d-none');
+        infoEl.innerHTML = '';
+        return;
+      }
+
+      infoSection.classList.remove('d-none');
+
+      infoEl.innerHTML = rows.map(function (item) {
+        const label = escapeHtml(item.label || 'Detail');
+        const value = escapeHtml(
+          displayValue(item.value)
+        );
+
+        return `
+          <div class="history-info-row">
+            <div class="history-info-label">${label}</div>
+            <div class="history-info-value">${value}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function displayValue(value) {
+      if (value === null || typeof value === 'undefined') {
+        return 'Not set';
+      }
+
+      const text = String(value).trim();
+      return text || 'Not set';
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     }
   })();
 </script>

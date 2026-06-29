@@ -107,6 +107,27 @@ const accessScopeLabel =
   String(editUser.dept || '').trim().toLowerCase() === 'accounts'
     ? 'School Accounts'
     : (editUser.dept || '—');
+    const isSchoolAccountsDept =
+  String(user.dept || editUser.dept || '').trim().toLowerCase() === 'accounts' ||
+  String(user.dept || editUser.dept || '').trim().toLowerCase() === 'school accounts' ||
+  String(user.dept || editUser.dept || '').trim().toLowerCase() === 'school_accounts';
+
+const pipelineTypeOptions = isSchoolAccountsDept
+  ? [
+      { value: 'print_record_update', label: 'Print + Record update' },
+      { value: 'verification_registration', label: 'Verification & Registration' },
+      { value: 'paid_slip', label: 'Paid slip' }
+    ]
+  : [
+      { value: 'accounts', label: 'Accounts' },
+      { value: 'admission', label: 'Admission' },
+      { value: 'management', label: 'Management' }
+    ];
+
+const pipelineTypeLabel = (value) => {
+  const found = pipelineTypeOptions.find((x) => x.value === value);
+  return found ? found.label : (value ? String(value).replace(/_/g, ' ') : '—');
+};
 
   const editUserAdmissionLink =
     editUser.admissionLink || editUser.admission_link || '';
@@ -435,7 +456,7 @@ const accessScopeLabel =
   <% if (isAgentRoute) { %>
     <input type="text"
            class="form-control bg-light"
-           value="<%= editUser.agentType ? editUser.agentType.charAt(0).toUpperCase() + editUser.agentType.slice(1) : '—' %>"
+           value="<%= pipelineTypeLabel(editUser.agentType) %>"
            disabled>
     <input type="hidden" name="agentType" value="<%= editUser.agentType || '' %>">
     <small class="text-muted d-block mt-1">
@@ -443,10 +464,12 @@ const accessScopeLabel =
     </small>
   <% } else { %>
     <select name="agentType" class="form-select">
-      <option value="accounts" <%= editUser.agentType === 'accounts' ? 'selected' : '' %>>Accounts</option>
-      <option value="admission" <%= editUser.agentType === 'admission' ? 'selected' : '' %>>Admission</option>
-      <option value="management" <%= editUser.agentType === 'management' ? 'selected' : '' %>>Management</option>
-    </select>
+  <% pipelineTypeOptions.forEach(function(opt){ %>
+    <option value="<%= opt.value %>" <%= editUser.agentType === opt.value ? 'selected' : '' %>>
+      <%= opt.label %>
+    </option>
+  <% }) %>
+</select>
     <small class="text-muted d-block mt-1">
       Only admin can change pipeline / agent type.
     </small>

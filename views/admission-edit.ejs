@@ -22,29 +22,68 @@ if (roleKey === 'admin') {
 }
 
   const isSuper = !!(user && (
-    user.role === 'super_admin' ||
-    user.role === 'superadmin' ||
-    user.agentType === 'super_admin' ||
-    user.agentType === 'superadmin' ||
+    roleKey === 'super_admin' ||
+    roleKey === 'superadmin' ||
     user.isSuperAdmin === true ||
     user.is_super_admin === true
   ));
 
-  const rawPerms = perms || (user && (user.permissions || user.perms || user.permission || user.permissionMap)) || {};
+  let rawPerms =
+    (typeof perms !== 'undefined' && perms)
+      ? perms
+      : (user && (user.permissions || user.perms || user.permission || user.permissionMap)) || {};
+
+  try {
+    if (typeof rawPerms === 'string') {
+      rawPerms = JSON.parse(rawPerms);
+    }
+  } catch (e) {
+    rawPerms = {};
+  }
+
+  function getNestedPerm(obj, path) {
+    const parts = String(path || '').split('.').filter(Boolean);
+    let current = obj;
+
+    for (const part of parts) {
+      if (!current || typeof current !== 'object' || !(part in current)) {
+        return undefined;
+      }
+      current = current[part];
+    }
+
+    return current;
+  }
 
   function hasPerm(keys) {
     if (isSuper) return true;
     if (!rawPerms) return false;
     if (rawPerms === true) return true;
-    if (Array.isArray(rawPerms)) return keys.some(k => rawPerms.includes(k) || rawPerms.includes('*') || rawPerms.includes('all'));
+
+    const cleanKeys = (Array.isArray(keys) ? keys : [keys])
+      .map(k => String(k || '').trim())
+      .filter(Boolean);
+
+    if (Array.isArray(rawPerms)) {
+      return (
+        rawPerms.includes('*') ||
+        rawPerms.includes('all') ||
+        cleanKeys.some(k => rawPerms.includes(k))
+      );
+    }
+
     if (typeof rawPerms === 'object') {
-      return keys.some(k => {
+      return cleanKeys.some(k => {
         if (rawPerms[k] === true) return true;
+
+        const nested = getNestedPerm(rawPerms, k);
+        if (nested === true) return true;
+
         const alt = k.replace(/\./g, '_');
-        if (rawPerms[alt] === true) return true;
-        return false;
+        return rawPerms[alt] === true;
       });
     }
+
     return false;
   }
 
@@ -134,10 +173,13 @@ if (roleKey === 'admin') {
 
   const DEFAULT_CURRENCY_OPTIONS =
     (typeof currencyOptions !== 'undefined' && Array.isArray(currencyOptions) && currencyOptions.length)
-      ? currencyOptions.map(opt => ({
-          value: opt.value || opt.label || opt.opt_key || '',
-          label: opt.label || opt.value || opt.opt_key || ''
-        })).filter(opt => opt.value)
+      ? currencyOptions.map(opt => {
+          const value = String(opt.value || opt.label || opt.opt_key || '').trim().toUpperCase();
+          return {
+            value,
+            label: String(opt.label || value).trim().toUpperCase()
+          };
+        }).filter(opt => opt.value)
       : [
           { value: 'AED', label: 'AED' },
           { value: 'SAR', label: 'SAR' },
@@ -169,18 +211,36 @@ if (roleKey === 'admin') {
           { value: 'UBL solution 0322', label: 'UBL solution 0322' }
         ];
 
-  const editAction = isSuper ? `/dashboard/super/update/${A.id}` : `/admin/update/${A.id}`;
-const detailsUrl = isSuper ? `/dashboard/super/admission/${A.id}` : `/admin/admission/${A.id}`;
+  const billingYearFromAdmission = Number(
+    (typeof billingYear !== 'undefined' ? billingYear : 0) ||
+    A?.billingYear ||
+    A?.billing_year ||
+    (
+      Array.isArray(A?.billing)
+        ? A.billing.find((row) => Number(row?.year))?.year
+        : 0
+    ) ||
+    0
+  );
 
-const dashboardUrl = '/dashboard';
-const backUrl = dashboardUrl;
+  const currentYearOnly =
+    Number.isInteger(billingYearFromAdmission) &&
+    billingYearFromAdmission >= 2020 &&
+    billingYearFromAdmission <= 2100
+      ? billingYearFromAdmission
+      : new Date().getFullYear();
+
+  const dashboardUrl = '/dashboard';
+  const sharedDetailsUrl =
+    `/dashboard/admission/${encodeURIComponent(A.id || '')}` +
+    `?year=${encodeURIComponent(currentYearOnly)}`;
+  const backUrl = P.btn.details ? sharedDetailsUrl : dashboardUrl;
 
   const currentStatusVal = String(A.status || A.currentStatus || A.current_status || 'New Admission').trim();
   const feeStatusVal = String(A.feeStatus || A.fee_status || A.feeStatusText || 'New Admission').trim();
   const currencyVal = String(A.currency_code || A.currencyCode || adm.currencyCode || adm.currency_code || '').trim().toUpperCase();
   const bankVal = String(A.bank_name || A.bankName || adm.bankName || adm.bank_name || '').trim();
   const monthVal = String(adm.month || A.admission_month || '').trim();
-  const currentYearOnly = new Date().getFullYear();
   const months = [
     { full: 'January', short: 'Jan' },
     { full: 'February', short: 'Feb' },
@@ -224,7 +284,10 @@ const familyDisplayLabel = cleanFamilyNumber || (isAutoFamilyMatch ? 'Auto Match
 const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
 %>
 
-<div class="compact-edit-page <%= themeClass %>">
+<div
+  class="compact-edit-page <%= themeClass %>"
+  data-billing-year="<%= currentYearOnly %>"
+  data-details-url="<%= sharedDetailsUrl %>">
 
   <% if (hasFamilyEditGroup) { %>
     <div class="family-edit-banner">
@@ -234,7 +297,9 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
           Family Admissions
         </div>
         <div class="family-subtitle">
-          Family # <strong><%= familyDisplayLabel %></strong> | <%= editAdmissions.length %> admissions found
+          Family # <strong><%= familyDisplayLabel %></strong>
+          | <%= editAdmissions.length %> admissions found
+          | Billing Year: <strong><%= currentYearOnly %></strong>
         </div>
       </div>
     </div>
@@ -245,8 +310,20 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
     const eAcc = E.accounts || {};
     const eAdm = E.admission || E.admissionPanel || {};
 
-    const eEditAction = isSuper ? `/dashboard/super/update/${E.id}` : `/admin/update/${E.id}`;
-    const eDetailsUrl = isSuper ? `/dashboard/super/admission/${E.id}` : `/admin/admission/${E.id}`;
+    const eEditActionBase =
+      isSuper
+        ? `/dashboard/super/update/${encodeURIComponent(E.id)}`
+        : roleKey === 'admin'
+          ? `/admin/update/${encodeURIComponent(E.id)}`
+          : `/pipeline/update/${encodeURIComponent(E.id)}`;
+
+    const eEditAction =
+      eEditActionBase +
+      `?year=${encodeURIComponent(currentYearOnly)}`;
+
+    const eDetailsUrl =
+      `/dashboard/admission/${encodeURIComponent(E.id)}` +
+      `?year=${encodeURIComponent(currentYearOnly)}`;
 
     const eCurrentStatusVal = String(E.status || E.currentStatus || E.current_status || 'New Admission').trim();
     const eFeeStatusVal = String(E.feeStatus || E.fee_status || E.feeStatusText || 'New Admission').trim();
@@ -257,7 +334,14 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
     const isActiveCard = Number(E.id || 0) === activeAdmissionId;
   %>
 
-  <form class="admission-edit-form" action="<%= eEditAction %>" method="POST">
+  <form
+    class="admission-edit-form"
+    action="<%= eEditAction %>"
+    method="POST"
+    data-admission-id="<%= E.id || '' %>"
+    data-details-url="<%= eDetailsUrl %>">
+    <input type="hidden" name="year" value="<%= currentYearOnly %>">
+
     <div class="compact-card <%= isActiveCard ? 'active-edit-card' : '' %>">
       <div class="compact-head">
         <div class="student-mini">
@@ -278,6 +362,8 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
               <% if (E.id) { %>
                 <span class="mini-chip">ID #<%= E.id %></span>
               <% } %>
+
+              <span class="mini-chip">Billing Year <%= currentYearOnly %></span>
 
               <% if (eAcc.familyNumber || isAutoFamilyMatch) { %>
   <span class="mini-chip">Family #<%= eAcc.familyNumber || 'Auto Matched' %></span>
@@ -580,7 +666,7 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
           <div></div>
 
           <div class="footer-actions">
-            <a href="<%= dashboardUrl %>" class="btn btn-light rounded-pill px-4">
+            <a href="<%= backUrl %>" class="btn btn-light rounded-pill px-4">
               Cancel
             </a>
 
@@ -603,7 +689,7 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
 <% if (hasFamilyEditGroup) { %>
   <div class="compact-family-footer">
     <div class="footer-actions">
-      <a href="<%= dashboardUrl %>" class="btn btn-light rounded-pill px-4">
+      <a href="<%= backUrl %>" class="btn btn-light rounded-pill px-4">
   Cancel
 </a>
 
@@ -1193,8 +1279,17 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
       </div>
 
       <div class="modal-footer border-0 justify-content-end">
+        <% if (P.btn.details) { %>
+          <a
+            href="<%= sharedDetailsUrl %>"
+            class="btn btn-outline-secondary rounded-pill px-4 d-none"
+            id="admissionUpdateDetailsLink">
+            Back to Details
+          </a>
+        <% } %>
+
         <button type="button" class="btn btn-danger rounded-pill px-4 admission-update-close-btn">
-          OK
+          Stay Here
         </button>
       </div>
     </div>
@@ -1208,6 +1303,7 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
 
     const modalEl = document.getElementById('admissionUpdateModal');
     const listEl = document.getElementById('admissionUpdateList');
+    const detailsLinkEl = document.getElementById('admissionUpdateDetailsLink');
 
     if (!forms.length || !updateButtons.length) return;
 
@@ -1220,8 +1316,13 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
     .replaceAll("'", '&#039;');
 }
 
-function showUpdateModal(items, titleText) {
+function showUpdateModal(items, titleText, options = {}) {
   if (!modalEl || !listEl) return;
+
+  const {
+    subtitle = 'The selected admission fields were updated successfully.',
+    showDetailsLink = false
+  } = options;
 
   const titleEl = modalEl.querySelector('.modal-title');
   const subTitleEl = modalEl.querySelector('.modal-header .small');
@@ -1231,7 +1332,11 @@ function showUpdateModal(items, titleText) {
   }
 
   if (subTitleEl) {
-    subTitleEl.textContent = 'The selected admission fields were updated successfully.';
+    subTitleEl.textContent = subtitle;
+  }
+
+  if (detailsLinkEl) {
+    detailsLinkEl.classList.toggle('d-none', !showDetailsLink);
   }
 
   let html = '';
@@ -1369,15 +1474,34 @@ function showUpdateModal(items, titleText) {
           ? forms
           : [btn.closest('form')].filter(Boolean);
 
-        const changedRows = targetForms.map(function (form, index) {
-          const changed = getChangedFields(form);
+        const changedRows = targetForms
+          .map(function (form, index) {
+            return {
+              form,
+              student: getStudentName(form, index),
+              fields: getChangedFields(form)
+            };
+          })
+          .filter(function (item) {
+            return item.fields.length > 0;
+          });
 
-          return {
-            form,
-            student: getStudentName(form, index),
-            fields: changed.length ? changed : ['Updated successfully']
-          };
-        });
+        if (!changedRows.length) {
+          showUpdateModal(
+            [
+              {
+                student: 'No changes detected',
+                fields: ['Change at least one editable field before updating.']
+              }
+            ],
+            '<i class="bi bi-info-circle-fill text-primary me-1"></i> No Changes',
+            {
+              subtitle: 'Nothing was sent to the server.',
+              showDetailsLink: false
+            }
+          );
+          return;
+        }
 
         btn.disabled = true;
         const oldText = btn.innerHTML;
@@ -1391,10 +1515,20 @@ function showUpdateModal(items, titleText) {
 
           showUpdateModal(
             changedRows,
-            '<i class="bi bi-check-circle-fill text-success me-1"></i> Admission Updated'
+            '<i class="bi bi-check-circle-fill text-success me-1"></i> Admission Updated',
+            {
+              subtitle: 'The changed admission fields were updated successfully.',
+              showDetailsLink: true
+            }
           );
 
-          window.history.replaceState({}, document.title, window.location.pathname);
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.delete('focus');
+          window.history.replaceState(
+            {},
+            document.title,
+            nextUrl.pathname + nextUrl.search + nextUrl.hash
+          );
         } catch (err) {
           showUpdateModal(
             [
@@ -1403,7 +1537,11 @@ function showUpdateModal(items, titleText) {
                 fields: [err.message || 'Please try again.']
               }
             ],
-            '<i class="bi bi-x-circle-fill text-danger me-1"></i> Update Failed'
+            '<i class="bi bi-x-circle-fill text-danger me-1"></i> Update Failed',
+            {
+              subtitle: 'The update could not be completed. Review the message below.',
+              showDetailsLink: false
+            }
           );
         } finally {
           btn.disabled = false;
@@ -1545,9 +1683,23 @@ const boxes = Array.from(scope.querySelectorAll('.field-box'));
     fee: []
   };
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('\"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function safeColor(value) {
+    const color = String(value || '').trim();
+    return /^#[0-9a-f]{6}$/i.test(color) ? color : '#64748b';
+  }
+
   function setSelectVisual(sel, color) {
     if (!sel) return;
-    const c = color || '#64748b';
+    const c = safeColor(color);
     sel.style.setProperty('--dot', c);
     sel.style.setProperty('--bd', c + '55');
     sel.style.setProperty('--tx', '#0f172a');
@@ -1658,17 +1810,27 @@ const boxes = Array.from(scope.querySelectorAll('.field-box'));
   function rebuildSelect(selectEl, items, selectedValue, addValue) {
     if (!selectEl) return;
 
+    const cleanSelected = String(selectedValue || '').trim();
+    const hasSelected = (items || []).some(item =>
+      String(item.value || '').trim() === cleanSelected
+    );
+
     let html = '';
 
-    html += items.map(item => {
-      const selected = String(selectedValue || '') === String(item.value) ? 'selected' : '';
-      return `<option value="${item.value}" ${selected}>${item.value}</option>`;
+    if (cleanSelected && !hasSelected) {
+      html += `<option value="${escapeHtml(cleanSelected)}" selected>${escapeHtml(cleanSelected)}</option>`;
+    }
+
+    html += (items || []).map(item => {
+      const itemValue = String(item.value || '').trim();
+      const selected = cleanSelected === itemValue ? 'selected' : '';
+      return `<option value="${escapeHtml(itemValue)}" ${selected}>${escapeHtml(itemValue)}</option>`;
     }).join('');
 
-    html += `<option value="${addValue}">+ Add Option</option>`;
+    html += `<option value="${escapeHtml(addValue)}">+ Add Option</option>`;
 
     selectEl.innerHTML = html;
-    selectEl.value = selectedValue || 'New Admission';
+    selectEl.value = cleanSelected || 'New Admission';
   }
 
   function refreshDropdowns() {
@@ -1716,30 +1878,36 @@ const boxes = Array.from(scope.querySelectorAll('.field-box'));
       return;
     }
 
-    listEl.innerHTML = items.map(item => `
-      <div class="status-option-item">
-        <div class="status-option-left">
-          <span class="status-option-dot" style="background:${item.color || '#64748b'}"></span>
-          <div class="status-option-name">${item.value}</div>
+    listEl.innerHTML = items.map(item => {
+      const itemColor = safeColor(item.color);
+      const itemId = Number(item.id || 0);
+      const itemValue = escapeHtml(item.value || '');
+
+      return `
+        <div class="status-option-item">
+          <div class="status-option-left">
+            <span class="status-option-dot" style="background:${itemColor}"></span>
+            <div class="status-option-name">${itemValue}</div>
+          </div>
+          <div class="status-option-actions">
+            <input
+              type="color"
+              class="form-control form-control-color status-option-color-input"
+              value="${itemColor}"
+              data-id="${itemId}"
+              style="width:48px;min-width:48px;">
+            ${item.is_custom ? `
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-danger rounded-pill status-option-delete-btn"
+                data-id="${itemId}">
+                Delete
+              </button>
+            ` : ''}
+          </div>
         </div>
-        <div class="status-option-actions">
-          <input
-            type="color"
-            class="form-control form-control-color status-option-color-input"
-            value="${item.color || '#64748b'}"
-            data-id="${item.id}"
-            style="width:48px;min-width:48px;">
-          ${item.is_custom ? `
-            <button
-              type="button"
-              class="btn btn-sm btn-outline-danger rounded-pill status-option-delete-btn"
-              data-id="${item.id}">
-              Delete
-            </button>
-          ` : ''}
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   function openModal(type, selectEl) {
@@ -1888,6 +2056,15 @@ const boxes = Array.from(scope.querySelectorAll('.field-box'));
 
   let pendingSelect = null;
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('\"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
   function normalizeBankRows(rows) {
     return (rows || []).map(row => ({
       id: row.id,
@@ -1956,34 +2133,50 @@ const boxes = Array.from(scope.querySelectorAll('.field-box'));
       return;
     }
 
-    listEl.innerHTML = items.map(item => `
-      <div class="status-option-item">
-        <div class="status-option-left">
-          <div class="status-option-name">${item.label}</div>
-        </div>
+    listEl.innerHTML = items.map(item => {
+      const itemId = Number(item.id || 0);
+      const itemLabel = escapeHtml(item.label || item.value || '');
 
-        <div class="status-option-actions">
-          ${item.is_custom ? `
-            <button
-              type="button"
-              class="btn btn-sm btn-outline-danger rounded-pill bank-option-delete-btn"
-              data-id="${item.id}">
-              Delete
-            </button>
-          ` : ''}
+      return `
+        <div class="status-option-item">
+          <div class="status-option-left">
+            <div class="status-option-name">${itemLabel}</div>
+          </div>
+
+          <div class="status-option-actions">
+            ${item.is_custom ? `
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-danger rounded-pill bank-option-delete-btn"
+                data-id="${itemId}">
+                Delete
+              </button>
+            ` : ''}
+          </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   function rebuildBankSelect(selectEl, items, selectedValue, includeAdd) {
     if (!selectEl) return;
 
+    const cleanSelected = String(selectedValue || '').trim();
+    const hasSelected = (items || []).some(item =>
+      String(item.value || '').trim().toLowerCase() === cleanSelected.toLowerCase()
+    );
+
     let html = '<option value="">Select bank</option>';
 
-    html += items.map(item => {
-      const selected = String(selectedValue || '') === String(item.value) ? 'selected' : '';
-      return `<option value="${item.value}" ${selected}>${item.label}</option>`;
+    if (cleanSelected && !hasSelected) {
+      html += `<option value="${escapeHtml(cleanSelected)}" selected>${escapeHtml(cleanSelected)}</option>`;
+    }
+
+    html += (items || []).map(item => {
+      const itemValue = String(item.value || '').trim();
+      const itemLabel = String(item.label || itemValue).trim();
+      const selected = itemValue.toLowerCase() === cleanSelected.toLowerCase() ? 'selected' : '';
+      return `<option value="${escapeHtml(itemValue)}" ${selected}>${escapeHtml(itemLabel)}</option>`;
     }).join('');
 
     if (includeAdd) {
@@ -1991,7 +2184,7 @@ const boxes = Array.from(scope.querySelectorAll('.field-box'));
     }
 
     selectEl.innerHTML = html;
-    selectEl.value = selectedValue || '';
+    selectEl.value = cleanSelected;
   }
 
   function refreshBankDropdowns() {
@@ -2110,6 +2303,15 @@ const boxes = Array.from(scope.querySelectorAll('.field-box'));
 
   let pendingSelect = null;
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('\"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
   function normalizeCurrencyRows(rows) {
     return (rows || []).map(row => ({
       id: row.id,
@@ -2178,34 +2380,50 @@ const boxes = Array.from(scope.querySelectorAll('.field-box'));
       return;
     }
 
-    listEl.innerHTML = items.map(item => `
-      <div class="status-option-item">
-        <div class="status-option-left">
-          <div class="status-option-name">${item.label}</div>
-        </div>
+    listEl.innerHTML = items.map(item => {
+      const itemId = Number(item.id || 0);
+      const itemLabel = escapeHtml(item.label || item.value || '');
 
-        <div class="status-option-actions">
-          ${item.is_custom ? `
-            <button
-              type="button"
-              class="btn btn-sm btn-outline-danger rounded-pill currency-option-delete-btn"
-              data-id="${item.id}">
-              Delete
-            </button>
-          ` : ''}
+      return `
+        <div class="status-option-item">
+          <div class="status-option-left">
+            <div class="status-option-name">${itemLabel}</div>
+          </div>
+
+          <div class="status-option-actions">
+            ${item.is_custom ? `
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-danger rounded-pill currency-option-delete-btn"
+                data-id="${itemId}">
+                Delete
+              </button>
+            ` : ''}
+          </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   function rebuildCurrencySelect(selectEl, items, selectedValue, includeAdd) {
     if (!selectEl) return;
 
+    const cleanSelected = String(selectedValue || '').trim().toUpperCase();
+    const hasSelected = (items || []).some(item =>
+      String(item.value || '').trim().toUpperCase() === cleanSelected
+    );
+
     let html = '<option value="">Select</option>';
 
-    html += items.map(item => {
-      const selected = String(selectedValue || '') === String(item.value) ? 'selected' : '';
-      return `<option value="${item.value}" ${selected}>${item.label}</option>`;
+    if (cleanSelected && !hasSelected) {
+      html += `<option value="${escapeHtml(cleanSelected)}" selected>${escapeHtml(cleanSelected)}</option>`;
+    }
+
+    html += (items || []).map(item => {
+      const itemValue = String(item.value || '').trim().toUpperCase();
+      const itemLabel = String(item.label || itemValue).trim().toUpperCase();
+      const selected = itemValue === cleanSelected ? 'selected' : '';
+      return `<option value="${escapeHtml(itemValue)}" ${selected}>${escapeHtml(itemLabel)}</option>`;
     }).join('');
 
     if (includeAdd) {
@@ -2213,7 +2431,7 @@ const boxes = Array.from(scope.querySelectorAll('.field-box'));
     }
 
     selectEl.innerHTML = html;
-    selectEl.value = selectedValue || '';
+    selectEl.value = cleanSelected;
   }
 
   function refreshCurrencyDropdowns() {

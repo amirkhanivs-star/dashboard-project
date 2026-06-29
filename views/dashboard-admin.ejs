@@ -4,12 +4,15 @@
   const deptTitle = user && user.dept
     ? user.dept.charAt(0).toUpperCase() + user.dept.slice(1)
     : 'Department';
-      const isAccountsAdmin =
-    user &&
-    (
-      String(user.dept || '').trim().toLowerCase() === 'accounts' ||
-      String(user.agentType || '').trim().toLowerCase() === 'accounts'
-    );
+      const cleanUserDept = String(user?.dept || user?.department || '').trim().toLowerCase();
+
+const isAccountsAdmin =
+  user &&
+  (
+    cleanUserDept === 'accounts' ||
+    cleanUserDept === 'school accounts' ||
+    cleanUserDept === 'school_accounts'
+  );
 
   const dashboardScopeTitle = isAccountsAdmin ? 'All Departments' : deptTitle;
   const dashboardScopeLabel = isAccountsAdmin ? 'All Admissions' : `${deptTitle} Admissions`;
@@ -56,7 +59,34 @@
 
   const visiblePages = getVisiblePages(currentPage, totalPages);
 
-    const totalAdmissions = Number(totalRecords || (admissions || []).length);
+  const accountsPipelineCountData =
+    (typeof accountsPipelineCounts !== 'undefined' && accountsPipelineCounts)
+      ? accountsPipelineCounts
+      : {};
+
+  const accountsPipelineTypeCounts =
+    accountsPipelineCountData.pipelines || {};
+
+  const accountsPipelineSourceCounts =
+    accountsPipelineCountData.sources || {};
+
+  const accountsNewAdmissionsCount = Number(
+    accountsPipelineCountData.newAdmissions || 0
+  );
+
+  const accountsOldAdmissionsCount = Number(
+    accountsPipelineCountData.oldAdmissions || 0
+  );
+
+  const accountsInternalDepartmentCount = Number(
+    accountsPipelineCountData.internalDepartment ||
+    accountsPipelineSourceCounts.internal_department ||
+    0
+  );
+
+  const totalAdmissions = isAccountsAdmin
+    ? accountsNewAdmissionsCount + accountsOldAdmissionsCount
+    : Number(totalRecords || (admissions || []).length);
 
   const paidCount = (admissions || []).filter(a => a.accounts && a.accounts.paymentStatus === 'Paid').length;
   const partiallyPaid = (admissions || []).filter(a => a.accounts && a.accounts.paymentStatus === 'Partial').length;
@@ -349,11 +379,48 @@
   // ✅ Action column shows only if column permission is ON and at least one button allowed
  const canDeleteAdmissions = !!P.btn.deleteAdmission;
 
+const showBulkDeleteBar = canDeleteAdmissions;
+
+const currentUserDept = String(
+  (user && (user.dept || user.department || user.userDept || user.user_department)) || ''
+).trim().toLowerCase();
+
+const isSchoolAccountsUser =
+  currentUserDept === 'accounts' ||
+  currentUserDept === 'school accounts' ||
+  currentUserDept === 'school_accounts';
+
+const canUseSchoolForwarding =
+  _isSuper || currentUserDept === 'school' || isSchoolAccountsUser;
+
+const shouldShowSchoolForwardFilters =
+  _isSuper || currentUserDept === 'school';
+
+const shouldShowSchoolAccountsWorkflow =
+  _isSuper || isSchoolAccountsUser;
+
+// Backward-compatible alias used by the existing page scripts.
+const shouldShowSchoolAccountsNewAdmissions =
+  shouldShowSchoolAccountsWorkflow;
+
+  const canShowTopFileFilters =
+  P.btn.files && (_isSuper || isAccountsAdmin);
+
   const showActions =
   P.col.actionButtons &&
-  (P.btn.details || P.btn.edit || P.btn.pdf || P.btn.update || P.btn.whatsapp || P.btn.billing || P.btn.upload || P.btn.files || canDeleteAdmissions);
-
-const showBulkDeleteBar = canDeleteAdmissions;
+  (
+    P.btn.details ||
+    P.btn.edit ||
+    P.btn.pdf ||
+    P.btn.update ||
+    P.btn.whatsapp ||
+    P.btn.billing ||
+    P.btn.upload ||
+    P.btn.files ||
+    shouldShowSchoolForwardFilters ||
+    shouldShowSchoolAccountsWorkflow ||
+    canDeleteAdmissions
+  );
 
 const hiddenActionCount =
   (P.btn.pdf ? 1 : 0) +
@@ -516,6 +583,187 @@ function getCardFieldClass(field) {
   return '';
 }
 
+function toDashboardDateOnly(value) {
+  const raw = String(value || '').trim();
+
+  if (!raw) return '';
+
+  const directDate = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+
+  if (directDate) {
+    return directDate[1];
+  }
+
+  const parsedDate = new Date(raw);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return '';
+  }
+
+  return parsedDate.toISOString().slice(0, 10);
+}
+
+function formatDashboardDate(value) {
+  const dateOnly = toDashboardDateOnly(value);
+
+  if (!dateOnly) {
+    return 'Not Assigned';
+  }
+
+  const parts = dateOnly.split('-');
+
+  return `${parts[2]}-${parts[1]}-${parts[0]}`;
+}
+
+function getDashboardWorkflowTag(admission) {
+  const returnStatus = String(
+    admission?.schoolReturnStatus ||
+    admission?.school_return_status ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+
+  /*
+   * Not Received ko highest priority milegi.
+   * Re-upload hone tak Forward button available nahi hoga.
+   */
+  if (returnStatus === 'not_received') {
+    return 'Not Received';
+  }
+
+  const reuploadTagActive = Number(
+    admission?.reuploadTagActive ||
+    admission?.reupload_tag_active ||
+    0
+  ) === 1;
+
+  /*
+   * Forward ke baad school_return_status clear hoga,
+   * lekin persistent flag ki wajah se orange tag rahega.
+   */
+  if (
+    returnStatus === 'reupload' ||
+    reuploadTagActive
+  ) {
+    return 'Reupload';
+  }
+
+  const directTag = String(
+    admission?.workflowTag || ''
+  ).trim();
+
+  if (directTag) {
+    return directTag;
+  }
+
+  const registrationNumberRemoved = Number(
+    admission?.registrationNumberRemoved ||
+    admission?.registration_number_removed ||
+    admission?.accounts?.registrationNumberRemoved ||
+    0
+  ) === 1;
+
+  if (registrationNumberRemoved) {
+    return 'Registration Number Removed';
+  }
+
+  return '';
+}
+
+function getDashboardWorkflowTagClass(tag) {
+  const cleanTag = String(tag || '')
+    .trim()
+    .toLowerCase();
+
+  if (cleanTag === 'reupload') {
+    return 'workflow-tag-reupload';
+  }
+
+  if (
+    cleanTag === 'not received' ||
+    cleanTag === 'registration number removed'
+  ) {
+    return 'workflow-tag-danger';
+  }
+
+  return '';
+}
+
+function getAccountsPipelineLabel(type) {
+  const clean = String(type || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+
+  const aliases = {
+    'print_+_record_update': 'print_record_update',
+    'print_&_record_update': 'print_record_update',
+    print_record_update: 'print_record_update',
+    verification_registration: 'verification_registration',
+    'verification_&_registration': 'verification_registration',
+    paid_slip: 'paid_slip',
+    fee_slip: 'paid_slip',
+    internal: 'internal_department',
+    internal_department: 'internal_department',
+    school_department: 'school',
+    school: 'school',
+    school_return: 'school_return',
+  };
+
+  const normalized = aliases[clean] || clean;
+
+  const labels = {
+    print_record_update: 'Print & Record Update',
+    verification_registration: 'Verification & Registration',
+    paid_slip: 'Paid Slip',
+    internal_department: 'Internal Department',
+    school: 'School Department',
+    school_return: 'School Department',
+  };
+
+  return labels[normalized] || '';
+}
+
+function getAccountsWorkflowStageLabel(stage) {
+  const clean = String(stage || '')
+    .trim()
+    .toLowerCase();
+
+  const labels = {
+    new_admissions: 'New Admissions',
+    record_to_update: 'Record to Update',
+    old_admissions: 'Old Admissions',
+  };
+
+  return labels[clean] || 'New Admissions';
+}
+
+function parseDashboardJsonArray(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map(item => String(item || '').trim())
+      .filter(Boolean);
+  }
+
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed
+          .map(item => String(item || '').trim())
+          .filter(Boolean)
+      : [];
+  } catch (e) {
+    return raw
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+}
+
 function escHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -642,14 +890,209 @@ function escHtml(value) {
     </div>
   </div>
 
+  <% if (shouldShowSchoolForwardFilters || shouldShowSchoolAccountsWorkflow) { %>
+    <div class="admin-forward-tabs-wrap mb-3">
+      <div
+        class="admin-forward-tabs"
+        role="group"
+        aria-label="Admission pipeline filters">
+
+        <% if (shouldShowSchoolForwardFilters) { %>
+          <div class="school-forward-filter-group">
+            <button
+              type="button"
+              class="btn school-forward-filter-btn forwarded"
+              data-school-forward-filter="forwarded">
+              Forwarded
+              <span
+                class="admin-forward-tab-count"
+                id="schoolForwardedCount">0</span>
+            </button>
+
+            <button
+              type="button"
+              class="btn school-forward-filter-btn not-forwarded"
+              data-school-forward-filter="not_forwarded">
+              Not Forwarded
+              <span
+                class="admin-forward-tab-count"
+                id="schoolNotForwardedCount">0</span>
+            </button>
+          </div>
+
+          <div
+            class="forwarded-subfilter-group d-none"
+            id="schoolForwardedSubfilters"
+            aria-label="Forwarded admission status filters">
+
+            <button
+              type="button"
+              class="btn forwarded-subfilter-btn"
+              data-forwarded-subfilter="not_verified">
+              Not Verified
+              <span
+                class="admin-forward-tab-count"
+                id="schoolNotVerifiedCount">0</span>
+            </button>
+
+            <button
+              type="button"
+              class="btn forwarded-subfilter-btn"
+              data-forwarded-subfilter="verified">
+              Verified
+              <span
+                class="admin-forward-tab-count"
+                id="schoolVerifiedCount">0</span>
+            </button>
+
+            <button
+              type="button"
+              class="btn forwarded-subfilter-btn"
+              data-forwarded-subfilter="not_received">
+              Not Received
+              <span
+                class="admin-forward-tab-count"
+                id="schoolNotReceivedCount">0</span>
+            </button>
+          </div>
+        <% } %>
+
+        <% if (shouldShowSchoolAccountsWorkflow) { %>
+          <div class="forwarded-stage-filter-group school-accounts-stage-group">
+            <button
+              type="button"
+              class="btn forwarded-stage-filter-btn"
+              data-forwarded-stage-filter="new_admissions">
+              New Admissions
+              <span
+                class="admin-forward-tab-count"
+                id="accountsNewAdmissionsCount">0</span>
+            </button>
+
+            <button
+              type="button"
+              class="btn forwarded-stage-filter-btn"
+              data-forwarded-stage-filter="old_admissions">
+              Old Admissions
+              <span
+                class="admin-forward-tab-count"
+                id="accountsOldAdmissionsCount">0</span>
+            </button>
+          </div>
+
+          <div
+            class="accounts-pipeline-filter-group d-none"
+            id="schoolAccountsPipelineFilters"
+            aria-label="School Accounts pipeline filters">
+
+            <button
+              type="button"
+              class="btn accounts-pipeline-filter-btn"
+              data-accounts-pipeline-filter="print_record_update">
+              Print &amp; Record Update
+              <span
+                class="admin-forward-tab-count"
+                id="accountsPrintPipelineCount">0</span>
+            </button>
+
+            <button
+              type="button"
+              class="btn accounts-pipeline-filter-btn"
+              data-accounts-pipeline-filter="verification_registration">
+              Verification &amp; Registration
+              <span
+                class="admin-forward-tab-count"
+                id="accountsVerificationPipelineCount">0</span>
+            </button>
+
+            <button
+              type="button"
+              class="btn accounts-pipeline-filter-btn"
+              data-accounts-pipeline-filter="paid_slip">
+              Paid Slip
+              <span
+                class="admin-forward-tab-count"
+                id="accountsPaidSlipPipelineCount">0</span>
+            </button>
+
+            <button
+              type="button"
+              class="btn accounts-pipeline-filter-btn"
+              data-accounts-pipeline-filter="internal_department">
+              Internal Department
+              <span
+                class="admin-forward-tab-count"
+                id="accountsInternalPipelineCount">0</span>
+            </button>
+          </div>
+        <% } %>
+
+      </div>
+    </div>
+  <% } %>
+
+  <% if (shouldShowSchoolAccountsWorkflow) { %>
+    <div class="accounts-pipeline-home mb-3" id="accountsPipelineHome">
+      <div class="accounts-pipeline-home-heading">
+        <div>
+          <div class="accounts-pipeline-eyebrow">School Accounts Workflow</div>
+          <h3 class="accounts-pipeline-title">Select a pipeline to view admissions</h3>
+          <p class="accounts-pipeline-subtitle">
+            Records are hidden by default. Open New Admissions or Old Admissions to view the relevant Accounts records.
+          </p>
+        </div>
+      </div>
+
+      <div class="accounts-pipeline-home-grid">
+        <button
+          type="button"
+          class="accounts-pipeline-card"
+          data-accounts-home-stage="new_admissions">
+          <span class="accounts-pipeline-card-icon">
+            <i class="bi bi-inbox"></i>
+          </span>
+          <span class="accounts-pipeline-card-content">
+            <span class="accounts-pipeline-card-title">New Admissions</span>
+            <span class="accounts-pipeline-card-hint">Active forwarded Accounts workflow records</span>
+          </span>
+          <span class="accounts-pipeline-card-count" id="accountsHomeNewCount"><%= accountsNewAdmissionsCount %></span>
+        </button>
+
+        <button
+          type="button"
+          class="accounts-pipeline-card"
+          data-accounts-home-stage="old_admissions">
+          <span class="accounts-pipeline-card-icon old">
+            <i class="bi bi-archive"></i>
+          </span>
+          <span class="accounts-pipeline-card-content">
+            <span class="accounts-pipeline-card-title">Old Admissions</span>
+            <span class="accounts-pipeline-card-hint">Completed Accounts records</span>
+          </span>
+          <span class="accounts-pipeline-card-count" id="accountsHomeOldCount"><%= accountsOldAdmissionsCount %></span>
+        </button>
+      </div>
+    </div>
+  <% } %>
+
   <!-- TABLE -->
-  <div class="card shadow-sm admin-table-card">
+  <div class="card shadow-sm admin-table-card <%= shouldShowSchoolAccountsWorkflow ? 'accounts-workspace-hidden' : '' %>" id="accountsAdmissionsWorkspace">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <strong><%= isAccountsAdmin ? 'Admissions for All Departments' : `Admissions for ${deptTitle}` %></strong>
   </div>
 
   <div class="d-flex align-items-center gap-2 flex-wrap">
+    <% if (shouldShowSchoolAccountsWorkflow) { %>
+      <button
+        type="button"
+        id="backToAccountsPipelinesBtn"
+        class="btn btn-sm btn-light rounded-pill px-3 border">
+        <i class="bi bi-grid-3x3-gap me-1"></i>
+        Pipelines
+      </button>
+    <% } %>
+
     <button
       type="button"
       id="applyRealtimeUpdatesBtn"
@@ -704,9 +1147,149 @@ function escHtml(value) {
       </button>
     </div>
 
+    <% if (shouldShowSchoolForwardFilters) { %>
+      <div class="dropdown workflow-date-filter-dropdown">
+        <button
+          type="button"
+          class="btn workflow-date-filter-btn dropdown-toggle"
+          id="workflowDateFilterBtn"
+          data-bs-toggle="dropdown"
+          data-bs-auto-close="outside"
+          aria-expanded="false">
+          <i class="bi bi-calendar3 me-1"></i>
+          Registration Dates
+
+          <span
+            class="workflow-date-active-badge d-none"
+            id="workflowDateFilterActiveBadge">
+            Active
+          </span>
+        </button>
+
+        <div
+          class="dropdown-menu workflow-date-filter-menu shadow-lg border-0"
+          aria-labelledby="workflowDateFilterBtn">
+
+          <div class="workflow-date-filter-heading">
+            <div class="fw-bold">Date Filters</div>
+
+            <div class="small text-muted">
+              Use an exact date or a From–To range.
+            </div>
+          </div>
+
+          <div class="workflow-date-filter-section">
+            <div class="workflow-date-filter-title">
+              Date of Registration
+            </div>
+
+            <label
+              class="form-label small mb-1"
+              for="registrationDateExactFilter">
+              Exact date
+            </label>
+
+            <input
+              type="date"
+              class="form-control form-control-sm workflow-date-input"
+              id="registrationDateExactFilter">
+
+            <div class="row g-2 mt-1">
+              <div class="col-6">
+                <label
+                  class="form-label small mb-1"
+                  for="registrationDateFromFilter">
+                  From
+                </label>
+
+                <input
+                  type="date"
+                  class="form-control form-control-sm workflow-date-input"
+                  id="registrationDateFromFilter">
+              </div>
+
+              <div class="col-6">
+                <label
+                  class="form-label small mb-1"
+                  for="registrationDateToFilter">
+                  To
+                </label>
+
+                <input
+                  type="date"
+                  class="form-control form-control-sm workflow-date-input"
+                  id="registrationDateToFilter">
+              </div>
+            </div>
+          </div>
+
+          <div class="workflow-date-filter-section">
+            <div class="workflow-date-filter-title">
+              Registration Number Assigned Date
+            </div>
+
+            <label
+              class="form-label small mb-1"
+              for="assignedDateExactFilter">
+              Exact date
+            </label>
+
+            <input
+              type="date"
+              class="form-control form-control-sm workflow-date-input"
+              id="assignedDateExactFilter">
+
+            <div class="row g-2 mt-1">
+              <div class="col-6">
+                <label
+                  class="form-label small mb-1"
+                  for="assignedDateFromFilter">
+                  From
+                </label>
+
+                <input
+                  type="date"
+                  class="form-control form-control-sm workflow-date-input"
+                  id="assignedDateFromFilter">
+              </div>
+
+              <div class="col-6">
+                <label
+                  class="form-label small mb-1"
+                  for="assignedDateToFilter">
+                  To
+                </label>
+
+                <input
+                  type="date"
+                  class="form-control form-control-sm workflow-date-input"
+                  id="assignedDateToFilter">
+              </div>
+            </div>
+          </div>
+
+          <div class="workflow-date-filter-actions">
+            <button
+              type="button"
+              class="btn btn-light btn-sm rounded-pill px-3"
+              id="clearWorkflowDateFiltersBtn">
+              Clear
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-success btn-sm rounded-pill px-3"
+              id="applyWorkflowDateFiltersBtn">
+              Apply Filters
+            </button>
+          </div>
+        </div>
+      </div>
+    <% } %>
+
     <div class="ms-auto d-flex justify-content-end align-items-center gap-2 flex-wrap">
 
-    <% if (P.btn.files) { %>
+  <% if (canShowTopFileFilters) { %>
     <div class="dropdown admission-files-filter-dropdown">
       <button
         type="button"
@@ -792,6 +1375,114 @@ function escHtml(value) {
       const deptVal = a.dept || user.dept || '';
       const currentStatusVal = (a.status || a.currentStatus || a.current_status || '').trim();
       const feeStatusVal = (a.feeStatus || a.fee_status || a.feeStatusText || '').trim();
+
+      const registrationDateRaw =
+        a.registrationDate ||
+        a.registration_date ||
+        '';
+
+      const assignedRegistrationDateRaw =
+        a.registrationNumberAssignedAt ||
+        a.accounts_registration_number_assigned_at ||
+        (a.accounts && a.accounts.registrationNumberAssignedAt) ||
+        '';
+
+      const registrationDateOnly =
+        toDashboardDateOnly(registrationDateRaw);
+
+      const assignedRegistrationDateOnly =
+        toDashboardDateOnly(assignedRegistrationDateRaw);
+
+      const workflowTag =
+        getDashboardWorkflowTag(a);
+
+      const workflowTagClass =
+        getDashboardWorkflowTagClass(workflowTag);
+
+      const cardSchoolReturnStatus = String(
+        a.schoolReturnStatus ||
+        a.school_return_status ||
+        (a.forward && a.forward.schoolReturnStatus) ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+
+      const cardReuploadTagActive =
+        Number(
+          a.reuploadTagActive ||
+          a.reupload_tag_active ||
+          0
+        ) === 1;
+
+      const cardForwardSubStatus = String(
+        a.forwardSubStatus ||
+        (a.forward && a.forward.subStatus) ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+
+      const cardForwardStatus = String(
+        a.forwardStatus ||
+        (a.forward && a.forward.status) ||
+        'not_forwarded'
+      ).trim().toLowerCase();
+
+      const cardForwardedTo = String(
+        a.forwardedToDepartment ||
+        (a.forward && a.forward.toDepartment) ||
+        ''
+      ).trim();
+
+      const cardForwardedToType = String(
+        a.forwardedToType ||
+        a.forwarded_to_type ||
+        (a.forward && a.forward.toType) ||
+        ''
+      ).trim().toLowerCase();
+
+      const cardForwardedFromDepartment = String(
+        a.forwardedFromDepartment ||
+        a.forwarded_from_department ||
+        (a.forward && a.forward.fromDepartment) ||
+        ''
+      ).trim();
+
+      const cardForwardedFromType = String(
+        a.forwardedFromType ||
+        a.forwarded_from_type ||
+        (a.forward && a.forward.fromType) ||
+        ''
+      ).trim().toLowerCase();
+
+      const cardAccountsWorkflowStage = String(
+        a.accountsWorkflowStage ||
+        a.accounts_workflow_stage ||
+        (a.forward && a.forward.workflowStage) ||
+        'new_admissions'
+      ).trim().toLowerCase();
+
+      const cardAccountsIssueMessage = String(
+        a.accountsIssueMessage ||
+        a.accounts_issue_message ||
+        (a.forward && a.forward.issueMessage) ||
+        ''
+      ).trim();
+
+      const cardAccountsIssueFields = parseDashboardJsonArray(
+        a.accountsIssueFields ||
+        a.accounts_issue_fields ||
+        (a.forward && a.forward.issueFields) ||
+        []
+      );
+
+      const cardForwardedOwnerName = String(
+        a.forwardedOwnerUserName ||
+        a.forwarded_owner_user_name ||
+        (a.forward && a.forward.forwardedOwnerUserName) ||
+        ''
+      ).trim();
 
       const studentVal = a.studentName || a.student || '';
       const fatherVal = a.fatherName || a.father || '';
@@ -891,7 +1582,33 @@ function escHtml(value) {
 
       <div
         class="admission-card admin-admission-card <%= a.isDuplicate ? 'duplicate-admission-card' : '' %>"
-        data-admission-id="<%= a.id %>">
+        data-admission-id="<%= a.id %>"
+        data-dept="<%= String(a.dept || deptVal || '').trim().toLowerCase() %>"
+        data-current-status="<%= currentStatusVal || '' %>"
+        data-fee-status="<%= feeStatusVal || '' %>"
+        data-has-upload="<%= a.hasLatestUpload ? '1' : '0' %>"
+        data-uploaded-by-current-user="<%= a.latestUploadByCurrentUser || a.uploadedByCurrentUser ? '1' : '0' %>"
+                data-forward-status="<%= cardForwardStatus || 'not_forwarded' %>"
+        data-forward-sub-status="<%= cardForwardSubStatus || '' %>"
+        data-forwarded-to="<%= cardForwardedTo || '' %>"
+        data-forwarded-to-type="<%= cardForwardedToType || '' %>"
+        data-forwarded-from="<%= cardForwardedFromDepartment || '' %>"
+        data-forwarded-from-type="<%= cardForwardedFromType || 'school' %>"
+        data-accounts-workflow-stage="<%= cardAccountsWorkflowStage || 'new_admissions' %>"
+        data-accounts-issue-message="<%= cardAccountsIssueMessage || '' %>"
+        data-forwarded-owner-user-name="<%= cardForwardedOwnerName || '' %>"
+        data-forwarded-by-current-user="<%= a.forwardedByCurrentUser ? '1' : '0' %>"
+        data-not-forwarded-visible-for-current-user="<%= a.notForwardedVisibleForCurrentUser ? '1' : '0' %>"
+        data-not-received-visible-for-current-user="<%= a.notReceivedVisibleForCurrentUser ? '1' : '0' %>"
+        data-forward-scope-visible-for-current-user="<%= a.forwardScopeVisibleForCurrentUser ? '1' : '0' %>"
+        data-school-return-status="<%= cardSchoolReturnStatus || '' %>"
+        data-reupload-tag-active="<%= cardReuploadTagActive ? '1' : '0' %>"
+        data-workflow-tag="<%= workflowTag || '' %>"
+        data-registration-number-removed="<%= Number(a.registrationNumberRemoved || a.registration_number_removed || (a.accounts && a.accounts.registrationNumberRemoved) || 0) === 1 ? '1' : '0' %>"
+        data-registration-date="<%= registrationDateOnly || '' %>"
+        data-registration-assigned-date="<%= assignedRegistrationDateOnly || '' %>"
+        data-can-forward="<%= a.canShowForwardButton ? '1' : '0' %>"
+        data-forward-display-text="<%= a.forwardDisplayText || (a.forward && a.forward.displayText) || '' %>">
 
         <div class="admission-card-top">
           <div class="d-flex align-items-center gap-2">
@@ -918,57 +1635,97 @@ function escHtml(value) {
           </div>
 
           <div class="admission-card-top-right">
+
   <% if (a.hasLatestUpload && a.latestUpload) { %>
-    <a
-  href="<%= a.latestUpload.fileUrl || '#' %>"
-  target="_blank"
-  class="admission-file-bill-icon <%= a.latestUpload.seenByCurrentUser ? 'seen-file-icon' : 'new-file-icon' %>"
-  data-upload-id="<%= a.latestUpload.id %>"
-  data-admission-id="<%= a.id %>"
-  data-student="<%= studentVal || 'No Name' %>"
-  data-father="<%= fatherVal || '-' %>"
-  data-added-by="<%= a.latestUpload.addedBy || 'System / Old Record' %>"
-  data-added-by-role="<%= a.latestUpload.addedByRole || '' %>"
-  data-file-name="<%= a.latestUpload.fileName || 'File' %>"
-  data-uploaded-at="<%= a.latestUpload.uploadedAt || '' %>"
-  title="Open file">
-      <i class="bi bi-receipt-cutoff"></i>
 
-      <span class="admission-file-tooltip <%= a.latestUpload.seenByCurrentUser ? 'seen-file-tooltip' : 'new-file-tooltip' %>">
-        <span class="file-tooltip-title">
-          <%= a.latestUpload.seenByCurrentUser ? 'File Seen' : 'New File Added' %>
-        </span>
+    <% if (P.btn.files) { %>
 
-        <span class="file-tooltip-row">
-          <b>Added by:</b>
-          <%= a.latestUpload.addedBy || 'System / Old Record' %>
-        </span>
+      <a
+        href="<%= a.latestUpload.fileUrl || '#' %>"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="admission-file-bill-icon <%= a.latestUpload.seenByCurrentUser ? 'seen-file-icon' : 'new-file-icon' %>"
+        data-upload-id="<%= a.latestUpload.id %>"
+        data-admission-id="<%= a.id %>"
+        data-student="<%= studentVal || 'No Name' %>"
+        data-father="<%= fatherVal || '-' %>"
+        data-added-by="<%= a.latestUpload.addedBy || 'System / Old Record' %>"
+        data-added-by-role="<%= a.latestUpload.addedByRole || '' %>"
+        data-file-name="<%= a.latestUpload.fileName || 'File' %>"
+        data-uploaded-at="<%= a.latestUpload.uploadedAt || '' %>"
+        title="Open file">
 
-        <% if (a.latestUpload.addedByRole) { %>
-          <span class="file-tooltip-row">
-            <b>Role:</b>
-            <%= String(a.latestUpload.addedByRole || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) %>
+        <i class="bi bi-receipt-cutoff"></i>
+
+        <span class="admission-file-tooltip <%= a.latestUpload.seenByCurrentUser ? 'seen-file-tooltip' : 'new-file-tooltip' %>">
+
+          <span class="file-tooltip-title">
+            <%= a.latestUpload.seenByCurrentUser ? 'File Seen' : 'New File Added' %>
           </span>
-        <% } %>
 
-        <span class="file-tooltip-row">
-          <b>File:</b>
-          <%= a.latestUpload.fileName || 'File' %>
+          <span class="file-tooltip-row">
+            <b>Added by:</b>
+            <%= a.latestUpload.addedBy || 'System / Old Record' %>
+          </span>
+
+          <% if (a.latestUpload.addedByRole) { %>
+            <span class="file-tooltip-row">
+              <b>Role:</b>
+              <%= String(a.latestUpload.addedByRole || '')
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, c => c.toUpperCase()) %>
+            </span>
+          <% } %>
+
+          <span class="file-tooltip-row">
+            <b>File:</b>
+            <%= a.latestUpload.fileName || 'File' %>
+          </span>
+
+          <% if (a.latestUpload.uploadedAt) { %>
+            <span class="file-tooltip-row">
+              <b>Date:</b>
+              <%= a.latestUpload.uploadedAt %>
+            </span>
+          <% } %>
+
+        </span>
+      </a>
+
+    <% } else { %>
+
+      <span
+        class="admission-file-bill-icon locked-file-icon"
+        aria-disabled="true"
+        title="Files permission required">
+
+        <i class="bi bi-receipt-cutoff"></i>
+
+        <span class="admission-file-tooltip locked-file-tooltip">
+          <span class="file-tooltip-title">
+            File Available
+          </span>
+
+          <span class="file-tooltip-row">
+            Files permission is required to view details or open this file.
+          </span>
         </span>
 
-        <% if (a.latestUpload.uploadedAt) { %>
-          <span class="file-tooltip-row">
-            <b>Date:</b>
-            <%= a.latestUpload.uploadedAt %>
-          </span>
-        <% } %>
       </span>
-    </a>
+
+    <% } %>
+
   <% } %>
+
+  <span
+    class="admission-workflow-tag <%= workflowTagClass %> <%= workflowTag ? '' : 'd-none' %>">
+    <%= workflowTag %>
+  </span>
 
   <span class="admission-role-pill admin-role-pill">
     <%= deptVal || 'Dept' %>
   </span>
+
 </div>
         </div>
 
@@ -1068,6 +1825,46 @@ function escHtml(value) {
               </a>
             <% } %>
 
+                        <%
+              const cardDept = String(
+                a.dept ||
+                deptVal ||
+                ''
+              )
+                .trim()
+                .toLowerCase();
+
+              const isSchoolReuploadReady =
+                currentUserDept === 'school' &&
+                cardSchoolReturnStatus === 'reupload';
+
+              const canShowForwardBtnForCard =
+                canUseSchoolForwarding &&
+                cardDept === 'school' &&
+                cardSchoolReturnStatus !== 'not_received' &&
+                !!a.canShowForwardButton &&
+                (
+                  isSchoolAccountsUser ||
+                  cardForwardStatus !== 'forwarded' ||
+                  isSchoolReuploadReady
+                );
+            %>
+
+            <% if (canShowForwardBtnForCard) { %>
+              <button
+                type="button"
+                class="mini-action-btn mini-forward btn-forward-admission"
+                data-admission-id="<%= a.id %>"
+                data-student="<%= studentVal || 'Student' %>">
+                <i class="bi bi-send"></i> Forward
+              </button>
+                        <% } else if (canUseSchoolForwarding && cardDept === 'school' && cardForwardStatus === 'forwarded') { %>
+              <span class="mini-action-btn mini-forwarded-done">
+                <i class="bi bi-send-check"></i>
+                Forwarded<%= cardForwardedTo ? ' to ' + cardForwardedTo : '' %>
+              </span>
+            <% } %>
+
             <% if (canDeleteAdmissions) { %>
               <button
                 type="button"
@@ -1080,6 +1877,104 @@ function escHtml(value) {
 
           </div>
         <% } %>
+
+        <div class="admission-workflow-dates">
+          <span>
+            <b>Registration:</b>
+
+            <span class="workflow-registration-date-text">
+              <%= formatDashboardDate(registrationDateRaw) %>
+            </span>
+          </span>
+
+          <span class="workflow-date-separator">•</span>
+
+          <span>
+            <b>Reg. No. Assigned:</b>
+
+            <span class="workflow-assigned-date-text">
+              <%= formatDashboardDate(assignedRegistrationDateRaw) %>
+            </span>
+          </span>
+        </div>
+
+        <% if (
+          cardForwardStatus === 'forwarded' &&
+          cardForwardedToType &&
+          cardForwardedToType !== 'school_return'
+        ) { %>
+          <div class="school-accounts-workflow-meta">
+            <span>
+              <b>Pipeline:</b>
+              <span class="accounts-pipeline-label">
+                <%= getAccountsPipelineLabel(cardForwardedToType) || cardForwardedTo %>
+              </span>
+            </span>
+
+            <span>
+              <b>Source:</b>
+              <span class="accounts-source-label">
+                <%= cardAccountsWorkflowStage === 'record_to_update'
+                  ? 'Record to Update'
+                  : (
+                      (
+                        cardForwardedFromType === 'internal_department' ||
+                        (
+                          cardForwardedFromType &&
+                          cardForwardedFromType === cardForwardedToType &&
+                          cardAccountsWorkflowStage !== 'old_admissions'
+                        )
+                      )
+                        ? 'Internal Department'
+                        : (cardForwardedFromDepartment || getAccountsPipelineLabel(cardForwardedFromType) || 'School Department')
+                    ) %>
+              </span>
+            </span>
+
+            <% if (cardForwardedOwnerName) { %>
+              <span>
+                <b>Assigned to:</b>
+                <span class="accounts-owner-label"><%= cardForwardedOwnerName %></span>
+              </span>
+            <% } %>
+
+            <span>
+              <b>Stage:</b>
+              <span class="accounts-stage-label">
+                <%= getAccountsWorkflowStageLabel(cardAccountsWorkflowStage) %>
+              </span>
+            </span>
+          </div>
+        <% } %>
+
+        <div class="accounts-issue-note <%= cardAccountsIssueMessage ? '' : 'd-none' %>">
+          <div class="accounts-issue-note-title">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            Correction Required
+          </div>
+
+          <div class="accounts-issue-note-message">
+            <%= cardAccountsIssueMessage %>
+          </div>
+
+          <% if (cardAccountsIssueFields.length) { %>
+            <div class="accounts-issue-note-fields">
+              Incorrect:
+              <%= cardAccountsIssueFields.join(', ') %>
+            </div>
+          <% } %>
+        </div>
+
+        <%
+          const cardForwardDisplayText = String(
+            a.forwardDisplayText || (a.forward && a.forward.displayText) || ''
+          ).trim();
+        %>
+
+        <div class="admission-forward-note <%= cardForwardDisplayText ? '' : 'd-none' %>">
+          <i class="bi bi-send-check"></i>
+          <span class="admission-forward-note-text"><%= cardForwardDisplayText %></span>
+        </div>
 
       </div>
     <% }) %>
@@ -3244,6 +4139,38 @@ function escHtml(value) {
 .file-tooltip-row b{
   color: inherit;
 }
+
+/* Files permission na hone par latest-file icon */
+.locked-file-icon{
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 8px 18px rgba(100,116,139,.14);
+  cursor: not-allowed;
+}
+
+.locked-file-icon:hover{
+  transform: none;
+  background: #e2e8f0;
+  color: #475569;
+  box-shadow: 0 8px 18px rgba(100,116,139,.18);
+}
+
+.locked-file-tooltip{
+  width: 230px;
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.locked-file-tooltip .file-tooltip-title{
+  color: #334155;
+}
+
+.locked-file-tooltip .file-tooltip-row{
+  color: #475569;
+}
+
 .admission-card-fields{
   display: flex;
   flex-wrap: wrap;
@@ -3401,6 +4328,429 @@ function escHtml(value) {
   border: 1px solid #bfdbfe;
 }
 
+/* ✅ Simple forwarding filters above Admin admissions table */
+.admin-forward-tabs-wrap{
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid rgba(16,185,129,.24);
+  border-radius: 14px;
+  box-shadow:
+    0 8px 20px rgba(15,23,42,.06),
+    inset 0 1px 0 rgba(255,255,255,.9);
+  padding: 0 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.admin-forward-tabs-wrap::-webkit-scrollbar{
+  height: 5px;
+}
+
+.admin-forward-tabs-wrap::-webkit-scrollbar-thumb{
+  background: rgba(16,185,129,.38);
+  border-radius: 999px;
+}
+
+.admin-forward-tabs{
+  width: max-content;
+  min-width: 100%;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+}
+
+.school-forward-filter-group,
+.forwarded-stage-filter-group{
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.school-forward-filter-btn,
+.forwarded-stage-filter-btn{
+  position: relative;
+  min-height: 50px;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 13px 16px !important;
+  background: transparent !important;
+  color: #475569 !important;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: none !important;
+  outline: none !important;
+  transition:
+    color .15s ease,
+    background-color .15s ease;
+}
+
+.school-forward-filter-btn::after,
+.forwarded-stage-filter-btn::after{
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 999px 999px 0 0;
+  background: #16a34a;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform .16s ease;
+}
+
+.school-forward-filter-btn:hover,
+.forwarded-stage-filter-btn:hover{
+  color: #065f46 !important;
+  background: #f0fdf4 !important;
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+.school-forward-filter-btn.active,
+.forwarded-stage-filter-btn.active{
+  color: #166534 !important;
+  background: #ecfdf5 !important;
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+.school-forward-filter-btn.active::after,
+.forwarded-stage-filter-btn.active::after{
+  transform: scaleX(1);
+}
+
+.admin-forward-tab-count{
+  min-width: 22px;
+  height: 22px;
+  margin-left: 7px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.school-forward-filter-btn.active .admin-forward-tab-count{
+  background: #dcfce7;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.forwarded-subfilter-group{
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  padding-left: 10px;
+  border-left: 1px solid #d1fae5;
+}
+
+.forwarded-subfilter-btn{
+  position: relative;
+  min-height: 50px;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 13px 14px !important;
+  background: transparent !important;
+  color: #475569 !important;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: none !important;
+  outline: none !important;
+  transition:
+    color .15s ease,
+    background-color .15s ease;
+}
+
+.forwarded-subfilter-btn::after{
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 999px 999px 0 0;
+  background: #059669;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform .16s ease;
+}
+
+.forwarded-subfilter-btn:hover{
+  color: #065f46 !important;
+  background: #f0fdf4 !important;
+}
+
+.forwarded-subfilter-btn.active{
+  color: #166534 !important;
+  background: #ecfdf5 !important;
+}
+
+.forwarded-subfilter-btn.active::after{
+  transform: scaleX(1);
+}
+
+.forwarded-subfilter-btn.active .admin-forward-tab-count{
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.workflow-date-filter-dropdown{
+  position: relative;
+}
+
+.workflow-date-filter-btn{
+  min-height: 46px;
+  border-radius: 14px;
+  padding: 0 14px;
+  border: 1px solid rgba(22,163,74,.20);
+  background: #ffffff;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 8px 18px rgba(22,163,74,.09);
+}
+
+.workflow-date-filter-btn:hover,
+.workflow-date-filter-btn:focus,
+.workflow-date-filter-btn.show{
+  color: #14532d;
+  background: #f0fdf4;
+  border-color: rgba(22,163,74,.34);
+}
+
+.workflow-date-active-badge{
+  margin-left: 6px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+}
+
+.workflow-date-filter-menu{
+  width: 420px;
+  max-width: calc(100vw - 28px);
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.99);
+  box-shadow: 0 24px 60px rgba(15,23,42,.18) !important;
+}
+
+.workflow-date-filter-heading{
+  padding: 2px 2px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 10px;
+}
+
+.workflow-date-filter-section{
+  padding: 11px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.workflow-date-filter-title{
+  margin-bottom: 8px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.workflow-date-input{
+  border-radius: 10px;
+  border-color: #dbe1e8;
+}
+
+.workflow-date-input:focus{
+  border-color: rgba(22,163,74,.42);
+  box-shadow: 0 0 0 3px rgba(22,163,74,.12);
+}
+
+.workflow-date-filter-actions{
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.admission-card-top-right{
+  flex-wrap: wrap;
+  max-width: 58%;
+}
+
+.admission-workflow-tag{
+  max-width: 190px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.1;
+  text-align: center;
+  white-space: normal;
+}
+
+.workflow-tag-danger{
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+}
+
+.workflow-tag-reupload{
+  color: #9a3412;
+  background: #ffedd5;
+  border: 1px solid #fdba74;
+}
+
+.admission-workflow-dates{
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(148,163,184,.28);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.admission-workflow-dates b{
+  color: #334155;
+  font-weight: 800;
+}
+
+.workflow-date-separator{
+  color: #cbd5e1;
+}
+
+.admission-card.workflow-date-filter-hidden{
+  display: none !important;
+}
+
+.forward-return-school-option{
+  border-color: #fdba74;
+  background: #fff7ed;
+}
+
+.forward-return-school-option b{
+  color: #9a3412;
+}
+
+@media (max-width: 575.98px){
+  .admin-forward-tabs-wrap{
+    padding: 0 6px;
+  }
+
+  .school-forward-filter-btn,
+  .forwarded-stage-filter-btn,
+  .forwarded-subfilter-btn{
+    min-height: 46px;
+    padding: 12px 13px !important;
+    font-size: 13px;
+  }
+
+  .workflow-date-filter-btn{
+    width: 100%;
+  }
+}
+
+.admission-card.forward-filter-hidden{
+  display: none !important;
+}
+
+.mini-forward{
+  background: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #ddd6fe;
+}
+
+.mini-forwarded-done{
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  cursor: default;
+}
+
+.admission-forward-note{
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(148,163,184,.35);
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.35;
+}
+
+.admission-forward-note i{
+  color: #16a34a;
+  font-size: 14px;
+}
+
+.admission-forward-note-text{
+  word-break: break-word;
+}
+
+.forward-dept-option{
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(148,163,184,.28);
+  background: #fff;
+  cursor: pointer;
+  transition: transform .14s ease, border-color .14s ease, box-shadow .14s ease;
+}
+
+.forward-dept-option:hover{
+  transform: translateY(-1px);
+  border-color: rgba(22,163,74,.28);
+  box-shadow: 0 10px 22px rgba(15,23,42,.08);
+}
+
+.forward-dept-option input{
+  margin-top: 4px;
+}
+
+.forward-dept-option b{
+  display: block;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.forward-dept-option small{
+  display: block;
+  color: #64748b;
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
 .duplicate-admission-card{
   background: #fee2e2;
   border-color: #fca5a5;
@@ -3461,6 +4811,317 @@ function escHtml(value) {
   font-weight: 900;
   max-width: 170px;
 }
+
+
+/* =========================
+   School Accounts pipeline home
+   ========================= */
+.accounts-pipeline-home{
+  border-radius: 18px;
+  border: 1px solid rgba(16,185,129,.20);
+  background:
+    radial-gradient(circle at top left, rgba(34,197,94,.14), transparent 34%),
+    linear-gradient(135deg, #ffffff, #f0fdf4);
+  box-shadow: 0 14px 34px rgba(15,23,42,.08);
+  padding: 18px;
+}
+
+.accounts-pipeline-home-heading{
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.accounts-pipeline-eyebrow{
+  color: #16a34a;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .42px;
+  text-transform: uppercase;
+}
+
+.accounts-pipeline-title{
+  margin: 3px 0 2px;
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -.2px;
+}
+
+.accounts-pipeline-subtitle{
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.accounts-pipeline-home-grid{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.accounts-pipeline-card{
+  width: 100%;
+  min-height: 112px;
+  border: 1px solid rgba(16,185,129,.20);
+  border-radius: 18px;
+  background: rgba(255,255,255,.96);
+  box-shadow:
+    0 12px 26px rgba(15,23,42,.08),
+    inset 0 1px 0 rgba(255,255,255,.85);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+
+.accounts-pipeline-card:hover{
+  transform: translateY(-2px);
+  border-color: rgba(16,185,129,.38);
+  box-shadow: 0 18px 38px rgba(22,163,74,.14);
+}
+
+.accounts-pipeline-card-icon{
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 48px;
+  background: linear-gradient(135deg, #22c55e, #15803d);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(22,163,74,.20);
+}
+
+.accounts-pipeline-card-icon.old{
+  background: linear-gradient(135deg, #0f172a, #334155);
+}
+
+.accounts-pipeline-card-icon i{
+  font-size: 20px;
+}
+
+.accounts-pipeline-card-content{
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.accounts-pipeline-card-title{
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.accounts-pipeline-card-hint{
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.accounts-pipeline-card-count{
+  min-width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #dcfce7;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.accounts-workspace-hidden{
+  display: none !important;
+}
+
+@media (max-width: 767.98px){
+  .accounts-pipeline-home-grid{
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================
+   School Accounts workflow
+   ========================= */
+.school-accounts-stage-group{
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid #d1fae5;
+}
+
+.accounts-pipeline-filter-group{
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding-left: 10px;
+  border-left: 1px solid #d1fae5;
+}
+
+.accounts-pipeline-filter-btn{
+  position: relative;
+  min-height: 50px;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 13px 14px !important;
+  background: transparent !important;
+  color: #475569 !important;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.accounts-pipeline-filter-btn::after{
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 999px 999px 0 0;
+  background: #2563eb;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform .16s ease;
+}
+
+.accounts-pipeline-filter-btn:hover{
+  color: #0f172a !important;
+  background: #eff6ff !important;
+}
+
+.accounts-pipeline-filter-btn.active{
+  color: #1d4ed8 !important;
+  background: #eff6ff !important;
+}
+
+.accounts-pipeline-filter-btn.active::after{
+  transform: scaleX(1);
+}
+
+.accounts-pipeline-filter-btn.active .admin-forward-tab-count{
+  background: #dbeafe;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.forwarded-stage-filter-btn.active .admin-forward-tab-count{
+  background: #dcfce7;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.school-accounts-workflow-meta{
+  margin-top: 10px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  color: #14532d;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.school-accounts-workflow-meta b{
+  color: #166534;
+  font-weight: 900;
+}
+
+.accounts-stage-label{
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: #ffffff;
+  border: 1px solid #86efac;
+  color: #166534;
+  font-weight: 900;
+}
+
+.accounts-issue-note{
+  margin-top: 10px;
+  padding: 10px 11px;
+  border-radius: 12px;
+  border: 1px solid #fdba74;
+  background: #fff7ed;
+  color: #7c2d12;
+}
+
+.accounts-issue-note-title{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.accounts-issue-note-message{
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.accounts-issue-note-fields{
+  margin-top: 4px;
+  color: #c2410c;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.forward-target-user-wrap{
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+}
+
+.forward-target-user-wrap .form-select{
+  border-radius: 12px;
+  border-color: #86efac;
+  background-color: #ffffff;
+}
+
+.forward-target-user-wrap .form-select:focus{
+  border-color: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34,197,94,.12);
+}
+
+@media (max-width: 575.98px){
+  .accounts-pipeline-filter-btn{
+    min-height: 46px;
+    padding: 12px 13px !important;
+    font-size: 12px;
+  }
+
+  .school-accounts-workflow-meta{
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
 </style>
 
 <div id="upload-flash-overlay"
@@ -4495,7 +6156,110 @@ function escHtml(value) {
     </div>
   </div>
 </div>
+<!-- ✅ Admission Forward Modal -->
+<div class="modal fade" id="admissionForwardModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg rounded-4">
+      <div class="modal-header border-0">
+        <div>
+          <h5 class="modal-title mb-0">
+            <i class="bi bi-send me-1"></i> Forward Admission
+          </h5>
+          <div class="small text-muted">
+            Select department and send this admission forward.
+          </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
 
+      <div class="modal-body pt-0">
+        <div class="p-3 rounded-4 bg-light mb-3">
+          <div class="small"><b>Student:</b> <span id="forwardStudentName">-</span></div>
+          <div class="small mt-1"><b>Admission ID:</b> <span id="forwardAdmissionId">-</span></div>
+        </div>
+
+        <label class="form-label fw-semibold">Forward to department</label>
+
+        <div class="d-grid gap-2">
+          <label class="forward-dept-option">
+            <input type="radio" name="forwardType" value="print_record_update" data-label="Print & Record Update">
+            <span>
+              <b>Print &amp; Record Update</b>
+              <small>For print and record update work.</small>
+            </span>
+          </label>
+
+          <label class="forward-dept-option">
+            <input type="radio" name="forwardType" value="verification_registration" data-label="Verification & Registration">
+            <span>
+              <b>Verification & Registration</b>
+              <small>For verification number and registration process.</small>
+            </span>
+          </label>
+
+                    <label class="forward-dept-option">
+            <input type="radio" name="forwardType" value="paid_slip" data-label="Paid Slip">
+            <span>
+              <b>Paid Slip</b>
+              <small>For paid slip related work.</small>
+            </span>
+          </label>
+
+          <label
+            class="forward-dept-option forward-return-school-option d-none"
+            data-school-return-option>
+
+            <input
+              type="radio"
+              name="forwardType"
+              value="school_return"
+              data-label="School Department">
+
+            <span>
+              <b>Return to School Department</b>
+
+              <small>
+                Use this when Accounts sends the admission back for correction or file re-upload.
+              </small>
+            </span>
+          </label>
+        </div>
+
+        <div
+          class="forward-target-user-wrap d-none"
+          id="forwardTargetUserWrap">
+          <label
+            class="form-label fw-semibold mb-1"
+            for="forwardTargetUserId">
+            Assign to Agent / Sub-Agent
+          </label>
+
+          <select
+            class="form-select"
+            id="forwardTargetUserId"
+            disabled>
+            <option value="">Select pipeline first</option>
+          </select>
+
+          <div
+            class="small text-muted mt-2"
+            id="forwardTargetUserHint">
+            Select the user who should receive this admission.
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">
+          Cancel
+        </button>
+        <button type="button" class="btn btn-success rounded-pill px-4" id="sendForwardAdmissionBtn">
+          <i class="bi bi-send-check me-1"></i> Send
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 <!-- ✅ NEW: Confirm Modal (Same Bootstrap style, center) -->
 <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -6064,6 +7828,2760 @@ if (editBillingStatusSaveBtn) {
     });
   })();
 </script>
+<script>
+  (function () {
+    const canUseSchoolForwarding = <%- JSON.stringify(!!canUseSchoolForwarding) %>;
+    const shouldShowSchoolForwardFilters = <%- JSON.stringify(!!shouldShowSchoolForwardFilters) %>;
+    const shouldShowSchoolAccountsWorkflow = <%- JSON.stringify(!!shouldShowSchoolAccountsWorkflow) %>;
+    const shouldShowSchoolAccountsNewAdmissions = shouldShowSchoolAccountsWorkflow;
+    const isSuper = <%- JSON.stringify(!!_isSuper) %>;
+    const isSchoolAccountsUser = <%- JSON.stringify(!!isSchoolAccountsUser) %>;
+    const currentUserDept = <%- JSON.stringify(currentUserDept || '') %>;
+
+    const serverAccountsPipelineCounts = <%- JSON.stringify(accountsPipelineCountData || {}) %>;
+
+    if (!canUseSchoolForwarding) return;
+
+    let activeForwardAdmissionId = "";
+    let activeForwardStudentName = "";
+    let activeForwardMainFilter = "";
+    let activeForwardSubFilter = "";
+    let activeAccountsStageFilter = "";
+    let activeAccountsPipelineFilter = "";
+
+    function showPopup(type, title, message) {
+      if (typeof window.showUploadFlash === "function") {
+        window.showUploadFlash(type, title, message);
+      } else {
+        alert(message || title || "Notification");
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function normalizeStatusText(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ");
+    }
+
+    function normalizeDateOnly(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+
+      const direct = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (direct) return direct[1];
+
+      const parsed = new Date(raw);
+      if (Number.isNaN(parsed.getTime())) return "";
+
+      return parsed.toISOString().slice(0, 10);
+    }
+
+    function formatDateForCard(value) {
+      const dateOnly = normalizeDateOnly(value);
+      if (!dateOnly) return "Not Assigned";
+
+      const parts = dateOnly.split("-");
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+
+    function getWorkflowTagClass(tag) {
+      const clean = String(tag || "").trim().toLowerCase();
+
+      if (clean === "reupload") {
+        return "workflow-tag-reupload";
+      }
+
+      if (
+        clean === "not received" ||
+        clean === "registration number removed"
+      ) {
+        return "workflow-tag-danger";
+      }
+
+      return "";
+    }
+
+    function deriveWorkflowTag({
+      directTag = "",
+      schoolReturnStatus = "",
+      reuploadTagActive = false,
+      registrationNumberRemoved = false,
+    } = {}) {
+      const returnStatus = String(
+        schoolReturnStatus || ""
+      )
+        .trim()
+        .toLowerCase();
+
+      if (returnStatus === "not_received") {
+        return "Not Received";
+      }
+
+      if (
+        returnStatus === "reupload" ||
+        reuploadTagActive
+      ) {
+        return "Reupload";
+      }
+
+      const cleanDirect = String(
+        directTag || ""
+      ).trim();
+
+      if (cleanDirect) {
+        return cleanDirect;
+      }
+
+      return registrationNumberRemoved
+        ? "Registration Number Removed"
+        : "";
+    }
+
+    function upsertForwardDisplayText(card, text) {
+      if (!card) return;
+
+      const cleanText = String(text || "").trim();
+      let note = card.querySelector(".admission-forward-note");
+
+      if (!cleanText) {
+        if (note) note.classList.add("d-none");
+        return;
+      }
+
+      if (!note) {
+        note = document.createElement("div");
+        note.className = "admission-forward-note";
+        note.innerHTML = `
+          <i class="bi bi-send-check"></i>
+          <span class="admission-forward-note-text"></span>
+        `;
+        card.appendChild(note);
+      }
+
+      const textEl = note.querySelector(".admission-forward-note-text");
+
+      if (textEl) {
+        textEl.innerHTML = escapeHtml(cleanText);
+      }
+
+      note.classList.remove("d-none");
+    }
+
+    function upsertWorkflowTag(card, tag) {
+      if (!card) return;
+
+      const cleanTag = String(tag || "").trim();
+      let tagEl = card.querySelector(".admission-workflow-tag");
+
+      if (!tagEl) {
+        const topRight = card.querySelector(".admission-card-top-right");
+
+        if (topRight) {
+          tagEl = document.createElement("span");
+          tagEl.className = "admission-workflow-tag d-none";
+
+          const rolePill = topRight.querySelector(".admission-role-pill");
+
+          if (rolePill) {
+            topRight.insertBefore(tagEl, rolePill);
+          } else {
+            topRight.appendChild(tagEl);
+          }
+        }
+      }
+
+      if (!tagEl) return;
+
+      tagEl.classList.remove(
+        "workflow-tag-danger",
+        "workflow-tag-reupload"
+      );
+
+      const tagClass = getWorkflowTagClass(cleanTag);
+
+      if (tagClass) {
+        tagEl.classList.add(tagClass);
+      }
+
+      tagEl.textContent = cleanTag;
+      tagEl.classList.toggle("d-none", !cleanTag);
+
+      card.setAttribute("data-workflow-tag", cleanTag);
+    }
+
+    function upsertWorkflowDates(card, registrationDate, assignedDate) {
+      if (!card) return;
+
+      const registrationDateOnly = normalizeDateOnly(registrationDate);
+      const assignedDateOnly = normalizeDateOnly(assignedDate);
+
+      card.setAttribute(
+        "data-registration-date",
+        registrationDateOnly
+      );
+
+      card.setAttribute(
+        "data-registration-assigned-date",
+        assignedDateOnly
+      );
+
+      let datesWrap = card.querySelector(".admission-workflow-dates");
+
+      if (!datesWrap) {
+        datesWrap = document.createElement("div");
+        datesWrap.className = "admission-workflow-dates";
+
+        datesWrap.innerHTML = `
+          <span>
+            <b>Registration:</b>
+            <span class="workflow-registration-date-text"></span>
+          </span>
+
+          <span class="workflow-date-separator">•</span>
+
+          <span>
+            <b>Reg. No. Assigned:</b>
+            <span class="workflow-assigned-date-text"></span>
+          </span>
+        `;
+
+        const forwardNote = card.querySelector(".admission-forward-note");
+
+        if (forwardNote) {
+          card.insertBefore(datesWrap, forwardNote);
+        } else {
+          card.appendChild(datesWrap);
+        }
+      }
+
+      const registrationText = datesWrap.querySelector(
+        ".workflow-registration-date-text"
+      );
+
+      const assignedText = datesWrap.querySelector(
+        ".workflow-assigned-date-text"
+      );
+
+      if (registrationText) {
+        registrationText.textContent =
+          formatDateForCard(registrationDateOnly);
+      }
+
+      if (assignedText) {
+        assignedText.textContent =
+          formatDateForCard(assignedDateOnly);
+      }
+    }
+
+    function normalizeAccountsPipelineType(value) {
+      const clean = String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, "_");
+
+      const aliases = {
+        "print_+_record_update": "print_record_update",
+        "print_&_record_update": "print_record_update",
+        print_record_update: "print_record_update",
+        verification_registration: "verification_registration",
+        "verification_&_registration": "verification_registration",
+        paid_slip: "paid_slip",
+        fee_slip: "paid_slip",
+        internal: "internal_department",
+        internal_department: "internal_department",
+        school_department: "school",
+      };
+
+      return aliases[clean] || clean;
+    }
+
+    function getAccountsPipelineLabelClient(type) {
+      const labels = {
+        print_record_update: "Print & Record Update",
+        verification_registration: "Verification & Registration",
+        paid_slip: "Paid Slip",
+        internal_department: "Internal Department",
+        school: "School Department",
+        school_return: "School Department",
+      };
+
+      return labels[normalizeAccountsPipelineType(type)] || "";
+    }
+
+    function normalizeAccountsWorkflowStageClient(value) {
+      const clean = String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, "_");
+
+      const aliases = {
+        new: "new_admissions",
+        new_admission: "new_admissions",
+        new_admissions: "new_admissions",
+        record_update: "record_to_update",
+        record_to_update: "record_to_update",
+        old: "old_admissions",
+        old_admission: "old_admissions",
+        old_admissions: "old_admissions",
+      };
+
+      return aliases[clean] || "new_admissions";
+    }
+
+    function getAccountsWorkflowStageLabelClient(stage) {
+      const labels = {
+        new_admissions: "New Admissions",
+        record_to_update: "Record to Update",
+        old_admissions: "Old Admissions",
+      };
+
+      return labels[
+        normalizeAccountsWorkflowStageClient(stage)
+      ] || "New Admissions";
+    }
+
+    function normalizeIssueFieldsClient(value) {
+      if (Array.isArray(value)) {
+        return value
+          .map(item => String(item || "").trim())
+          .filter(Boolean);
+      }
+
+      const raw = String(value || "").trim();
+      if (!raw) return [];
+
+      try {
+        const parsed = JSON.parse(raw);
+
+        return Array.isArray(parsed)
+          ? parsed
+              .map(item => String(item || "").trim())
+              .filter(Boolean)
+          : [];
+      } catch (error) {
+        return raw
+          .split(",")
+          .map(item => item.trim())
+          .filter(Boolean);
+      }
+    }
+
+    function upsertAccountsWorkflowMeta(card, details = {}) {
+      if (!card) return;
+
+      const pipelineType =
+        normalizeAccountsPipelineType(
+          details.pipelineType || ""
+        );
+
+      const forwardStatus = String(
+        details.forwardStatus || ""
+      )
+        .trim()
+        .toLowerCase();
+
+      let meta = card.querySelector(
+        ".school-accounts-workflow-meta"
+      );
+
+      const shouldShow =
+        forwardStatus === "forwarded" &&
+        !!pipelineType &&
+        pipelineType !== "school_return";
+
+      if (!shouldShow) {
+        if (meta) {
+          meta.classList.add("d-none");
+        }
+        return;
+      }
+
+      if (!meta) {
+        meta = document.createElement("div");
+        meta.className = "school-accounts-workflow-meta";
+
+        const issueNote = card.querySelector(
+          ".accounts-issue-note"
+        );
+
+        const forwardNote = card.querySelector(
+          ".admission-forward-note"
+        );
+
+        if (issueNote) {
+          card.insertBefore(meta, issueNote);
+        } else if (forwardNote) {
+          card.insertBefore(meta, forwardNote);
+        } else {
+          card.appendChild(meta);
+        }
+      }
+
+      const pipelineLabel =
+        getAccountsPipelineLabelClient(pipelineType) ||
+        String(details.pipelineDepartment || "").trim() ||
+        "School Accounts";
+
+      const normalizedSourceType = normalizeAccountsPipelineType(
+        details.sourceType || ""
+      );
+
+      const sourceLabel =
+        details.workflowStage === "record_to_update"
+          ? "Record to Update"
+          : (
+              normalizedSourceType === "internal_department" ||
+              (
+                normalizedSourceType &&
+                normalizedSourceType === pipelineType &&
+                details.workflowStage !== "old_admissions"
+              )
+                ? "Internal Department"
+                : (
+                    String(details.sourceDepartment || "").trim() ||
+                    getAccountsPipelineLabelClient(normalizedSourceType) ||
+                    "School Department"
+                  )
+            );
+
+      const ownerName = String(
+        details.ownerName || ""
+      ).trim();
+
+      const stageLabel =
+        getAccountsWorkflowStageLabelClient(
+          details.workflowStage || ""
+        );
+
+      meta.innerHTML = `
+        <span>
+          <b>Pipeline:</b>
+          <span class="accounts-pipeline-label">${escapeHtml(pipelineLabel)}</span>
+        </span>
+
+        <span>
+          <b>Source:</b>
+          <span class="accounts-source-label">${escapeHtml(sourceLabel)}</span>
+        </span>
+
+        ${ownerName ? `
+          <span>
+            <b>Assigned to:</b>
+            <span class="accounts-owner-label">${escapeHtml(ownerName)}</span>
+          </span>
+        ` : ""}
+
+        <span>
+          <b>Stage:</b>
+          <span class="accounts-stage-label">${escapeHtml(stageLabel)}</span>
+        </span>
+      `;
+
+      meta.classList.remove("d-none");
+    }
+
+    function upsertAccountsIssueNote(
+      card,
+      issueMessage,
+      issueFields = []
+    ) {
+      if (!card) return;
+
+      const cleanMessage = String(
+        issueMessage || ""
+      ).trim();
+
+      const cleanFields =
+        normalizeIssueFieldsClient(issueFields);
+
+      let note = card.querySelector(
+        ".accounts-issue-note"
+      );
+
+      if (!cleanMessage) {
+        if (note) {
+          note.classList.add("d-none");
+        }
+        return;
+      }
+
+      if (!note) {
+        note = document.createElement("div");
+        note.className = "accounts-issue-note";
+
+        const forwardNote = card.querySelector(
+          ".admission-forward-note"
+        );
+
+        if (forwardNote) {
+          card.insertBefore(note, forwardNote);
+        } else {
+          card.appendChild(note);
+        }
+      }
+
+      note.innerHTML = `
+        <div class="accounts-issue-note-title">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          Correction Required
+        </div>
+
+        <div class="accounts-issue-note-message">${escapeHtml(cleanMessage)}</div>
+
+        ${cleanFields.length ? `
+          <div class="accounts-issue-note-fields">
+            Incorrect: ${escapeHtml(cleanFields.join(", "))}
+          </div>
+        ` : ""}
+      `;
+
+      note.classList.remove("d-none");
+    }
+
+    function syncForwardAction(
+      card,
+      admission = {}
+    ) {
+      if (!card) return;
+
+      const actions =
+        card.querySelector(
+          ".admission-card-actions"
+        );
+
+      if (!actions) return;
+
+      const admissionCanForward =
+        admission?.canShowForwardButton === true ||
+        admission?.canShowForwardButton === 1 ||
+        admission?.canShowForwardButton === "1";
+
+      if (
+        typeof admission?.canShowForwardButton !==
+        "undefined"
+      ) {
+        card.setAttribute(
+          "data-can-forward",
+          admissionCanForward ? "1" : "0"
+        );
+      }
+
+      const state =
+        getCardForwardState(card);
+
+      const admissionId = String(
+        admission?.id ||
+        card.getAttribute(
+          "data-admission-id"
+        ) ||
+        ""
+      );
+
+      const studentName = String(
+        admission?.student ||
+        admission?.studentName ||
+        card.querySelector(
+          ".admission-title"
+        )?.textContent ||
+        "Student"
+      ).trim();
+
+      const canReforwardAfterReupload =
+        currentUserDept === "school" &&
+        state.schoolReturnStatus ===
+          "reupload";
+
+      const shouldShowForwardButton =
+        state.isSchool &&
+        state.canForward &&
+        (
+          isSchoolAccountsUser ||
+          state.status !== "forwarded" ||
+          canReforwardAfterReupload
+        );
+
+      let forwardButton =
+        actions.querySelector(
+          ".btn-forward-admission"
+        );
+
+      let forwardedDone =
+        actions.querySelector(
+          ".mini-forwarded-done"
+        );
+
+      if (shouldShowForwardButton) {
+        if (forwardedDone) {
+          forwardedDone.remove();
+          forwardedDone = null;
+        }
+
+        if (!forwardButton) {
+          forwardButton =
+            document.createElement(
+              "button"
+            );
+
+          forwardButton.type =
+            "button";
+
+          forwardButton.className =
+            "mini-action-btn mini-forward btn-forward-admission";
+
+          forwardButton.innerHTML = `
+            <i class="bi bi-send"></i>
+            Forward
+          `;
+
+          actions.appendChild(
+            forwardButton
+          );
+        }
+
+        forwardButton.setAttribute(
+          "data-admission-id",
+          admissionId
+        );
+
+        forwardButton.setAttribute(
+          "data-student",
+          studentName
+        );
+
+        forwardButton.classList.remove(
+          "d-none"
+        );
+
+        return;
+      }
+
+      if (forwardButton) {
+        forwardButton.remove();
+      }
+
+      if (state.isForwarded) {
+        const forwardedTo =
+          String(
+            card.getAttribute(
+              "data-forwarded-to"
+            ) || ""
+          ).trim();
+
+        if (!forwardedDone) {
+          forwardedDone =
+            document.createElement(
+              "span"
+            );
+
+          forwardedDone.className =
+            "mini-action-btn mini-forwarded-done";
+
+          actions.appendChild(
+            forwardedDone
+          );
+        }
+
+        forwardedDone.innerHTML = `
+          <i class="bi bi-send-check"></i>
+          Forwarded${
+            forwardedTo
+              ? ` to ${escapeHtml(forwardedTo)}`
+              : ""
+          }
+        `;
+      } else if (forwardedDone) {
+        forwardedDone.remove();
+      }
+    }
+    function updateAdmissionWorkflowCard(card, admission = {}) {
+      if (!card) return;
+
+      const forward = admission?.forward || {};
+
+      const forwardStatus = String(
+        admission?.forwardStatus ||
+        forward?.status ||
+        card.getAttribute("data-forward-status") ||
+        "not_forwarded"
+      )
+        .trim()
+        .toLowerCase();
+
+      const forwardSubStatus = String(
+        admission?.forwardSubStatus ||
+        forward?.subStatus ||
+        card.getAttribute("data-forward-sub-status") ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+
+      const schoolReturnStatus = String(
+        admission?.schoolReturnStatus ||
+        admission?.school_return_status ||
+        forward?.schoolReturnStatus ||
+        card.getAttribute("data-school-return-status") ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+
+      const hasExplicitReuploadTag =
+        Object.prototype.hasOwnProperty.call(
+          admission || {},
+          "reuploadTagActive"
+        ) ||
+        Object.prototype.hasOwnProperty.call(
+          admission || {},
+          "reupload_tag_active"
+        );
+
+      const reuploadTagActive =
+        hasExplicitReuploadTag
+          ? Number(
+              admission?.reuploadTagActive ??
+              admission?.reupload_tag_active ??
+              0
+            ) === 1
+          : card.getAttribute(
+              "data-reupload-tag-active"
+            ) === "1";
+
+      const registrationNumberRemoved =
+        Number(
+          admission?.registrationNumberRemoved ||
+          admission?.registration_number_removed ||
+          admission?.accounts?.registrationNumberRemoved ||
+          card.getAttribute("data-registration-number-removed") ||
+          0
+        ) === 1;
+
+      const hasExplicitCanForward =
+        Object.prototype.hasOwnProperty.call(
+          admission || {},
+          "canShowForwardButton"
+        ) ||
+        Object.prototype.hasOwnProperty.call(
+          admission || {},
+          "canForward"
+        );
+
+      const admissionCanForward =
+        admission?.canShowForwardButton === true ||
+        admission?.canShowForwardButton === 1 ||
+        admission?.canShowForwardButton === "1" ||
+        admission?.canForward === true ||
+        admission?.canForward === 1 ||
+        admission?.canForward === "1";
+
+      const canForward =
+        schoolReturnStatus === "not_received"
+          ? false
+          : hasExplicitCanForward
+            ? admissionCanForward
+            : card.getAttribute(
+                "data-can-forward"
+              ) === "1";
+
+      const workflowTag = deriveWorkflowTag({
+        directTag: admission?.workflowTag || "",
+        schoolReturnStatus,
+        reuploadTagActive,
+        registrationNumberRemoved,
+      });
+
+      const registrationDate =
+        admission?.registrationDate ||
+        admission?.registration_date ||
+        card.getAttribute("data-registration-date") ||
+        "";
+
+      const assignedDate =
+        admission?.registrationNumberAssignedAt ||
+        admission?.accounts_registration_number_assigned_at ||
+        admission?.accounts?.registrationNumberAssignedAt ||
+        card.getAttribute("data-registration-assigned-date") ||
+        "";
+
+      const forwardDisplayText = String(
+        admission?.forwardDisplayText ||
+        forward?.displayText ||
+        card.getAttribute("data-forward-display-text") ||
+        ""
+      ).trim();
+
+      const forwardedFromDepartment = String(
+        admission?.forwardedFromDepartment ||
+        admission?.forwarded_from_department ||
+        forward?.fromDepartment ||
+        card.getAttribute("data-forwarded-from") ||
+        ""
+      ).trim();
+
+      const forwardedFromType =
+        normalizeAccountsPipelineType(
+          admission?.forwardedFromType ||
+          admission?.forwarded_from_type ||
+          forward?.fromType ||
+          card.getAttribute("data-forwarded-from-type") ||
+          ""
+        );
+
+      const accountsWorkflowStage =
+        normalizeAccountsWorkflowStageClient(
+          admission?.accountsWorkflowStage ||
+          admission?.accounts_workflow_stage ||
+          forward?.workflowStage ||
+          card.getAttribute("data-accounts-workflow-stage") ||
+          "new_admissions"
+        );
+
+      const accountsIssueMessage = String(
+        admission?.accountsIssueMessage ||
+        admission?.accounts_issue_message ||
+        admission?.issueMessage ||
+        forward?.issueMessage ||
+        card.getAttribute("data-accounts-issue-message") ||
+        ""
+      ).trim();
+
+      const accountsIssueFields =
+        normalizeIssueFieldsClient(
+          admission?.accountsIssueFields ||
+          admission?.accounts_issue_fields ||
+          admission?.issueFields ||
+          forward?.issueFields ||
+          []
+        );
+
+      const forwardedOwnerUserName = String(
+        admission?.forwardedOwnerUserName ||
+        admission?.forwarded_owner_user_name ||
+        forward?.forwardedOwnerUserName ||
+        card.getAttribute("data-forwarded-owner-user-name") ||
+        ""
+      ).trim();
+
+      card.setAttribute(
+        "data-forward-status",
+        forwardStatus
+      );
+
+      card.setAttribute(
+        "data-forward-sub-status",
+        forwardSubStatus
+      );
+
+      card.setAttribute(
+        "data-school-return-status",
+        schoolReturnStatus
+      );
+
+      card.setAttribute(
+        "data-reupload-tag-active",
+        reuploadTagActive ? "1" : "0"
+      );
+
+      card.setAttribute(
+        "data-can-forward",
+        canForward ? "1" : "0"
+      );
+
+      const forwardButton = card.querySelector(
+        ".btn-forward-admission"
+      );
+
+      if (forwardButton) {
+        forwardButton.classList.toggle(
+          "d-none",
+          !canForward
+        );
+      }
+
+      card.setAttribute(
+        "data-registration-number-removed",
+        registrationNumberRemoved ? "1" : "0"
+      );
+
+      card.setAttribute(
+        "data-not-received-visible-for-current-user",
+        admission?.notReceivedVisibleForCurrentUser === true ||
+        schoolReturnStatus === "not_received" ||
+        schoolReturnStatus === "reupload"
+          ? "1"
+          : "0"
+      );
+
+      if (
+        admission?.forwardedToDepartment ||
+        forward?.toDepartment
+      ) {
+        card.setAttribute(
+          "data-forwarded-to",
+          admission?.forwardedToDepartment ||
+          forward?.toDepartment ||
+          ""
+        );
+      }
+
+      if (
+        admission?.forwardedToType ||
+        forward?.toType
+      ) {
+        card.setAttribute(
+          "data-forwarded-to-type",
+          normalizeAccountsPipelineType(
+            admission?.forwardedToType ||
+            forward?.toType ||
+            ""
+          )
+        );
+      }
+
+      card.setAttribute(
+        "data-forwarded-from",
+        forwardedFromDepartment
+      );
+
+      card.setAttribute(
+        "data-forwarded-from-type",
+        forwardedFromType
+      );
+
+      card.setAttribute(
+        "data-accounts-workflow-stage",
+        accountsWorkflowStage
+      );
+
+      card.setAttribute(
+        "data-accounts-issue-message",
+        accountsIssueMessage
+      );
+
+      card.setAttribute(
+        "data-forwarded-owner-user-name",
+        forwardedOwnerUserName
+      );
+
+      card.setAttribute(
+        "data-forward-display-text",
+        forwardDisplayText
+      );
+
+      upsertWorkflowTag(card, workflowTag);
+      upsertWorkflowDates(card, registrationDate, assignedDate);
+      upsertAccountsWorkflowMeta(card, {
+        forwardStatus,
+        pipelineType:
+          card.getAttribute("data-forwarded-to-type") || "",
+        pipelineDepartment:
+          card.getAttribute("data-forwarded-to") || "",
+        sourceDepartment: forwardedFromDepartment,
+        sourceType: forwardedFromType,
+        workflowStage: accountsWorkflowStage,
+        ownerName: forwardedOwnerUserName,
+      });
+      upsertAccountsIssueNote(
+        card,
+        accountsIssueMessage,
+        accountsIssueFields
+      );
+      upsertForwardDisplayText(card, forwardDisplayText);
+      syncForwardAction(card, admission);
+
+      if (
+        typeof window.applyWorkflowDateFilters === "function"
+      ) {
+        window.applyWorkflowDateFilters();
+      }
+
+      if (activeAccountsStageFilter) {
+        applySchoolAccountsWorkflowFilter(
+          activeAccountsStageFilter,
+          activeAccountsPipelineFilter
+        );
+      } else if (activeForwardMainFilter) {
+        applySchoolForwardFilter(
+          activeForwardMainFilter,
+          activeForwardSubFilter
+        );
+      } else {
+        updateForwardCounts();
+      }
+    }
+
+    window.updateAdmissionWorkflowCard =
+      updateAdmissionWorkflowCard;
+
+    window.upsertAdmissionForwardDisplayText =
+      upsertForwardDisplayText;
+
+    const ACCOUNTS_PIPELINE_TYPES = new Set([
+      "print_record_update",
+      "verification_registration",
+      "paid_slip",
+    ]);
+
+    const ACCOUNTS_PIPELINE_FILTER_TYPES = new Set([
+      "print_record_update",
+      "verification_registration",
+      "paid_slip",
+      "internal_department",
+    ]);
+
+    function getCardForwardState(card) {
+      const dept = String(
+        card?.getAttribute("data-dept") || ""
+      )
+        .trim()
+        .toLowerCase();
+
+      const currentStatus = normalizeStatusText(
+        card?.getAttribute("data-current-status") || ""
+      );
+
+      const feeStatus = normalizeStatusText(
+        card?.getAttribute("data-fee-status") || ""
+      );
+
+      const hasUpload =
+        String(
+          card?.getAttribute("data-has-upload") || ""
+        ) === "1";
+
+      const uploadedByCurrentUser =
+        String(
+          card?.getAttribute(
+            "data-uploaded-by-current-user"
+          ) || ""
+        ) === "1";
+
+      const status = String(
+        card?.getAttribute("data-forward-status") ||
+        "not_forwarded"
+      )
+        .trim()
+        .toLowerCase();
+
+      const forwardSubStatus = String(
+        card?.getAttribute("data-forward-sub-status") ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+
+      const schoolReturnStatus = String(
+        card?.getAttribute("data-school-return-status") ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+
+      const forwardedByCurrentUser =
+        String(
+          card?.getAttribute(
+            "data-forwarded-by-current-user"
+          ) || ""
+        ) === "1";
+
+      const notForwardedVisibleForCurrentUser =
+        String(
+          card?.getAttribute(
+            "data-not-forwarded-visible-for-current-user"
+          ) || ""
+        ) === "1";
+
+      const notReceivedVisibleForCurrentUser =
+        String(
+          card?.getAttribute(
+            "data-not-received-visible-for-current-user"
+          ) || ""
+        ) === "1";
+
+      const forwardScopeVisibleForCurrentUser =
+        String(
+          card?.getAttribute(
+            "data-forward-scope-visible-for-current-user"
+          ) || ""
+        ) === "1";
+
+      const canForward =
+        String(
+          card?.getAttribute("data-can-forward") || ""
+        ) === "1";
+
+      const forwardedToType =
+        normalizeAccountsPipelineType(
+          card?.getAttribute(
+            "data-forwarded-to-type"
+          ) || ""
+        );
+
+      const forwardedFromType =
+        normalizeAccountsPipelineType(
+          card?.getAttribute(
+            "data-forwarded-from-type"
+          ) || ""
+        );
+
+      const accountsWorkflowStage =
+        normalizeAccountsWorkflowStageClient(
+          card?.getAttribute(
+            "data-accounts-workflow-stage"
+          ) || "new_admissions"
+        );
+
+      const isSchool = dept === "school";
+      const isForwarded = status === "forwarded";
+
+      const isNewAdmissionStage =
+        currentStatus === "new admission" &&
+        feeStatus === "new admission";
+
+      const isForwardedForThisUser =
+        isSchool &&
+        isForwarded &&
+        (
+          isSuper ||
+          forwardedByCurrentUser ||
+          forwardScopeVisibleForCurrentUser
+        );
+
+      const isNotReceived =
+        isForwarded &&
+        forwardSubStatus === "not_received" &&
+        (
+          isSuper ||
+          notReceivedVisibleForCurrentUser ||
+          forwardScopeVisibleForCurrentUser
+        );
+
+      const isSchoolAccountsAdmission =
+        isSchool &&
+        isForwarded &&
+        ACCOUNTS_PIPELINE_TYPES.has(
+          forwardedToType
+        ) &&
+        (
+          isSuper ||
+          forwardedByCurrentUser ||
+          forwardScopeVisibleForCurrentUser
+        );
+
+      const isAccountsOldAdmission =
+        isSchoolAccountsAdmission &&
+        accountsWorkflowStage === "old_admissions";
+
+      const isAccountsNewAdmission =
+        isSchoolAccountsAdmission &&
+        !isAccountsOldAdmission;
+
+      const isAccountsInternalDepartment =
+        isAccountsNewAdmission &&
+        !!forwardedFromType &&
+        forwardedFromType === forwardedToType;
+
+      const effectiveAccountsPipelineFilter =
+        isAccountsInternalDepartment
+          ? "internal_department"
+          : forwardedToType;
+
+      return {
+        dept,
+        currentStatus,
+        feeStatus,
+        hasUpload,
+        uploadedByCurrentUser,
+        status,
+        forwardSubStatus,
+        schoolReturnStatus,
+        forwardedByCurrentUser,
+        notForwardedVisibleForCurrentUser,
+        notReceivedVisibleForCurrentUser,
+        forwardScopeVisibleForCurrentUser,
+        canForward,
+        forwardedToType,
+        forwardedFromType,
+        accountsWorkflowStage,
+        isSchool,
+        isForwarded,
+        isNewAdmissionStage,
+        isForwardedForThisUser,
+        isNotReceived,
+        isSchoolAccountsAdmission,
+        isAccountsNewAdmission,
+        isAccountsOldAdmission,
+        isAccountsInternalDepartment,
+        effectiveAccountsPipelineFilter,
+
+        // Existing property name retained for compatibility.
+        isSchoolAccountsNewAdmission:
+          isAccountsNewAdmission,
+
+        isNotForwardedVisibleForThisUser:
+          isSchool &&
+          status !== "forwarded" &&
+          (
+            isSuper ||
+            notForwardedVisibleForCurrentUser
+          ),
+      };
+    }
+
+    function updateForwardCounts() {
+      const cards = Array.from(
+        document.querySelectorAll(".admission-card")
+      );
+
+      let forwarded = 0;
+      let notForwarded = 0;
+      let notVerified = 0;
+      let verified = 0;
+      let notReceived = 0;
+
+      let accountsNewAdmissions = 0;
+      let accountsOldAdmissions = 0;
+      let accountsPrint = 0;
+      let accountsVerification = 0;
+      let accountsPaidSlip = 0;
+      let accountsInternal = 0;
+
+      cards.forEach(card => {
+        if (
+          card.classList.contains(
+            "workflow-date-filter-hidden"
+          )
+        ) {
+          return;
+        }
+
+        const state = getCardForwardState(card);
+
+        if (!state.isSchool) return;
+
+        if (state.isForwardedForThisUser) {
+          forwarded += 1;
+        }
+
+        if (state.isNotForwardedVisibleForCurrentUser) {
+          notForwarded += 1;
+        }
+
+        if (
+          state.isForwardedForThisUser &&
+          state.forwardSubStatus === "not_verified"
+        ) {
+          notVerified += 1;
+        }
+
+        if (
+          state.isForwardedForThisUser &&
+          state.forwardSubStatus === "verified"
+        ) {
+          verified += 1;
+        }
+
+        if (state.isNotReceived) {
+          notReceived += 1;
+        }
+
+        if (state.isAccountsNewAdmission) {
+          accountsNewAdmissions += 1;
+
+          if (state.isAccountsInternalDepartment) {
+            accountsInternal += 1;
+          } else if (
+            state.forwardedToType ===
+            "print_record_update"
+          ) {
+            accountsPrint += 1;
+          } else if (
+            state.forwardedToType ===
+            "verification_registration"
+          ) {
+            accountsVerification += 1;
+          } else if (
+            state.forwardedToType ===
+            "paid_slip"
+          ) {
+            accountsPaidSlip += 1;
+          }
+        }
+
+        if (state.isAccountsOldAdmission) {
+          accountsOldAdmissions += 1;
+        }
+      });
+
+      const serverSources = serverAccountsPipelineCounts?.sources || {};
+      const serverPipelines = serverAccountsPipelineCounts?.pipelines || {};
+      const useServerAccountsCounts =
+        shouldShowSchoolAccountsWorkflow &&
+        serverAccountsPipelineCounts &&
+        (
+          Number(serverAccountsPipelineCounts.newAdmissions || 0) > 0 ||
+          Number(serverAccountsPipelineCounts.oldAdmissions || 0) > 0 ||
+          Number(serverAccountsPipelineCounts.internalDepartment || 0) > 0
+        );
+
+      const finalAccountsNewAdmissions = useServerAccountsCounts
+        ? Number(serverAccountsPipelineCounts.newAdmissions || 0)
+        : accountsNewAdmissions;
+
+      const finalAccountsOldAdmissions = useServerAccountsCounts
+        ? Number(serverAccountsPipelineCounts.oldAdmissions || 0)
+        : accountsOldAdmissions;
+
+      const finalAccountsInternal = useServerAccountsCounts
+        ? Number(
+            serverAccountsPipelineCounts.internalDepartment ||
+            serverSources.internal_department ||
+            0
+          )
+        : accountsInternal;
+
+      const finalAccountsPrint = accountsPrint || Number(serverPipelines.print_record_update || 0);
+      const finalAccountsVerification = accountsVerification || Number(serverPipelines.verification_registration || 0);
+      const finalAccountsPaidSlip = accountsPaidSlip || Number(serverPipelines.paid_slip || 0);
+
+      const countMap = {
+        schoolForwardedCount: forwarded,
+        schoolNotForwardedCount: notForwarded,
+        schoolNotVerifiedCount: notVerified,
+        schoolVerifiedCount: verified,
+        schoolNotReceivedCount: notReceived,
+
+        accountsNewAdmissionsCount:
+          finalAccountsNewAdmissions,
+
+        accountsOldAdmissionsCount:
+          finalAccountsOldAdmissions,
+
+        accountsHomeNewCount:
+          finalAccountsNewAdmissions,
+
+        accountsHomeOldCount:
+          finalAccountsOldAdmissions,
+
+        accountsPrintPipelineCount:
+          finalAccountsPrint,
+
+        accountsVerificationPipelineCount:
+          finalAccountsVerification,
+
+        accountsPaidSlipPipelineCount:
+          finalAccountsPaidSlip,
+
+        accountsInternalPipelineCount:
+          finalAccountsInternal,
+      };
+
+      Object.entries(countMap).forEach(([id, value]) => {
+        const el = document.getElementById(id);
+
+        if (el) {
+          el.textContent = String(value);
+        }
+      });
+    }
+
+    window.updateSchoolForwardCounts =
+      updateForwardCounts;
+
+    function setActiveForwardFilter(filter) {
+      document
+        .querySelectorAll("[data-school-forward-filter]")
+        .forEach(btn => {
+          const buttonFilter =
+            btn.getAttribute(
+              "data-school-forward-filter"
+            ) || "";
+
+          btn.classList.toggle(
+            "active",
+            buttonFilter === filter
+          );
+        });
+    }
+
+    function setActiveForwardSubFilter(subFilter) {
+      document
+        .querySelectorAll("[data-forwarded-subfilter]")
+        .forEach(btn => {
+          const buttonFilter =
+            btn.getAttribute(
+              "data-forwarded-subfilter"
+            ) || "";
+
+          btn.classList.toggle(
+            "active",
+            !!subFilter &&
+            buttonFilter === subFilter
+          );
+        });
+    }
+
+    function setActiveForwardStageFilter(stageFilter) {
+      document
+        .querySelectorAll("[data-forwarded-stage-filter]")
+        .forEach(btn => {
+          const buttonFilter =
+            btn.getAttribute(
+              "data-forwarded-stage-filter"
+            ) || "";
+
+          btn.classList.toggle(
+            "active",
+            !!stageFilter &&
+            buttonFilter === stageFilter
+          );
+        });
+    }
+
+    function setActiveAccountsPipelineFilter(
+      pipelineFilter
+    ) {
+      document
+        .querySelectorAll(
+          "[data-accounts-pipeline-filter]"
+        )
+        .forEach(btn => {
+          const buttonFilter =
+            normalizeAccountsPipelineType(
+              btn.getAttribute(
+                "data-accounts-pipeline-filter"
+              ) || ""
+            );
+
+          btn.classList.toggle(
+            "active",
+            !!pipelineFilter &&
+            buttonFilter === pipelineFilter
+          );
+        });
+    }
+
+    function toggleForwardedSubfilters(show) {
+      const group = document.getElementById(
+        "schoolForwardedSubfilters"
+      );
+
+      if (!group) return;
+
+      group.classList.toggle(
+        "d-none",
+        !show
+      );
+    }
+
+    function toggleAccountsPipelineFilters(show) {
+      const group = document.getElementById(
+        "schoolAccountsPipelineFilters"
+      );
+
+      if (!group) return;
+
+      group.classList.toggle(
+        "d-none",
+        !show
+      );
+    }
+
+    function showAccountsWorkspace() {
+      if (!shouldShowSchoolAccountsWorkflow) return;
+
+      const home = document.getElementById("accountsPipelineHome");
+      const workspace = document.getElementById("accountsAdmissionsWorkspace");
+
+      if (home) home.classList.add("d-none");
+      if (workspace) workspace.classList.remove("accounts-workspace-hidden");
+    }
+
+    function showAccountsPipelineHome() {
+      if (!shouldShowSchoolAccountsWorkflow) return;
+
+      const home = document.getElementById("accountsPipelineHome");
+      const workspace = document.getElementById("accountsAdmissionsWorkspace");
+
+      if (home) home.classList.remove("d-none");
+      if (workspace) workspace.classList.add("accounts-workspace-hidden");
+
+      activeForwardMainFilter = "";
+      activeForwardSubFilter = "";
+      activeAccountsStageFilter = "";
+      activeAccountsPipelineFilter = "";
+
+      document.querySelectorAll(".admission-card").forEach(card => {
+        card.classList.add("forward-filter-hidden");
+      });
+
+      setActiveForwardFilter("");
+      setActiveForwardSubFilter("");
+      setActiveForwardStageFilter("");
+      setActiveAccountsPipelineFilter("");
+      toggleForwardedSubfilters(false);
+      toggleAccountsPipelineFilters(false);
+      updateForwardCounts();
+    }
+
+    window.showAccountsPipelineHome = showAccountsPipelineHome;
+
+    function applySchoolForwardFilter(
+      filter,
+      subFilter = activeForwardSubFilter
+    ) {
+      const finalFilter = String(filter || "")
+        .trim()
+        .toLowerCase();
+
+      const allowedSubFilters = new Set([
+        "not_verified",
+        "verified",
+        "not_received",
+      ]);
+
+      const requestedSubFilter = String(
+        subFilter || ""
+      )
+        .trim()
+        .toLowerCase();
+
+      const finalSubFilter =
+        finalFilter === "forwarded"
+          ? (
+              allowedSubFilters.has(requestedSubFilter)
+                ? requestedSubFilter
+                : "not_verified"
+            )
+          : "";
+
+      activeForwardMainFilter = finalFilter;
+      activeForwardSubFilter = finalSubFilter;
+      activeAccountsStageFilter = "";
+      activeAccountsPipelineFilter = "";
+
+      document
+        .querySelectorAll(".admission-card")
+        .forEach(card => {
+          const state = getCardForwardState(card);
+          let show = true;
+
+          if (finalFilter === "forwarded") {
+            show =
+              shouldShowSchoolForwardFilters &&
+              state.isForwardedForThisUser &&
+              state.forwardSubStatus === finalSubFilter;
+          }
+
+          if (finalFilter === "not_forwarded") {
+            show =
+              shouldShowSchoolForwardFilters &&
+              state.isNotForwardedVisibleForThisUser;
+          }
+
+          card.classList.toggle(
+            "forward-filter-hidden",
+            !show
+          );
+        });
+
+      setActiveForwardFilter(finalFilter);
+      setActiveForwardSubFilter(finalSubFilter);
+      setActiveForwardStageFilter("");
+      setActiveAccountsPipelineFilter("");
+
+      toggleForwardedSubfilters(
+        finalFilter === "forwarded"
+      );
+
+      toggleAccountsPipelineFilters(false);
+      updateForwardCounts();
+    }
+
+    function applySchoolAccountsWorkflowFilter(
+      stageFilter,
+      pipelineFilter = ""
+    ) {
+      showAccountsWorkspace();
+
+      const finalStage =
+        normalizeAccountsWorkflowStageClient(
+          stageFilter || "new_admissions"
+        ) === "old_admissions"
+          ? "old_admissions"
+          : "new_admissions";
+
+      const requestedPipeline =
+        normalizeAccountsPipelineType(
+          pipelineFilter || ""
+        );
+
+      const finalPipeline =
+        finalStage === "new_admissions" &&
+        ACCOUNTS_PIPELINE_FILTER_TYPES.has(
+          requestedPipeline
+        )
+          ? requestedPipeline
+          : "";
+
+      activeForwardMainFilter = "";
+      activeForwardSubFilter = "";
+      activeAccountsStageFilter = finalStage;
+      activeAccountsPipelineFilter =
+        finalPipeline;
+
+      document
+        .querySelectorAll(".admission-card")
+        .forEach(card => {
+          const state = getCardForwardState(card);
+
+          let show =
+            shouldShowSchoolAccountsWorkflow &&
+            (
+              finalStage === "old_admissions"
+                ? state.isAccountsOldAdmission
+                : state.isAccountsNewAdmission
+            );
+
+          if (
+            show &&
+            finalStage === "new_admissions" &&
+            finalPipeline
+          ) {
+            show =
+              state.effectiveAccountsPipelineFilter ===
+              finalPipeline;
+          }
+
+          card.classList.toggle(
+            "forward-filter-hidden",
+            !show
+          );
+        });
+
+      setActiveForwardFilter("");
+      setActiveForwardSubFilter("");
+      setActiveForwardStageFilter(finalStage);
+      setActiveAccountsPipelineFilter(
+        finalPipeline
+      );
+
+      toggleForwardedSubfilters(false);
+      toggleAccountsPipelineFilters(
+        finalStage === "new_admissions"
+      );
+
+      updateForwardCounts();
+    }
+
+    window.applySchoolForwardFilter =
+      applySchoolForwardFilter;
+
+    window.applySchoolAccountsWorkflowFilter =
+      applySchoolAccountsWorkflowFilter;
+
+    document.addEventListener("click", function (event) {
+      const homeButton = event.target.closest(
+        "[data-accounts-home-stage]"
+      );
+
+      if (!homeButton) return;
+
+      event.preventDefault();
+
+      const stageFilter =
+        homeButton.getAttribute(
+          "data-accounts-home-stage"
+        ) || "new_admissions";
+
+      applySchoolAccountsWorkflowFilter(
+        stageFilter,
+        ""
+      );
+    });
+
+    document.addEventListener("click", function (event) {
+      const backButton = event.target.closest(
+        "#backToAccountsPipelinesBtn"
+      );
+
+      if (!backButton) return;
+
+      event.preventDefault();
+      showAccountsPipelineHome();
+    });
+
+    document.addEventListener("click", function (event) {
+      const filterButton = event.target.closest(
+        "[data-school-forward-filter]"
+      );
+
+      if (!filterButton) return;
+
+      event.preventDefault();
+
+      const filter =
+        filterButton.getAttribute(
+          "data-school-forward-filter"
+        ) || "";
+
+      applySchoolForwardFilter(
+        filter,
+        filter === "forwarded"
+          ? (
+              activeForwardSubFilter ||
+              "not_verified"
+            )
+          : ""
+      );
+    });
+
+    document.addEventListener("click", function (event) {
+      const subFilterButton = event.target.closest(
+        "[data-forwarded-subfilter]"
+      );
+
+      if (!subFilterButton) return;
+
+      event.preventDefault();
+
+      const subFilter =
+        subFilterButton.getAttribute(
+          "data-forwarded-subfilter"
+        ) || "";
+
+      applySchoolForwardFilter(
+        "forwarded",
+        subFilter
+      );
+    });
+
+    document.addEventListener("click", function (event) {
+      const stageButton = event.target.closest(
+        "[data-forwarded-stage-filter]"
+      );
+
+      if (!stageButton) return;
+
+      event.preventDefault();
+
+      const stageFilter =
+        stageButton.getAttribute(
+          "data-forwarded-stage-filter"
+        ) || "";
+
+      applySchoolAccountsWorkflowFilter(
+        stageFilter,
+        ""
+      );
+    });
+
+    document.addEventListener("click", function (event) {
+      const pipelineButton = event.target.closest(
+        "[data-accounts-pipeline-filter]"
+      );
+
+      if (!pipelineButton) return;
+
+      event.preventDefault();
+
+      const pipelineFilter =
+        pipelineButton.getAttribute(
+          "data-accounts-pipeline-filter"
+        ) || "";
+
+      applySchoolAccountsWorkflowFilter(
+        "new_admissions",
+        pipelineFilter
+      );
+    });
+
+    const dateFilterElements = {
+      registrationExact:
+        document.getElementById(
+          "registrationDateExactFilter"
+        ),
+
+      registrationFrom:
+        document.getElementById(
+          "registrationDateFromFilter"
+        ),
+
+      registrationTo:
+        document.getElementById(
+          "registrationDateToFilter"
+        ),
+
+      assignedExact:
+        document.getElementById(
+          "assignedDateExactFilter"
+        ),
+
+      assignedFrom:
+        document.getElementById(
+          "assignedDateFromFilter"
+        ),
+
+      assignedTo:
+        document.getElementById(
+          "assignedDateToFilter"
+        ),
+    };
+
+    function getDateFilterValues() {
+      return Object.fromEntries(
+        Object.entries(dateFilterElements).map(
+          ([key, element]) => [
+            key,
+            String(element?.value || "").trim(),
+          ]
+        )
+      );
+    }
+
+    function hasActiveDateFilters(filters) {
+      return Object
+        .values(filters || {})
+        .some(Boolean);
+    }
+
+    function matchesOneDateFilter(
+      cardDate,
+      exact,
+      from,
+      to
+    ) {
+      const dateOnly = normalizeDateOnly(cardDate);
+
+      if (exact) {
+        return dateOnly === exact;
+      }
+
+      if (
+        from &&
+        (!dateOnly || dateOnly < from)
+      ) {
+        return false;
+      }
+
+      if (
+        to &&
+        (!dateOnly || dateOnly > to)
+      ) {
+        return false;
+      }
+
+      return true;
+    }
+
+    function applyWorkflowDateFilters() {
+      const filters = getDateFilterValues();
+
+      document
+        .querySelectorAll(".admission-card")
+        .forEach(card => {
+          const registrationDate =
+            card.getAttribute(
+              "data-registration-date"
+            ) || "";
+
+          const assignedDate =
+            card.getAttribute(
+              "data-registration-assigned-date"
+            ) || "";
+
+          const registrationMatches =
+            matchesOneDateFilter(
+              registrationDate,
+              filters.registrationExact,
+              filters.registrationFrom,
+              filters.registrationTo
+            );
+
+          const assignedMatches =
+            matchesOneDateFilter(
+              assignedDate,
+              filters.assignedExact,
+              filters.assignedFrom,
+              filters.assignedTo
+            );
+
+          card.classList.toggle(
+            "workflow-date-filter-hidden",
+            !(
+              registrationMatches &&
+              assignedMatches
+            )
+          );
+        });
+
+      const badge = document.getElementById(
+        "workflowDateFilterActiveBadge"
+      );
+
+      if (badge) {
+        badge.classList.toggle(
+          "d-none",
+          !hasActiveDateFilters(filters)
+        );
+      }
+
+      updateForwardCounts();
+    }
+
+    window.applyWorkflowDateFilters =
+      applyWorkflowDateFilters;
+
+    function clearWorkflowDateFilters() {
+      Object
+        .values(dateFilterElements)
+        .forEach(element => {
+          if (element) {
+            element.value = "";
+          }
+        });
+
+      applyWorkflowDateFilters();
+    }
+
+    const exactRangePairs = [
+      {
+        exact: dateFilterElements.registrationExact,
+        from: dateFilterElements.registrationFrom,
+        to: dateFilterElements.registrationTo,
+      },
+      {
+        exact: dateFilterElements.assignedExact,
+        from: dateFilterElements.assignedFrom,
+        to: dateFilterElements.assignedTo,
+      },
+    ];
+
+    exactRangePairs.forEach(group => {
+      group.exact?.addEventListener(
+        "change",
+        function () {
+          if (!this.value) return;
+
+          if (group.from) {
+            group.from.value = "";
+          }
+
+          if (group.to) {
+            group.to.value = "";
+          }
+        }
+      );
+
+      [group.from, group.to].forEach(element => {
+        element?.addEventListener(
+          "change",
+          function () {
+            if (
+              this.value &&
+              group.exact
+            ) {
+              group.exact.value = "";
+            }
+          }
+        );
+      });
+    });
+
+    document
+      .getElementById("applyWorkflowDateFiltersBtn")
+      ?.addEventListener(
+        "click",
+        applyWorkflowDateFilters
+      );
+
+    document
+      .getElementById("clearWorkflowDateFiltersBtn")
+      ?.addEventListener(
+        "click",
+        clearWorkflowDateFilters
+      );
+
+    const forwardTargetUserWrap =
+      document.getElementById(
+        "forwardTargetUserWrap"
+      );
+
+    const forwardTargetUserSelect =
+      document.getElementById(
+        "forwardTargetUserId"
+      );
+
+    const forwardTargetUserHint =
+      document.getElementById(
+        "forwardTargetUserHint"
+      );
+
+    let forwardUsersRequestToken = 0;
+
+    function resetForwardTargetUsers({
+      hide = true,
+      message = "Select the user who should receive this admission.",
+    } = {}) {
+      forwardUsersRequestToken += 1;
+
+      if (forwardTargetUserSelect) {
+        forwardTargetUserSelect.disabled = true;
+        forwardTargetUserSelect.innerHTML =
+          '<option value="">Select pipeline first</option>';
+      }
+
+      if (forwardTargetUserHint) {
+        forwardTargetUserHint.textContent = message;
+      }
+
+      if (forwardTargetUserWrap) {
+        forwardTargetUserWrap.classList.toggle(
+          "d-none",
+          hide
+        );
+      }
+    }
+
+    async function loadForwardTargetUsers(toType) {
+      const cleanType =
+        normalizeAccountsPipelineType(toType);
+
+      if (
+        !cleanType ||
+        cleanType === "school_return"
+      ) {
+        resetForwardTargetUsers({
+          hide: true,
+        });
+        return;
+      }
+
+      const requestToken =
+        ++forwardUsersRequestToken;
+
+      if (forwardTargetUserWrap) {
+        forwardTargetUserWrap.classList.remove(
+          "d-none"
+        );
+      }
+
+      if (forwardTargetUserSelect) {
+        forwardTargetUserSelect.disabled = true;
+        forwardTargetUserSelect.innerHTML =
+          '<option value="">Loading users...</option>';
+      }
+
+      if (forwardTargetUserHint) {
+        forwardTargetUserHint.textContent =
+          "Loading matching Accounts Agents and Sub-Agents...";
+      }
+
+      try {
+        const response = await fetch(
+          `/api/accounts/forward-users?toType=${encodeURIComponent(
+            cleanType
+          )}`,
+          {
+            credentials: "same-origin",
+            headers: {
+              "Accept": "application/json",
+            },
+          }
+        );
+
+        const data = await response
+          .json()
+          .catch(() => ({}));
+
+        if (
+          requestToken !== forwardUsersRequestToken
+        ) {
+          return;
+        }
+
+        if (
+          !response.ok ||
+          data.success === false
+        ) {
+          throw new Error(
+            data.message ||
+            "Could not load forwarding users."
+          );
+        }
+
+        const users = Array.isArray(data.users)
+          ? data.users
+          : [];
+
+        if (!forwardTargetUserSelect) return;
+
+        if (!users.length) {
+          forwardTargetUserSelect.disabled = true;
+          forwardTargetUserSelect.innerHTML =
+            '<option value="">No matching user available</option>';
+
+          if (forwardTargetUserHint) {
+            forwardTargetUserHint.textContent =
+              "Create or assign an Agent/Sub-Agent to this Accounts pipeline first.";
+          }
+
+          return;
+        }
+
+        forwardTargetUserSelect.innerHTML = [
+          '<option value="">Select Agent / Sub-Agent</option>',
+          ...users.map(item => {
+            const id = Number(item?.id || 0);
+            const name = String(
+              item?.name ||
+              item?.email ||
+              "User"
+            ).trim();
+
+            const role = String(
+              item?.role || ""
+            )
+              .replace(/_/g, " ")
+              .replace(/\b\w/g, char =>
+                char.toUpperCase()
+              );
+
+            return `
+              <option value="${id}">
+                ${escapeHtml(name)}${role ? ` (${escapeHtml(role)})` : ""}
+              </option>
+            `;
+          }),
+        ].join("");
+
+        forwardTargetUserSelect.disabled = false;
+
+        if (forwardTargetUserHint) {
+          forwardTargetUserHint.textContent =
+            `${users.length} matching user${users.length === 1 ? "" : "s"} available.`;
+        }
+      } catch (error) {
+        if (
+          requestToken !== forwardUsersRequestToken
+        ) {
+          return;
+        }
+
+        if (forwardTargetUserSelect) {
+          forwardTargetUserSelect.disabled = true;
+          forwardTargetUserSelect.innerHTML =
+            '<option value="">Users could not be loaded</option>';
+        }
+
+        if (forwardTargetUserHint) {
+          forwardTargetUserHint.textContent =
+            error.message ||
+            "Could not load forwarding users.";
+        }
+
+        showPopup(
+          "danger",
+          "Users Not Loaded",
+          error.message ||
+          "Could not load forwarding users."
+        );
+      }
+    }
+
+    document.addEventListener(
+      "change",
+      function (event) {
+        const radio = event.target.closest(
+          'input[name="forwardType"]'
+        );
+
+        if (!radio) return;
+
+        loadForwardTargetUsers(
+          radio.value || ""
+        );
+      }
+    );
+
+    document.addEventListener("click", function (event) {
+      const button = event.target.closest(
+        ".btn-forward-admission"
+      );
+
+      if (!button) return;
+
+      event.preventDefault();
+
+      activeForwardAdmissionId =
+        button.getAttribute("data-admission-id") || "";
+
+      activeForwardStudentName =
+        button.getAttribute("data-student") || "Student";
+
+      const card = button.closest(".admission-card");
+      const state = getCardForwardState(card);
+
+      if (
+        !state.canForward ||
+        state.schoolReturnStatus === "not_received"
+      ) {
+        showPopup(
+          "danger",
+          "Re-upload Required",
+          "Please upload or re-upload the required file before forwarding this admission again."
+        );
+
+        return;
+      }
+
+      const idElement = document.getElementById(
+        "forwardAdmissionId"
+      );
+
+      const studentElement = document.getElementById(
+        "forwardStudentName"
+      );
+
+      if (idElement) {
+        idElement.textContent =
+          activeForwardAdmissionId || "-";
+      }
+
+      if (studentElement) {
+        studentElement.textContent =
+          activeForwardStudentName || "-";
+      }
+
+      document
+        .querySelectorAll('input[name="forwardType"]')
+        .forEach(radio => {
+          radio.checked = false;
+        });
+
+      resetForwardTargetUsers({
+        hide: true,
+      });
+
+      const returnOption = document.querySelector(
+        "[data-school-return-option]"
+      );
+
+      if (returnOption) {
+        const canShowReturnOption =
+          state.isForwarded &&
+          state.forwardedToType !== "school_return" &&
+          !state.schoolReturnStatus;
+
+        returnOption.classList.toggle(
+          "d-none",
+          !canShowReturnOption
+        );
+      }
+
+      const modalElement = document.getElementById(
+        "admissionForwardModal"
+      );
+
+      if (
+        !modalElement ||
+        typeof bootstrap === "undefined"
+      ) {
+        showPopup(
+          "danger",
+          "Modal Missing",
+          "Forward modal not found."
+        );
+
+        return;
+      }
+
+      bootstrap.Modal
+        .getOrCreateInstance(modalElement)
+        .show();
+    });
+
+    const sendButton = document.getElementById(
+      "sendForwardAdmissionBtn"
+    );
+
+    if (sendButton) {
+      sendButton.addEventListener(
+        "click",
+        async function () {
+          const oldHtml = sendButton.innerHTML;
+
+          try {
+            const checked = document.querySelector(
+              'input[name="forwardType"]:checked'
+            );
+
+            const toType = checked
+              ? checked.value
+              : "";
+
+            const toDepartment = checked
+              ? (
+                  checked.getAttribute("data-label") ||
+                  checked.value
+                )
+              : "";
+
+            if (!activeForwardAdmissionId) {
+              showPopup(
+                "danger",
+                "Invalid Admission",
+                "Admission ID not found."
+              );
+
+              return;
+            }
+
+            if (!toType) {
+              showPopup(
+                "danger",
+                "Select Type",
+                "Please select forwarding type first."
+              );
+
+              return;
+            }
+
+            const isReturnToSchool =
+              toType === "school_return";
+
+            const targetUserId =
+              isReturnToSchool
+                ? 0
+                : Number(
+                    forwardTargetUserSelect?.value ||
+                    0
+                  );
+
+            if (
+              !isReturnToSchool &&
+              !targetUserId
+            ) {
+              showPopup(
+                "danger",
+                "Select User",
+                "Please select the Accounts Agent or Sub-Agent who should receive this admission."
+              );
+
+              return;
+            }
+
+            sendButton.disabled = true;
+
+            sendButton.innerHTML =
+              '<i class="bi bi-hourglass-split me-1"></i> Sending...';
+
+            const response = await fetch(
+              `/api/admissions/${encodeURIComponent(
+                activeForwardAdmissionId
+              )}/forward`,
+              {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Accept": "application/json",
+                },
+                body: JSON.stringify({
+                  toType,
+                  targetUserId:
+                    isReturnToSchool
+                      ? null
+                      : targetUserId,
+                  returnToSchool:
+                    isReturnToSchool,
+                }),
+              }
+            );
+
+            const data = await response
+              .json()
+              .catch(() => ({}));
+
+            if (
+              !response.ok ||
+              data.success === false
+            ) {
+              throw new Error(
+                data.message ||
+                "Admission forward failed."
+              );
+            }
+
+            const modalElement =
+              document.getElementById(
+                "admissionForwardModal"
+              );
+
+            const modal =
+              modalElement &&
+              bootstrap.Modal.getInstance(
+                modalElement
+              );
+
+            if (modal) {
+              modal.hide();
+            }
+
+            const card = document.querySelector(
+              `.admission-card[data-admission-id="${CSS.escape(
+                String(activeForwardAdmissionId)
+              )}"]`
+            );
+
+            if (card) {
+              const forwardDisplayText = String(
+                data.forwardDisplayText ||
+                `Forwarded to ${toDepartment}`
+              ).trim();
+
+              const nextReturnStatus = String(
+                data.schoolReturnStatus || ""
+              )
+                .trim()
+                .toLowerCase();
+
+              const nextSubStatus = String(
+                data.forwardSubStatus ||
+                (
+                  isReturnToSchool
+                    ? "not_received"
+                    : (
+                        card.getAttribute(
+                          "data-forward-sub-status"
+                        ) || ""
+                      )
+                )
+              )
+                .trim()
+                .toLowerCase();
+
+              card.setAttribute(
+                "data-forward-status",
+                "forwarded"
+              );
+
+              card.setAttribute(
+                "data-forward-sub-status",
+                nextSubStatus
+              );
+
+              card.setAttribute(
+                "data-forwarded-to",
+                toDepartment
+              );
+
+              const nextForwardedToType =
+                normalizeAccountsPipelineType(
+                  data.forwardedToType ||
+                  toType
+                );
+
+              const nextForwardedFromType =
+                normalizeAccountsPipelineType(
+                  data.forwardedFromType ||
+                  card.getAttribute(
+                    "data-forwarded-to-type"
+                  ) ||
+                  "school"
+                );
+
+              const nextForwardedFromDepartment =
+                String(
+                  data.forwardedFromDepartment ||
+                  card.getAttribute(
+                    "data-forwarded-to"
+                  ) ||
+                  "School Department"
+                ).trim();
+
+              const nextAccountsWorkflowStage =
+                normalizeAccountsWorkflowStageClient(
+                  data.accountsWorkflowStage ||
+                  "new_admissions"
+                );
+
+              const nextForwardedOwnerName =
+                String(
+                  data.forwardedOwnerUserName ||
+                  ""
+                ).trim();
+
+              const nextIssueMessage =
+                String(
+                  data.issueMessage || ""
+                ).trim();
+
+              const nextIssueFields =
+                normalizeIssueFieldsClient(
+                  data.issueFields || []
+                );
+
+              card.setAttribute(
+                "data-forwarded-to-type",
+                nextForwardedToType
+              );
+
+              card.setAttribute(
+                "data-forwarded-from",
+                nextForwardedFromDepartment
+              );
+
+              card.setAttribute(
+                "data-forwarded-from-type",
+                nextForwardedFromType
+              );
+
+              card.setAttribute(
+                "data-accounts-workflow-stage",
+                nextAccountsWorkflowStage
+              );
+
+              card.setAttribute(
+                "data-forwarded-owner-user-name",
+                nextForwardedOwnerName
+              );
+
+              card.setAttribute(
+                "data-accounts-issue-message",
+                nextIssueMessage
+              );
+
+              card.setAttribute(
+                "data-forwarded-by-current-user",
+                "1"
+              );
+
+              card.setAttribute(
+                "data-forward-scope-visible-for-current-user",
+                "1"
+              );
+
+              card.setAttribute(
+                "data-school-return-status",
+                nextReturnStatus
+              );
+
+              card.setAttribute(
+                "data-not-received-visible-for-current-user",
+                nextSubStatus === "not_received"
+                  ? "1"
+                  : "0"
+              );
+
+              const hasExplicitReuploadTag =
+                Object.prototype.hasOwnProperty.call(
+                  data || {},
+                  "reuploadTagActive"
+                ) ||
+                Object.prototype.hasOwnProperty.call(
+                  data || {},
+                  "reupload_tag_active"
+                );
+
+              const nextReuploadTagActive =
+                hasExplicitReuploadTag
+                  ? Number(
+                      data.reuploadTagActive ??
+                      data.reupload_tag_active ??
+                      0
+                    ) === 1
+                  : card.getAttribute(
+                      "data-reupload-tag-active"
+                    ) === "1";
+
+              /*
+               * Accounts/Super ka normal forwarding access same rahega.
+               * Return to School ke waqt button re-upload tak hide hoga.
+               */
+              const nextCanForward =
+                isReturnToSchool
+                  ? false
+                  : isSchoolAccountsUser;
+
+              card.setAttribute(
+                "data-reupload-tag-active",
+                nextReuploadTagActive ? "1" : "0"
+              );
+
+              card.setAttribute(
+                "data-can-forward",
+                nextCanForward ? "1" : "0"
+              );
+
+              const forwardButton =
+                card.querySelector(
+                  ".btn-forward-admission"
+                );
+
+              if (forwardButton) {
+                forwardButton.classList.toggle(
+                  "d-none",
+                  !nextCanForward
+                );
+              }
+
+              card.setAttribute(
+                "data-forward-display-text",
+                forwardDisplayText
+              );
+
+              const registrationNumberRemoved =
+                card.getAttribute(
+                  "data-registration-number-removed"
+                ) === "1";
+
+              const workflowTag =
+                deriveWorkflowTag({
+                  directTag:
+                    data.workflowTag || "",
+
+                  schoolReturnStatus:
+                    nextReturnStatus,
+
+                  reuploadTagActive:
+                    nextReuploadTagActive,
+
+                  registrationNumberRemoved,
+                });
+
+              upsertWorkflowTag(
+                card,
+                workflowTag
+              );
+
+              upsertAccountsWorkflowMeta(
+                card,
+                {
+                  forwardStatus: "forwarded",
+                  pipelineType:
+                    nextForwardedToType,
+                  pipelineDepartment:
+                    data.forwardedToDepartment ||
+                    toDepartment,
+                  sourceDepartment:
+                    nextForwardedFromDepartment,
+                  sourceType:
+                    nextForwardedFromType,
+                  workflowStage:
+                    nextAccountsWorkflowStage,
+                  ownerName:
+                    nextForwardedOwnerName,
+                }
+              );
+
+              upsertAccountsIssueNote(
+                card,
+                nextIssueMessage,
+                nextIssueFields
+              );
+
+              upsertForwardDisplayText(
+                card,
+                forwardDisplayText
+              );
+
+              syncForwardAction(
+                card,
+                {
+                  id: activeForwardAdmissionId,
+                  student: activeForwardStudentName,
+                  canShowForwardButton: nextCanForward,
+                  schoolReturnStatus: nextReturnStatus,
+                  reuploadTagActive: nextReuploadTagActive ? 1 : 0,
+                  reupload_tag_active: nextReuploadTagActive ? 1 : 0,
+                  workflowTag,
+                  forwardedToDepartment:
+                    data.forwardedToDepartment || toDepartment,
+                  forwardedToType: nextForwardedToType,
+                }
+              );
+            }
+
+            if (activeAccountsStageFilter) {
+              applySchoolAccountsWorkflowFilter(
+                activeAccountsStageFilter,
+                activeAccountsPipelineFilter
+              );
+            } else if (activeForwardMainFilter) {
+              applySchoolForwardFilter(
+                activeForwardMainFilter,
+                activeForwardSubFilter
+              );
+            } else {
+              updateForwardCounts();
+            }
+
+            showPopup(
+              "success",
+              isReturnToSchool
+                ? "Admission Returned"
+                : "Admission Forwarded",
+
+              data.message ||
+              `Admission forwarded to ${toDepartment}.`
+            );
+          } catch (error) {
+            console.error(error);
+
+            showPopup(
+              "danger",
+              "Forward Failed",
+              error.message ||
+              "Could not forward admission."
+            );
+          } finally {
+            sendButton.disabled = false;
+            sendButton.innerHTML = oldHtml;
+          }
+        }
+      );
+    }
+
+    function initializeForwardWorkflow() {
+      toggleForwardedSubfilters(false);
+      toggleAccountsPipelineFilters(false);
+      setActiveForwardFilter("");
+      setActiveForwardSubFilter("");
+      setActiveForwardStageFilter("");
+      setActiveAccountsPipelineFilter("");
+      applyWorkflowDateFilters();
+
+      if (shouldShowSchoolAccountsWorkflow) {
+        showAccountsPipelineHome();
+      } else {
+        updateForwardCounts();
+      }
+    }
+
+    document.addEventListener(
+      "DOMContentLoaded",
+      initializeForwardWorkflow
+    );
+
+    if (
+      document.readyState !== "loading"
+    ) {
+      initializeForwardWorkflow();
+    }
+  })();
+</script>
 <%- include('partials/bootstrap-footer') %>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -6081,6 +10599,12 @@ if (editBillingStatusSaveBtn) {
 <script src="/js/admissions.js"></script>
 <script>
   (function () {
+    const canUseFiles = <%= P.btn.files ? 'true' : 'false' %>;
+
+    if (!canUseFiles) {
+      return;
+    }
+
     let latestAdmissionFilesCache = [];
     let currentAdmissionFileFilter = 'none';
 
@@ -6355,324 +10879,29 @@ function applyAdmissionPipelineFileFilter(filter) {
   filterBtn.blur();
 });
     document.addEventListener('click', async function (e) {
-      const fileIcon = e.target.closest('.admission-file-bill-icon');
-      if (!fileIcon) return;
-
-      e.preventDefault();
-
-      const uploadId = fileIcon.getAttribute('data-upload-id');
-      const fileUrl = fileIcon.getAttribute('href');
-
-      await openFileAndMarkSeen(uploadId, fileUrl);
-    });
-
-    document.addEventListener('click', async function (e) {
-      const dropdownItem = e.target.closest('.file-dropdown-item');
-      if (!dropdownItem) return;
-
-      e.preventDefault();
-
-      const uploadId = dropdownItem.getAttribute('data-upload-id');
-      const fileUrl = dropdownItem.getAttribute('data-file-url');
-
-      await openFileAndMarkSeen(uploadId, fileUrl);
-    });
-
-    document.addEventListener('DOMContentLoaded', function () {
-      window.rebuildAdmissionFilesDropdowns();
-    });
-
-    if (document.readyState !== 'loading') {
-      window.rebuildAdmissionFilesDropdowns();
-    }
-  })();
-</script>
-<script>
-  (function () {
-    let latestAdmissionFilesCache = [];
-    let currentAdmissionFileFilter = 'none';
-
-    function escapeHtml(value) {
-      return String(value || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-    }
-
-    function normalizeFileItem(item) {
-      return {
-        uploadId: item.uploadId || item.id || '',
-        admissionId: item.admissionId || '',
-        fileUrl: item.fileUrl || '#',
-        seen: item.seen === true || item.seenByCurrentUser === true,
-        student: item.student || item.studentName || 'No Name',
-        father: item.father || item.fatherName || '-',
-        addedBy: item.addedBy || item.uploadedByName || 'System / Old Record',
-        addedByRole: item.addedByRole || item.uploadedByRole || '',
-        fileName: item.fileName || item.originalName || 'File',
-        uploadedAt: item.uploadedAt || '',
-        dept: item.dept || '',
-        grade: item.grade || '',
-        registrationNumber: item.registrationNumber || '',
-        familyNumber: item.familyNumber || ''
-      };
-    }
-    function getAdmissionCardUploadState(card) {
-  if (!card) return 'none';
-
-  const icon = card.querySelector('.admission-file-bill-icon');
-
-  if (!icon) return 'none';
-
-  if (icon.classList.contains('seen-file-icon')) return 'seen';
-  if (icon.classList.contains('new-file-icon')) return 'unseen';
-
-  return 'none';
-}
-
-function setActiveFileFilterButton(filter) {
-  document.querySelectorAll('[data-admission-file-filter]').forEach(btn => {
-    const btnFilter = btn.getAttribute('data-admission-file-filter') || '';
-    btn.classList.toggle('active-file-filter', filter !== 'none' && btnFilter === filter);
-  });
-}
-
-function applyAdmissionPipelineFileFilter(filter) {
-  const finalFilter = String(filter || 'none').trim().toLowerCase();
-  const cards = document.querySelectorAll('.admission-card');
-
-  cards.forEach(card => {
-    const state = getAdmissionCardUploadState(card);
-
-    let showCard = true;
-
-    if (finalFilter === 'all') {
-      showCard = state === 'seen' || state === 'unseen';
-    } else if (finalFilter === 'seen') {
-      showCard = state === 'seen';
-    } else if (finalFilter === 'unseen') {
-      showCard = state === 'unseen';
-    } else {
-      showCard = true;
-    }
-
-    card.classList.toggle('file-filter-hidden', !showCard);
-  });
-
-  setActiveFileFilterButton(finalFilter);
-}
-    function updateSingleIconToSeen(uploadId) {
-      if (!uploadId) return;
-
-      const icons = document.querySelectorAll(
-        `.admission-file-bill-icon[data-upload-id="${CSS.escape(String(uploadId))}"]`
-      );
-
-      icons.forEach(fileIcon => {
-        fileIcon.classList.remove('new-file-icon');
-        fileIcon.classList.add('seen-file-icon');
-
-        const tooltip = fileIcon.querySelector('.admission-file-tooltip');
-        if (tooltip) {
-          tooltip.classList.remove('new-file-tooltip');
-          tooltip.classList.add('seen-file-tooltip');
-
-          const title = tooltip.querySelector('.file-tooltip-title');
-          if (title) title.textContent = 'File Seen';
-        }
-      });
-    }
-
-    async function markUploadSeen(uploadId) {
-      if (!uploadId) return false;
-
-      try {
-        const res = await fetch(`/api/uploads/${encodeURIComponent(uploadId)}/seen`, {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok || data.success === false) {
-          console.error('Mark upload seen failed:', data.message || 'Unknown error');
-          return false;
-        }
-
-        return true;
-      } catch (err) {
-        console.error('Mark upload seen failed:', err);
-        return false;
-      }
-    }
-
-    async function fetchAdmissionFiles(filter) {
-      const finalFilter = filter || 'all';
-
-      const res = await fetch(`/api/admission-files?filter=${encodeURIComponent(finalFilter)}`, {
-        method: 'GET',
-        credentials: 'same-origin',
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok || data.success === false) {
-        throw new Error(data.message || 'Files load failed');
-      }
-
-      return data;
-    }
-
-    function renderList(targetId, items) {
-      const wrap = document.getElementById(targetId);
-      if (!wrap) return;
-
-      const finalItems = (items || []).map(normalizeFileItem);
-
-      if (!finalItems.length) {
-        wrap.innerHTML = '<div class="file-dropdown-empty">No files found.</div>';
-        return;
-      }
-
-      wrap.innerHTML = finalItems.map(item => {
-        const statusClass = item.seen ? 'seen' : 'unseen';
-        const statusText = item.seen ? 'Seen' : 'Unseen';
-
-        return `
-          <button
-            type="button"
-            class="file-dropdown-item ${statusClass}"
-            data-upload-id="${escapeHtml(item.uploadId)}"
-            data-file-url="${escapeHtml(item.fileUrl)}">
-            <div class="file-dropdown-head">
-              <div class="file-dropdown-student">${escapeHtml(item.student)}</div>
-              <span class="file-dropdown-status ${statusClass}">${statusText}</span>
-            </div>
-
-            <div class="file-dropdown-meta">
-              <div><b>Father:</b> ${escapeHtml(item.father)}</div>
-              ${item.grade ? `<div><b>Grade:</b> ${escapeHtml(item.grade)}</div>` : ''}
-              ${item.dept ? `<div><b>Dept:</b> ${escapeHtml(item.dept)}</div>` : ''}
-              ${item.registrationNumber ? `<div><b>Reg #:</b> ${escapeHtml(item.registrationNumber)}</div>` : ''}
-              ${item.familyNumber ? `<div><b>Family #:</b> ${escapeHtml(item.familyNumber)}</div>` : ''}
-              <div><b>Added by:</b> ${escapeHtml(item.addedBy)}${item.addedByRole ? ' (' + escapeHtml(item.addedByRole).replace(/_/g, ' ') + ')' : ''}</div>
-              <div><b>File:</b> ${escapeHtml(item.fileName)}</div>
-              ${item.uploadedAt ? `<div><b>Date:</b> ${escapeHtml(item.uploadedAt)}</div>` : ''}
-            </div>
-          </button>
-        `;
-      }).join('');
-    }
-
-    function setCounts(counts, fallbackFiles) {
-      const files = Array.isArray(fallbackFiles) ? fallbackFiles.map(normalizeFileItem) : [];
-
-      const allCount = document.getElementById('allFilesCount');
-      const unseenCount = document.getElementById('unseenFilesCount');
-      const seenCount = document.getElementById('seenFilesCount');
-
-      const finalCounts = counts || {
-        all: files.length,
-        unseen: files.filter(f => !f.seen).length,
-        seen: files.filter(f => f.seen).length
-      };
-
-      if (allCount) allCount.textContent = String(finalCounts.all || 0);
-      if (unseenCount) unseenCount.textContent = String(finalCounts.unseen || 0);
-      if (seenCount) seenCount.textContent = String(finalCounts.seen || 0);
-    }
-
-    window.rebuildAdmissionFilesDropdowns = async function () {
-      try {
-        const data = await fetchAdmissionFiles('all');
-
-        latestAdmissionFilesCache = Array.isArray(data.files)
-          ? data.files.map(normalizeFileItem)
-          : [];
-
-        const allFiles = latestAdmissionFilesCache;
-        const unseenFiles = allFiles.filter(f => !f.seen);
-        const seenFiles = allFiles.filter(f => f.seen);
-
-        setCounts(data.counts, allFiles);
-
-        renderList('allFilesDropdownList', allFiles);
-        renderList('unseenFilesDropdownList', unseenFiles);
-        renderList('seenFilesDropdownList', seenFiles);
-        applyAdmissionPipelineFileFilter(currentAdmissionFileFilter);
-      } catch (err) {
-        console.error('Admission files dropdown load failed:', err);
-
-        renderList('allFilesDropdownList', []);
-        renderList('unseenFilesDropdownList', []);
-        renderList('seenFilesDropdownList', []);
-        setCounts({ all: 0, unseen: 0, seen: 0 }, []);
-      }
-    };
-
-    async function openFileAndMarkSeen(uploadId, fileUrl) {
-      if (!uploadId) return;
-
-      await markUploadSeen(uploadId);
-
-      latestAdmissionFilesCache = latestAdmissionFilesCache.map(item => {
-        if (String(item.uploadId) === String(uploadId)) {
-          return { ...item, seen: true, seenByCurrentUser: true };
-        }
-        return item;
-      });
-
-      updateSingleIconToSeen(uploadId);
-
-      if (typeof window.rebuildAdmissionFilesDropdowns === 'function') {
-        await window.rebuildAdmissionFilesDropdowns();
-      }
-
-      if (fileUrl && fileUrl !== '#') {
-        window.open(fileUrl, '_blank');
-      }
-    }
-   document.addEventListener('click', function (e) {
-  const filterBtn = e.target.closest('[data-admission-file-filter]');
-  if (!filterBtn) return;
+  const fileIcon = e.target.closest('.admission-file-bill-icon');
+  if (!fileIcon) return;
 
   e.preventDefault();
-  e.stopPropagation();
 
-  const filter = filterBtn.getAttribute('data-admission-file-filter') || 'none';
+  const isLocked =
+    fileIcon.classList.contains('locked-file-icon') ||
+    fileIcon.getAttribute('aria-disabled') === 'true';
 
-  currentAdmissionFileFilter = filter;
-  applyAdmissionPipelineFileFilter(filter);
-
-  const parentDropdown = filterBtn.closest('.admission-files-filter-dropdown');
-  const menu = parentDropdown ? parentDropdown.querySelector('.admission-files-dropdown-menu') : null;
-
-  if (menu) {
-    menu.classList.remove('show');
-    menu.style.display = '';
+  if (isLocked) {
+    e.stopPropagation();
+    return;
   }
 
-  filterBtn.blur();
+  const uploadId = fileIcon.getAttribute('data-upload-id');
+  const fileUrl = fileIcon.getAttribute('href');
+
+  if (!uploadId || !fileUrl || fileUrl === '#') {
+    return;
+  }
+
+  await openFileAndMarkSeen(uploadId, fileUrl);
 });
-    document.addEventListener('click', async function (e) {
-      const fileIcon = e.target.closest('.admission-file-bill-icon');
-      if (!fileIcon) return;
-
-      e.preventDefault();
-
-      const uploadId = fileIcon.getAttribute('data-upload-id');
-      const fileUrl = fileIcon.getAttribute('href');
-
-      await openFileAndMarkSeen(uploadId, fileUrl);
-    });
 
     document.addEventListener('click', async function (e) {
       const dropdownItem = e.target.closest('.file-dropdown-item');
@@ -7408,6 +11637,16 @@ function applyAdmissionPipelineFileFilter(filter) {
       });
 
       updateCardActions(card, admission);
+
+      if (
+        typeof window.updateAdmissionWorkflowCard ===
+        "function"
+      ) {
+        window.updateAdmissionWorkflowCard(
+          card,
+          admission
+        );
+      }
 
       card.classList.remove("realtime-updated");
       void card.offsetWidth;

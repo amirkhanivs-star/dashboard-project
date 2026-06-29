@@ -345,20 +345,18 @@ The Super Admin can edit the role, department, assigned admin, pipeline type, co
               <div class="col-md-4">
                 <label class="form-label small">Department</label>
                 <select name="dept" id="deptSelect" class="form-select" required>
-                  <option value="quran" <%= editUser.dept === 'quran' ? 'selected' : '' %>>Quran</option>
-                  <option value="tuition" <%= editUser.dept === 'tuition' ? 'selected' : '' %>>Tuition</option>
+                  <option value="quran" <%= editUser.dept === 'quran' ? 'selected' : 'disabled' %>>Quran - Coming Soon</option>
+                  <option value="tuition" <%= editUser.dept === 'tuition' ? 'selected' : 'disabled' %>>Tuition - Coming Soon</option>
                   <option value="school" <%= editUser.dept === 'school' ? 'selected' : '' %>>School</option>
-<option value="accounts" <%= editUser.dept === 'accounts' ? 'selected' : '' %>>School Accounts</option>
+                  <option value="accounts" <%= editUser.dept === 'accounts' ? 'selected' : '' %>>School Accounts</option>
                 </select>
               </div>
 
               <div class="col-md-4">
                 <label class="form-label small">Pipeline / Agent Type</label>
-                <select name="agentType" id="agentTypeSelect" class="form-select">
-                  <option value="accounts" <%= editUser.agentType === 'accounts' ? 'selected' : '' %>>Accounts</option>
-                  <option value="admission" <%= editUser.agentType === 'admission' ? 'selected' : '' %>>Admission</option>
-                  <option value="management" <%= editUser.agentType === 'management' ? 'selected' : '' %>>Management</option>
-                </select>
+                <select name="agentType" id="agentTypeSelect" class="form-select" data-current-agent-type="<%= editUser.agentType || '' %>">
+                <option value="">Select type</option>
+               </select>
                 <small class="text-muted d-block">
                   This is only meaningful for Agent and Sub Agent. It will be ignored for Admin.
                 </small>
@@ -824,6 +822,48 @@ The Super Admin can edit the role, department, assigned admin, pipeline type, co
         return false;
       }
     }
+    const schoolAgentTypeOptions = [
+  { value: "accounts", label: "Accounts" },
+  { value: "admission", label: "Admission" },
+  { value: "management", label: "Management" },
+];
+
+const schoolAccountsAgentTypeOptions = [
+  { value: "print_record_update", label: "Print + Record update" },
+  { value: "verification_registration", label: "Verification & Registration" },
+  { value: "paid_slip", label: "Paid slip" },
+];
+
+function isSchoolAccountsDept(dept) {
+  const d = String(dept || "").trim().toLowerCase();
+  return d === "accounts" || d === "school accounts" || d === "school_accounts";
+}
+
+function syncAgentTypeOptions() {
+  if (!agentTypeSelect) return;
+
+  const dept = deptSelect ? deptSelect.value : "";
+  const currentValue =
+    agentTypeSelect.value ||
+    agentTypeSelect.getAttribute("data-current-agent-type") ||
+    "";
+
+  const options = isSchoolAccountsDept(dept)
+    ? schoolAccountsAgentTypeOptions
+    : schoolAgentTypeOptions;
+
+  agentTypeSelect.innerHTML = '<option value="">Select type</option>';
+
+  options.forEach((item) => {
+    const opt = document.createElement("option");
+    opt.value = item.value;
+    opt.textContent = item.label;
+    agentTypeSelect.appendChild(opt);
+  });
+
+  const exists = options.some((item) => item.value === currentValue);
+  agentTypeSelect.value = exists ? currentValue : "";
+}
     function filterAssignedAdmins() {
       if (!assignedAdminSelect) return;
 
@@ -858,8 +898,10 @@ The Super Admin can edit the role, department, assigned admin, pipeline type, co
     }
 
     function syncRoleUI() {
-      const role = (roleSelect && roleSelect.value) ? roleSelect.value : "";
-      const dept = (deptSelect && deptSelect.value) ? deptSelect.value : "";
+  const role = (roleSelect && roleSelect.value) ? roleSelect.value : "";
+  const dept = (deptSelect && deptSelect.value) ? deptSelect.value : "";
+
+  syncAgentTypeOptions();
 
       if (agentTypeSelect) {
         if (role === "admin") {
@@ -937,7 +979,12 @@ The Super Admin can edit the role, department, assigned admin, pipeline type, co
       });
     }
     if (roleSelect) roleSelect.addEventListener("change", syncRoleUI);
-    if (deptSelect) deptSelect.addEventListener("change", syncRoleUI);
+if (deptSelect) {
+  deptSelect.addEventListener("change", function () {
+    syncAgentTypeOptions();
+    syncRoleUI();
+  });
+}
 
     if (btnSelectAll) btnSelectAll.addEventListener("click", () => toggleAll(true));
     if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));

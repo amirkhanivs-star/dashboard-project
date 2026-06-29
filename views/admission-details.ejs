@@ -376,6 +376,14 @@ registrationFeePaymentDate: "",
       admissionInfo?.feeHistory || admissionInfo?.fee_history || x?.feeHistory || x?.fee_history || [];
 
     const billingJson = readBillingJson(x, admissionInfo);
+
+    const monthFees =
+      admissionInfo?.monthFees ||
+      admissionInfo?.month_fees ||
+      x?.monthFees ||
+      x?.month_fees ||
+      {};
+
     const billRows = Array.isArray(x?.billing) ? sortBillingRowsByMonth(x.billing) : [];
 
     const billFeeCandidates = (billRows || [])
@@ -409,16 +417,18 @@ registrationFeePaymentDate: "",
       const amount = parseFirstNumber(amountStr);
 
       const feeOverride = parseFirstNumber(entry.feeOverride);
+      const rowFee = parseFirstNumber(getFeeFromBillingRow(row));
+      const computedMonthFee = parseFirstNumber(monthFees?.[mk]);
+      const feeFromRule = feeForMonthKey(history, mk, baseFee);
 
-      const stLower = String(status || '').toLowerCase().trim();
-      const hasStatus = !!stLower;
-
-      const feeFromRule = hasStatus
-        ? baseFee
-        : feeForMonthKey(history, mk, baseFee);
-
-      const feeComputed = (feeOverride > 0) ? feeOverride : feeFromRule;
-      const fee = feeComputed;
+      const fee =
+        feeOverride > 0
+          ? feeOverride
+          : rowFee > 0
+            ? rowFee
+            : computedMonthFee > 0
+              ? computedMonthFee
+              : feeFromRule;
 
       const verification =
         safeStr(getVerificationFromBillingRow(row)).trim() ||
@@ -554,7 +564,7 @@ hasAny
           monthKey: m.key,
           monthNo: m.monthNo,
           verifNo: m.verification || '-',
-          monthSlipNo: m.monthNumber || '-',
+          bank: m.bank || '-',
           due: Number.isFinite(dueN) ? dueN : NaN,
           feeVal: m.feeShown || '-',
           amountVal: (m.amount ? m.amount : '-'),
@@ -594,6 +604,39 @@ hasAny
 
   const role = String(user?.role || '').toLowerCase();
   const agentType = String(user?.agentType || '').toLowerCase();
+
+  let detailsPerms =
+    (typeof perms !== 'undefined' && perms)
+      ? perms
+      : (
+          user?.permissions ||
+          user?.perms ||
+          user?.permission ||
+          {}
+        );
+
+  try {
+    if (typeof detailsPerms === 'string') {
+      detailsPerms = JSON.parse(detailsPerms);
+    }
+  } catch (e) {
+    detailsPerms = {};
+  }
+
+  const canEditAdmission =
+    role === 'super_admin' ||
+    role === 'superadmin' ||
+    detailsPerms === true ||
+    (Array.isArray(detailsPerms) && (
+      detailsPerms.includes('*') ||
+      detailsPerms.includes('all') ||
+      detailsPerms.includes('btnEditRow')
+    )) ||
+    (
+      detailsPerms &&
+      typeof detailsPerms === 'object' &&
+      detailsPerms.btnEditRow === true
+    );
 
  let backUrl = '/dashboard';
 
@@ -673,27 +716,62 @@ if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; f
 
   const famCurrency = String(getCurrency(A) || '').trim() || '-';
 
-  const CURRENT_YEAR = new Date().getFullYear();
-    const feeCollectionBaseUrl =
+  const billingYearFromAdmission =
+    Number(
+      A?.billingYear ||
+      A?.billing_year ||
+      (
+        Array.isArray(A?.billing)
+          ? A.billing.find((row) => Number(row?.year))?.year
+          : 0
+      ) ||
+      0
+    );
+
+  const CURRENT_YEAR =
+    Number.isInteger(billingYearFromAdmission) &&
+    billingYearFromAdmission >= 2020 &&
+    billingYearFromAdmission <= 2100
+      ? billingYearFromAdmission
+      : new Date().getFullYear();
+
+  const feeCollectionBaseUrl =
     (role === 'admin')
       ? '/admin/fee-collection'
       : '/dashboard/super/fee-collection';
-        const isAutoFamilyMatch = !familyNumber && Array.isArray(familyList) && familyList.length > 1;
-  const familyRouteNumber = familyNumber || (isAutoFamilyMatch ? 'auto' : '');
-  const familyRouteAdmissionId = A?.id || (familyList[0]?.id || '');
+
+  const isAutoFamilyMatch =
+    !familyNumber &&
+    Array.isArray(familyList) &&
+    familyList.length > 1;
+
+  const familyRouteNumber =
+    familyNumber ||
+    (isAutoFamilyMatch ? 'auto' : '');
+
+  const familyRouteAdmissionId =
+    A?.id ||
+    (familyList[0]?.id || '');
+
+  const sharedDetailsUrl =
+    `/dashboard/admission/${encodeURIComponent(A?.id || '')}` +
+    `?year=${encodeURIComponent(CURRENT_YEAR)}`;
 %>
 
 <div class="container-fluid py-2 admission-details-page"
      data-family-number="<%= familyRouteNumber %>"
      data-primary-admission-id="<%= A?.id || '' %>"
      data-user-role="<%= String(user?.role || user?.agentType || '').toLowerCase() %>"
-     data-details-url="<%= (role === 'admin') ? ('/admin/admission/' + (A?.id || '')) : ('/dashboard/super/admission/' + (A?.id || '')) %>">
+     data-billing-year="<%= CURRENT_YEAR %>"
+     data-details-url="<%= sharedDetailsUrl %>">
 
   <div class="d-flex justify-content-between align-items-center mb-2 top-head">
     <div>
       <h4 class="mb-0 page-title">Admission Details</h4>
       <div class="text-muted small">
         Admission ID: <b><%= A.id %></b>
+        <span class="mx-2">|</span>
+        Billing Year: <b><%= CURRENT_YEAR %></b>
         <% if (familyNumber || isAutoFamilyMatch) { %>
   <span class="mx-2">|</span> Family #:
   <b><%= familyNumber || 'Auto Matched' %></b>
@@ -985,13 +1063,15 @@ if (regInfo.enabled) {
                     </div>
                   <% } %>
 
-                  <div class="profile-edit-center">
-  <a
-    href="<%= (role === 'admin') ? ('/admin/admission/' + X.id + '/edit') : ('/dashboard/super/admission/' + X.id + '/edit') %>"
-    class="btn btn-sm btn-premium-edit px-4 rounded-3">
-    <i class="bi bi-pencil-square me-1"></i> Edit
-  </a>
-</div>
+                  <% if (canEditAdmission) { %>
+                    <div class="profile-edit-center">
+                      <a
+                        href="/dashboard/admission/<%= encodeURIComponent(X.id) %>/edit?year=<%= encodeURIComponent(CURRENT_YEAR) %>"
+                        class="btn btn-sm btn-premium-edit px-4 rounded-3">
+                        <i class="bi bi-pencil-square me-1"></i> Edit
+                      </a>
+                    </div>
+                  <% } %>
                 </div>
 
               </div>
@@ -1004,7 +1084,7 @@ if (regInfo.enabled) {
 
                 <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
   <a
-   href="<%= feeCollectionBaseUrl %>?admissionId=<%= X.id %>&familyNumber=<%= encodeURIComponent(familyRouteNumber || '') %>"
+   href="<%= feeCollectionBaseUrl %>?admissionId=<%= encodeURIComponent(X.id) %>&familyNumber=<%= encodeURIComponent(familyRouteNumber || '') %>&year=<%= encodeURIComponent(CURRENT_YEAR) %>"
     class="btn btn-fee-collection btn-sm rounded-3"
     title="Open Fee Collection"
   >
@@ -1033,7 +1113,7 @@ if (regInfo.enabled) {
                             <th style="width:14%">Month</th>
                             <th style="width:6%">M#</th>
                             <th style="width:18%">Verification #</th>
-                            <th style="width:14%">Month Number</th>
+                            <th style="width:14%">Bank</th>
                             <th style="width:12%">Month Fee</th>
                             <th style="width:9%">Received</th>
                             <th style="width:9%">Balance</th>
@@ -1063,7 +1143,7 @@ if (regInfo.enabled) {
                                   <span class="pill-mini mono"><%= regInfo.verification || '-' %></span>
                                 </td>
                                 <td>
-                                  <span class="pill-mini mono">Yearly</span>
+                                  <span class="pill-mini"><%= regInfo.bank || '-' %></span>
                                 </td>
                                 <td>
                                   <span class="pill-fee"><%= money(regInfo.total) %></span>
@@ -1104,7 +1184,7 @@ if (regInfo.enabled) {
                                   <span class="pill-mini mono"><%= (r.verifNo || '-') %></span>
                                 </td>
                                 <td>
-                                  <span class="pill-mini mono"><%= (r.monthSlipNo || '-') %></span>
+                                  <span class="pill-mini"><%= (r.bank || '-') %></span>
                                 </td>
                                 <td>
                                   <span class="pill-fee"><%= (r.feeVal !== '-' ? money(r.feeVal) : '-') %></span>
@@ -1953,11 +2033,8 @@ const canPrintPaid =
   window.__ADMISSION_ID__ = <%- JSON.stringify(familyRouteAdmissionId || "") %>;
   window.__FAMILY_NUMBER__ = <%- JSON.stringify(familyRouteNumber || "") %>;
   window.__USER_ROLE__ = <%- JSON.stringify(String(user?.role || user?.agentType || '').toLowerCase()) %>;
-  window.__DETAILS_PAGE_URL__ = <%- JSON.stringify(
-    (role === 'admin')
-      ? ('/admin/admission/' + (A?.id || ''))
-      : ('/dashboard/super/admission/' + (A?.id || ''))
-  ) %>;
+  window.__BILLING_YEAR__ = <%- JSON.stringify(String(CURRENT_YEAR)) %>;
+  window.__DETAILS_PAGE_URL__ = <%- JSON.stringify(sharedDetailsUrl) %>;
  window.__ROUTES__ = {
   pendingAdmission: "/api/pending/admission/",
   pendingFamily: "/api/pending/family/",

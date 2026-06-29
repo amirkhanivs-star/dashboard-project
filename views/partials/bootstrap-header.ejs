@@ -670,34 +670,128 @@ html.ivs-ready .ivs-topbar {
 
 <%
   const u = user || {};
-  const role = (u.role || '').toString();
-  const dept = (u.dept || '').toString();
-  const agentType = (u.agentType || '').toString();
 
-  const cap = (txt) => txt ? txt.charAt(0).toUpperCase() + txt.slice(1) : '';
-  const deptTitle  = cap(dept);
-  const agentTitle = cap(agentType);
+  const normalizeRole = (value) => {
+    const clean = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[-\s]+/g, '_');
 
-  const perms = u.permissions || {};
-  const can = (key, def = true) => (typeof perms[key] === 'undefined') ? def : !!perms[key];
+    if (clean === 'superadmin') return 'super_admin';
+    if (clean === 'subagent') return 'sub_agent';
+    return clean;
+  };
+
+  const rawRole = normalizeRole(u.role || '');
+  const normalizedAgentRole = normalizeRole(u.agentType || '');
+  const role = rawRole || (
+    ['super_admin', 'admin', 'agent', 'sub_agent'].includes(normalizedAgentRole)
+      ? normalizedAgentRole
+      : ''
+  );
+
+  const dept = String(u.dept || u.department || '').trim();
+  const agentType = String(u.agentType || u.agent_type || '').trim();
+
+  const formatLabel = (value) => String(value || '')
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, ch => ch.toUpperCase());
+
+  const deptTitle = formatLabel(dept);
+  const agentTitle = formatLabel(agentType);
+
+  const isSuper = !!(
+    role === 'super_admin' ||
+    u.isSuperAdmin === true ||
+    u.is_super_admin === true
+  );
+
+  let headerPerms =
+    (typeof perms !== 'undefined' && perms !== null)
+      ? perms
+      : (u.permissions || u.perms || u.permission || u.permissionMap || {});
+
+  try {
+    if (typeof headerPerms === 'string') {
+      headerPerms = JSON.parse(headerPerms);
+    }
+  } catch (e) {
+    headerPerms = {};
+  }
+
+  function getNestedPermission(obj, path) {
+    const parts = String(path || '').split('.').filter(Boolean);
+    let current = obj;
+
+    for (const part of parts) {
+      if (!current || typeof current !== 'object' || !(part in current)) {
+        return undefined;
+      }
+      current = current[part];
+    }
+
+    return current;
+  }
+
+  function can(key, def = true) {
+    if (isSuper) return true;
+    if (headerPerms === true) return true;
+    if (!headerPerms) return def;
+
+    const cleanKey = String(key || '').trim();
+    if (!cleanKey) return def;
+
+    if (Array.isArray(headerPerms)) {
+      if (headerPerms.includes('*') || headerPerms.includes('all')) return true;
+      return headerPerms.includes(cleanKey) ? true : def;
+    }
+
+    if (typeof headerPerms === 'object') {
+      if (headerPerms['*'] === true || headerPerms.all === true) return true;
+      if (Object.prototype.hasOwnProperty.call(headerPerms, cleanKey)) {
+        return !!headerPerms[cleanKey];
+      }
+
+      const nested = getNestedPermission(headerPerms, cleanKey);
+      if (typeof nested !== 'undefined') return !!nested;
+
+      const altKey = cleanKey.replace(/\./g, '_');
+      if (Object.prototype.hasOwnProperty.call(headerPerms, altKey)) {
+        return !!headerPerms[altKey];
+      }
+    }
+
+    return def;
+  }
 
   let themeClass = '';
   if (role === 'admin') themeClass = 'admin';
   else if (role === 'agent') themeClass = 'agent';
   else if (role === 'sub_agent') themeClass = 'sub_agent';
 
-  let headerTitle = pageTitle || (role === 'super_admin' ? 'Super Admin Dashboard' : 'Dashboard');
+  const headerTitle =
+    pageTitle ||
+    (isSuper ? 'Super Admin Dashboard' : 'Dashboard');
 
   let headerRole = '';
-  if (role === 'super_admin') headerRole = 'Super Admin';
+  if (isSuper) headerRole = 'Super Admin';
   else if (role === 'admin') headerRole = deptTitle ? `${deptTitle} Admin` : 'Admin';
-  else if (role === 'agent') headerRole = (deptTitle || agentType) ? `${deptTitle || 'Dept'} ${agentTitle || 'Agent'} Agent`.trim() : 'Agent';
-  else if (role === 'sub_agent') headerRole = (deptTitle || agentType) ? `${deptTitle || 'Dept'} ${agentTitle || 'Sub Agent'} Sub Agent`.trim() : 'Sub Agent';
-  else headerRole = cap(role || 'User');
+  else if (role === 'agent') {
+    headerRole = (deptTitle || agentTitle)
+      ? `${deptTitle || 'Department'} ${agentTitle || 'Agent'} Agent`.trim()
+      : 'Agent';
+  } else if (role === 'sub_agent') {
+    headerRole = (deptTitle || agentTitle)
+      ? `${deptTitle || 'Department'} ${agentTitle || 'Sub Agent'} Sub Agent`.trim()
+      : 'Sub Agent';
+  } else {
+    headerRole = formatLabel(role || 'User');
+  }
 
-  /* ✅ robust dept check */
-  const deptLower = dept.toLowerCase();
-  const isSchoolDept = deptLower.includes('school');
+  const deptLower = dept.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const isSchoolDept = deptLower === 'school';
   const isSchoolAccountsDept =
     deptLower === 'accounts' ||
     deptLower === 'school accounts' ||
@@ -705,16 +799,58 @@ html.ivs-ready .ivs-topbar {
 
   const canShowSchoolAdmissionForm = isSchoolDept || isSchoolAccountsDept;
 
+  const currentPath =
+    (typeof currentUrl !== 'undefined' && currentUrl)
+      ? currentUrl
+      : (typeof req !== 'undefined' && req.originalUrl)
+        ? req.originalUrl
+        : '';
+
+  function isActivePath(paths) {
+    const cleanPath = String(currentPath || '').split('?')[0];
+    return (paths || []).some(path => {
+      const cleanTarget = String(path || '').split('?')[0];
+      return cleanPath === cleanTarget || cleanPath.startsWith(cleanTarget + '/');
+    });
+  }
+
+  const usersPageActive =
+    role === 'admin'
+      ? isActivePath(['/dashboard/admin/users'])
+      : isActivePath(['/dashboard/agent/users']);
+
   const sidebarAdmissionFormLink =
     (typeof currentUserAdmissionLink !== 'undefined' && currentUserAdmissionLink)
       ? currentUserAdmissionLink
       : (u && (u.admissionLink || u.admission_link))
         ? (u.admissionLink || u.admission_link)
         : '';
+
+  const clientUser = {
+    id: u.id || null,
+    role,
+    dept,
+    department: dept,
+    agentType,
+    isSuperAdmin: isSuper,
+    is_super_admin: isSuper
+  };
+
+  const safeScriptJson = (value) => JSON.stringify(value ?? null)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 %>
 
 <body class="layout-dashboard" data-theme="<%= themeClass %>">
- <div id="ivsGlobalLoader" aria-hidden="true">
+<script>
+  window.CURRENT_USER = <%- safeScriptJson(clientUser) %>;
+  window.USER_PERMS = <%- safeScriptJson(headerPerms || null) %>;
+  window.IS_SUPER = <%- safeScriptJson(isSuper) %>;
+</script>
+ <div id="ivsGlobalLoader" aria-hidden="false">
   <div class="ivs-luxury-orb orb-red"></div>
   <div class="ivs-luxury-orb orb-blue"></div>
   <div class="ivs-luxury-orb orb-purple"></div>
@@ -745,25 +881,43 @@ html.ivs-ready .ivs-topbar {
 </div>
     <script>
   (function () {
-    function showDashboardSmoothly() {
+    let revealScheduled = false;
+
+    function revealDashboard(delay = 1000) {
+      if (revealScheduled) return;
+      revealScheduled = true;
+
       const html = document.documentElement;
+      const loader = document.getElementById('ivsGlobalLoader');
 
       setTimeout(function () {
-        html.classList.remove("ivs-preload");
-        html.classList.remove("ivs-loading");
-        html.classList.add("ivs-ready");
+        html.classList.remove('ivs-preload', 'ivs-loading', 'ivs-page-leaving');
+        html.classList.add('ivs-ready');
+
+        if (loader) loader.setAttribute('aria-hidden', 'true');
 
         setTimeout(function () {
-          html.classList.remove("ivs-ready");
+          html.classList.remove('ivs-ready');
         }, 400);
-     }, 1000);
+      }, Math.max(0, Number(delay) || 0));
     }
 
-    if (document.readyState === "complete") {
-      showDashboardSmoothly();
+    if (document.readyState === 'complete') {
+      revealDashboard();
     } else {
-      window.addEventListener("load", showDashboardSmoothly, { once: true });
+      window.addEventListener('load', function () {
+        revealDashboard();
+      }, { once: true });
     }
+
+    window.addEventListener('pageshow', function () {
+      revealDashboard(0);
+    });
+
+    // CDN/resource failure must never leave the page permanently covered.
+    setTimeout(function () {
+      revealDashboard(0);
+    }, 8000);
   })();
 </script>
   <script>
@@ -793,45 +947,45 @@ html.ivs-ready .ivs-topbar {
       <div class="sidebar-section-label">MAIN</div>
 
       <% if (can('viewDashboard', true)) { %>
-        <a href="/dashboard" class="<%= (pageTitle||'').includes('Dashboard') ? 'active' : '' %>">
+        <a href="/dashboard" class="<%= isActivePath(['/dashboard']) && !isActivePath(['/dashboard/super/users','/dashboard/super/history','/dashboard/super/files','/dashboard/super/quran','/dashboard/super/tuition','/dashboard/super/school','/dashboard/overview','/dashboard/admin/users','/dashboard/agent/users']) ? 'active' : '' %>">
           <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
         </a>
       <% } %>
 
-      <% if (role === 'super_admin') { %>
+      <% if (isSuper) { %>
         <% if (can('viewUsers')) { %>
-          <a href="/dashboard/super/users"><i class="bi bi-people"></i> <span>Users</span></a>
+          <a href="/dashboard/super/users" class="<%= isActivePath(['/dashboard/super/users']) ? 'active' : '' %>"><i class="bi bi-people"></i> <span>Users</span></a>
         <% } %>
         <% if (can('viewHistory')) { %>
-          <a href="/dashboard/super/history"><i class="bi bi-clock-history"></i> <span>History</span></a>
+          <a href="/dashboard/super/history" class="<%= isActivePath(['/dashboard/super/history']) ? 'active' : '' %>"><i class="bi bi-clock-history"></i> <span>History</span></a>
         <% } %>
         <% if (can('viewFiles')) { %>
-          <a href="/dashboard/super/files"><i class="bi bi-folder2-open"></i> <span>View Files</span></a>
+          <a href="/dashboard/super/files" class="<%= isActivePath(['/dashboard/super/files']) ? 'active' : '' %>"><i class="bi bi-folder2-open"></i> <span>View Files</span></a>
         <% } %>
 
         <div class="sidebar-section-label mt-3">DEPARTMENTS</div>
 
-                <a href="/dashboard/overview" class="<%= (pageTitle||'').includes('Overview') ? 'active' : '' %>">
+                <a href="/dashboard/overview" class="<%= isActivePath(['/dashboard/overview']) ? 'active' : '' %>">
           <i class="bi bi-bar-chart-line"></i> <span>Overview</span>
         </a>
 
         <% if (can('viewQuran')) { %>
-          <a href="/dashboard/super/quran"><i class="bi bi-moon-stars"></i> <span>Quran</span></a>
+          <a href="/dashboard/super/quran" class="<%= isActivePath(['/dashboard/super/quran']) ? 'active' : '' %>"><i class="bi bi-moon-stars"></i> <span>Quran</span></a>
         <% } %>
         <% if (can('viewTuition')) { %>
-          <a href="/dashboard/super/tuition"><i class="bi bi-journal-text"></i> <span>Tuition</span></a>
+          <a href="/dashboard/super/tuition" class="<%= isActivePath(['/dashboard/super/tuition']) ? 'active' : '' %>"><i class="bi bi-journal-text"></i> <span>Tuition</span></a>
         <% } %>
         <% if (can('viewSchool')) { %>
-          <a href="/dashboard/super/school"><i class="bi bi-building"></i> <span>School</span></a>
+          <a href="/dashboard/super/school" class="<%= isActivePath(['/dashboard/super/school']) ? 'active' : '' %>"><i class="bi bi-building"></i> <span>School</span></a>
         <% } %>
 
         <div class="sidebar-section-label mt-3">DB SETTING</div>
 
-<a href="/db-settings" class="<%= (pageTitle||'').includes('DB Settings') ? 'active' : '' %>">
+<a href="/db-settings" class="<%= isActivePath(['/db-settings']) ? 'active' : '' %>">
   <i class="bi bi-database-gear"></i> <span>Database Settings</span>
 </a>
 
-<a href="/api-settings" class="<%= (pageTitle||'').includes('API Settings') ? 'active' : '' %>">
+<a href="/api-settings" class="<%= isActivePath(['/api-settings']) ? 'active' : '' %>">
   <i class="bi bi-key-fill"></i> <span>API'S</span>
 </a>
 
@@ -842,7 +996,7 @@ html.ivs-ready .ivs-topbar {
 
       <% } else { %>
         <% if ((role === 'admin' || role === 'agent') && can('viewUsers', true)) { %>
-          <a href="<%= role === 'admin' ? '/dashboard/admin/users' : '/dashboard/agent/users' %>" class="<%= (pageTitle||'').includes('Users') ? 'active' : '' %>">
+          <a href="<%= role === 'admin' ? '/dashboard/admin/users' : '/dashboard/agent/users' %>" class="<%= usersPageActive ? 'active' : '' %>">
             <i class="bi bi-people"></i> <span>Users</span>
           </a>
         <% } %>
@@ -887,7 +1041,68 @@ html.ivs-ready .ivs-topbar {
       </div>
     </nav>
   </aside>
+<script>
+  (function () {
+    const path = window.location.pathname;
+    const links = Array.from(document.querySelectorAll('.sidebar-nav a'));
+    const dashboardLink = document.querySelector('.sidebar-nav a[href="/dashboard"]');
 
+    function activate(link) {
+      links.forEach(function (item) {
+        item.classList.remove('active');
+        item.removeAttribute('aria-current');
+      });
+
+      if (link) {
+        link.classList.add('active');
+        link.setAttribute('aria-current', 'page');
+      }
+    }
+
+    if (path === '/dashboard') {
+      activate(dashboardLink);
+      return;
+    }
+
+    let bestMatch = null;
+    let bestLength = 0;
+
+    links.forEach(function (link) {
+      const href = link.getAttribute('href') || '';
+
+      if (
+        !href ||
+        href === '/dashboard' ||
+        href === '/logout' ||
+        href.startsWith('http')
+      ) {
+        return;
+      }
+
+      if (path === href || path.startsWith(href + '/')) {
+        if (href.length > bestLength) {
+          bestMatch = link;
+          bestLength = href.length;
+        }
+      }
+    });
+
+    if (bestMatch) {
+      activate(bestMatch);
+      return;
+    }
+
+    const isSharedAdmissionPage =
+      path.startsWith('/dashboard/admission/') ||
+      path.startsWith('/dashboard/super/admission/') ||
+      path === '/dashboard/super/fee-collection' ||
+      path === '/admin/fee-collection';
+
+    if (isSharedAdmissionPage || path.startsWith('/dashboard')) {
+      activate(dashboardLink);
+    }
+  })();
+</script>
   <!-- MAIN + TOPBAR -->
   <main class="ivs-main d-flex flex-column">
     <nav class="ivs-topbar navbar">

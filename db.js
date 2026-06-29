@@ -79,27 +79,97 @@ function safeParseJson(str, fallback = {}) {
   }
 }
 
+function permissionValueEnabled(value) {
+  if (value === true || value === 1) {
+    return true;
+  }
+
+  if (
+    value === false ||
+    value === 0 ||
+    value === null ||
+    typeof value === "undefined"
+  ) {
+    return false;
+  }
+
+  const normalized = String(value)
+    .trim()
+    .toLowerCase();
+
+  return [
+    "1",
+    "true",
+    "on",
+    "yes",
+  ].includes(normalized);
+}
+
 function buildDefaultPermissions(role) {
-  const isSuper = role === "super_admin";
+  const roleKey = String(role || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  const isSuper =
+    roleKey === "super_admin" ||
+    roleKey === "superadmin";
+
   const obj = {};
-  for (const k of PERMISSION_KEYS) obj[k] = isSuper ? true : false;
+
+  for (const key of PERMISSION_KEYS) {
+    obj[key] = isSuper;
+  }
+
   return obj;
 }
 
 function normalizePermissions(rawPermissions, role) {
-  const isSuper = role === "super_admin";
-  const raw = safeParseJson(rawPermissions, {});
+  const parsed = safeParseJson(rawPermissions, {});
+
+  const raw =
+    parsed &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed)
+      ? { ...parsed }
+      : {};
 
   for (const [legacyKey, newKey] of Object.entries(LEGACY_MAP)) {
-    if (typeof raw[newKey] === "undefined" && typeof raw[legacyKey] !== "undefined") {
-      raw[newKey] = !!raw[legacyKey];
+    const hasNewKey =
+      Object.prototype.hasOwnProperty.call(
+        raw,
+        newKey
+      );
+
+    const hasLegacyKey =
+      Object.prototype.hasOwnProperty.call(
+        raw,
+        legacyKey
+      );
+
+    if (!hasNewKey && hasLegacyKey) {
+      raw[newKey] =
+        permissionValueEnabled(raw[legacyKey]);
     }
   }
 
-  const clean = {};
-  for (const key of PERMISSION_KEYS) clean[key] = !!raw[key];
+  const defaults =
+    buildDefaultPermissions(role);
 
-  if (isSuper) for (const key of PERMISSION_KEYS) clean[key] = true;
+  const clean = {};
+
+  for (const key of PERMISSION_KEYS) {
+    const hasSavedValue =
+      Object.prototype.hasOwnProperty.call(
+        raw,
+        key
+      );
+
+    clean[key] = hasSavedValue
+      ? permissionValueEnabled(raw[key])
+      : defaults[key];
+  }
+
   return clean;
 }
 
@@ -114,6 +184,9 @@ db.exec(`
     dept TEXT,
     agentType TEXT,
     managerId INTEGER,
+    assigned_admin_id INTEGER,
+    created_by INTEGER,
+    access_scope TEXT DEFAULT 'own',
     permissions TEXT,
     lastUpdatedBy TEXT,
     lastUpdatedByRole TEXT,
@@ -139,6 +212,8 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS admissions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_number INTEGER,
+    last_activity_at TEXT,
 
     dept TEXT,
     status TEXT,
@@ -169,10 +244,48 @@ db.exec(`
     accounts_paid_upto TEXT,
     accounts_verification_number TEXT,
     accounts_registration_number TEXT,
+    accounts_registration_number_assigned_at TEXT,
+    registration_number_removed INTEGER DEFAULT 0,
     accounts_family_number TEXT,
+
+    school_return_status TEXT DEFAULT '',
+    school_returned_to_user_id INTEGER,
+    school_returned_at TEXT,
+    school_reuploaded_at TEXT,
+    reupload_tag_active INTEGER DEFAULT 0,
+
+    forward_status TEXT DEFAULT 'not_forwarded',
+    forwarded_to_department TEXT,
+    forwarded_to_type TEXT,
+    forwarded_at TEXT,
+    forwarded_from_department TEXT,
+    forwarded_from_type TEXT,
+    accounts_workflow_stage TEXT DEFAULT 'new_admissions',
+
+    accounts_issue_message TEXT,
+    accounts_issue_fields TEXT,
+    accounts_issue_by_id INTEGER,
+    accounts_issue_by_name TEXT,
+    accounts_issue_by_role TEXT,
+    accounts_issue_at TEXT,
+
+    accounts_completed_at TEXT,
+    accounts_completed_by_id INTEGER,
+    accounts_completed_by_name TEXT,
+    accounts_completed_by_role TEXT,
+
+    forwarded_by_id INTEGER,
+    forwarded_by_name TEXT,
+    forwarded_by_role TEXT,
+
+    forwarded_owner_user_id INTEGER,
+    forwarded_owner_user_name TEXT,
+    forwarded_owner_user_role TEXT,
 
     admission_registration_fee TEXT,
     admission_fees TEXT,
+    currency_code TEXT DEFAULT 'SAR',
+    bank_name TEXT,
     fee_history TEXT,
     admission_month TEXT,
 
@@ -199,8 +312,12 @@ db.exec(`
     november TEXT,
     december TEXT,
 
+    billing_json TEXT,
+    monthly_fee_current REAL,
+    has_extra_fee INTEGER,
+
     whatsapp TEXT,
-       pdf_path TEXT,
+    pdf_path TEXT,
 
     is_deleted INTEGER DEFAULT 0,
     deleted_at TEXT,
@@ -218,6 +335,10 @@ db.exec(`
     file_url TEXT,
     mime_type TEXT,
     size INTEGER,
+    uploaded_by_id INTEGER,
+    uploaded_by_name TEXT,
+    uploaded_by_role TEXT,
+    uploaded_at TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -277,6 +398,17 @@ CREATE TABLE IF NOT EXISTS admission_billing_yearly (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(admission_id, billing_year, month_key)
 );
+  CREATE TABLE IF NOT EXISTS admission_accounts_workflow_users (
+    admission_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    user_name TEXT,
+    user_role TEXT,
+    agent_type TEXT,
+    first_assigned_at TEXT NOT NULL,
+    last_assigned_at TEXT NOT NULL,
+    PRIMARY KEY (admission_id, user_id)
+  );
+
   CREATE TABLE IF NOT EXISTS api_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     setting_key TEXT NOT NULL UNIQUE,
@@ -329,6 +461,9 @@ function tableExists(table) {
 ensureColumn("users", "dept", "TEXT");
 ensureColumn("users", "agentType", "TEXT");
 ensureColumn("users", "managerId", "INTEGER");
+ensureColumn("users", "assigned_admin_id", "INTEGER");
+ensureColumn("users", "created_by", "INTEGER");
+ensureColumn("users", "access_scope", "TEXT DEFAULT 'own'");
 ensureColumn("users", "permissions", "TEXT");
 ensureColumn("users", "lastUpdatedBy", "TEXT");
 ensureColumn("users", "lastUpdatedByRole", "TEXT");
@@ -341,6 +476,8 @@ ensureColumn("users", "updatedAt", "TEXT");
 ensureColumn("audit_logs", "actorDept", "TEXT");
 ensureColumn("audit_logs", "dept", "TEXT");
 
+ensureColumn("admissions", "entry_number", "INTEGER");
+ensureColumn("admissions", "last_activity_at", "TEXT");
 ensureColumn("admissions", "status", "TEXT");
 ensureColumn("admissions", "feeStatus", "TEXT");
 ensureColumn("admissions", "tuition_grade", "TEXT");
@@ -351,7 +488,128 @@ ensureColumn("admissions", "accounts_payment_status", "TEXT");
 ensureColumn("admissions", "accounts_paid_upto", "TEXT");
 ensureColumn("admissions", "accounts_verification_number", "TEXT");
 ensureColumn("admissions", "accounts_registration_number", "TEXT");
+ensureColumn("admissions", "accounts_registration_number_assigned_at", "TEXT");
+ensureColumn("admissions", "registration_number_removed", "INTEGER DEFAULT 0");
 ensureColumn("admissions", "accounts_family_number", "TEXT");
+ensureColumn("admissions", "school_return_status", "TEXT DEFAULT ''");
+ensureColumn("admissions", "school_returned_to_user_id", "INTEGER");
+ensureColumn("admissions", "school_returned_at", "TEXT");
+ensureColumn("admissions", "school_reuploaded_at", "TEXT");
+ensureColumn("admissions", "reupload_tag_active", "INTEGER DEFAULT 0");
+
+ensureColumn("admissions", "forward_status", "TEXT DEFAULT 'not_forwarded'");
+ensureColumn("admissions", "forwarded_to_department", "TEXT");
+ensureColumn("admissions", "forwarded_to_type", "TEXT");
+ensureColumn("admissions", "forwarded_at", "TEXT");
+ensureColumn("admissions", "forwarded_from_department", "TEXT");
+ensureColumn("admissions", "forwarded_from_type", "TEXT");
+ensureColumn("admissions", "accounts_workflow_stage", "TEXT DEFAULT 'new_admissions'");
+
+ensureColumn("admissions", "accounts_issue_message", "TEXT");
+ensureColumn("admissions", "accounts_issue_fields", "TEXT");
+ensureColumn("admissions", "accounts_issue_by_id", "INTEGER");
+ensureColumn("admissions", "accounts_issue_by_name", "TEXT");
+ensureColumn("admissions", "accounts_issue_by_role", "TEXT");
+ensureColumn("admissions", "accounts_issue_at", "TEXT");
+
+ensureColumn("admissions", "accounts_completed_at", "TEXT");
+ensureColumn("admissions", "accounts_completed_by_id", "INTEGER");
+ensureColumn("admissions", "accounts_completed_by_name", "TEXT");
+ensureColumn("admissions", "accounts_completed_by_role", "TEXT");
+
+ensureColumn("admissions", "forwarded_by_id", "INTEGER");
+ensureColumn("admissions", "forwarded_by_name", "TEXT");
+ensureColumn("admissions", "forwarded_by_role", "TEXT");
+
+ensureColumn("admissions", "forwarded_owner_user_id", "INTEGER");
+ensureColumn("admissions", "forwarded_owner_user_name", "TEXT");
+ensureColumn("admissions", "forwarded_owner_user_role", "TEXT");
+
+try {
+  db.exec(`
+    UPDATE admissions
+    SET reupload_tag_active = 1
+    WHERE TRIM(COALESCE(school_reuploaded_at, '')) <> ''
+      AND COALESCE(reupload_tag_active, 0) <> 1
+  `);
+} catch (e) {
+  console.error("reupload tag backfill error:", e.message);
+}
+
+try {
+  db.exec(`
+    WITH ordered AS (
+      SELECT
+        id,
+        ROW_NUMBER() OVER (ORDER BY id ASC) AS rn
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+    )
+    UPDATE admissions
+    SET entry_number = (
+      SELECT rn
+      FROM ordered
+      WHERE ordered.id = admissions.id
+    )
+    WHERE COALESCE(is_deleted, 0) = 0
+      AND (
+        entry_number IS NULL
+        OR TRIM(COALESCE(entry_number, '')) = ''
+        OR CAST(entry_number AS INTEGER) = 0
+      );
+
+    UPDATE admissions
+    SET last_activity_at = COALESCE(
+      NULLIF(TRIM(last_activity_at), ''),
+      NULLIF(TRIM(created_at), ''),
+      NULLIF(TRIM(registration_date), ''),
+      datetime('now')
+    )
+    WHERE COALESCE(is_deleted, 0) = 0
+      AND (
+        last_activity_at IS NULL
+        OR TRIM(COALESCE(last_activity_at, '')) = ''
+      );
+
+    UPDATE admissions
+    SET accounts_workflow_stage = 'new_admissions'
+    WHERE COALESCE(is_deleted, 0) = 0
+      AND (
+        accounts_workflow_stage IS NULL
+        OR TRIM(COALESCE(accounts_workflow_stage, '')) = ''
+      );
+
+    UPDATE admissions
+    SET forwarded_from_department = 'School Department',
+        forwarded_from_type = 'school'
+    WHERE COALESCE(is_deleted, 0) = 0
+      AND LOWER(TRIM(COALESCE(forward_status, ''))) = 'forwarded'
+      AND (
+        forwarded_from_type IS NULL
+        OR TRIM(COALESCE(forwarded_from_type, '')) = ''
+      );
+  `);
+} catch (e) {
+  console.error("accounts workflow backfill error:", e.message);
+}
+
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS admission_accounts_workflow_users (
+      admission_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      user_name TEXT,
+      user_role TEXT,
+      agent_type TEXT,
+      first_assigned_at TEXT NOT NULL,
+      last_assigned_at TEXT NOT NULL,
+      PRIMARY KEY (admission_id, user_id)
+    );
+  `);
+} catch (e) {
+  console.error("accounts workflow users table error:", e.message);
+}
+
 ensureColumn("admissions", "admission_registration_fee", "TEXT");
 ensureColumn("admissions", "admission_fees", "TEXT");
 ensureColumn("admissions", "currency_code", "TEXT DEFAULT 'SAR'");
@@ -407,6 +665,10 @@ ensureColumn("uploads", "stored_name", "TEXT");
 ensureColumn("uploads", "file_url", "TEXT");
 ensureColumn("uploads", "mime_type", "TEXT");
 ensureColumn("uploads", "size", "INTEGER");
+ensureColumn("uploads", "uploaded_by_id", "INTEGER");
+ensureColumn("uploads", "uploaded_by_name", "TEXT");
+ensureColumn("uploads", "uploaded_by_role", "TEXT");
+ensureColumn("uploads", "uploaded_at", "TEXT");
 ensureColumn("uploads", "created_at", "TEXT");
 
 ensureColumn("status_options", "opt_key", "TEXT");
@@ -665,6 +927,8 @@ try {
     db.exec(`
       CREATE TABLE IF NOT EXISTS admissions_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entry_number INTEGER,
+        last_activity_at TEXT,
 
         dept TEXT,
         status TEXT,
@@ -695,7 +959,43 @@ try {
         accounts_paid_upto TEXT,
         accounts_verification_number TEXT,
         accounts_registration_number TEXT,
+        accounts_registration_number_assigned_at TEXT,
+        registration_number_removed INTEGER DEFAULT 0,
         accounts_family_number TEXT,
+
+        school_return_status TEXT DEFAULT '',
+        school_returned_to_user_id INTEGER,
+        school_returned_at TEXT,
+        school_reuploaded_at TEXT,
+        reupload_tag_active INTEGER DEFAULT 0,
+
+        forward_status TEXT DEFAULT 'not_forwarded',
+        forwarded_to_department TEXT,
+        forwarded_to_type TEXT,
+        forwarded_at TEXT,
+        forwarded_from_department TEXT,
+        forwarded_from_type TEXT,
+        accounts_workflow_stage TEXT DEFAULT 'new_admissions',
+
+        accounts_issue_message TEXT,
+        accounts_issue_fields TEXT,
+        accounts_issue_by_id INTEGER,
+        accounts_issue_by_name TEXT,
+        accounts_issue_by_role TEXT,
+        accounts_issue_at TEXT,
+
+        accounts_completed_at TEXT,
+        accounts_completed_by_id INTEGER,
+        accounts_completed_by_name TEXT,
+        accounts_completed_by_role TEXT,
+
+        forwarded_by_id INTEGER,
+        forwarded_by_name TEXT,
+        forwarded_by_role TEXT,
+
+        forwarded_owner_user_id INTEGER,
+        forwarded_owner_user_name TEXT,
+        forwarded_owner_user_role TEXT,
 
         admission_registration_fee TEXT,
         admission_fees TEXT,
@@ -747,11 +1047,24 @@ try {
     db.exec(`
       INSERT INTO admissions_new (
         id,
+        entry_number,
+        last_activity_at,
         dept, status, feeStatus,
         student_name, gender, dob, grade, father_name, guardian_whatsapp, religion, father_email, father_occupation, nationality,
         present_address, city, state, secondary_contact, session, registration_date, processed_by,
         tuition_grade, phone,
-        accounts_payment_status, accounts_paid_upto, accounts_verification_number, accounts_registration_number, accounts_family_number,
+        accounts_payment_status, accounts_paid_upto, accounts_verification_number,
+        accounts_registration_number, accounts_registration_number_assigned_at,
+        registration_number_removed, accounts_family_number,
+        school_return_status, school_returned_to_user_id, school_returned_at, school_reuploaded_at,
+        reupload_tag_active,
+        forward_status, forwarded_to_department, forwarded_to_type, forwarded_at,
+        forwarded_from_department, forwarded_from_type, accounts_workflow_stage,
+        accounts_issue_message, accounts_issue_fields,
+        accounts_issue_by_id, accounts_issue_by_name, accounts_issue_by_role, accounts_issue_at,
+        accounts_completed_at, accounts_completed_by_id, accounts_completed_by_name, accounts_completed_by_role,
+        forwarded_by_id, forwarded_by_name, forwarded_by_role,
+        forwarded_owner_user_id, forwarded_owner_user_name, forwarded_owner_user_role,
                 admission_registration_fee, admission_fees, currency_code, bank_name, fee_history, admission_month,
         admission_total_paid, admission_total_fees, admission_pending_dues, admission_comment,
         admission_invoice_status, admission_invoice_status_timestamp,
@@ -764,6 +1077,8 @@ try {
       )
       SELECT
         id,
+        entry_number,
+        last_activity_at,
         dept,
         COALESCE(NULLIF(status,''), ${hasCurrentStatus ? "current_status" : "NULL"}) AS status,
         COALESCE(NULLIF(feeStatus,''), ${hasFeeStatusOld ? "fee_status" : "NULL"}) AS feeStatus,
@@ -771,7 +1086,20 @@ try {
         student_name, gender, dob, grade, father_name, guardian_whatsapp, religion, father_email, father_occupation, nationality,
         present_address, city, state, secondary_contact, session, registration_date, processed_by,
         tuition_grade, phone,
-        accounts_payment_status, accounts_paid_upto, accounts_verification_number, accounts_registration_number, accounts_family_number,
+                accounts_payment_status, accounts_paid_upto, accounts_verification_number,
+        accounts_registration_number, accounts_registration_number_assigned_at,
+        registration_number_removed, accounts_family_number,
+                school_return_status, school_returned_to_user_id, school_returned_at, school_reuploaded_at,
+        COALESCE(reupload_tag_active, 0),
+        COALESCE(NULLIF(TRIM(forward_status), ''), 'not_forwarded'),
+        forwarded_to_department, forwarded_to_type, forwarded_at,
+        forwarded_from_department, forwarded_from_type,
+        COALESCE(NULLIF(TRIM(accounts_workflow_stage), ''), 'new_admissions'),
+        accounts_issue_message, accounts_issue_fields,
+        accounts_issue_by_id, accounts_issue_by_name, accounts_issue_by_role, accounts_issue_at,
+        accounts_completed_at, accounts_completed_by_id, accounts_completed_by_name, accounts_completed_by_role,
+        forwarded_by_id, forwarded_by_name, forwarded_by_role,
+        forwarded_owner_user_id, forwarded_owner_user_name, forwarded_owner_user_role,
                 admission_registration_fee, admission_fees, currency_code, bank_name, fee_history, admission_month,
                 admission_total_paid, admission_total_fees, admission_pending_dues, admission_comment,
         admission_invoice_status, admission_invoice_status_timestamp,
@@ -793,6 +1121,47 @@ try {
 } catch (e) {
   try { db.exec("ROLLBACK"); } catch {}
   console.error("admissions rebuild error:", e.message);
+}
+
+// ================== ✅ ADMISSIONS WORKFLOW INDEXES ==================
+try {
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_admissions_unique_reg_no
+    ON admissions(accounts_registration_number)
+    WHERE accounts_registration_number IS NOT NULL
+      AND TRIM(accounts_registration_number) <> '';
+
+    CREATE INDEX IF NOT EXISTS idx_admissions_registration_date
+    ON admissions(registration_date);
+
+    CREATE INDEX IF NOT EXISTS idx_admissions_reg_assigned_at
+    ON admissions(accounts_registration_number_assigned_at);
+
+    CREATE INDEX IF NOT EXISTS idx_admissions_school_return_state
+    ON admissions(school_return_status, school_returned_to_user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_admissions_activity_order
+    ON admissions(last_activity_at, entry_number);
+
+    CREATE INDEX IF NOT EXISTS idx_admissions_accounts_pipeline
+    ON admissions(
+      forward_status,
+      forwarded_to_type,
+      accounts_workflow_stage,
+      forwarded_owner_user_id
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_admissions_accounts_source
+    ON admissions(
+      forwarded_from_type,
+      accounts_workflow_stage
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_accounts_workflow_users_user
+    ON admission_accounts_workflow_users(user_id, admission_id);
+  `);
+} catch (e) {
+  console.error("admissions workflow indexes error:", e.message);
 }
 
 // ================== ✅ PERMISSIONS MIGRATION ==================
@@ -1346,8 +1715,103 @@ export function dbGetAdmissionDetailsById(id, billingYear = new Date().getFullYe
     }));
   }
 
+  const parsedAccountsIssueFields = safeParseJson(
+    row.accounts_issue_fields,
+    []
+  );
+
+  const accountsIssueFields = Array.isArray(parsedAccountsIssueFields)
+    ? parsedAccountsIssueFields
+    : [];
+
   return {
     id: row.id,
+    entryNumber: row.entry_number || row.id,
+    entry_number: row.entry_number || row.id,
+    lastActivityAt: row.last_activity_at || "",
+    last_activity_at: row.last_activity_at || "",
+
+    forwardStatus: row.forward_status || "not_forwarded",
+    forward_status: row.forward_status || "not_forwarded",
+    forwardedToDepartment: row.forwarded_to_department || "",
+    forwarded_to_department: row.forwarded_to_department || "",
+    forwardedToType: row.forwarded_to_type || "",
+    forwarded_to_type: row.forwarded_to_type || "",
+    forwardedAt: row.forwarded_at || "",
+    forwarded_at: row.forwarded_at || "",
+
+    forwardedFromDepartment: row.forwarded_from_department || "",
+    forwarded_from_department: row.forwarded_from_department || "",
+    forwardedFromType: row.forwarded_from_type || "",
+    forwarded_from_type: row.forwarded_from_type || "",
+
+    accountsWorkflowStage:
+      row.accounts_workflow_stage || "new_admissions",
+    accounts_workflow_stage:
+      row.accounts_workflow_stage || "new_admissions",
+
+    accountsIssueMessage: row.accounts_issue_message || "",
+    accounts_issue_message: row.accounts_issue_message || "",
+    accountsIssueFields,
+    accounts_issue_fields: accountsIssueFields,
+    accountsIssueById: row.accounts_issue_by_id || null,
+    accounts_issue_by_id: row.accounts_issue_by_id || null,
+    accountsIssueByName: row.accounts_issue_by_name || "",
+    accounts_issue_by_name: row.accounts_issue_by_name || "",
+    accountsIssueByRole: row.accounts_issue_by_role || "",
+    accounts_issue_by_role: row.accounts_issue_by_role || "",
+    accountsIssueAt: row.accounts_issue_at || "",
+    accounts_issue_at: row.accounts_issue_at || "",
+
+    accountsCompletedAt: row.accounts_completed_at || "",
+    accounts_completed_at: row.accounts_completed_at || "",
+    accountsCompletedById: row.accounts_completed_by_id || null,
+    accounts_completed_by_id: row.accounts_completed_by_id || null,
+    accountsCompletedByName: row.accounts_completed_by_name || "",
+    accounts_completed_by_name: row.accounts_completed_by_name || "",
+    accountsCompletedByRole: row.accounts_completed_by_role || "",
+    accounts_completed_by_role: row.accounts_completed_by_role || "",
+
+    forwardedById: row.forwarded_by_id || null,
+    forwarded_by_id: row.forwarded_by_id || null,
+    forwardedByName: row.forwarded_by_name || "",
+    forwarded_by_name: row.forwarded_by_name || "",
+    forwardedByRole: row.forwarded_by_role || "",
+    forwarded_by_role: row.forwarded_by_role || "",
+
+    forwardedOwnerUserId: row.forwarded_owner_user_id || null,
+    forwarded_owner_user_id: row.forwarded_owner_user_id || null,
+    forwardedOwnerUserName: row.forwarded_owner_user_name || "",
+    forwarded_owner_user_name: row.forwarded_owner_user_name || "",
+    forwardedOwnerUserRole: row.forwarded_owner_user_role || "",
+    forwarded_owner_user_role: row.forwarded_owner_user_role || "",
+
+    forward: {
+      status: row.forward_status || "not_forwarded",
+      toDepartment: row.forwarded_to_department || "",
+      toType: row.forwarded_to_type || "",
+      forwardedAt: row.forwarded_at || "",
+      fromDepartment: row.forwarded_from_department || "",
+      fromType: row.forwarded_from_type || "",
+      workflowStage: row.accounts_workflow_stage || "new_admissions",
+      issueMessage: row.accounts_issue_message || "",
+      issueFields: accountsIssueFields,
+      issueById: row.accounts_issue_by_id || null,
+      issueByName: row.accounts_issue_by_name || "",
+      issueByRole: row.accounts_issue_by_role || "",
+      issueAt: row.accounts_issue_at || "",
+      completedAt: row.accounts_completed_at || "",
+      completedById: row.accounts_completed_by_id || null,
+      completedByName: row.accounts_completed_by_name || "",
+      completedByRole: row.accounts_completed_by_role || "",
+      forwardedById: row.forwarded_by_id || null,
+      forwardedByName: row.forwarded_by_name || "",
+      forwardedByRole: row.forwarded_by_role || "",
+      forwardedOwnerUserId: row.forwarded_owner_user_id || null,
+      forwardedOwnerUserName: row.forwarded_owner_user_name || "",
+      forwardedOwnerUserRole: row.forwarded_owner_user_role || "",
+    },
+
     dept: row.dept,
     status: row.status || "",
     feeStatus: row.feeStatus || "",
@@ -1361,11 +1825,37 @@ export function dbGetAdmissionDetailsById(id, billingYear = new Date().getFullYe
     phone: row.phone || "",
     processedBy: row.processed_by || "",
     processed_by: row.processed_by || "",
+    registrationDate: row.registration_date || "",
+    registration_date: row.registration_date || "",
+    registrationNumberAssignedAt:
+      row.accounts_registration_number_assigned_at || "",
+    accounts_registration_number_assigned_at:
+      row.accounts_registration_number_assigned_at || "",
+    registrationNumberRemoved:
+      Number(row.registration_number_removed || 0),
+    registration_number_removed:
+      Number(row.registration_number_removed || 0),
+    schoolReturnStatus: row.school_return_status || "",
+    school_return_status: row.school_return_status || "",
+    schoolReturnedToUserId: row.school_returned_to_user_id || null,
+    school_returned_to_user_id: row.school_returned_to_user_id || null,
+    schoolReturnedAt: row.school_returned_at || "",
+    school_returned_at: row.school_returned_at || "",
+    schoolReuploadedAt: row.school_reuploaded_at || "",
+    school_reuploaded_at: row.school_reuploaded_at || "",
+    reuploadTagActive:
+      Number(row.reupload_tag_active || 0),
+    reupload_tag_active:
+      Number(row.reupload_tag_active || 0),
     accounts: {
       paymentStatus: row.accounts_payment_status || "",
       paidUpto: row.accounts_paid_upto || "",
       verificationNumber: row.accounts_verification_number || "",
       registrationNumber: row.accounts_registration_number || "",
+      registrationNumberAssignedAt:
+        row.accounts_registration_number_assigned_at || "",
+      registrationNumberRemoved:
+        Number(row.registration_number_removed || 0),
       familyNumber: row.accounts_family_number || "",
     },
 

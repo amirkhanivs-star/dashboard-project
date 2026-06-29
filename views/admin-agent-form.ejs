@@ -11,18 +11,32 @@
     : cap(user.dept || 'Department');
 
   const currentAgentType = user.agentType || 'accounts';
+const isSchoolAccountsDept =
+  String(user.dept || '').trim().toLowerCase() === 'accounts' ||
+  String(user.dept || '').trim().toLowerCase() === 'school accounts' ||
+  String(user.dept || '').trim().toLowerCase() === 'school_accounts';
 
-  const agentTypeOptions = [
-    { value: 'accounts',  label: 'Accounts'  },
-    { value: 'admission', label: 'Admission' },
-    { value: 'management',label: 'Management' }
-  ];
+const schoolAgentTypeOptions = [
+  { value: 'accounts',  label: 'Accounts'  },
+  { value: 'admission', label: 'Admission' },
+  { value: 'management',label: 'Management' }
+];
 
- const currentAgentTypeLabel = (() => {
-  if (currentAgentType === 'accounts') return 'Accounts';
-  if (currentAgentType === 'admission') return 'Admission';
-  if (currentAgentType === 'management') return 'Management';
-  return cap(currentAgentType);
+const schoolAccountsAgentTypeOptions = [
+  { value: 'print_record_update', label: 'Print + Record update' },
+  { value: 'verification_registration', label: 'Verification & Registration' },
+  { value: 'paid_slip', label: 'Paid slip' }
+];
+
+const agentTypeOptions = isSchoolAccountsDept
+  ? schoolAccountsAgentTypeOptions
+  : schoolAgentTypeOptions;
+
+const currentAgentTypeLabel = (() => {
+  const found = [...schoolAgentTypeOptions, ...schoolAccountsAgentTypeOptions]
+    .find((x) => x.value === currentAgentType);
+
+  return found ? found.label : cap(currentAgentType);
 })();
 
 const createdRoleLabel = isAdmin ? 'Agent / Sub Agent' : 'Sub Agent';

@@ -12,3 +12,7 @@ yarn-error.log*
 Thumbs.db
 uploads/pdfs/
 uploads/challans/
+data/*.db
+data/*.db-shm
+data/*.db-wal
+uploads/

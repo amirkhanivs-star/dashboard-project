@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : 'Welcome Developer' %></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/tabLogo.png" />
+
+ <style>
+  *{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+  }
+
+  :root{
+    --black:#050505;
+    --dark:#111827;
+    --muted:#6b7280;
+    --line:#e5e7eb;
+    --white:#ffffff;
+  }
+
+  html,
+  body{
+    width:100%;
+    min-height:100%;
+  }
+
+  body{
+    min-height:100vh;
+    font-family:
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
+    color:var(--black);
+    background:
+      linear-gradient(
+        rgba(17,24,39,.04) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        90deg,
+        rgba(17,24,39,.04) 1px,
+        transparent 1px
+      ),
+      #ffffff;
+    background-size:34px 34px;
+    overflow:hidden;
+    position:relative;
+  }
+
+  body::before{
+    content:"";
+    position:fixed;
+    width:360px;
+    height:360px;
+    right:-150px;
+    top:-150px;
+    border-radius:50%;
+    background:#111827;
+    opacity:.035;
+    pointer-events:none;
+  }
+
+  body::after{
+    content:"";
+    position:fixed;
+    width:330px;
+    height:330px;
+    left:-140px;
+    bottom:-140px;
+    border-radius:50%;
+    background:#111827;
+    opacity:.03;
+    pointer-events:none;
+  }
+
+  .welcome-shell{
+    position:relative;
+    z-index:2;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+
+  .welcome-content{
+    width:min(94vw, 760px);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    animation:welcomeIn .55s ease-out;
+  }
+
+  .welcome-avatar-wrap{
+    position:relative;
+    margin-bottom:28px;
+  }
+
+  .welcome-avatar-ring{
+    width:166px;
+    height:166px;
+    padding:6px;
+    border:2px solid #111827;
+    border-radius:50%;
+    background:#ffffff;
+    box-shadow:
+      0 22px 55px rgba(15,23,42,.20),
+      0 0 0 8px rgba(255,255,255,.95);
+  }
+
+  .welcome-avatar-image,
+  .welcome-avatar-fallback{
+    width:100%;
+    height:100%;
+    border-radius:50%;
+  }
+
+  .welcome-avatar-image{
+    display:block;
+    object-fit:cover;
+    object-position:center;
+    background:#f3f4f6;
+    image-rendering:auto;
+    filter:none;
+  }
+
+  .welcome-avatar-fallback{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#ffffff;
+    background:#050505;
+    font-size:46px;
+    line-height:1;
+    font-weight:950;
+    letter-spacing:-2px;
+  }
+
+  .welcome-online-dot{
+    position:absolute;
+    right:10px;
+    bottom:12px;
+    width:24px;
+    height:24px;
+    border:5px solid #ffffff;
+    border-radius:50%;
+    background:#10b981;
+    box-shadow:0 7px 18px rgba(16,185,129,.30);
+  }
+
+  .welcome-eyebrow{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:7px;
+    margin-bottom:13px;
+    color:#4b5563;
+    font-size:10px;
+    font-weight:950;
+    letter-spacing:.15em;
+    text-transform:uppercase;
+  }
+
+  .welcome-eyebrow-dot{
+    width:6px;
+    height:6px;
+    border-radius:50%;
+    background:#050505;
+  }
+
+  .welcome-title{
+    margin:0;
+    color:#050505;
+    font-size:52px;
+    line-height:1.08;
+    font-weight:950;
+    letter-spacing:-2.3px;
+  }
+
+  .welcome-title-name{
+    display:inline;
+  }
+
+  .welcome-subtitle{
+    margin-top:12px;
+    color:#4b5563;
+    font-size:15px;
+    line-height:1.5;
+    font-weight:750;
+  }
+
+  .welcome-underline{
+    position:relative;
+    width:205px;
+    height:5px;
+    margin:23px auto 0;
+    overflow:hidden;
+    border-radius:999px;
+    background:#e5e7eb;
+  }
+
+  .welcome-underline::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    width:45%;
+    border-radius:999px;
+    background:#050505;
+    animation:underlineMove 1.6s ease-in-out infinite;
+  }
+
+  .welcome-status{
+    margin-top:22px;
+    color:#9ca3af;
+    font-size:11px;
+    font-weight:800;
+  }
+
+  .welcome-status strong{
+    color:#111827;
+    font-weight:950;
+  }
+
+  .manual-link{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:7px;
+    min-height:40px;
+    margin-top:17px;
+    padding:9px 17px;
+    border:1px solid #d1d5db;
+    border-radius:999px;
+    background:#ffffff;
+    color:#050505;
+    text-decoration:none;
+    font-size:11px;
+    font-weight:950;
+    box-shadow:0 8px 22px rgba(15,23,42,.07);
+    transition:
+      background .18s ease,
+      color .18s ease,
+      border-color .18s ease,
+      transform .18s ease;
+  }
+
+  .manual-link:hover{
+    background:#050505;
+    color:#ffffff;
+    border-color:#050505;
+    transform:translateY(-1px);
+  }
+
+  .welcome-account{
+    margin-top:13px;
+    color:#9ca3af;
+    font-size:10px;
+    font-weight:750;
+  }
+
+  @keyframes underlineMove{
+    0%{
+      left:-45%;
+    }
+
+    50%{
+      left:100%;
+    }
+
+    100%{
+      left:-45%;
+    }
+  }
+
+  @keyframes welcomeIn{
+    from{
+      opacity:0;
+      transform:translateY(16px) scale(.985);
+    }
+
+    to{
+      opacity:1;
+      transform:translateY(0) scale(1);
+    }
+  }
+
+  @media (max-width:600px){
+    .welcome-avatar-ring{
+      width:138px;
+      height:138px;
+    }
+
+    .welcome-avatar-fallback{
+      font-size:38px;
+    }
+
+    .welcome-online-dot{
+      width:21px;
+      height:21px;
+      right:7px;
+      bottom:8px;
+    }
+
+    .welcome-title{
+      font-size:36px;
+      letter-spacing:-1.5px;
+    }
+
+    .welcome-subtitle{
+      font-size:13px;
+    }
+
+    .welcome-underline{
+      width:170px;
+    }
+  }
+</style>
+</head>
+
+<%
+  const devName =
+    (
+      typeof developer !== 'undefined' &&
+      developer &&
+      developer.name
+    )
+      ? developer.name
+      : 'Developer';
+
+  const devUsername =
+    (
+      typeof developer !== 'undefined' &&
+      developer &&
+      developer.username
+    )
+      ? developer.username
+      : '';
+
+  const devProfileImageUrl =
+    (
+      typeof developer !== 'undefined' &&
+      developer &&
+      developer.profileImageUrl
+    )
+      ? developer.profileImageUrl
+      : '';
+
+  const devInitials =
+    String(devName || 'Developer')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0))
+      .join('')
+      .toUpperCase() || 'D';
+%>
+
+<body>
+
+  <main class="welcome-shell">
+
+  <section class="welcome-content">
+
+    <div class="welcome-avatar-wrap">
+
+      <div class="welcome-avatar-ring">
+
+        <img
+          id="welcomeDeveloperAvatar"
+          class="welcome-avatar-image <%= devProfileImageUrl ? '' : 'd-none' %>"
+          <% if (devProfileImageUrl) { %>
+            src="<%= devProfileImageUrl %>"
+          <% } %>
+          alt="<%= devName %> profile picture"
+          onerror="
+            this.classList.add('d-none');
+            document
+              .getElementById('welcomeAvatarFallback')
+              .classList.remove('d-none');
+          "
+        >
+
+        <div
+          id="welcomeAvatarFallback"
+          class="welcome-avatar-fallback <%= devProfileImageUrl ? 'd-none' : '' %>"
+        >
+          <%= devInitials %>
+        </div>
+
+      </div>
+
+      <span
+        class="welcome-online-dot"
+        title="Developer online"
+      ></span>
+
+    </div>
+
+    <div class="welcome-eyebrow">
+      <span class="welcome-eyebrow-dot"></span>
+      Authorized Developer Access
+    </div>
+
+    <h1 class="welcome-title">
+      Welcome,
+      <span class="welcome-title-name">
+        <%= devName %>
+      </span>
+    </h1>
+
+    <div class="welcome-subtitle">
+      Developer Dashboard
+    </div>
+
+    <div class="welcome-underline"></div>
+
+    <div class="welcome-status">
+  Your Developer Dashboard is ready.
+</div>
+
+<a
+  href="/developer/dashboard"
+  class="manual-link"
+>
+  Thanks
+  <i class="bi bi-arrow-right"></i>
+</a>
+
+    <div class="welcome-account">
+      Logged in as
+      <%= devUsername || devName %>
+    </div>
+
+  </section>
+
+</main>
+
+</body>
+</html>

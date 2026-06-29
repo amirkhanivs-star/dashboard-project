@@ -88,47 +88,65 @@
       user.is_super_admin === true
     ));
 
-  // Perms
+  // Permissions
   let _perms =
     (typeof perms !== "undefined" && perms)
       ? perms
-      : ((user && (user.permissions || user.perms || user.permission || user.permissionMap)) || null);
+      : (
+          (
+            user &&
+            (
+              user.permissions ||
+              user.perms ||
+              user.permission ||
+              user.permissionMap
+            )
+          ) ||
+          null
+        );
 
-  try { if (typeof _perms === 'string') _perms = JSON.parse(_perms); } catch(e) {}
-
-  function _canDeleteFiles() {
-    if (_isSuper) return true;
-    if (!_perms) return false;
-    if (Array.isArray(_perms)) return _perms.includes("canDeleteFiles");
-    if (typeof _perms === "object") return !!_perms.canDeleteFiles;
-    return false;
+  try {
+    if (typeof _perms === "string") {
+      _perms = JSON.parse(_perms);
+    }
+  } catch (e) {
+    _perms = null;
   }
 
-  function _canUploadFiles() {
-    if (_isSuper) return true;
-    if (!_perms) return false;
+  function _permissionEnabled(value) {
+    return (
+      value === true ||
+      value === 1 ||
+      value === "1" ||
+      value === "true" ||
+      value === "on"
+    );
+  }
+
+  function _hasPermission(key) {
+    if (!_perms || !key) return false;
 
     if (Array.isArray(_perms)) {
-      return _perms.includes("btnUpload") ||
-             _perms.includes("btnUploadFiles") ||
-             _perms.includes("canUploadFiles") ||
-             _perms.includes("uploadFiles") ||
-             _perms.includes("canUpload");
+      return _perms.includes(key);
     }
 
     if (typeof _perms === "object") {
-      return !!(_perms.btnUpload ||
-                _perms.btnUploadFiles ||
-                _perms.canUploadFiles ||
-                _perms.uploadFiles ||
-                _perms.canUpload);
+      return _permissionEnabled(_perms[key]);
     }
 
     return false;
   }
 
-  const ALLOW_DELETE = _canDeleteFiles();
-  const ALLOW_UPLOAD_URL = _canUploadFiles();
+  const CAN_VIEW_FILES =
+    _hasPermission("btnFiles");
+
+  const ALLOW_DELETE =
+    CAN_VIEW_FILES &&
+    _hasPermission("canDeleteFiles");
+
+  const ALLOW_UPLOAD_URL =
+    CAN_VIEW_FILES &&
+    _hasPermission("btnUpload");
 
   const filesList = files || [];
 
@@ -1060,7 +1078,7 @@
     <div class="text-muted small">Try another month, or clear filters.</div>
   </div>
 
-  <% if (user && user.role === "super_admin") { %>
+  <% if (_isSuper && ALLOW_DELETE) { %>
     <div class="vf-super-danger">
       <div class="vf-super-danger-row">
         <span class="vf-danger-note">Danger action for all uploaded files</span>
@@ -1200,7 +1218,7 @@
                 </a>
               <% } %>
 
-              <% if (typeKey === 'link') { %>
+              <% if (typeKey === 'link' && ALLOW_UPLOAD_URL) { %>
                 <button type="button"
                         class="btn btn-sm btn-outline-secondary px-3 vf-btn-edit"
                         data-edit-url="1"
@@ -1382,7 +1400,7 @@
                     </a>
                   <% } %>
 
-                  <% if (typeKey === 'link') { %>
+                  <% if (typeKey === 'link' && ALLOW_UPLOAD_URL) { %>
                     <button type="button"
                             class="btn btn-sm btn-outline-secondary px-3 vf-btn-edit"
                             data-edit-url="1"
@@ -2202,6 +2220,13 @@
 
 <script>
   (function () {
+    const CAN_EDIT_URL =
+      <%- JSON.stringify(!!ALLOW_UPLOAD_URL) %>;
+
+    if (!CAN_EDIT_URL) {
+      return;
+    }
+
     const overlay = document.getElementById("url-edit-overlay");
     const successOverlay = document.getElementById("url-success-overlay");
 
@@ -2359,8 +2384,15 @@
 
     if (!confirmOverlay || !successOverlay || !btnCancel || !btnOk || !btnSuccessOk) return;
 
-    const CURRENT_USER = <%- JSON.stringify(user || null) %>;
-    const ALLOW_DELETE = <%- JSON.stringify(!!ALLOW_DELETE) %>;
+    const CURRENT_USER =
+      <%- JSON.stringify(user || null) %>;
+
+    const ALLOW_DELETE =
+      <%- JSON.stringify(!!ALLOW_DELETE) %>;
+
+    if (!ALLOW_DELETE) {
+      return;
+    }
 
     function isSuperUser(u) {
       if (!u) return false;
@@ -2405,9 +2437,15 @@
       }
 
       try {
-        const url = isSuperUser(CURRENT_USER)
-          ? `/dashboard/super/files/${pendingId}`
-          : `/files/${pendingId}`;
+        const currentRole = String(
+  CURRENT_USER?.role || ""
+).trim().toLowerCase();
+
+const url = isSuperUser(CURRENT_USER)
+  ? `/dashboard/super/files/${pendingId}`
+  : currentRole === "admin"
+    ? `/admin/files/${pendingId}`
+    : `/files/${pendingId}`;
 
         const res = await fetch(url, { method: "DELETE" });
         const data = await res.json().catch(() => ({}));

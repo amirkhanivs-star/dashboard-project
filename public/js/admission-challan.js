@@ -1,39 +1,164 @@
 // public/js/admission-challan.js
 
+function getActiveBillingYear() {
+  const selectedYear =
+    document.getElementById("billingYearSelect")?.value;
+
+  const queryYear =
+    new URLSearchParams(window.location.search).get("year");
+
+  const globalYear =
+    window.__BILLING_YEAR__;
+
+  for (const value of [
+    selectedYear,
+    queryYear,
+    globalYear,
+  ]) {
+    const year = Number(value);
+
+    if (
+      Number.isInteger(year) &&
+      year >= 2020 &&
+      year <= 2100
+    ) {
+      return String(year);
+    }
+  }
+
+  return String(
+    new Date().getFullYear()
+  );
+}
+
+function addQueryParams(url, params = {}) {
+  const parsedUrl = new URL(
+    String(url || ""),
+    window.location.origin
+  );
+
+  Object.entries(params).forEach(
+    ([key, value]) => {
+      const cleanValue =
+        String(value ?? "").trim();
+
+      if (cleanValue) {
+        parsedUrl.searchParams.set(
+          key,
+          cleanValue
+        );
+      }
+    }
+  );
+
+  return (
+    parsedUrl.pathname +
+    parsedUrl.search +
+    parsedUrl.hash
+  );
+}
+
+/*
+ * Server ke challan routes isi prefix par hain.
+ * Ye sirf Super Admin ke liye restricted nahi hain;
+ * backend permission/access check karta hai.
+ */
 function getDetailsBase() {
   return "/dashboard/super";
 }
 
-function admissionUrl(admissionId, suffix = "") {
-  return `${getDetailsBase()}/admission/${encodeURIComponent(admissionId)}${suffix}`;
+function admissionUrl(
+  admissionId,
+  suffix = ""
+) {
+  const url =
+    `${getDetailsBase()}/admission/` +
+    `${encodeURIComponent(admissionId)}` +
+    `${suffix}`;
+
+  return addQueryParams(url, {
+    year: getActiveBillingYear(),
+  });
 }
 
-function familyUrl(familyNumber, suffix = "", admissionId = "") {
-  const cleanFamilyNumber = String(familyNumber || "").trim();
-  const cleanAdmissionId = String(admissionId || "").trim();
+function familyUrl(
+  familyNumber,
+  suffix = "",
+  admissionId = ""
+) {
+  const cleanFamilyNumber =
+    String(familyNumber || "").trim();
 
-  let url = `${getDetailsBase()}/family/${encodeURIComponent(cleanFamilyNumber)}${suffix}`;
+  const cleanAdmissionId =
+    String(admissionId || "").trim();
 
-  // Auto-family case: backend ko admissionId chahiye hota hai
-  if (cleanFamilyNumber.toLowerCase() === "auto" && cleanAdmissionId) {
-    url += url.includes("?") ? "&" : "?";
-    url += `admissionId=${encodeURIComponent(cleanAdmissionId)}`;
+  const url =
+    `${getDetailsBase()}/family/` +
+    `${encodeURIComponent(cleanFamilyNumber)}` +
+    `${suffix}`;
+
+  const params = {
+    year: getActiveBillingYear(),
+  };
+
+  // Auto-family case mein backend ko admissionId chahiye.
+  if (
+    cleanFamilyNumber.toLowerCase() === "auto" &&
+    cleanAdmissionId
+  ) {
+    params.admissionId =
+      cleanAdmissionId;
   }
 
-  return url;
+  return addQueryParams(
+    url,
+    params
+  );
 }
 
-function pendingFamilyApiUrl(familyNumber, admissionId = "") {
-  const cleanFamilyNumber = String(familyNumber || "").trim();
-  const cleanAdmissionId = String(admissionId || "").trim();
+function pendingFamilyApiUrl(
+  familyNumber,
+  admissionId = ""
+) {
+  const cleanFamilyNumber =
+    String(familyNumber || "").trim();
 
-  let url = `/api/pending/family/${encodeURIComponent(cleanFamilyNumber)}`;
+  const cleanAdmissionId =
+    String(admissionId || "").trim();
 
-  if (cleanFamilyNumber.toLowerCase() === "auto" && cleanAdmissionId) {
-    url += `?admissionId=${encodeURIComponent(cleanAdmissionId)}`;
+  const url =
+    `/api/pending/family/` +
+    `${encodeURIComponent(cleanFamilyNumber)}`;
+
+  const params = {
+    year: getActiveBillingYear(),
+  };
+
+  if (
+    cleanFamilyNumber.toLowerCase() === "auto" &&
+    cleanAdmissionId
+  ) {
+    params.admissionId =
+      cleanAdmissionId;
   }
 
-  return url;
+  return addQueryParams(
+    url,
+    params
+  );
+}
+
+function pendingAdmissionApiUrl(
+  admissionId
+) {
+  return addQueryParams(
+    `/api/pending/admission/${encodeURIComponent(
+      admissionId
+    )}`,
+    {
+      year: getActiveBillingYear(),
+    }
+  );
 }
 
 document.addEventListener("click", (e) => {
@@ -129,24 +254,73 @@ document.addEventListener("click", async (e) => {
     return;
   }
 
-  const modal = new bootstrap.Modal(modalEl);
-  subEl.textContent = "Loading...";
-  bodyEl.innerHTML = `<div class="text-muted small">Loading...</div>`;
+  if (
+    typeof bootstrap === "undefined"
+  ) {
+    alert(
+      "Bootstrap modal is not available."
+    );
+
+    return;
+  }
+
+  const modal =
+    bootstrap.Modal.getOrCreateInstance(
+      modalEl
+    );
+
+  subEl.textContent =
+    "Loading...";
+
+  bodyEl.innerHTML =
+    `<div class="text-muted small">Loading...</div>`;
+
   modal.show();
 
   try {
-    // ✅ if family has 2+ students -> family API, else single admission
-   const url =
-  familyNumber && familyCount > 1
-    ? pendingFamilyApiUrl(familyNumber, admissionId)
-    : `/api/pending/admission/${encodeURIComponent(admissionId)}`;
+    // Family mein 2 ya zyada students hon to family API.
+    const url =
+      familyNumber &&
+      familyCount > 1
+        ? pendingFamilyApiUrl(
+            familyNumber,
+            admissionId
+          )
+        : pendingAdmissionApiUrl(
+            admissionId
+          );
 
-    const res = await fetch(url);
-    const json = await res.json();
+    const res = await fetch(
+      url,
+      {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+        },
+      }
+    );
 
-    if (!json.success) {
-      subEl.textContent = "Error";
-      bodyEl.innerHTML = `<div class="text-danger small">${json.message || "Failed"}</div>`;
+    const json = await res
+      .json()
+      .catch(() => ({}));
+
+    if (
+      !res.ok ||
+      !json.success
+    ) {
+      subEl.textContent =
+        "Error";
+
+      bodyEl.innerHTML = `
+        <div class="text-danger small">
+          ${escapeHtml(
+            json.message ||
+            "Failed to load pending months."
+          )}
+        </div>
+      `;
+
       return;
     }
 
@@ -211,13 +385,39 @@ function renderPendingTable(students) {
   const rows = [];
 
   (students || []).forEach((s) => {
-    const pending = Array.isArray(s.pending) ? s.pending : [];
-    if (!pending.length) return;
+    const pending =
+      Array.isArray(s.pending)
+        ? s.pending.filter((p) => {
+            return (
+              String(p?.status || "")
+                .trim()
+                .toLowerCase() !==
+              "not admitted"
+            );
+          })
+        : [];
+
+    if (!pending.length) {
+      return;
+    }
 
     rows.push(`
       <div class="mb-3">
         <div class="fw-bold mb-2">
-          ${escapeHtml(s.studentName || "-")} • Admission #${s.admissionId} • ${escapeHtml(s.grade || "-")} • ${escapeHtml(s.currency || "SAR")}
+          ${escapeHtml(
+            s.studentName || "-"
+          )}
+          • Admission #${escapeHtml(
+            String(
+              s.admissionId || "-"
+            )
+          )}
+          • ${escapeHtml(
+            s.grade || "-"
+          )}
+          • ${escapeHtml(
+            s.currency || "SAR"
+          )}
         </div>
 
         <div class="table-responsive">
@@ -227,45 +427,150 @@ function renderPendingTable(students) {
                 <th>Month</th>
                 <th>Status</th>
                 <th>Verification #</th>
-                <th>Month Number</th>
+                <th>Bank</th>
                 <th>Fee</th>
                 <th>Received</th>
                 <th>Due</th>
-                <th style="width:220px">Actions</th>
+                <th style="width:220px">
+                  Actions
+                </th>
               </tr>
             </thead>
+
             <tbody>
               ${pending
                 .map((p) => {
-                 const feeChallanUrl = admissionUrl(
-  s.admissionId,
-  `/challan/${encodeURIComponent(p.monthKey)}`
-);
+                  const feeChallanUrl =
+                    admissionUrl(
+                      s.admissionId,
+                      `/challan/${encodeURIComponent(
+                        p.monthKey
+                      )}`
+                    );
 
-const paidChallanUrl = admissionUrl(
-  s.admissionId,
-  `/paid/${encodeURIComponent(p.monthKey)}`
-);
+                  const paidChallanUrl =
+                    admissionUrl(
+                      s.admissionId,
+                      `/paid/${encodeURIComponent(
+                        p.monthKey
+                      )}`
+                    );
 
-                  const canPaid = Number(p.received || 0) > 0;
+                  const monthlyFee =
+                    Number(
+                      p.fee || 0
+                    ) || 0;
+
+                  const registrationFee =
+                    Number(
+                      p.registrationFeeTotal ||
+                      0
+                    ) || 0;
+
+                  const monthlyReceived =
+                    Number(
+                      p.received || 0
+                    ) || 0;
+
+                  const registrationReceived =
+                    Number(
+                      p.registrationFeeReceived ||
+                      0
+                    ) || 0;
+
+                  const totalFee =
+                    monthlyFee +
+                    registrationFee;
+
+                  const totalReceived =
+                    monthlyReceived +
+                    registrationReceived;
+
+                  const canPaid =
+                    totalReceived > 0;
 
                   return `
                     <tr>
-                      <td class="text-capitalize">${escapeHtml(p.monthLabel || p.monthKey)}</td>
-                      <td>${escapeHtml(p.status || "-")}</td>
-                      <td>${escapeHtml(p.verification || "-")}</td>
-                      <td>${escapeHtml(p.number || "-")}</td>
-                      <td>${escapeHtml(String(p.fee ?? "-"))}</td>
-                      <td>${escapeHtml(String(p.received ?? "-"))}</td>
-                      <td><b>${escapeHtml(String(p.due ?? "-"))}</b></td>
+                      <td class="text-capitalize">
+                        ${escapeHtml(
+                          p.monthLabel ||
+                          p.monthKey
+                        )}
+                      </td>
+
                       <td>
-                        <a class="btn btn-outline-secondary btn-sm me-2" target="_blank" href="${feeChallanUrl}">
+                        ${escapeHtml(
+                          p.status || "-"
+                        )}
+                      </td>
+
+                      <td>
+                        ${escapeHtml(
+                          p.verification || "-"
+                        )}
+                      </td>
+
+                      <td>
+                        ${escapeHtml(
+                          p.bank || "-"
+                        )}
+                      </td>
+
+                      <td>
+                        ${escapeHtml(
+                          String(totalFee)
+                        )}
+                      </td>
+
+                      <td>
+                        ${escapeHtml(
+                          String(
+                            totalReceived
+                          )
+                        )}
+                      </td>
+
+                      <td>
+                        <b>
+                          ${escapeHtml(
+                            String(
+                              p.due ?? "-"
+                            )
+                          )}
+                        </b>
+                      </td>
+
+                      <td>
+                        <a
+                          class="btn btn-outline-secondary btn-sm me-2"
+                          target="_blank"
+                          rel="noopener"
+                          href="${escapeHtml(
+                            feeChallanUrl
+                          )}">
                           Fee Challan
                         </a>
+
                         ${
                           canPaid
-                            ? `<a class="btn btn-outline-secondary btn-sm" target="_blank" href="${paidChallanUrl}">Paid Challan</a>`
-                            : `<button class="btn btn-outline-secondary btn-sm" disabled>Paid Challan</button>`
+                            ? `
+                              <a
+                                class="btn btn-outline-secondary btn-sm"
+                                target="_blank"
+                                rel="noopener"
+                                href="${escapeHtml(
+                                  paidChallanUrl
+                                )}">
+                                Paid Challan
+                              </a>
+                            `
+                            : `
+                              <button
+                                class="btn btn-outline-secondary btn-sm"
+                                disabled>
+                                Paid Challan
+                              </button>
+                            `
                         }
                       </td>
                     </tr>
@@ -280,7 +585,11 @@ const paidChallanUrl = admissionUrl(
   });
 
   if (!rows.length) {
-    return `<div class="text-muted small">No pending months found.</div>`;
+    return `
+      <div class="text-muted small">
+        No pending months found.
+      </div>
+    `;
   }
 
   return rows.join("");

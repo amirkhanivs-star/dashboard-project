@@ -1,54 +1,161 @@
           </div> <!-- /container-fluid -->
-        </div> <!-- /page content wrapper -->
+        </div> <!-- /ivs-content -->
 
         <!-- FOOTER -->
-       <footer class="border-top py-2 text-center small text-muted mt-auto ivs-footer">
-  © <%= new Date().getFullYear() %>  MAK
-</footer>
-
+        <footer class="border-top py-2 text-center small text-muted mt-auto ivs-footer">
+          © <%= new Date().getFullYear() %> MAK
+        </footer>
       </main>
-    </div> <!-- /d-flex -->
-<script>
-  (function () {
-    document.addEventListener("click", function (e) {
-      const link = e.target.closest("a[href]");
-      if (!link) return;
 
-      const href = link.getAttribute("href") || "";
+      <!-- Bootstrap JS -->
+      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+      <script src="/sidebar-toggle.js"></script>
 
-      if (
-        href.startsWith("#") ||
-        href.startsWith("javascript:") ||
-        link.target === "_blank" ||
-        link.hasAttribute("download")
-      ) {
-        return;
-      }
+      <!-- Socket.IO must load before realtime/heartbeat scripts -->
+      <script src="/socket.io/socket.io.js"></script>
 
-      e.preventDefault();
+      <!-- Developer Dashboard: Online users + usage heartbeat -->
+      <script src="/js/user-activity.js"></script>
 
-      document.documentElement.classList.add("ivs-page-leaving");
-      document.documentElement.classList.add("ivs-loading");
+      <!-- Shared realtime permission/user update support -->
+      <script>
+        (function () {
+          if (window.__IVS_USER_UPDATE_WATCHER__) return;
+          window.__IVS_USER_UPDATE_WATCHER__ = true;
 
-      setTimeout(function () {
-        window.location.href = href;
-      }, 1000);
-    });
+          async function resolveCurrentUserId() {
+            const currentId = String(window.CURRENT_USER?.id || '').trim();
+            if (currentId) return currentId;
 
-    window.addEventListener("pageshow", function (event) {
-  document.documentElement.classList.remove("ivs-page-leaving");
+            try {
+              const response = await fetch('/api/me', {
+                headers: { Accept: 'application/json' },
+                credentials: 'same-origin'
+              });
 
-  // Browser back/forward cache case only
-  if (event.persisted) {
-    document.documentElement.classList.remove("ivs-preload");
-    document.documentElement.classList.remove("ivs-loading");
-  }
-});
-  })();
-</script>
+              const data = await response.json().catch(function () {
+                return {};
+              });
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/sidebar-toggle.js"></script>
+              if (!response.ok || !data?.user?.id) return '';
+              return String(data.user.id).trim();
+            } catch (error) {
+              console.warn('Current user lookup failed:', error);
+              return '';
+            }
+          }
+
+          async function startUserUpdateWatcher() {
+            if (typeof window.io !== 'function') return;
+
+            const currentUserId = await resolveCurrentUserId();
+            if (!currentUserId) return;
+
+            const socket = window.__IVS_SHARED_SOCKET__ || window.io();
+            window.__IVS_SHARED_SOCKET__ = socket;
+
+            socket.on('user:updated', function (payload) {
+              const updatedUserId = String(
+                payload?.userId ??
+                payload?.user_id ??
+                payload?.id ??
+                ''
+              ).trim();
+
+              if (updatedUserId && updatedUserId === currentUserId) {
+                window.location.reload();
+              }
+            });
+          }
+
+          startUserUpdateWatcher().catch(function (error) {
+            console.warn('Realtime user update watcher failed:', error);
+          });
+        })();
+      </script>
+
+      <!-- Same-origin page transition loader -->
+      <script>
+        (function () {
+          const html = document.documentElement;
+          const loader = document.getElementById('ivsGlobalLoader');
+          let navigationPending = false;
+
+          function resetPageTransitionState() {
+            navigationPending = false;
+            html.classList.remove(
+              'ivs-page-leaving',
+              'ivs-loading',
+              'ivs-preload'
+            );
+
+            if (loader) {
+              loader.setAttribute('aria-hidden', 'true');
+            }
+          }
+
+          function shouldSkipLink(event, link) {
+            if (!link || event.defaultPrevented) return true;
+            if (event.button !== 0) return true;
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return true;
+            if (link.hasAttribute('download')) return true;
+            if (link.hasAttribute('data-no-page-loader')) return true;
+            if (link.hasAttribute('data-bs-toggle')) return true;
+            if (link.hasAttribute('data-bs-dismiss')) return true;
+
+            const target = String(link.getAttribute('target') || '').toLowerCase();
+            if (target && target !== '_self') return true;
+
+            const rawHref = String(link.getAttribute('href') || '').trim();
+            if (!rawHref || rawHref === '#') return true;
+            if (rawHref.startsWith('#')) return true;
+            if (rawHref.toLowerCase().startsWith('javascript:')) return true;
+
+            return false;
+          }
+
+          document.addEventListener('click', function (event) {
+            const link = event.target.closest('a[href]');
+            if (shouldSkipLink(event, link)) return;
+
+            let targetUrl;
+            try {
+              targetUrl = new URL(link.href, window.location.href);
+            } catch (error) {
+              return;
+            }
+
+            if (!['http:', 'https:'].includes(targetUrl.protocol)) return;
+            if (targetUrl.origin !== window.location.origin) return;
+
+            const currentUrl = new URL(window.location.href);
+            const sameDocument =
+              targetUrl.pathname === currentUrl.pathname &&
+              targetUrl.search === currentUrl.search;
+
+            if (sameDocument && targetUrl.hash) return;
+            if (targetUrl.href === currentUrl.href) return;
+
+            event.preventDefault();
+            if (navigationPending) return;
+            navigationPending = true;
+
+            html.classList.add('ivs-page-leaving', 'ivs-loading');
+            if (loader) loader.setAttribute('aria-hidden', 'false');
+
+            setTimeout(function () {
+              window.location.assign(targetUrl.href);
+            }, 1000);
+          });
+
+          window.addEventListener('pageshow', function () {
+            resetPageTransitionState();
+          });
+
+          window.addEventListener('pagehide', function () {
+            navigationPending = false;
+          });
+        })();
+      </script>
   </body>
 </html>
