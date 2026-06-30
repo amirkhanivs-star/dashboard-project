@@ -1667,10 +1667,17 @@
           const cardForwardDisplayText = String(
             a.forwardDisplayText || (a.forward && a.forward.displayText) || ''
           ).trim();
+
+          const isTransferHistoryNote =
+            cardForwardDisplayText.toLowerCase().startsWith('transferred by ') &&
+            cardForwardDisplayText.toLowerCase().includes(' due to pipeline type change');
         %>
 
-        <div class="admission-forward-note <%= cardForwardDisplayText ? '' : 'd-none' %>">
-          <i class="bi bi-send-check"></i>
+        <div class="admission-forward-note <%= isTransferHistoryNote ? 'admission-transfer-history-note' : '' %> <%= cardForwardDisplayText ? '' : 'd-none' %>">
+          <i class="bi <%= isTransferHistoryNote ? 'bi-clock-history' : 'bi-send-check' %>"></i>
+          <% if (isTransferHistoryNote) { %>
+            <b class="admission-history-label">History:</b>
+          <% } %>
           <span class="admission-forward-note-text"><%= cardForwardDisplayText %></span>
         </div>
 
@@ -4534,6 +4541,27 @@
 .admission-forward-note i{
   color: #16a34a;
   font-size: 14px;
+}
+
+.admission-transfer-history-note{
+  padding: 10px 11px;
+  border-top: 0;
+  border-radius: 12px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  align-items: flex-start;
+}
+
+.admission-transfer-history-note i{
+  color: #ea580c;
+  margin-top: 1px;
+}
+
+.admission-history-label{
+  color: #7c2d12;
+  font-weight: 900;
+  flex: 0 0 auto;
 }
 
 .admission-forward-note-text{
@@ -7737,15 +7765,45 @@ if (feeLabel) {
         return;
       }
 
+      const lowerText = cleanText.toLowerCase();
+      const isTransferHistoryNote =
+        lowerText.startsWith("transferred by ") &&
+        lowerText.includes(" due to pipeline type change");
+
       if (!note) {
         note = document.createElement("div");
         note.className = "admission-forward-note";
         note.innerHTML = `
           <i class="bi bi-send-check"></i>
+          <b class="admission-history-label d-none">History:</b>
           <span class="admission-forward-note-text"></span>
         `;
         card.appendChild(note);
       }
+
+      const iconEl = note.querySelector("i");
+      if (iconEl) {
+        iconEl.className = isTransferHistoryNote
+          ? "bi bi-clock-history"
+          : "bi bi-send-check";
+      }
+
+      let labelEl = note.querySelector(".admission-history-label");
+      if (!labelEl) {
+        labelEl = document.createElement("b");
+        labelEl.className = "admission-history-label d-none";
+        labelEl.textContent = "History:";
+
+        const textElForInsert = note.querySelector(".admission-forward-note-text");
+        if (textElForInsert) {
+          note.insertBefore(labelEl, textElForInsert);
+        } else {
+          note.appendChild(labelEl);
+        }
+      }
+
+      labelEl.classList.toggle("d-none", !isTransferHistoryNote);
+      note.classList.toggle("admission-transfer-history-note", isTransferHistoryNote);
 
       const textEl = note.querySelector(".admission-forward-note-text");
 

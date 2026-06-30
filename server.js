@@ -1383,6 +1383,20 @@ function ensureAdmissionForwardColumns() {
     addColumn("forwarded_owner_user_name", "TEXT");
     addColumn("forwarded_owner_user_role", "TEXT");
 
+    // Pipeline type change par assigned admissions transfer note/details.
+    addColumn("accounts_transfer_note", "TEXT");
+    addColumn("accounts_transfer_reason", "TEXT");
+    addColumn("accounts_transfer_from_user_id", "INTEGER");
+    addColumn("accounts_transfer_from_user_name", "TEXT");
+    addColumn("accounts_transfer_from_user_role", "TEXT");
+    addColumn("accounts_transfer_to_user_id", "INTEGER");
+    addColumn("accounts_transfer_to_user_name", "TEXT");
+    addColumn("accounts_transfer_to_user_role", "TEXT");
+    addColumn("accounts_transfer_by_id", "INTEGER");
+    addColumn("accounts_transfer_by_name", "TEXT");
+    addColumn("accounts_transfer_by_role", "TEXT");
+    addColumn("accounts_transfer_at", "TEXT");
+
     // Existing records ko safe defaults do. No current forwarding data is removed.
     db.prepare(`
       UPDATE admissions
@@ -3880,6 +3894,9 @@ function canSeeCompletedAccountsOldAdmission(user, row) {
 }
 
 function buildForwardDisplayText(row) {
+  const transferNote = String(row?.accounts_transfer_note || "").trim();
+  if (transferNote) return transferNote;
+
   const status = String(row?.forward_status || "").trim().toLowerCase();
   if (status !== "forwarded") return "";
 
@@ -3892,6 +3909,425 @@ function buildForwardDisplayText(row) {
   }
 
   return `Forwarded by ${byName} to ${toDept}`;
+}
+
+function isSchoolAccountsPipelineTransferUserRow(row = {}) {
+  if (!row) return false;
+
+  const role = String(row.role || "").trim();
+  if (role !== "agent" && role !== "sub_agent") return false;
+  if (!isSchoolAccountsDeptValue(row.dept || "")) return false;
+
+  const pipelineType = normalizeAgentTypeForDept(
+    row.agentType || "",
+    row.dept || ""
+  );
+
+  return SCHOOL_ACCOUNTS_AGENT_TYPES.includes(pipelineType);
+}
+
+function getAccountsPipelineTransferMetaForUser(row = {}) {
+  if (!isSchoolAccountsPipelineTransferUserRow(row)) {
+    return {
+      eligible: false,
+      pipelineType: "",
+      pipelineLabel: "",
+    };
+  }
+
+  const pipelineType = normalizeAgentTypeForDept(
+    row.agentType || "",
+    row.dept || ""
+  );
+
+  return {
+    eligible: true,
+    pipelineType,
+    pipelineLabel: forwardTypeToDepartmentLabel(pipelineType),
+  };
+}
+
+function getAccountsPipelineTransferTargetUsers({
+  sourceUserId = 0,
+  pipelineType = "",
+} = {}) {
+  try {
+    const cleanSourceUserId = Number(sourceUserId || 0);
+    const cleanPipelineType = normalizeForwardType(pipelineType);
+
+    if (!cleanPipelineType) return [];
+
+    const rows = db.prepare(`
+      SELECT
+        id,
+        name,
+        email,
+        role,
+        dept,
+        agentType
+      FROM users
+      WHERE role IN ('agent', 'sub_agent')
+        AND id != ?
+      ORDER BY name ASC
+    `).all(cleanSourceUserId);
+
+    return rows
+      .filter((row) => isAccountsUser(row))
+      .filter((row) =>
+        normalizeAgentTypeForDept(
+          row.agentType || "",
+          row.dept || ""
+        ) === cleanPipelineType
+      )
+      .map((row) => ({
+        id: row.id,
+        name: row.name || row.email || `User #${row.id}`,
+        email: row.email || "",
+        role: row.role || "",
+        dept: row.dept || "",
+        agentType: cleanPipelineType,
+        pipelineLabel: forwardTypeToDepartmentLabel(cleanPipelineType),
+      }));
+  } catch (err) {
+    console.error("getAccountsPipelineTransferTargetUsers error:", err.message);
+    return [];
+  }
+}
+
+function getAccountsPipelineTransferTargetUser({
+  targetUserId = 0,
+  sourceUserId = 0,
+  pipelineType = "",
+} = {}) {
+  const cleanTargetUserId = Number(targetUserId || 0);
+  if (!cleanTargetUserId) return null;
+
+  const targets = getAccountsPipelineTransferTargetUsers({
+    sourceUserId,
+    pipelineType,
+  });
+
+  return targets.find((user) => Number(user.id || 0) === cleanTargetUserId) || null;
+}
+
+function getAccountsPipelineTransferAdmissionsForUser(
+  sourceUserRow = {},
+  pipelineType = ""
+) {
+  try {
+    const cleanPipelineType = normalizeForwardType(pipelineType);
+    const sourceUserId = Number(sourceUserRow?.id || 0);
+    const sourceUserName = String(sourceUserRow?.name || "")
+      .trim()
+      .toLowerCase();
+
+    if (!cleanPipelineType || !sourceUserId) return [];
+
+    const pipelineLabel = forwardTypeToDepartmentLabel(cleanPipelineType).toLowerCase();
+    const alternatePipelineLabel =
+      cleanPipelineType === "print_record_update"
+        ? "print & record update"
+        : pipelineLabel;
+
+    return db.prepare(`
+      SELECT *
+      FROM admissions
+      WHERE LOWER(TRIM(COALESCE(dept, ''))) = 'school'
+        AND LOWER(TRIM(COALESCE(forward_status, ''))) = 'forwarded'
+        AND COALESCE(is_deleted, 0) = 0
+        AND (
+          LOWER(TRIM(COALESCE(forwarded_to_type, ''))) = @pipelineType
+          OR LOWER(TRIM(COALESCE(forwarded_to_department, ''))) = @pipelineLabel
+          OR LOWER(TRIM(COALESCE(forwarded_to_department, ''))) = @alternatePipelineLabel
+        )
+        AND (
+          (
+            LOWER(TRIM(COALESCE(accounts_workflow_stage, 'new_admissions'))) != 'old_admissions'
+            AND (
+              forwarded_owner_user_id = @sourceUserId
+              OR (
+                COALESCE(forwarded_owner_user_id, 0) = 0
+                AND LOWER(TRIM(COALESCE(forwarded_owner_user_name, ''))) = @sourceUserName
+              )
+            )
+          )
+          OR
+          (
+            LOWER(TRIM(COALESCE(accounts_workflow_stage, 'new_admissions'))) = 'old_admissions'
+            AND (
+              accounts_completed_by_id = @sourceUserId
+              OR (
+                COALESCE(accounts_completed_by_id, 0) = 0
+                AND LOWER(TRIM(COALESCE(accounts_completed_by_name, ''))) = @sourceUserName
+              )
+            )
+          )
+        )
+      ORDER BY ${ADMISSION_ACTIVITY_ORDER_SQL}
+    `).all({
+      pipelineType: cleanPipelineType,
+      pipelineLabel,
+      alternatePipelineLabel,
+      sourceUserId,
+      sourceUserName,
+    });
+  } catch (err) {
+    console.error("getAccountsPipelineTransferAdmissionsForUser error:", err.message);
+    return [];
+  }
+}
+
+function getAccountsPipelineTransferCountForUser(
+  sourceUserRow = {},
+  pipelineType = ""
+) {
+  return getAccountsPipelineTransferAdmissionsForUser(
+    sourceUserRow,
+    pipelineType
+  ).length;
+}
+
+function buildAccountsPipelineTransferInfoForUser(row = {}) {
+  const meta = getAccountsPipelineTransferMetaForUser(row);
+
+  if (!meta.eligible || !meta.pipelineType) {
+    return {
+      eligible: false,
+      count: 0,
+      currentPipelineType: "",
+      currentPipelineLabel: "",
+      targets: [],
+    };
+  }
+
+  const count = getAccountsPipelineTransferCountForUser(
+    row,
+    meta.pipelineType
+  );
+
+  return {
+    eligible: count > 0,
+    count,
+    currentPipelineType: meta.pipelineType,
+    currentPipelineLabel: meta.pipelineLabel,
+    sourceUserId: Number(row?.id || 0),
+    sourceUserName: String(row?.name || row?.email || "").trim(),
+    targets: getAccountsPipelineTransferTargetUsers({
+      sourceUserId: Number(row?.id || 0),
+      pipelineType: meta.pipelineType,
+    }),
+  };
+}
+
+function shouldRequireAccountsPipelineTransfer({
+  existingRow = {},
+  nextRole = "",
+  nextDept = "",
+  nextAgentType = "",
+} = {}) {
+  const oldMeta = getAccountsPipelineTransferMetaForUser(existingRow);
+  if (!oldMeta.eligible || !oldMeta.pipelineType) {
+    return {
+      required: false,
+      oldPipelineType: "",
+      oldPipelineLabel: "",
+    };
+  }
+
+  const nextIsPipelineRole =
+    nextRole === "agent" ||
+    nextRole === "sub_agent";
+
+  const nextIsSchoolAccounts =
+    isSchoolAccountsDeptValue(nextDept || "");
+
+  const normalizedNextType =
+    nextIsPipelineRole && nextIsSchoolAccounts
+      ? normalizeAgentTypeForDept(nextAgentType || "", nextDept || "")
+      : "";
+
+  const required =
+    !nextIsPipelineRole ||
+    !nextIsSchoolAccounts ||
+    normalizedNextType !== oldMeta.pipelineType;
+
+  return {
+    required,
+    oldPipelineType: oldMeta.pipelineType,
+    oldPipelineLabel: oldMeta.pipelineLabel,
+    nextPipelineType: normalizedNextType,
+  };
+}
+
+function transferAccountsPipelineAdmissionsForUserChange({
+  sourceUserRow = {},
+  targetUserRow = {},
+  pipelineType = "",
+  actorUser = {},
+} = {}) {
+  const cleanPipelineType = normalizeForwardType(pipelineType);
+  const sourceUserId = Number(sourceUserRow?.id || 0);
+  const targetUserId = Number(targetUserRow?.id || 0);
+
+  if (!cleanPipelineType || !sourceUserId || !targetUserId) {
+    return {
+      count: 0,
+      admissionIds: [],
+      note: "",
+    };
+  }
+
+  const rows = getAccountsPipelineTransferAdmissionsForUser(
+    sourceUserRow,
+    cleanPipelineType
+  );
+
+  if (!rows.length) {
+    return {
+      count: 0,
+      admissionIds: [],
+      note: "",
+    };
+  }
+
+  const now = new Date().toISOString();
+
+  const sourceName = String(
+    sourceUserRow?.name ||
+    sourceUserRow?.email ||
+    `User #${sourceUserId}`
+  ).trim();
+
+  const targetName = String(
+    targetUserRow?.name ||
+    targetUserRow?.email ||
+    `User #${targetUserId}`
+  ).trim();
+
+  const actorName = String(
+    actorUser?.name ||
+    actorUser?.email ||
+    "Super Admin"
+  ).trim();
+
+  const actorRole = String(
+    actorUser?.role ||
+    "super_admin"
+  ).trim();
+
+  const targetRole = String(
+    targetUserRow?.role ||
+    ""
+  ).trim();
+
+  const note =
+    `Transferred by ${actorName} from ${sourceName} to ${targetName} due to pipeline type change.`;
+
+  const transferOne = db.transaction((admissionRows) => {
+    for (const row of admissionRows) {
+      const workflowStage = getAccountsWorkflowStageFromRow(row);
+      const isOldAdmission = workflowStage === "old_admissions";
+
+      db.prepare(`
+        UPDATE admissions
+        SET forwarded_owner_user_id = @targetUserId,
+            forwarded_owner_user_name = @targetUserName,
+            forwarded_owner_user_role = @targetUserRole,
+
+            accounts_transfer_note = @note,
+            accounts_transfer_reason = 'pipeline_type_change',
+            accounts_transfer_from_user_id = @sourceUserId,
+            accounts_transfer_from_user_name = @sourceUserName,
+            accounts_transfer_from_user_role = @sourceUserRole,
+            accounts_transfer_to_user_id = @targetUserId,
+            accounts_transfer_to_user_name = @targetUserName,
+            accounts_transfer_to_user_role = @targetUserRole,
+            accounts_transfer_by_id = @actorUserId,
+            accounts_transfer_by_name = @actorName,
+            accounts_transfer_by_role = @actorRole,
+            accounts_transfer_at = @now,
+
+            forwarded_by_id = @actorUserId,
+            forwarded_by_name = @actorName,
+            forwarded_by_role = @actorRole,
+            forwarded_at = @now,
+
+            accounts_completed_by_id =
+              CASE
+                WHEN @isOldAdmission = 1 THEN @targetUserId
+                ELSE accounts_completed_by_id
+              END,
+            accounts_completed_by_name =
+              CASE
+                WHEN @isOldAdmission = 1 THEN @targetUserName
+                ELSE accounts_completed_by_name
+              END,
+            accounts_completed_by_role =
+              CASE
+                WHEN @isOldAdmission = 1 THEN @targetUserRole
+                ELSE accounts_completed_by_role
+              END,
+
+            last_activity_at = datetime('now')
+        WHERE id = @admissionId
+          AND COALESCE(is_deleted, 0) = 0
+      `).run({
+        admissionId: row.id,
+        targetUserId,
+        targetUserName: targetName,
+        targetUserRole: targetRole,
+        note,
+        sourceUserId,
+        sourceUserName: sourceName,
+        sourceUserRole: sourceUserRow?.role || "",
+        actorUserId: actorUser?.id || null,
+        actorName,
+        actorRole,
+        now,
+        isOldAdmission: isOldAdmission ? 1 : 0,
+      });
+
+      rememberAccountsWorkflowUser(row.id, {
+        id: targetUserId,
+        name: targetName,
+        role: targetRole,
+        dept: targetUserRow?.dept || "",
+        agentType: cleanPipelineType,
+      }, now);
+    }
+  });
+
+  transferOne(rows);
+
+  try {
+    logAudit("accounts_pipeline_admissions_transferred", actorUser, {
+      targetUserId: sourceUserId,
+      targetUserName: sourceName,
+      dept: "school",
+      details: {
+        reason: "pipeline_type_change",
+        pipelineType: cleanPipelineType,
+        pipelineLabel: forwardTypeToDepartmentLabel(cleanPipelineType),
+        transferredFromUserId: sourceUserId,
+        transferredFromUserName: sourceName,
+        transferredToUserId: targetUserId,
+        transferredToUserName: targetName,
+        transferredBy: actorName,
+        transferredAt: now,
+        admissionIds: rows.map((row) => row.id),
+        count: rows.length,
+        note,
+      },
+    });
+  } catch (err) {
+    console.error("accounts_pipeline_admissions_transferred audit error:", err.message);
+  }
+
+  return {
+    count: rows.length,
+    admissionIds: rows.map((row) => row.id),
+    note,
+  };
 }
 function isForwardedByCurrentUser(user, row) {
   if (!user || !row) return false;
@@ -4391,6 +4827,15 @@ function getAdmissionForwardSnapshot(row) {
     forwardedOwnerUserName: String(row?.forwarded_owner_user_name || "").trim(),
     forwardedOwnerUserRole: String(row?.forwarded_owner_user_role || "").trim(),
 
+    transferNote: String(row?.accounts_transfer_note || "").trim(),
+    transferReason: String(row?.accounts_transfer_reason || "").trim(),
+    transferFromUserId: row?.accounts_transfer_from_user_id || null,
+    transferFromUserName: String(row?.accounts_transfer_from_user_name || "").trim(),
+    transferToUserId: row?.accounts_transfer_to_user_id || null,
+    transferToUserName: String(row?.accounts_transfer_to_user_name || "").trim(),
+    transferByName: String(row?.accounts_transfer_by_name || "").trim(),
+    transferAt: String(row?.accounts_transfer_at || "").trim(),
+
     schoolReturnStatus: String(row?.school_return_status || "").trim(),
     schoolReturnedToUserId: row?.school_returned_to_user_id || null,
     schoolReturnedAt: String(row?.school_returned_at || "").trim(),
@@ -4879,6 +5324,19 @@ duplicateWithId: row.duplicateWithId || "",
     forwardedOwnerUserId: row.forwarded_owner_user_id || null,
     forwardedOwnerUserName: row.forwarded_owner_user_name || "",
     forwardedOwnerUserRole: row.forwarded_owner_user_role || "",
+
+    accountsTransferNote: row.accounts_transfer_note || "",
+    accountsTransferReason: row.accounts_transfer_reason || "",
+    accountsTransferFromUserId: row.accounts_transfer_from_user_id || null,
+    accountsTransferFromUserName: row.accounts_transfer_from_user_name || "",
+    accountsTransferFromUserRole: row.accounts_transfer_from_user_role || "",
+    accountsTransferToUserId: row.accounts_transfer_to_user_id || null,
+    accountsTransferToUserName: row.accounts_transfer_to_user_name || "",
+    accountsTransferToUserRole: row.accounts_transfer_to_user_role || "",
+    accountsTransferById: row.accounts_transfer_by_id || null,
+    accountsTransferByName: row.accounts_transfer_by_name || "",
+    accountsTransferByRole: row.accounts_transfer_by_role || "",
+    accountsTransferAt: row.accounts_transfer_at || "",
 
     forwardedByCurrentUser: !!row.forwardedByCurrentUser,
     notForwardedVisibleForCurrentUser: !!row.notForwardedVisibleForCurrentUser,
@@ -16863,6 +17321,8 @@ app.get("/dashboard/admin/users/:id/edit", requireLogin, (req, res) => {
   editUser,
   error: null,
   basePath: "/dashboard/admin",
+  admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+  pipelineTransferInfo: buildAccountsPipelineTransferInfoForUser(row),
 });
 });
 // ==================== ADMIN: EDIT USER (POST) ====================
@@ -16876,8 +17336,49 @@ app.post("/dashboard/admin/users/:id/edit", requireLogin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).send("Invalid id");
 
-  const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+  const row = db.prepare(`
+    SELECT
+      u.*,
+
+      assigned.name AS assignedAdminName,
+      assigned.email AS assignedAdminEmail,
+      assigned.dept AS assignedAdminDept,
+
+      creator.name AS createdByName,
+      creator.email AS createdByEmail,
+      creator.role AS createdByRole
+    FROM users u
+    LEFT JOIN users assigned
+      ON assigned.id = COALESCE(u.assigned_admin_id, u.managerId)
+    LEFT JOIN users creator
+      ON creator.id = u.created_by
+    WHERE u.id = ?
+    LIMIT 1
+  `).get(id);
+
   if (!row) return res.status(404).send("User not found");
+
+  const renderAdminEditError = (errorMessage) => {
+    const editUser = mapUserRow(row);
+    editUser.permissions = getPerm(editUser);
+
+    if (!editUser.access_scope) {
+      if (editUser.role === "super_admin") editUser.access_scope = "all";
+      else if (String(editUser.dept || "").toLowerCase() === "accounts") editUser.access_scope = "all";
+      else if (editUser.role === "admin") editUser.access_scope = "team";
+      else editUser.access_scope = "own";
+    }
+
+    return res.render("admin-user-edit", {
+      user: current,
+      perms: getPerm(current),
+      editUser,
+      error: errorMessage,
+      basePath: "/dashboard/admin",
+      admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+      pipelineTransferInfo: buildAccountsPipelineTransferInfoForUser(row),
+    });
+  };
 
   // ✅ Admin can edit only same dept + only agent/sub_agent
   if (!current.dept || row.dept !== current.dept) {
@@ -16886,26 +17387,69 @@ app.post("/dashboard/admin/users/:id/edit", requireLogin, (req, res) => {
   if (!(row.role === "agent" || row.role === "sub_agent")) {
     return res.status(403).send("Not allowed");
   }
-  
+
   if (!isUserAssignedToAdmin(row, current)) {
     return res.status(403).send("Not allowed");
   }
+
   const { name, email, agentType } = req.body || {};
 
   if (!name || !email) {
-    const editUser = mapUserRow(row);
-    editUser.permissions = getPerm(editUser);
-
-    return res.render("admin-user-edit", {
-      user: current,
-      perms: getPerm(current),
-      editUser,
-      error: "Name and email are required.",
-    });
+    return renderAdminEditError("Name and email are required.");
   }
 
-  const allowedAgentTypes = getAllowedAgentTypesForDept(row?.dept || current?.dept || "");
-const safeAgentType = normalizeAgentTypeForDept(agentType, row?.dept || current?.dept || "");
+  const safeAgentType = normalizeAgentTypeForDept(
+    agentType,
+    row?.dept || current?.dept || ""
+  );
+
+  const pipelineTransferRequirement =
+    shouldRequireAccountsPipelineTransfer({
+      existingRow: row,
+      nextRole: row.role,
+      nextDept: row.dept,
+      nextAgentType: safeAgentType || "",
+    });
+
+  let pendingPipelineTransfer = null;
+
+  if (pipelineTransferRequirement.required) {
+    const transferableCount =
+      getAccountsPipelineTransferCountForUser(
+        row,
+        pipelineTransferRequirement.oldPipelineType
+      );
+
+    if (transferableCount > 0) {
+      const pipelineTransferTargetUserId =
+        Number(
+          req.body.pipelineTransferTargetUserId ||
+          req.body.accountsPipelineTransferTargetUserId ||
+          req.body.transferTargetUserId ||
+          0
+        ) || 0;
+
+      const pipelineTransferTargetUser =
+        getAccountsPipelineTransferTargetUser({
+          targetUserId: pipelineTransferTargetUserId,
+          sourceUserId: id,
+          pipelineType: pipelineTransferRequirement.oldPipelineType,
+        });
+
+      if (!pipelineTransferTargetUser) {
+        return renderAdminEditError(
+          `This user has ${transferableCount} assigned admissions in ${pipelineTransferRequirement.oldPipelineLabel}. Please select another ${pipelineTransferRequirement.oldPipelineLabel} Agent/Sub-Agent to receive these admissions before changing the pipeline type.`
+        );
+      }
+
+      pendingPipelineTransfer = {
+        count: transferableCount,
+        pipelineType: pipelineTransferRequirement.oldPipelineType,
+        pipelineLabel: pipelineTransferRequirement.oldPipelineLabel,
+        targetUser: pipelineTransferTargetUser,
+      };
+    }
+  }
 
   // ✅ IMPORTANT: admin can only grant permissions that admin has
   const parentPerms = getPerm(current);
@@ -16914,6 +17458,8 @@ const safeAgentType = normalizeAgentTypeForDept(agentType, row?.dept || current?
   for (const key of PERMISSION_KEYS) {
     newPerms[key] = parentPerms[key] ? isOn(req.body[key]) : false;
   }
+
+  const beforeUserForAudit = { ...row };
 
   db.prepare(`
     UPDATE users
@@ -16937,6 +17483,27 @@ const safeAgentType = normalizeAgentTypeForDept(agentType, row?.dept || current?
     lastUpdatedAt: new Date().toISOString(),
   });
 
+  let pipelineTransferResult = null;
+
+  if (pendingPipelineTransfer) {
+    pipelineTransferResult =
+      transferAccountsPipelineAdmissionsForUserChange({
+        sourceUserRow: row,
+        targetUserRow: pendingPipelineTransfer.targetUser,
+        pipelineType: pendingPipelineTransfer.pipelineType,
+        actorUser: current,
+      });
+
+    if (pipelineTransferResult?.admissionIds?.length) {
+      emitAdmissionChanged(req, {
+        type: "accounts_pipeline_transfer",
+        dept: "school",
+        admissionId: pipelineTransferResult.admissionIds[0],
+        insertedIds: pipelineTransferResult.admissionIds,
+      });
+    }
+  }
+
   // socket notify
   try {
     const ioRef = req.app.get("io");
@@ -16956,7 +17523,7 @@ const safeAgentType = normalizeAgentTypeForDept(agentType, row?.dept || current?
   };
 
   const changes = buildUserAuditChanges(
-    row,
+    beforeUserForAudit,
     afterUserForAudit
   );
 
@@ -16974,7 +17541,10 @@ const safeAgentType = normalizeAgentTypeForDept(agentType, row?.dept || current?
   req.session.flash = {
     type: "success",
     title: "User updated",
-    message: `User "${name}" has been updated successfully.`,
+    message:
+      pipelineTransferResult?.count > 0
+        ? `User "${name}" has been updated successfully. ${pipelineTransferResult.count} admissions transferred to ${pendingPipelineTransfer.targetUser.name}.`
+        : `User "${name}" has been updated successfully.`,
   };
 
   return res.redirect("/dashboard/admin/users");
@@ -18235,6 +18805,7 @@ app.get("/dashboard/super/users/:id/edit", requireLogin, (req, res) => {
     error: null,
     assignableAdmins: getAssignableAdmins(),
     admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+    pipelineTransferInfo: buildAccountsPipelineTransferInfoForUser(row),
   });
 });
 
@@ -18275,6 +18846,8 @@ app.post("/dashboard/super/users/:id/edit", requireLogin, async (req, res) => {
       editUser,
       error: "Name, email and role are required.",
       assignableAdmins: getAssignableAdmins(),
+      admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+      pipelineTransferInfo: buildAccountsPipelineTransferInfoForUser(existingRow),
     });
   }
 
@@ -18288,6 +18861,8 @@ app.post("/dashboard/super/users/:id/edit", requireLogin, async (req, res) => {
       editUser,
       error: "Role must be Admin, Agent, or Sub Agent.",
       assignableAdmins: getAssignableAdmins(),
+      admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+      pipelineTransferInfo: buildAccountsPipelineTransferInfoForUser(existingRow),
     });
   }
 
@@ -18323,6 +18898,8 @@ const allowedAgentTypes = getAllowedAgentTypesForDept(safeDept);
           editUser,
           error: "Selected assigned admin is not valid.",
           assignableAdmins: getAssignableAdmins(),
+          admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+          pipelineTransferInfo: buildAccountsPipelineTransferInfoForUser(existingRow),
         });
       }
 
@@ -18338,9 +18915,73 @@ const allowedAgentTypes = getAllowedAgentTypesForDept(safeDept);
         editUser,
         error: "Please select an Assigned Admin for Agent/Sub Agent.",
         assignableAdmins: getAssignableAdmins(),
+        admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+        pipelineTransferInfo: buildAccountsPipelineTransferInfoForUser(existingRow),
       });
     }
   }
+
+  const nextAgentTypeForSave = isPipelineRole
+    ? normalizeAgentTypeForDept(agentType, safeDept)
+    : null;
+
+  const pipelineTransferRequirement =
+    shouldRequireAccountsPipelineTransfer({
+      existingRow,
+      nextRole: role,
+      nextDept: safeDept,
+      nextAgentType: nextAgentTypeForSave || "",
+    });
+
+  let pendingPipelineTransfer = null;
+
+  if (pipelineTransferRequirement.required) {
+    const transferableCount =
+      getAccountsPipelineTransferCountForUser(
+        existingRow,
+        pipelineTransferRequirement.oldPipelineType
+      );
+
+    if (transferableCount > 0) {
+      const pipelineTransferTargetUserId =
+        Number(
+          req.body.pipelineTransferTargetUserId ||
+          req.body.accountsPipelineTransferTargetUserId ||
+          req.body.transferTargetUserId ||
+          0
+        ) || 0;
+
+      const pipelineTransferTargetUser =
+        getAccountsPipelineTransferTargetUser({
+          targetUserId: pipelineTransferTargetUserId,
+          sourceUserId: id,
+          pipelineType: pipelineTransferRequirement.oldPipelineType,
+        });
+
+      if (!pipelineTransferTargetUser) {
+        const editUser = mapUserRow(existingRow);
+        editUser.permissions = getPerm(editUser);
+
+        return res.render("super-user-edit", {
+          user: current,
+          editUser,
+          error:
+            `This user has ${transferableCount} assigned admissions in ${pipelineTransferRequirement.oldPipelineLabel}. Please select another ${pipelineTransferRequirement.oldPipelineLabel} Agent/Sub-Agent to receive these admissions before changing the pipeline type.`,
+          assignableAdmins: getAssignableAdmins(),
+          admissionFormBaseUrl: getAdmissionFormBaseUrl(),
+          pipelineTransferInfo: buildAccountsPipelineTransferInfoForUser(existingRow),
+        });
+      }
+
+      pendingPipelineTransfer = {
+        count: transferableCount,
+        pipelineType: pipelineTransferRequirement.oldPipelineType,
+        pipelineLabel: pipelineTransferRequirement.oldPipelineLabel,
+        targetUser: pipelineTransferTargetUser,
+      };
+    }
+  }
+
   const safeAccessScope =
     role === "admin"
       ? (isSchoolAccountsDeptValue(safeDept) ? "all" : "team")
@@ -18419,9 +19060,7 @@ canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
     password_hash: passwordHash,
     role,
     dept: safeDept,
-    agentType: isPipelineRole
-  ? normalizeAgentTypeForDept(agentType, safeDept)
-  : null,
+    agentType: nextAgentTypeForSave,
     permissions: JSON.stringify(permissions),
         managerId: assignedAdminId || existingRow.managerId || current.id,
     assigned_admin_id: assignedAdminId,
@@ -18430,6 +19069,27 @@ canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
     lastUpdatedByRole: current.role,
     lastUpdatedAt: new Date().toISOString(),
   });
+
+  let pipelineTransferResult = null;
+
+  if (pendingPipelineTransfer) {
+    pipelineTransferResult =
+      transferAccountsPipelineAdmissionsForUserChange({
+        sourceUserRow: existingRow,
+        targetUserRow: pendingPipelineTransfer.targetUser,
+        pipelineType: pendingPipelineTransfer.pipelineType,
+        actorUser: current,
+      });
+
+    if (pipelineTransferResult?.admissionIds?.length) {
+      emitAdmissionChanged(req, {
+        type: "accounts_pipeline_transfer",
+        dept: "school",
+        admissionId: pipelineTransferResult.admissionIds[0],
+        insertedIds: pipelineTransferResult.admissionIds,
+      });
+    }
+  }
    try {
   const ioRef = req.app.get("io");
   if (ioRef) {
@@ -18448,12 +19108,7 @@ canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
 
     dept: safeDept,
 
-    agentType: isPipelineRole
-      ? normalizeAgentTypeForDept(
-          agentType,
-          safeDept
-        )
-      : null,
+    agentType: nextAgentTypeForSave,
 
     managerId:
       assignedAdminId ||

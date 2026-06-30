@@ -23,6 +23,29 @@ const roleBadgeClass =
 
 const editUserAdmissionLink =
   editUser.admissionLink || editUser.admission_link || '';
+
+const safePipelineTransferInfo =
+  (typeof pipelineTransferInfo !== "undefined" && pipelineTransferInfo)
+    ? pipelineTransferInfo
+    : {
+        eligible: false,
+        count: 0,
+        currentPipelineType: "",
+        currentPipelineLabel: "",
+        sourceUserId: editUser.id,
+        sourceUserName: editUser.name || "",
+        targets: [],
+      };
+
+const pipelineTransferInfoJson =
+  JSON.stringify({
+    eligible: !!safePipelineTransferInfo.eligible,
+    count: Number(safePipelineTransferInfo.count || 0),
+    currentPipelineType: safePipelineTransferInfo.currentPipelineType || "",
+    currentPipelineLabel: safePipelineTransferInfo.currentPipelineLabel || "",
+    sourceUserName: safePipelineTransferInfo.sourceUserName || editUser.name || "",
+    targets: safePipelineTransferInfo.targets || [],
+  }).replace(/</g, "\\u003c");
 %>
 
 <style>
@@ -192,6 +215,62 @@ const editUserAdmissionLink =
     background: rgba(37, 99, 235, 0.14);
     color: #1d4ed8;
   }
+
+
+  .pipeline-transfer-warning{
+    margin-top: 12px;
+    border: 1px solid rgba(220, 53, 69, 0.22);
+    background: linear-gradient(135deg, rgba(220, 53, 69, 0.06), rgba(255, 255, 255, 0.95));
+    border-radius: 16px;
+    padding: 12px 14px;
+    display: none;
+  }
+
+  .pipeline-transfer-warning.is-visible{
+    display: block;
+  }
+
+  .pipeline-transfer-warning .transfer-count-badge{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: rgba(220, 53, 69, 0.12);
+    color: #b42318;
+    font-weight: 900;
+    border: 1px solid rgba(220, 53, 69, 0.24);
+  }
+
+  .pipeline-transfer-modal-card{
+    border-radius: 22px;
+    border: 0;
+    overflow: hidden;
+  }
+
+  .pipeline-transfer-modal-head{
+    background: linear-gradient(135deg, #dc3545, #9f1239);
+    color: #fff;
+  }
+
+  .pipeline-transfer-target-card{
+    border: 1px solid rgba(220, 53, 69, 0.16);
+    border-radius: 16px;
+    background: rgba(220, 53, 69, 0.04);
+    padding: 12px;
+  }
+
+  .pipeline-transfer-note{
+    border-radius: 14px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    color: #9a3412;
+    padding: 10px 12px;
+    font-size: .78rem;
+    line-height: 1.45;
+  }
 </style>
 
 <div class="container-fluid py-4">
@@ -274,7 +353,15 @@ The Super Admin can edit the role, department, assigned admin, pipeline type, co
           <div class="alert alert-danger py-2 small"><%= error %></div>
           <% } %>
 
-          <form method="POST" action="/dashboard/super/users/<%= editUser.id %>/edit">
+          <form
+            method="POST"
+            action="/dashboard/super/users/<%= editUser.id %>/edit"
+            id="editUserForm">
+            <input
+              type="hidden"
+              name="pipelineTransferTargetUserId"
+              id="pipelineTransferTargetUserId"
+              value="">
             <div class="row g-3">
               <div class="col-12">
                 <h6 class="mb-1">1. Basic information</h6>
@@ -361,6 +448,38 @@ The Super Admin can edit the role, department, assigned admin, pipeline type, co
                   This is only meaningful for Agent and Sub Agent. It will be ignored for Admin.
                 </small>
               </div>
+
+              <% if (safePipelineTransferInfo.eligible) { %>
+              <div class="col-12">
+                <div
+                  class="pipeline-transfer-warning"
+                  id="pipelineTransferWarning">
+                  <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+                    <div>
+                      <div class="small fw-bold text-danger text-uppercase mb-1">
+                        <i class="bi bi-arrow-left-right me-1"></i>
+                        Pipeline Transfer Required
+                      </div>
+                      <div class="fw-semibold">
+                        <span class="transfer-count-badge me-1">
+                          <%= safePipelineTransferInfo.count || 0 %>
+                        </span>
+                        assigned admission(s) are currently in
+                        <%= safePipelineTransferInfo.currentPipelineLabel || 'this pipeline' %>.
+                      </div>
+                      <div class="small text-muted mt-1">
+                        If you change this user's School Accounts pipeline type, these admissions must be transferred to another
+                        <%= safePipelineTransferInfo.currentPipelineLabel || 'same pipeline' %> Agent/Sub-Agent.
+                      </div>
+                    </div>
+                    <div class="small text-muted">
+                      Source user:
+                      <strong><%= safePipelineTransferInfo.sourceUserName || editUser.name || 'Current user' %></strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <% } %>
               <!-- ASSIGNMENT -->
               <div class="col-12 mt-3" id="assignmentSection">
                 <div class="rounded-4 border bg-light p-3">
@@ -741,6 +860,91 @@ The Super Admin can edit the role, department, assigned admin, pipeline type, co
             </div>
           </form>
 
+          <% if (safePipelineTransferInfo.eligible) { %>
+          <div class="modal fade" id="pipelineTransferModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+              <div class="modal-content pipeline-transfer-modal-card shadow-lg">
+                <div class="modal-header pipeline-transfer-modal-head border-0">
+                  <div>
+                    <h5 class="modal-title fw-bold mb-1">
+                      <i class="bi bi-arrow-left-right me-2"></i>
+                      Transfer Assigned Admissions
+                    </h5>
+                    <div class="small opacity-75">
+                      Required before changing this School Accounts pipeline type.
+                    </div>
+                  </div>
+                  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                  <div class="pipeline-transfer-target-card mb-3">
+                    <div class="row g-3 align-items-center">
+                      <div class="col-md-4">
+                        <div class="small text-muted">Current user</div>
+                        <div class="fw-bold"><%= safePipelineTransferInfo.sourceUserName || editUser.name || 'Current user' %></div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="small text-muted">Old pipeline type</div>
+                        <div class="fw-bold"><%= safePipelineTransferInfo.currentPipelineLabel || '—' %></div>
+                      </div>
+                      <div class="col-md-4">
+                        <div class="small text-muted">Admissions to transfer</div>
+                        <div class="fw-bold text-danger"><%= safePipelineTransferInfo.count || 0 %></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <label class="form-label small fw-semibold">
+                    Select target <%= safePipelineTransferInfo.currentPipelineLabel || 'same pipeline' %> Agent/Sub-Agent
+                  </label>
+
+                  <select id="pipelineTransferTargetSelect" class="form-select">
+                    <option value="">Select user to receive admissions</option>
+                    <% (safePipelineTransferInfo.targets || []).forEach(function(target) { %>
+                      <option value="<%= target.id %>">
+                        <%= target.name %>
+                        <% if (target.role) { %>
+                          - <%= String(target.role).replace(/_/g, ' ') %>
+                        <% } %>
+                        <% if (target.email) { %>
+                          (<%= target.email %>)
+                        <% } %>
+                      </option>
+                    <% }) %>
+                  </select>
+
+                  <% if (!(safePipelineTransferInfo.targets || []).length) { %>
+                    <div class="alert alert-warning small mt-3 mb-0">
+                      No same pipeline Agent/Sub-Agent found. Please create another
+                      <%= safePipelineTransferInfo.currentPipelineLabel || 'same pipeline' %>
+                      user first, then come back and change this user.
+                    </div>
+                  <% } %>
+
+                  <div class="pipeline-transfer-note mt-3" id="pipelineTransferNotePreview">
+                    Transfer note will be saved in admission history after selecting a target user.
+                  </div>
+                </div>
+
+                <div class="modal-footer border-0">
+                  <button type="button" class="btn btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-danger rounded-pill px-4"
+                    id="confirmPipelineTransferBtn"
+                    <%= !(safePipelineTransferInfo.targets || []).length ? 'disabled' : '' %>>
+                    <i class="bi bi-check2-circle me-1"></i>
+                    Transfer & Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <% } %>
+
         </div>
       </div>
     </div>
@@ -752,6 +956,17 @@ The Super Admin can edit the role, department, assigned admin, pipeline type, co
     const roleSelect = document.getElementById("roleSelect");
     const deptSelect = document.getElementById("deptSelect");
     const agentTypeSelect = document.getElementById("agentTypeSelect");
+    const editUserForm = document.getElementById("editUserForm");
+    const pipelineTransferTargetUserIdInput = document.getElementById("pipelineTransferTargetUserId");
+    const pipelineTransferWarning = document.getElementById("pipelineTransferWarning");
+    const pipelineTransferModalEl = document.getElementById("pipelineTransferModal");
+    const pipelineTransferTargetSelect = document.getElementById("pipelineTransferTargetSelect");
+    const confirmPipelineTransferBtn = document.getElementById("confirmPipelineTransferBtn");
+    const pipelineTransferNotePreview = document.getElementById("pipelineTransferNotePreview");
+
+    const pipelineTransferInfo = <%- pipelineTransferInfoJson %>;
+
+    let pipelineTransferConfirmed = false;
 
         const editUserNameInput = document.getElementById("editUserNameInput");
     const editUserAdmissionLinkPreview = document.getElementById("editUserAdmissionLinkPreview");
@@ -837,6 +1052,87 @@ const schoolAccountsAgentTypeOptions = [
 function isSchoolAccountsDept(dept) {
   const d = String(dept || "").trim().toLowerCase();
   return d === "accounts" || d === "school accounts" || d === "school_accounts";
+}
+
+function getPipelineTransferTargetName(targetId) {
+  const cleanId = String(targetId || "");
+  const target = (pipelineTransferInfo.targets || []).find(function (item) {
+    return String(item.id || "") === cleanId;
+  });
+
+  return target ? String(target.name || target.email || "selected user") : "";
+}
+
+function shouldShowPipelineTransferPopup() {
+  if (!pipelineTransferInfo.eligible || Number(pipelineTransferInfo.count || 0) <= 0) {
+    return false;
+  }
+
+  const role = roleSelect ? String(roleSelect.value || "") : "";
+  const dept = deptSelect ? String(deptSelect.value || "") : "";
+  const selectedAgentType = agentTypeSelect ? String(agentTypeSelect.value || "") : "";
+  const oldPipelineType = String(pipelineTransferInfo.currentPipelineType || "");
+
+  if (!oldPipelineType) return false;
+
+  if (role !== "agent" && role !== "sub_agent") return true;
+  if (!isSchoolAccountsDept(dept)) return true;
+
+  return selectedAgentType !== oldPipelineType;
+}
+
+function syncPipelineTransferWarning() {
+  if (!pipelineTransferWarning) return;
+
+  if (shouldShowPipelineTransferPopup()) {
+    pipelineTransferWarning.classList.add("is-visible");
+  } else {
+    pipelineTransferWarning.classList.remove("is-visible");
+
+    if (pipelineTransferTargetUserIdInput) {
+      pipelineTransferTargetUserIdInput.value = "";
+    }
+
+    pipelineTransferConfirmed = false;
+  }
+}
+
+function updatePipelineTransferNotePreview() {
+  if (!pipelineTransferNotePreview) return;
+
+  const targetId = pipelineTransferTargetSelect ? pipelineTransferTargetSelect.value : "";
+  const targetName = getPipelineTransferTargetName(targetId);
+
+  if (!targetName) {
+    pipelineTransferNotePreview.textContent =
+      "Transfer note will be saved in admission history after selecting a target user.";
+    return;
+  }
+
+  const sourceName = pipelineTransferInfo.sourceUserName || "current user";
+
+  pipelineTransferNotePreview.textContent =
+    "Transferred by Super Admin from " +
+    sourceName +
+    " to " +
+    targetName +
+    " due to pipeline type change.";
+}
+
+function openPipelineTransferModal() {
+  updatePipelineTransferNotePreview();
+
+  if (window.bootstrap && pipelineTransferModalEl) {
+    const modal = bootstrap.Modal.getOrCreateInstance(pipelineTransferModalEl);
+    modal.show();
+    return;
+  }
+
+  alert(
+    "This user has " +
+    pipelineTransferInfo.count +
+    " assigned admissions. Please select a target user before saving."
+  );
 }
 
 function syncAgentTypeOptions() {
@@ -939,6 +1235,7 @@ function syncAgentTypeOptions() {
       }
 
       filterAssignedAdmins();
+      syncPipelineTransferWarning();
     }
 
     function toggleAll(on) {
@@ -986,10 +1283,74 @@ if (deptSelect) {
   });
 }
 
+    if (agentTypeSelect) {
+      agentTypeSelect.addEventListener("change", function () {
+        pipelineTransferConfirmed = false;
+        syncPipelineTransferWarning();
+      });
+    }
+
+    if (pipelineTransferTargetSelect) {
+      pipelineTransferTargetSelect.addEventListener("change", updatePipelineTransferNotePreview);
+    }
+
+    if (confirmPipelineTransferBtn) {
+      confirmPipelineTransferBtn.addEventListener("click", function () {
+        const selectedTargetId = pipelineTransferTargetSelect
+          ? String(pipelineTransferTargetSelect.value || "").trim()
+          : "";
+
+        if (!selectedTargetId) {
+          alert("Please select a target user to receive these admissions.");
+          return;
+        }
+
+        if (pipelineTransferTargetUserIdInput) {
+          pipelineTransferTargetUserIdInput.value = selectedTargetId;
+        }
+
+        pipelineTransferConfirmed = true;
+
+        if (pipelineTransferModalEl && window.bootstrap) {
+          const modal = bootstrap.Modal.getOrCreateInstance(pipelineTransferModalEl);
+          modal.hide();
+        }
+
+        if (editUserForm) {
+          if (typeof editUserForm.requestSubmit === "function") {
+            editUserForm.requestSubmit();
+          } else {
+            editUserForm.submit();
+          }
+        }
+      });
+    }
+
+    if (editUserForm) {
+      editUserForm.addEventListener("submit", function (event) {
+        if (!shouldShowPipelineTransferPopup()) {
+          return;
+        }
+
+        if (pipelineTransferConfirmed) {
+          return;
+        }
+
+        event.preventDefault();
+
+        if (pipelineTransferTargetUserIdInput) {
+          pipelineTransferTargetUserIdInput.value = "";
+        }
+
+        openPipelineTransferModal();
+      });
+    }
+
     if (btnSelectAll) btnSelectAll.addEventListener("click", () => toggleAll(true));
     if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));
 
     syncRoleUI();
+    syncPipelineTransferWarning();
     syncEditUserAdmissionLinkPreview();
   })();
 </script>
