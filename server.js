@@ -1649,6 +1649,22 @@ function getSchoolAdminAssignedUsers(adminUser) {
       return [];
     }
 
+    /*
+     * School Dept Admin ko apni admissions bhi same workflow me milni chahiye.
+     * Is liye admin khud first card banega, phir uske assigned agents/sub-agents.
+     */
+    const adminSelf = {
+      id: Number(adminUser.id || 0),
+      name: String(adminUser.name || adminUser.email || "Admin").trim(),
+      email: String(adminUser.email || "").trim(),
+      role: "admin",
+      dept: adminUser.dept || "school",
+      agentType: adminUser.agentType || "",
+      isSelf: true,
+      isCurrentAdmin: true,
+      displayName: "My Admissions",
+    };
+
     const rows = db.prepare(`
       SELECT
         id,
@@ -1671,15 +1687,20 @@ function getSchoolAdminAssignedUsers(adminUser) {
 
     const seen = new Set();
 
-    return rows
-      .map((row) => ({
+    return [
+      adminSelf,
+      ...rows.map((row) => ({
         id: Number(row.id || 0),
         name: String(row.name || row.email || "").trim(),
         email: String(row.email || "").trim(),
         role: row.role || "",
         dept: row.dept || "",
         agentType: row.agentType || "",
-      }))
+        isSelf: false,
+        isCurrentAdmin: false,
+        displayName: String(row.name || row.email || "").trim(),
+      })),
+    ]
       .filter((row) => row.id && row.name)
       .filter((row) => {
         if (seen.has(row.id)) return false;

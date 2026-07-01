@@ -1157,7 +1157,7 @@ function escHtml(value) {
           <div class="accounts-pipeline-eyebrow">School Dept Users Workflow</div>
           <h3 class="accounts-pipeline-title">Select a user to view admissions</h3>
           <p class="accounts-pipeline-subtitle">
-            Only assigned School Dept users are shown here. Open any user to view that user's admissions.
+            Your own admissions and assigned School Dept users are shown here. Open any user to view that user's admissions.
           </p>
         </div>
 
@@ -1174,10 +1174,19 @@ function escHtml(value) {
       <div class="accounts-pipeline-home-grid school-team-user-grid">
         <% schoolTeamUserFilterData.forEach(teamUser => {
           const teamUserId = Number(teamUser.id || 0);
-          const teamUserName = String(teamUser.name || teamUser.email || 'User').trim();
-          const teamUserRole = String(teamUser.role || '').replace(/_/g, ' ');
-          const teamUserCount = Number(teamUser.count || 0);
-          const isActiveTeamUser = teamUserId === selectedSchoolTeamUserIdValue;
+const teamUserName = String(teamUser.name || teamUser.email || 'User').trim();
+const teamUserDisplayName = String(
+  teamUser.displayName ||
+  (teamUser.isSelf ? 'My Admissions' : teamUserName)
+).trim();
+
+const teamUserRole = String(teamUser.role || '').replace(/_/g, ' ');
+const teamUserCount = Number(teamUser.count || 0);
+const isActiveTeamUser = teamUserId === selectedSchoolTeamUserIdValue;
+
+const teamUserHint = teamUser.isSelf
+  ? `${teamUserName} admissions`
+  : `${teamUserRole ? teamUserRole.replace(/\b\w/g, c => c.toUpperCase()) : 'School User'} admissions`;
         %>
           <a
             href="<%= buildSchoolTeamUserUrl(teamUserId, 1) %>"
@@ -1187,10 +1196,10 @@ function escHtml(value) {
             </span>
 
             <span class="accounts-pipeline-card-content">
-              <span class="accounts-pipeline-card-title"><%= teamUserName %></span>
-              <span class="accounts-pipeline-card-hint">
-                <%= teamUserRole ? teamUserRole.replace(/\b\w/g, c => c.toUpperCase()) : 'School User' %> admissions
-              </span>
+              <span class="accounts-pipeline-card-title"><%= teamUserDisplayName %></span>
+<span class="accounts-pipeline-card-hint">
+  <%= teamUserHint %>
+</span>
             </span>
 
             <span class="accounts-pipeline-card-count"><%= teamUserCount %></span>
@@ -1205,7 +1214,7 @@ function escHtml(value) {
     <div>
     <% if (shouldShowSchoolTeamUserWorkflow && hasSelectedSchoolTeamUser) { %>
       <strong>
-        Admissions for <%= selectedSchoolTeamUserData.name || selectedSchoolTeamUserData.email || 'Selected User' %>
+        Admissions for <%= selectedSchoolTeamUserData.displayName || selectedSchoolTeamUserData.name || selectedSchoolTeamUserData.email || 'Selected User' %>
       </strong>
       <div class="small text-muted">School Dept assigned user filter</div>
     <% } else { %>
