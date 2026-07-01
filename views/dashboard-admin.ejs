@@ -20,7 +20,7 @@ const isAccountsAdmin =
     ? 'Accounts scope: all department admissions'
     : `Dept scope: ${deptTitle}`;
 
-      const paginationData = pagination || {};
+            const paginationData = pagination || {};
   const currentPage = Number(paginationData.page || 1);
   const totalPages = Number(paginationData.totalPages || 1);
   const pageLimit = Number(paginationData.limit || 200);
@@ -28,10 +28,54 @@ const isAccountsAdmin =
   const startRecord = Number(paginationData.startRecord || 0);
   const endRecord = Number(paginationData.endRecord || 0);
 
+  const schoolTeamUserFilterData =
+    (typeof schoolTeamUserFilters !== 'undefined' && Array.isArray(schoolTeamUserFilters))
+      ? schoolTeamUserFilters
+      : [];
+
+  const selectedSchoolTeamUserIdValue = Number(
+    typeof selectedSchoolTeamUserId !== 'undefined'
+      ? selectedSchoolTeamUserId
+      : 0
+  ) || 0;
+
+  const selectedSchoolTeamUserData =
+    (typeof selectedSchoolTeamUser !== 'undefined' && selectedSchoolTeamUser)
+      ? selectedSchoolTeamUser
+      : (
+          schoolTeamUserFilterData.find(row =>
+            Number(row.id || 0) === selectedSchoolTeamUserIdValue
+          ) || null
+        );
+
+  const hasSelectedSchoolTeamUser = !!(
+    selectedSchoolTeamUserData &&
+    Number(selectedSchoolTeamUserData.id || 0)
+  );
+
   function buildPageUrl(pageNumber, limitNumber) {
     const params = new URLSearchParams();
     params.set('page', String(pageNumber));
     params.set('limit', String(limitNumber));
+
+    if (selectedSchoolTeamUserIdValue) {
+      params.set('schoolUserId', String(selectedSchoolTeamUserIdValue));
+    }
+
+    return `/dashboard?${params.toString()}`;
+  }
+
+  function buildSchoolTeamUserUrl(userId = 0, pageNumber = 1) {
+    const params = new URLSearchParams();
+    const cleanUserId = Number(userId || 0);
+
+    params.set('page', String(pageNumber || 1));
+    params.set('limit', String(pageLimit || 200));
+
+    if (cleanUserId) {
+      params.set('schoolUserId', String(cleanUserId));
+    }
+
     return `/dashboard?${params.toString()}`;
   }
 
@@ -78,10 +122,35 @@ const isAccountsAdmin =
     accountsPipelineCountData.oldAdmissions || 0
   );
 
-  const accountsInternalDepartmentCount = Number(
+    const accountsInternalDepartmentCount = Number(
     accountsPipelineCountData.internalDepartment ||
     accountsPipelineSourceCounts.internal_department ||
     0
+  );
+
+  const schoolForwardCountData =
+    (typeof schoolForwardCounts !== 'undefined' && schoolForwardCounts)
+      ? schoolForwardCounts
+      : {};
+
+  const schoolForwardedInitialCount = Number(
+    schoolForwardCountData.forwarded || 0
+  );
+
+  const schoolNotForwardedInitialCount = Number(
+    schoolForwardCountData.notForwarded || 0
+  );
+
+  const schoolNotVerifiedInitialCount = Number(
+    schoolForwardCountData.notVerified || 0
+  );
+
+  const schoolVerifiedInitialCount = Number(
+    schoolForwardCountData.verified || 0
+  );
+
+  const schoolNotReceivedInitialCount = Number(
+    schoolForwardCountData.notReceived || 0
   );
 
   const totalAdmissions = isAccountsAdmin
@@ -398,6 +467,13 @@ const shouldShowSchoolForwardFilters =
 
 const shouldShowSchoolAccountsWorkflow =
   _isSuper || isSchoolAccountsUser;
+
+const shouldShowSchoolTeamUserWorkflow =
+  !_isSuper &&
+  !isSchoolAccountsUser &&
+  currentUserDept === 'school' &&
+  String(user?.role || '').trim() === 'admin' &&
+  schoolTeamUserFilterData.length > 0;
 
 // Backward-compatible alias used by the existing page scripts.
 const shouldShowSchoolAccountsNewAdmissions =
@@ -906,7 +982,7 @@ function escHtml(value) {
               Forwarded
               <span
                 class="admin-forward-tab-count"
-                id="schoolForwardedCount">0</span>
+                id="schoolForwardedCount"><%= schoolForwardedInitialCount %></span>
             </button>
 
             <button
@@ -916,7 +992,7 @@ function escHtml(value) {
               Not Forwarded
               <span
                 class="admin-forward-tab-count"
-                id="schoolNotForwardedCount">0</span>
+                id="schoolNotForwardedCount"><%= schoolNotForwardedInitialCount %></span>
             </button>
           </div>
 
@@ -932,7 +1008,7 @@ function escHtml(value) {
               Not Verified
               <span
                 class="admin-forward-tab-count"
-                id="schoolNotVerifiedCount">0</span>
+                id="schoolNotVerifiedCount"><%= schoolNotVerifiedInitialCount %></span>
             </button>
 
             <button
@@ -942,7 +1018,7 @@ function escHtml(value) {
               Verified
               <span
                 class="admin-forward-tab-count"
-                id="schoolVerifiedCount">0</span>
+                id="schoolVerifiedCount"><%= schoolVerifiedInitialCount %></span>
             </button>
 
             <button
@@ -952,7 +1028,7 @@ function escHtml(value) {
               Not Received
               <span
                 class="admin-forward-tab-count"
-                id="schoolNotReceivedCount">0</span>
+                id="schoolNotReceivedCount"><%= schoolNotReceivedInitialCount %></span>
             </button>
           </div>
         <% } %>
@@ -1074,12 +1150,67 @@ function escHtml(value) {
       </div>
     </div>
   <% } %>
+  <% if (shouldShowSchoolTeamUserWorkflow) { %>
+    <div class="accounts-pipeline-home school-team-user-home mb-3" id="schoolTeamUserHome">
+      <div class="accounts-pipeline-home-heading">
+        <div>
+          <div class="accounts-pipeline-eyebrow">School Dept Users Workflow</div>
+          <h3 class="accounts-pipeline-title">Select a user to view admissions</h3>
+          <p class="accounts-pipeline-subtitle">
+            Only assigned School Dept users are shown here. Open any user to view that user's admissions.
+          </p>
+        </div>
 
+        <% if (hasSelectedSchoolTeamUser) { %>
+          <a
+            href="<%= buildSchoolTeamUserUrl(0, 1) %>"
+            class="school-team-clear-link">
+            <i class="bi bi-grid-3x3-gap me-1"></i>
+            All Users
+          </a>
+        <% } %>
+      </div>
+
+      <div class="accounts-pipeline-home-grid school-team-user-grid">
+        <% schoolTeamUserFilterData.forEach(teamUser => {
+          const teamUserId = Number(teamUser.id || 0);
+          const teamUserName = String(teamUser.name || teamUser.email || 'User').trim();
+          const teamUserRole = String(teamUser.role || '').replace(/_/g, ' ');
+          const teamUserCount = Number(teamUser.count || 0);
+          const isActiveTeamUser = teamUserId === selectedSchoolTeamUserIdValue;
+        %>
+          <a
+            href="<%= buildSchoolTeamUserUrl(teamUserId, 1) %>"
+            class="accounts-pipeline-card school-team-user-card <%= isActiveTeamUser ? 'active' : '' %>">
+            <span class="accounts-pipeline-card-icon <%= isActiveTeamUser ? '' : 'school-user' %>">
+              <i class="bi bi-person-badge"></i>
+            </span>
+
+            <span class="accounts-pipeline-card-content">
+              <span class="accounts-pipeline-card-title"><%= teamUserName %></span>
+              <span class="accounts-pipeline-card-hint">
+                <%= teamUserRole ? teamUserRole.replace(/\b\w/g, c => c.toUpperCase()) : 'School User' %> admissions
+              </span>
+            </span>
+
+            <span class="accounts-pipeline-card-count"><%= teamUserCount %></span>
+          </a>
+        <% }) %>
+      </div>
+    </div>
+  <% } %>
   <!-- TABLE -->
-  <div class="card shadow-sm admin-table-card <%= shouldShowSchoolAccountsWorkflow ? 'accounts-workspace-hidden' : '' %>" id="accountsAdmissionsWorkspace">
+   <div class="card shadow-sm admin-table-card <%= shouldShowSchoolAccountsWorkflow ? 'accounts-workspace-hidden' : '' %> <%= (shouldShowSchoolTeamUserWorkflow && !hasSelectedSchoolTeamUser) ? 'school-team-workspace-hidden' : '' %>" id="accountsAdmissionsWorkspace">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-  <div>
-    <strong><%= isAccountsAdmin ? 'Admissions for All Departments' : `Admissions for ${deptTitle}` %></strong>
+    <div>
+    <% if (shouldShowSchoolTeamUserWorkflow && hasSelectedSchoolTeamUser) { %>
+      <strong>
+        Admissions for <%= selectedSchoolTeamUserData.name || selectedSchoolTeamUserData.email || 'Selected User' %>
+      </strong>
+      <div class="small text-muted">School Dept assigned user filter</div>
+    <% } else { %>
+      <strong><%= isAccountsAdmin ? 'Admissions for All Departments' : `Admissions for ${deptTitle}` %></strong>
+    <% } %>
   </div>
 
   <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -1091,6 +1222,15 @@ function escHtml(value) {
         <i class="bi bi-grid-3x3-gap me-1"></i>
         Pipelines
       </button>
+    <% } %>
+
+    <% if (shouldShowSchoolTeamUserWorkflow && hasSelectedSchoolTeamUser) { %>
+      <a
+        href="<%= buildSchoolTeamUserUrl(0, 1) %>"
+        class="btn btn-sm btn-light rounded-pill px-3 border">
+        <i class="bi bi-people me-1"></i>
+        Users
+      </a>
     <% } %>
 
     <button
@@ -4941,8 +5081,74 @@ function escHtml(value) {
   font-weight: 900;
 }
 
-.accounts-workspace-hidden{
+.accounts-workspace-hidden,
+.school-team-workspace-hidden{
   display: none !important;
+}
+
+.school-team-user-home{
+  background:
+    radial-gradient(circle at top left, rgba(34,197,94,.15), transparent 34%),
+    linear-gradient(135deg, #ffffff, #f0fdf4);
+}
+
+.school-team-user-grid{
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+}
+
+.school-team-user-card{
+  color: inherit;
+  text-decoration: none;
+}
+
+.school-team-user-card:hover{
+  color: inherit;
+  text-decoration: none;
+}
+
+.school-team-user-card.active{
+  border-color: rgba(22,163,74,.55);
+  background: linear-gradient(135deg, #ecfdf5, #ffffff);
+  box-shadow:
+    0 18px 38px rgba(22,163,74,.16),
+    0 0 0 4px rgba(187,247,208,.48);
+}
+
+.accounts-pipeline-card-icon.school-user{
+  background: linear-gradient(135deg, #0f172a, #334155);
+}
+
+.school-team-clear-link{
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid rgba(22,163,74,.25);
+  color: #166534;
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+  box-shadow: 0 8px 18px rgba(15,23,42,.07);
+}
+
+.school-team-clear-link:hover{
+  color: #14532d;
+  background: #ecfdf5;
+}
+
+@media (max-width: 991.98px){
+  .school-team-user-grid{
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+  }
+}
+
+@media (max-width: 767.98px){
+  .school-team-user-grid{
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 767.98px){
@@ -7838,7 +8044,8 @@ if (editBillingStatusSaveBtn) {
     const isSchoolAccountsUser = <%- JSON.stringify(!!isSchoolAccountsUser) %>;
     const currentUserDept = <%- JSON.stringify(currentUserDept || '') %>;
 
-    const serverAccountsPipelineCounts = <%- JSON.stringify(accountsPipelineCountData || {}) %>;
+        const serverAccountsPipelineCounts = <%- JSON.stringify(accountsPipelineCountData || {}) %>;
+    const serverSchoolForwardCounts = <%- JSON.stringify(schoolForwardCountData || {}) %>;
 
     if (!canUseSchoolForwarding) return;
 
@@ -9074,7 +9281,7 @@ if (editBillingStatusSaveBtn) {
           forwarded += 1;
         }
 
-        if (state.isNotForwardedVisibleForCurrentUser) {
+                if (state.isNotForwardedVisibleForThisUser) {
           notForwarded += 1;
         }
 
@@ -9151,16 +9358,55 @@ if (editBillingStatusSaveBtn) {
           )
         : accountsInternal;
 
-      const finalAccountsPrint = accountsPrint || Number(serverPipelines.print_record_update || 0);
+           const finalAccountsPrint = accountsPrint || Number(serverPipelines.print_record_update || 0);
       const finalAccountsVerification = accountsVerification || Number(serverPipelines.verification_registration || 0);
       const finalAccountsPaidSlip = accountsPaidSlip || Number(serverPipelines.paid_slip || 0);
 
+      const hasWorkflowDateFilter =
+        cards.some(card =>
+          card.classList.contains(
+            "workflow-date-filter-hidden"
+          )
+        );
+
+      const useServerSchoolCounts =
+        shouldShowSchoolForwardFilters &&
+        !hasWorkflowDateFilter &&
+        serverSchoolForwardCounts &&
+        (
+          Number(serverSchoolForwardCounts.forwarded || 0) > 0 ||
+          Number(serverSchoolForwardCounts.notForwarded || 0) > 0 ||
+          Number(serverSchoolForwardCounts.notVerified || 0) > 0 ||
+          Number(serverSchoolForwardCounts.verified || 0) > 0 ||
+          Number(serverSchoolForwardCounts.notReceived || 0) > 0
+        );
+
+      const finalSchoolForwarded = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.forwarded || 0)
+        : forwarded;
+
+      const finalSchoolNotForwarded = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.notForwarded || 0)
+        : notForwarded;
+
+      const finalSchoolNotVerified = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.notVerified || 0)
+        : notVerified;
+
+      const finalSchoolVerified = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.verified || 0)
+        : verified;
+
+      const finalSchoolNotReceived = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.notReceived || 0)
+        : notReceived;
+
       const countMap = {
-        schoolForwardedCount: forwarded,
-        schoolNotForwardedCount: notForwarded,
-        schoolNotVerifiedCount: notVerified,
-        schoolVerifiedCount: verified,
-        schoolNotReceivedCount: notReceived,
+        schoolForwardedCount: finalSchoolForwarded,
+        schoolNotForwardedCount: finalSchoolNotForwarded,
+        schoolNotVerifiedCount: finalSchoolNotVerified,
+        schoolVerifiedCount: finalSchoolVerified,
+        schoolNotReceivedCount: finalSchoolNotReceived,
 
         accountsNewAdmissionsCount:
           finalAccountsNewAdmissions,

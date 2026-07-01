@@ -267,6 +267,31 @@
   const shouldShowSchoolAccountsNewAdmissions =
     shouldShowSchoolAccountsWorkflow;
 
+  const schoolForwardCountData =
+    (typeof schoolForwardCounts !== 'undefined' && schoolForwardCounts)
+      ? schoolForwardCounts
+      : {};
+
+  const schoolForwardedInitialCount = Number(
+    schoolForwardCountData.forwarded || 0
+  );
+
+  const schoolNotForwardedInitialCount = Number(
+    schoolForwardCountData.notForwarded || 0
+  );
+
+  const schoolNotVerifiedInitialCount = Number(
+    schoolForwardCountData.notVerified || 0
+  );
+
+  const schoolVerifiedInitialCount = Number(
+    schoolForwardCountData.verified || 0
+  );
+
+  const schoolNotReceivedInitialCount = Number(
+    schoolForwardCountData.notReceived || 0
+  );
+
     const showActions =
     P.col.actionButtons && (
       P.btn.details ||
@@ -733,7 +758,7 @@
               Forwarded
               <span
                 class="super-forward-tab-count"
-                id="schoolForwardedCount">0</span>
+                id="schoolForwardedCount"><%= schoolForwardedInitialCount %></span>
             </button>
 
             <button
@@ -743,7 +768,7 @@
               Not Forwarded
               <span
                 class="super-forward-tab-count"
-                id="schoolNotForwardedCount">0</span>
+                id="schoolNotForwardedCount"><%= schoolNotForwardedInitialCount %></span>
             </button>
           </div>
 
@@ -759,7 +784,7 @@
               Not Verified
               <span
                 class="super-forward-tab-count"
-                id="schoolNotVerifiedCount">0</span>
+                id="schoolNotVerifiedCount"><%= schoolNotVerifiedInitialCount %></span>
             </button>
 
             <button
@@ -769,7 +794,7 @@
               Verified
               <span
                 class="super-forward-tab-count"
-                id="schoolVerifiedCount">0</span>
+                id="schoolVerifiedCount"><%= schoolVerifiedInitialCount %></span>
             </button>
 
             <button
@@ -779,7 +804,7 @@
               Not Received
               <span
                 class="super-forward-tab-count"
-                id="schoolNotReceivedCount">0</span>
+                id="schoolNotReceivedCount"><%= schoolNotReceivedInitialCount %></span>
             </button>
           </div>
         <% } %>
@@ -7645,6 +7670,7 @@ if (feeLabel) {
     const shouldShowSchoolAccountsWorkflow = <%- JSON.stringify(!!shouldShowSchoolAccountsWorkflow) %>;
     const shouldShowSchoolAccountsNewAdmissions = shouldShowSchoolAccountsWorkflow;
     const isSuper = <%- JSON.stringify(!!_isSuper) %>;
+    const serverSchoolForwardCounts = <%- JSON.stringify(schoolForwardCountData || {}) %>;
 
     if (!canUseSchoolForwarding) return;
 
@@ -8812,12 +8838,51 @@ if (feeLabel) {
         }
       });
 
+      const hasWorkflowDateFilter =
+        cards.some(card =>
+          card.classList.contains(
+            "workflow-date-filter-hidden"
+          )
+        );
+
+      const useServerSchoolCounts =
+        shouldShowSchoolForwardFilters &&
+        !hasWorkflowDateFilter &&
+        serverSchoolForwardCounts &&
+        (
+          Number(serverSchoolForwardCounts.forwarded || 0) > 0 ||
+          Number(serverSchoolForwardCounts.notForwarded || 0) > 0 ||
+          Number(serverSchoolForwardCounts.notVerified || 0) > 0 ||
+          Number(serverSchoolForwardCounts.verified || 0) > 0 ||
+          Number(serverSchoolForwardCounts.notReceived || 0) > 0
+        );
+
+      const finalSchoolForwarded = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.forwarded || 0)
+        : forwarded;
+
+      const finalSchoolNotForwarded = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.notForwarded || 0)
+        : notForwarded;
+
+      const finalSchoolNotVerified = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.notVerified || 0)
+        : notVerified;
+
+      const finalSchoolVerified = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.verified || 0)
+        : verified;
+
+      const finalSchoolNotReceived = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.notReceived || 0)
+        : notReceived;
+
       const countMap = {
-        schoolForwardedCount: forwarded,
-        schoolNotForwardedCount: notForwarded,
-        schoolNotVerifiedCount: notVerified,
-        schoolVerifiedCount: verified,
-        schoolNotReceivedCount: notReceived,
+        schoolForwardedCount: finalSchoolForwarded,
+        schoolNotForwardedCount: finalSchoolNotForwarded,
+        schoolNotVerifiedCount: finalSchoolNotVerified,
+        schoolVerifiedCount: finalSchoolVerified,
+        schoolNotReceivedCount: finalSchoolNotReceived,
 
         accountsNewAdmissionsCount:
           accountsNewAdmissions,

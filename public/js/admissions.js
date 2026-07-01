@@ -1,5 +1,28 @@
 const API_URL = "/api/admissions";
+function buildAdmissionsApiUrl() {
+  const params = new URLSearchParams(window.location.search || "");
+  const apiParams = new URLSearchParams();
 
+  [
+    "schoolUserId",
+    "schoolTeamUserId",
+    "teamUserId",
+    "view",
+    "accountsView",
+    "accountsPipeline",
+    "pipelineType",
+    "forwardedToType",
+    "forwardStatus"
+  ].forEach((key) => {
+    const value = params.get(key);
+    if (value) {
+      apiParams.set(key, value);
+    }
+  });
+
+  const query = apiParams.toString();
+  return query ? `${API_URL}?${query}` : API_URL;
+}
 let CURRENT_USER = null;
 let USER_PERMS = null;
 let DIRTY_ROW_FORM_ID = null;
@@ -707,7 +730,7 @@ function initRowUpdateOverlayBridge() {
 }
 async function loadAdmissions() {
   try {
-    const res = await fetch(API_URL, {
+        const res = await fetch(buildAdmissionsApiUrl(), {
       credentials: "same-origin",
       headers: {
         Accept: "application/json",

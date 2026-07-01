@@ -76,10 +76,35 @@
     accountsPipelineCountData.oldAdmissions || 0
   );
 
-  const accountsInternalDepartmentCount = Number(
+    const accountsInternalDepartmentCount = Number(
     accountsPipelineCountData.internalDepartment ||
     accountsPipelineSourceCounts.internal_department ||
     0
+  );
+
+  const schoolForwardCountData =
+    (typeof schoolForwardCounts !== 'undefined' && schoolForwardCounts)
+      ? schoolForwardCounts
+      : {};
+
+  const schoolForwardedInitialCount = Number(
+    schoolForwardCountData.forwarded || 0
+  );
+
+  const schoolNotForwardedInitialCount = Number(
+    schoolForwardCountData.notForwarded || 0
+  );
+
+  const schoolNotVerifiedInitialCount = Number(
+    schoolForwardCountData.notVerified || 0
+  );
+
+  const schoolVerifiedInitialCount = Number(
+    schoolForwardCountData.verified || 0
+  );
+
+  const schoolNotReceivedInitialCount = Number(
+    schoolForwardCountData.notReceived || 0
   );
 
   const totalAdmissions = isAccountsAgent
@@ -909,7 +934,7 @@ const hasAnyUi = visibleColCount > 0;
                 class="btn school-forward-filter-btn forwarded"
                 data-school-forward-filter="forwarded">
                 Forwarded
-                <span class="agent-forward-tab-count" id="schoolForwardedCount">0</span>
+                <span class="agent-forward-tab-count" id="schoolForwardedCount"><%= schoolForwardedInitialCount %></span>
               </button>
 
               <button
@@ -917,7 +942,7 @@ const hasAnyUi = visibleColCount > 0;
                 class="btn school-forward-filter-btn not-forwarded"
                 data-school-forward-filter="not_forwarded">
                 Not Forwarded
-                <span class="agent-forward-tab-count" id="schoolNotForwardedCount">0</span>
+                <span class="agent-forward-tab-count" id="schoolNotForwardedCount"><%= schoolNotForwardedInitialCount %></span>
               </button>
             </div>
 
@@ -928,17 +953,17 @@ const hasAnyUi = visibleColCount > 0;
 
               <button type="button" class="btn forwarded-subfilter-btn" data-forwarded-subfilter="not_verified">
                 Not Verified
-                <span class="agent-forward-tab-count" id="schoolNotVerifiedCount">0</span>
+                <span class="agent-forward-tab-count" id="schoolNotVerifiedCount"><%= schoolNotVerifiedInitialCount %></span>
               </button>
 
               <button type="button" class="btn forwarded-subfilter-btn" data-forwarded-subfilter="verified">
                 Verified
-                <span class="agent-forward-tab-count" id="schoolVerifiedCount">0</span>
+                <span class="agent-forward-tab-count" id="schoolVerifiedCount"><%= schoolVerifiedInitialCount %></span>
               </button>
 
               <button type="button" class="btn forwarded-subfilter-btn" data-forwarded-subfilter="not_received">
                 Not Received
-                <span class="agent-forward-tab-count" id="schoolNotReceivedCount">0</span>
+                <span class="agent-forward-tab-count" id="schoolNotReceivedCount"><%= schoolNotReceivedInitialCount %></span>
               </button>
             </div>
           <% } %>
@@ -6703,7 +6728,8 @@ const hasAnyUi = visibleColCount > 0;
     const allowedAccountsSourceFilters = new Set(
       <%- JSON.stringify((currentAccountsSourceFilters || []).map(item => item.value)) %>
     );
-    const serverAccountsPipelineCounts = <%- JSON.stringify(accountsPipelineCountData || {}) %>;
+        const serverAccountsPipelineCounts = <%- JSON.stringify(accountsPipelineCountData || {}) %>;
+    const serverSchoolForwardCounts = <%- JSON.stringify(schoolForwardCountData || {}) %>;
     const canCompleteRecordUpdate = <%- JSON.stringify(!!canCompleteRecordUpdate) %>;
     const clientCardPermissions = <%- JSON.stringify(P) %>;
 
@@ -7948,7 +7974,7 @@ const hasAnyUi = visibleColCount > 0;
         ? Number(serverAccountsPipelineCounts.oldAdmissions || 0)
         : accountsOldAdmissions;
 
-      const finalSourceCounts = useServerAccountsCounts
+           const finalSourceCounts = useServerAccountsCounts
         ? {
             school: Number(serverSources.school || 0),
             print_record_update: Number(serverSources.print_record_update || 0),
@@ -7963,12 +7989,51 @@ const hasAnyUi = visibleColCount > 0;
           }
         : sourceCounts;
 
+      const hasWorkflowDateFilter =
+        cards.some(card =>
+          card.classList.contains(
+            "workflow-date-filter-hidden"
+          )
+        );
+
+      const useServerSchoolCounts =
+        shouldShowSchoolForwardFilters &&
+        !hasWorkflowDateFilter &&
+        serverSchoolForwardCounts &&
+        (
+          Number(serverSchoolForwardCounts.forwarded || 0) > 0 ||
+          Number(serverSchoolForwardCounts.notForwarded || 0) > 0 ||
+          Number(serverSchoolForwardCounts.notVerified || 0) > 0 ||
+          Number(serverSchoolForwardCounts.verified || 0) > 0 ||
+          Number(serverSchoolForwardCounts.notReceived || 0) > 0
+        );
+
+      const finalSchoolForwarded = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.forwarded || 0)
+        : forwarded;
+
+      const finalSchoolNotForwarded = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.notForwarded || 0)
+        : notForwarded;
+
+      const finalSchoolNotVerified = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.notVerified || 0)
+        : notVerified;
+
+      const finalSchoolVerified = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.verified || 0)
+        : verified;
+
+      const finalSchoolNotReceived = useServerSchoolCounts
+        ? Number(serverSchoolForwardCounts.notReceived || 0)
+        : notReceived;
+
       const countMap = {
-        schoolForwardedCount: forwarded,
-        schoolNotForwardedCount: notForwarded,
-        schoolNotVerifiedCount: notVerified,
-        schoolVerifiedCount: verified,
-        schoolNotReceivedCount: notReceived,
+        schoolForwardedCount: finalSchoolForwarded,
+        schoolNotForwardedCount: finalSchoolNotForwarded,
+        schoolNotVerifiedCount: finalSchoolNotVerified,
+        schoolVerifiedCount: finalSchoolVerified,
+        schoolNotReceivedCount: finalSchoolNotReceived,
         accountsNewAdmissionsCount: finalAccountsNewAdmissions,
         accountsOldAdmissionsCount: finalAccountsOldAdmissions,
         accountsHomeNewCount: finalAccountsNewAdmissions,

@@ -1624,6 +1624,129 @@ function getAdminTeamNames(adminUser) {
 function makeInPlaceholders(arr) {
   return arr.map(() => "?").join(",");
 }
+
+function isSchoolDeptAdmin(user) {
+  return (
+    !!user &&
+    user.role === "admin" &&
+    String(user.dept || "").trim().toLowerCase() === "school"
+  );
+}
+
+function getRequestedSchoolTeamUserId(source = {}) {
+  const raw =
+    source.schoolUserId ??
+    source.schoolTeamUserId ??
+    source.teamUserId ??
+    "";
+
+  return Number(raw || 0) || 0;
+}
+
+function getSchoolAdminAssignedUsers(adminUser) {
+  try {
+    if (!isSchoolDeptAdmin(adminUser) || !adminUser?.id) {
+      return [];
+    }
+
+    const rows = db.prepare(`
+      SELECT
+        id,
+        name,
+        email,
+        role,
+        dept,
+        agentType,
+        assigned_admin_id,
+        managerId
+      FROM users
+      WHERE role IN ('agent', 'sub_agent')
+        AND LOWER(TRIM(COALESCE(dept, ''))) = 'school'
+        AND (
+          assigned_admin_id = ?
+          OR managerId = ?
+        )
+      ORDER BY name ASC, id ASC
+    `).all(adminUser.id, adminUser.id);
+
+    const seen = new Set();
+
+    return rows
+      .map((row) => ({
+        id: Number(row.id || 0),
+        name: String(row.name || row.email || "").trim(),
+        email: String(row.email || "").trim(),
+        role: row.role || "",
+        dept: row.dept || "",
+        agentType: row.agentType || "",
+      }))
+      .filter((row) => row.id && row.name)
+      .filter((row) => {
+        if (seen.has(row.id)) return false;
+        seen.add(row.id);
+        return true;
+      });
+  } catch (e) {
+    console.error("getSchoolAdminAssignedUsers error:", e.message);
+    return [];
+  }
+}
+
+function getSchoolAdminSelectedTeamUser(adminUser, selectedUserId = 0) {
+  const cleanSelectedUserId = Number(selectedUserId || 0);
+  if (!cleanSelectedUserId) return null;
+
+  return (
+    getSchoolAdminAssignedUsers(adminUser).find(
+      (row) => Number(row.id || 0) === cleanSelectedUserId
+    ) || null
+  );
+}
+
+function buildSchoolAdminTeamUserFilters(adminUser) {
+  const teamUsers = getSchoolAdminAssignedUsers(adminUser);
+
+  if (!teamUsers.length) {
+    return [];
+  }
+
+  const userNames = teamUsers
+    .map((row) => String(row.name || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  const countsByName = new Map();
+
+  try {
+    const placeholders = makeInPlaceholders(userNames);
+
+    const rows = db.prepare(`
+      SELECT
+        LOWER(TRIM(COALESCE(processed_by, ''))) AS processedByName,
+        COUNT(*) AS total
+      FROM admissions
+      WHERE LOWER(TRIM(COALESCE(dept, ''))) = 'school'
+        AND COALESCE(is_deleted, 0) = 0
+        AND LOWER(TRIM(COALESCE(processed_by, ''))) IN (${placeholders})
+      GROUP BY LOWER(TRIM(COALESCE(processed_by, '')))
+    `).all(...userNames);
+
+    for (const row of rows) {
+      countsByName.set(
+        String(row.processedByName || "").trim().toLowerCase(),
+        Number(row.total || 0)
+      );
+    }
+  } catch (e) {
+    console.error("buildSchoolAdminTeamUserFilters error:", e.message);
+  }
+
+  return teamUsers.map((row) => ({
+    ...row,
+    count: countsByName.get(
+      String(row.name || "").trim().toLowerCase()
+    ) || 0,
+  }));
+}
 function canAccessAdmissionRow(user, row) {
   if (!user || !row) return false;
 
@@ -2297,10 +2420,26 @@ function fetchAdmissionsForUser(user, options = {}) {
     }
   }
 
-  // Admin = only assigned team admissions
+    // Admin = only assigned team admissions
   else if (scope === "team") {
     const dept = String(user?.dept || "").trim().toLowerCase();
-    const teamNames = getAdminTeamNames(user)
+    const selectedSchoolTeamUserId = Number(
+      options.schoolTeamUserId || 0
+    );
+
+    const selectedSchoolTeamUser =
+      isSchoolDeptAdmin(user) && selectedSchoolTeamUserId
+        ? getSchoolAdminSelectedTeamUser(
+            user,
+            selectedSchoolTeamUserId
+          )
+        : null;
+
+    const teamNames = (
+      selectedSchoolTeamUser
+        ? [selectedSchoolTeamUser.name]
+        : getAdminTeamNames(user)
+    )
       .map((name) => String(name || "").trim().toLowerCase())
       .filter(Boolean);
 
@@ -4720,7 +4859,65 @@ function makeEmptySchoolAccountsPipelineCounts() {
     },
   };
 }
+function makeEmptySchoolForwardCounts() {
+  return {
+    forwarded: 0,
+    notForwarded: 0,
+    notVerified: 0,
+    verified: 0,
+    notReceived: 0,
+  };
+}
 
+function buildSchoolForwardCountsFromAdmissions(admissions = []) {
+  const counts = makeEmptySchoolForwardCounts();
+
+  for (const admission of Array.isArray(admissions) ? admissions : []) {
+    const dept = String(admission?.dept || "")
+      .trim()
+      .toLowerCase();
+
+    if (dept !== "school") continue;
+
+    const status = String(admission?.forwardStatus || "")
+      .trim()
+      .toLowerCase();
+
+    const forwardSubStatus = String(admission?.forwardSubStatus || "")
+      .trim()
+      .toLowerCase();
+
+    const isForwardedForThisUser =
+      status === "forwarded" &&
+      admission?.forwardedByCurrentUser === true;
+
+    const isNotForwardedForThisUser =
+      status !== "forwarded" &&
+      admission?.notForwardedVisibleForCurrentUser === true;
+
+    if (isForwardedForThisUser) {
+      counts.forwarded += 1;
+
+      if (forwardSubStatus === "not_verified") {
+        counts.notVerified += 1;
+      }
+
+      if (forwardSubStatus === "verified") {
+        counts.verified += 1;
+      }
+    }
+
+    if (isNotForwardedForThisUser) {
+      counts.notForwarded += 1;
+    }
+
+    if (admission?.notReceivedVisibleForCurrentUser === true) {
+      counts.notReceived += 1;
+    }
+  }
+
+  return counts;
+}
 function buildSchoolAccountsPipelineCounts(user) {
   const counts = makeEmptySchoolAccountsPipelineCounts();
 
@@ -13259,11 +13456,14 @@ app.get("/api/admissions", requireLogin, (req, res) => {
       .trim()
       .toLowerCase();
 
-    const view = String(
+        const view = String(
       req.query.view || ""
     )
       .trim()
       .toLowerCase();
+
+    const schoolTeamUserId =
+      getRequestedSchoolTeamUserId(req.query);
 
     const accountsPipelineFilter = String(
       req.query.accountsPipeline ||
@@ -13330,10 +13530,11 @@ app.get("/api/admissions", requireLogin, (req, res) => {
       ).trim(),
     };
 
-    let admissions = fetchAdmissionsForUser(user, {
+       let admissions = fetchAdmissionsForUser(user, {
       accountsView: isAccountsOldView
         ? "old_admissions"
         : "new_admissions",
+      schoolTeamUserId,
     });
 
     if (isAccountsNewView || isAccountsOldView) {
@@ -13400,17 +13601,15 @@ app.get("/api/admissions", requireLogin, (req, res) => {
       );
     }
 
-    if (forwardStatus === "not_forwarded") {
+       if (forwardStatus === "not_forwarded") {
       admissions = admissions.filter(
         (admission) => {
-          const hasFile =
-            !!admission.latestUpload ||
-            !!admission.hasLatestUpload;
-
           const status = String(
             admission.forwardStatus ||
             "not_forwarded"
-          ).toLowerCase();
+          )
+            .trim()
+            .toLowerCase();
 
           const dept = String(
             admission.dept || ""
@@ -13418,20 +13617,19 @@ app.get("/api/admissions", requireLogin, (req, res) => {
             .trim()
             .toLowerCase();
 
-          if (user?.role === "super_admin") {
-            return (
-              dept === "school" &&
-              hasFile &&
-              status !== "forwarded"
-            );
+          if (dept !== "school") {
+            return false;
           }
 
-          return (
-            dept === "school" &&
-            hasFile &&
-            !!admission.latestUploadByCurrentUser &&
-            status !== "forwarded"
-          );
+          if (status === "forwarded") {
+            return false;
+          }
+
+          if (user?.role === "super_admin") {
+            return true;
+          }
+
+          return admission.notForwardedVisibleForCurrentUser === true;
         }
       );
     }
@@ -17073,13 +17271,21 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
   const rows = db.prepare("SELECT * FROM users ORDER BY id ASC").all();
   const users = rows.map(mapUserRow);
 
-  const admissionsPage = fetchAdmissionsPage({
+   const admissionsPage = fetchAdmissionsPage({
   dept: null,
   page,
   limit,
   perms,
   viewerUser: user,
 });
+
+  const superAccessibleAdmissions =
+    fetchAdmissionsForUser(user);
+
+  const schoolForwardCounts =
+    buildSchoolForwardCountsFromAdmissions(
+      superAccessibleAdmissions
+    );
 
   return res.render("dashboard-super", {
     user,
@@ -17092,7 +17298,8 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
     currencyOptions: getCurrencyOptions(),
     bankOptions: getBankOptions(),
     classOptions,
-    accountsPipelineCounts: buildSchoolAccountsPipelineCounts(user),
+        accountsPipelineCounts: buildSchoolAccountsPipelineCounts(user),
+    schoolForwardCounts,
     pagination: {
       page: admissionsPage.page,
       limit: admissionsPage.limit,
@@ -17104,7 +17311,29 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
   });
 }
 
-    const accessibleAdmissions = fetchAdmissionsForUser(user);
+        const schoolTeamUserFilters =
+    isSchoolDeptAdmin(user)
+      ? buildSchoolAdminTeamUserFilters(user)
+      : [];
+
+  const requestedSchoolTeamUserId =
+    getRequestedSchoolTeamUserId(req.query);
+
+  const selectedSchoolTeamUser =
+    requestedSchoolTeamUserId
+      ? schoolTeamUserFilters.find(
+          (row) =>
+            Number(row.id || 0) ===
+            requestedSchoolTeamUserId
+        ) || null
+      : null;
+
+  const selectedSchoolTeamUserId =
+    selectedSchoolTeamUser?.id || 0;
+
+  const accessibleAdmissions = fetchAdmissionsForUser(user, {
+    schoolTeamUserId: selectedSchoolTeamUserId,
+  });
 
   const totalRecords = accessibleAdmissions.length;
   const totalPages = Math.max(Math.ceil(totalRecords / limit), 1);
@@ -17120,8 +17349,11 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
     endRecord: totalRecords === 0 ? 0 : Math.min(offset + limit, totalRecords),
   };
 
-  const accountsPipelineCounts =
+    const accountsPipelineCounts =
     buildSchoolAccountsPipelineCounts(user);
+
+  const schoolForwardCounts =
+    buildSchoolForwardCountsFromAdmissions(accessibleAdmissions);
 
 if (user.role === "admin") {
   return res.render("dashboard-admin", {
@@ -17134,7 +17366,11 @@ if (user.role === "admin") {
     currencyOptions: getCurrencyOptions(),
     bankOptions: getBankOptions(),
         classOptions,
-    accountsPipelineCounts,
+        accountsPipelineCounts,
+    schoolForwardCounts,
+    schoolTeamUserFilters,
+    selectedSchoolTeamUserId,
+    selectedSchoolTeamUser,
     pagination: {
       page: deptAdmissionsPage.page,
       limit: deptAdmissionsPage.limit,
@@ -17157,7 +17393,8 @@ if (user.role === "sub_agent") {
     currencyOptions: getCurrencyOptions(),
     bankOptions: getBankOptions(),
         classOptions,
-    accountsPipelineCounts,
+        accountsPipelineCounts,
+    schoolForwardCounts,
     pagination: {
       page: deptAdmissionsPage.page,
       limit: deptAdmissionsPage.limit,
@@ -17180,7 +17417,8 @@ if (user.role === "agent") {
     currencyOptions: getCurrencyOptions(),
     bankOptions: getBankOptions(),
         classOptions,
-    accountsPipelineCounts,
+        accountsPipelineCounts,
+    schoolForwardCounts,
     pagination: {
       page: deptAdmissionsPage.page,
       limit: deptAdmissionsPage.limit,
@@ -19425,6 +19663,19 @@ const deptAdmissionsPage = fetchAdmissionsPage({
   viewerUser: user,
 });
 
+const superDeptAccessibleAdmissions =
+  dept === "school"
+    ? fetchAdmissionsForDept("school", user)
+    : [];
+
+const schoolForwardCounts =
+  buildSchoolForwardCountsFromAdmissions(
+    superDeptAccessibleAdmissions
+  );
+
+const accountsPipelineCounts =
+  buildSchoolAccountsPipelineCounts(user);
+
   const rows = db.prepare("SELECT * FROM users ORDER BY id ASC").all();
   const allUsers = rows.map((row) => {
   const u = mapUserRow(row);
@@ -19456,8 +19707,10 @@ pagination: {
   statusOptionsCurrent,
   statusOptionsFee,
   currencyOptions: getCurrencyOptions(),
-  bankOptions: getBankOptions(),
+    bankOptions: getBankOptions(),
    classOptions,
+  accountsPipelineCounts,
+  schoolForwardCounts,
 });
 });
 
