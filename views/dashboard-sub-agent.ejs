@@ -482,8 +482,10 @@ const canCompleteRecordUpdate =
   ) &&
   currentAccountsPipelineType === 'print_record_update';
 
-  const canShowTopFileFilters =
-  P.btn.files && (_isSuper || isAccountsSubAgent);
+// Files filters must follow only Files permission.
+// Any Sub-Agent with btnFiles ON can see All Files / Unseen / Seen.
+const canShowTopFileFilters =
+  !!P.btn.files;
 
 const showActions =
   P.col.actionButtons &&
@@ -818,6 +820,121 @@ const DEFAULT_FEE_STATUS_OPTIONS =
       return raw.split(',').map(item => item.trim()).filter(Boolean);
     }
   }
+
+  function getDashboardForwardTimer(admission) {
+    const forward = (admission && admission.forward) || {};
+
+    return (
+      (admission && admission.currentForwardTimer) ||
+      (admission && admission.forwardTimer) ||
+      forward.currentTimer ||
+      forward.forwardTimer ||
+      forward.timer ||
+      null
+    );
+  }
+
+  function getDashboardForwardTimerStartedAt(timer) {
+    return String(
+      (timer && (
+        timer.startedAt ||
+        timer.started_at ||
+        timer.startAt ||
+        timer.started
+      )) ||
+      ''
+    ).trim();
+  }
+
+  function getDashboardForwardTimerName(timer) {
+    return String(
+      (timer && (
+        timer.name ||
+        timer.holderUserName ||
+        timer.holder_user_name ||
+        timer.userName ||
+        timer.user_name
+      )) ||
+      ''
+    ).trim();
+  }
+
+  function getDashboardForwardTimerDept(timer) {
+    return String(
+      (timer && (
+        timer.department ||
+        timer.holderDepartment ||
+        timer.holder_department ||
+        timer.dept
+      )) ||
+      ''
+    ).trim();
+  }
+
+  function getDashboardForwardTimerType(timer) {
+    return String(
+      (timer && (
+        timer.type ||
+        timer.holderType ||
+        timer.holder_type ||
+        timer.forwardType
+      )) ||
+      ''
+    ).trim();
+  }
+
+  function getDashboardForwardTimerDurationSeconds(timer) {
+    const directSeconds = Number(
+      (timer && (
+        timer.durationSeconds ||
+        timer.duration_seconds
+      )) ||
+      0
+    );
+
+    const startedAt = getDashboardForwardTimerStartedAt(timer);
+
+    if (startedAt) {
+      const parsed = new Date(startedAt);
+
+      if (!Number.isNaN(parsed.getTime())) {
+        return Math.max(
+          0,
+          Math.floor((Date.now() - parsed.getTime()) / 1000)
+        );
+      }
+    }
+
+    return Math.max(0, directSeconds);
+  }
+
+  function formatDashboardForwardTimerDuration(seconds) {
+    const totalSeconds = Math.max(0, Number(seconds || 0));
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    const minutes = totalMinutes % 60;
+
+    return `${days}d ${hours}h ${minutes}m`;
+  }
+
+  function getDashboardForwardTimerDurationLabel(timer) {
+    const savedLabel = String(
+      (timer && (
+        timer.durationLabel ||
+        timer.duration_label
+      )) ||
+      ''
+    ).trim();
+
+    if (savedLabel) {
+      return savedLabel;
+    }
+
+    return formatDashboardForwardTimerDuration(
+      getDashboardForwardTimerDurationSeconds(timer)
+    );
+  }
 %>
 
 <div class="admin-shell">
@@ -946,82 +1063,86 @@ const DEFAULT_FEE_STATUS_OPTIONS =
         aria-label="Admission pipeline filters">
 
         <% if (shouldShowSchoolForwardFilters) { %>
-          <div class="school-forward-filter-group">
-            <button
-              type="button"
-              class="btn school-forward-filter-btn forwarded"
-              data-school-forward-filter="forwarded">
-              Forwarded
-              <span class="subagent-forward-tab-count" id="schoolForwardedCount"><%= schoolForwardedInitialCount %></span>
-            </button>
+  <div class="school-forward-filter-group">
+    <button
+      type="button"
+      class="btn school-forward-filter-btn forwarded"
+      data-school-forward-filter="forwarded">
+      Forwarded
+      <span class="subagent-forward-tab-count" id="schoolForwardedCount"><%= schoolForwardedInitialCount %></span>
+    </button>
+  </div>
 
-            <button
-              type="button"
-              class="btn school-forward-filter-btn not-forwarded"
-              data-school-forward-filter="not_forwarded">
-              Not Forwarded
-              <span class="subagent-forward-tab-count" id="schoolNotForwardedCount"><%= schoolNotForwardedInitialCount %></span>
-            </button>
-          </div>
+  <div
+    class="forwarded-subfilter-group d-none"
+    id="schoolForwardedSubfilters"
+    aria-label="Forwarded admission status filters">
 
-          <div
-            class="forwarded-subfilter-group d-none"
-            id="schoolForwardedSubfilters"
-            aria-label="Forwarded admission status filters">
+    <button type="button" class="btn forwarded-subfilter-btn" data-forwarded-subfilter="not_verified">
+      Not Verified
+      <span class="subagent-forward-tab-count" id="schoolNotVerifiedCount"><%= schoolNotVerifiedInitialCount %></span>
+    </button>
 
-            <button type="button" class="btn forwarded-subfilter-btn" data-forwarded-subfilter="not_verified">
-              Not Verified
-              <span class="subagent-forward-tab-count" id="schoolNotVerifiedCount"><%= schoolNotVerifiedInitialCount %></span>
-            </button>
+    <button type="button" class="btn forwarded-subfilter-btn" data-forwarded-subfilter="verified">
+      Verified
+      <span class="subagent-forward-tab-count" id="schoolVerifiedCount"><%= schoolVerifiedInitialCount %></span>
+    </button>
 
-            <button type="button" class="btn forwarded-subfilter-btn" data-forwarded-subfilter="verified">
-              Verified
-              <span class="subagent-forward-tab-count" id="schoolVerifiedCount"><%= schoolVerifiedInitialCount %></span>
-            </button>
+    <button type="button" class="btn forwarded-subfilter-btn" data-forwarded-subfilter="not_received">
+      Not Received
+      <span class="subagent-forward-tab-count" id="schoolNotReceivedCount"><%= schoolNotReceivedInitialCount %></span>
+    </button>
+  </div>
 
-            <button type="button" class="btn forwarded-subfilter-btn" data-forwarded-subfilter="not_received">
-              Not Received
-              <span class="subagent-forward-tab-count" id="schoolNotReceivedCount"><%= schoolNotReceivedInitialCount %></span>
-            </button>
-          </div>
-        <% } %>
+  <div class="school-forward-filter-group school-not-forwarded-filter-group">
+    <button
+      type="button"
+      class="btn school-forward-filter-btn not-forwarded"
+      data-school-forward-filter="not_forwarded">
+      Not Forwarded
+      <span class="subagent-forward-tab-count" id="schoolNotForwardedCount"><%= schoolNotForwardedInitialCount %></span>
+    </button>
+  </div>
+<% } %>
 
-        <% if (shouldShowSchoolAccountsWorkflow) { %>
-          <div class="forwarded-stage-filter-group school-accounts-stage-group">
-            <button
-              type="button"
-              class="btn forwarded-stage-filter-btn"
-              data-forwarded-stage-filter="new_admissions">
-              New Admissions
-              <span class="subagent-forward-tab-count" id="accountsNewAdmissionsCount">0</span>
-            </button>
+       <% if (shouldShowSchoolAccountsWorkflow) { %>
+  <div class="forwarded-stage-filter-group school-accounts-stage-group">
+    <button
+      type="button"
+      class="btn forwarded-stage-filter-btn"
+      data-forwarded-stage-filter="new_admissions">
+      New Admissions
+      <span class="subagent-forward-tab-count" id="accountsNewAdmissionsCount">0</span>
+    </button>
+  </div>
 
-            <button
-              type="button"
-              class="btn forwarded-stage-filter-btn"
-              data-forwarded-stage-filter="old_admissions">
-              Old Admissions
-              <span class="subagent-forward-tab-count" id="accountsOldAdmissionsCount">0</span>
-            </button>
-          </div>
+  <div
+    class="accounts-source-filter-group d-none"
+    id="schoolAccountsSourceFilters"
+    aria-label="School Accounts source filters">
+    <% currentAccountsSourceFilters.forEach(sourceFilter => { %>
+      <button
+        type="button"
+        class="btn accounts-source-filter-btn"
+        data-accounts-source-filter="<%= sourceFilter.value %>">
+        <%= sourceFilter.label %>
+        <span
+          class="subagent-forward-tab-count"
+          id="<%= sourceFilter.countId %>">0</span>
+      </button>
+    <% }) %>
+  </div>
 
-          <div
-            class="accounts-source-filter-group d-none"
-            id="schoolAccountsSourceFilters"
-            aria-label="School Accounts source filters">
-            <% currentAccountsSourceFilters.forEach(sourceFilter => { %>
-              <button
-                type="button"
-                class="btn accounts-source-filter-btn"
-                data-accounts-source-filter="<%= sourceFilter.value %>">
-                <%= sourceFilter.label %>
-                <span
-                  class="subagent-forward-tab-count"
-                  id="<%= sourceFilter.countId %>">0</span>
-              </button>
-            <% }) %>
-          </div>
-        <% } %>
+  <div class="forwarded-stage-filter-group school-accounts-old-stage-group">
+    <button
+      type="button"
+      class="btn forwarded-stage-filter-btn"
+      data-forwarded-stage-filter="old_admissions">
+      Old Admissions
+      <span class="subagent-forward-tab-count" id="accountsOldAdmissionsCount">0</span>
+    </button>
+  </div>
+<% } %>
 
       </div>
     </div>
@@ -1071,9 +1192,51 @@ const DEFAULT_FEE_STATUS_OPTIONS =
       </div>
     </div>
   <% } %>
+  <% if (shouldShowSchoolForwardFilters && !shouldShowSchoolAccountsWorkflow) { %>
+    <div class="accounts-pipeline-home mb-3" id="schoolForwardHome">
+      <div class="accounts-pipeline-home-heading">
+        <div>
+          <div class="accounts-pipeline-eyebrow">School Dept Workflow</div>
+          <h3 class="accounts-pipeline-title">Select a pipeline to view admissions</h3>
+          <p class="accounts-pipeline-subtitle">
+            Records are hidden by default. Open Forwarded or Not Forwarded to view only your admissions.
+          </p>
+        </div>
+      </div>
 
+      <div class="accounts-pipeline-home-grid">
+        <button
+          type="button"
+          class="accounts-pipeline-card"
+          data-school-home-filter="forwarded">
+          <span class="accounts-pipeline-card-icon">
+            <i class="bi bi-send-check"></i>
+          </span>
+          <span class="accounts-pipeline-card-content">
+            <span class="accounts-pipeline-card-title">Forwarded</span>
+            <span class="accounts-pipeline-card-hint">Admissions forwarded to Accounts workflow</span>
+          </span>
+          <span class="accounts-pipeline-card-count" id="schoolHomeForwardedCount"><%= schoolForwardedInitialCount %></span>
+        </button>
+
+        <button
+          type="button"
+          class="accounts-pipeline-card"
+          data-school-home-filter="not_forwarded">
+          <span class="accounts-pipeline-card-icon old">
+            <i class="bi bi-hourglass-split"></i>
+          </span>
+          <span class="accounts-pipeline-card-content">
+            <span class="accounts-pipeline-card-title">Not Forwarded</span>
+            <span class="accounts-pipeline-card-hint">Admissions not forwarded yet</span>
+          </span>
+          <span class="accounts-pipeline-card-count" id="schoolHomeNotForwardedCount"><%= schoolNotForwardedInitialCount %></span>
+        </button>
+      </div>
+    </div>
+  <% } %>
   <!-- TABLE -->
-  <div class="card shadow-sm admin-table-card <%= shouldShowSchoolAccountsWorkflow ? 'accounts-workspace-hidden' : '' %>" id="accountsAdmissionsWorkspace">
+  <div class="card shadow-sm admin-table-card <%= (shouldShowSchoolAccountsWorkflow || shouldShowSchoolForwardFilters) ? 'accounts-workspace-hidden' : '' %>" id="accountsAdmissionsWorkspace">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div>
     <strong>Admissions for <%= deptTitle %></strong>
@@ -1089,7 +1252,15 @@ const DEFAULT_FEE_STATUS_OPTIONS =
         Pipelines
       </button>
     <% } %>
-
+       <% if (shouldShowSchoolForwardFilters && !shouldShowSchoolAccountsWorkflow) { %>
+      <button
+        type="button"
+        id="backToSchoolForwardHomeBtn"
+        class="btn btn-sm btn-light rounded-pill px-3 border">
+        <i class="bi bi-grid-3x3-gap me-1"></i>
+        Pipelines
+      </button>
+    <% } %>
     <button
       type="button"
       id="applyRealtimeUpdatesBtn"
@@ -1456,6 +1627,60 @@ const DEFAULT_FEE_STATUS_OPTIONS =
           ''
         ).trim();
 
+        const cardForwardTimer =
+          getDashboardForwardTimer(a);
+
+        const cardForwardTimerStartedAt =
+          getDashboardForwardTimerStartedAt(cardForwardTimer);
+
+        const cardForwardTimerName =
+          getDashboardForwardTimerName(cardForwardTimer) ||
+          cardForwardedOwnerName;
+
+        const cardForwardTimerDept =
+          getDashboardForwardTimerDept(cardForwardTimer) ||
+          cardForwardedTo ||
+          '';
+
+        const cardForwardTimerType =
+          getDashboardForwardTimerType(cardForwardTimer) ||
+          getAccountsPipelineLabel(cardForwardedToType) ||
+          cardForwardedToType ||
+          '';
+
+        const cardForwardTimerDurationLabel =
+          getDashboardForwardTimerDurationLabel(cardForwardTimer);
+
+        const cardForwardTimerContext = [
+          cardForwardTimerDept,
+          cardForwardTimerType
+        ].filter(Boolean).join(' | ');
+
+        const cardForwardTimerTitle = [
+          cardForwardTimerName ? `With ${cardForwardTimerName}` : 'With selected user',
+          cardForwardTimerDept,
+          cardForwardTimerType,
+          cardForwardTimerDurationLabel
+        ].filter(Boolean).join(' | ');
+
+        const cardForwardTimerLogs =
+          Array.isArray(a.forwardTimeLogs)
+            ? a.forwardTimeLogs
+            : (
+                Array.isArray(a.forward_time_logs)
+                  ? a.forward_time_logs
+                  : (
+                      Array.isArray(a.timeLogs)
+                        ? a.timeLogs
+                        : []
+                    )
+              );
+
+        const shouldShowCardForwardTimer =
+          cardForwardStatus === 'forwarded' &&
+          cardAccountsWorkflowStage !== 'old_admissions' &&
+          !!cardForwardTimerStartedAt;
+
         const studentVal = a.studentName || a.student || '';
         const fatherVal = a.fatherName || a.father || '';
         const fatherEmailVal = a.fatherEmail || a.father_email || '';
@@ -1555,6 +1780,12 @@ const DEFAULT_FEE_STATUS_OPTIONS =
           data-registration-date="<%= registrationDateOnly || '' %>"
           data-registration-assigned-date="<%= assignedRegistrationDateOnly || '' %>"
           data-can-forward="<%= a.canShowForwardButton ? '1' : '0' %>"
+          data-forward-timer-active="<%= shouldShowCardForwardTimer ? '1' : '0' %>"
+          data-forward-timer-started-at="<%= cardForwardTimerStartedAt || '' %>"
+          data-forward-timer-name="<%= cardForwardTimerName || '' %>"
+          data-forward-timer-dept="<%= cardForwardTimerDept || '' %>"
+          data-forward-timer-type="<%= cardForwardTimerType || '' %>"
+          data-forward-time-logs='<%= JSON.stringify(cardForwardTimerLogs || []) %>'
           data-forward-display-text="<%= a.forwardDisplayText || (a.forward && a.forward.displayText) || '' %>">
 
           <div class="admission-card-top">
@@ -1663,6 +1894,21 @@ const DEFAULT_FEE_STATUS_OPTIONS =
     <% } %>
 
   <% } %>
+
+  <span
+    class="admission-forward-timer-pill <%= shouldShowCardForwardTimer ? '' : 'd-none' %>"
+    data-forward-timer-pill>
+    <i class="bi bi-stopwatch"></i>
+
+    <b class="admission-forward-timer-time" data-forward-timer-time>
+      <%= cardForwardTimerDurationLabel %>
+    </b>
+
+    <span
+      class="admission-forward-timer-tooltip"
+      data-forward-timer-tooltip>
+    </span>
+  </span>
 
   <span
     class="admission-workflow-tag <%= workflowTagClass %> <%= workflowTag ? '' : 'd-none' %>">
@@ -3382,6 +3628,35 @@ const DEFAULT_FEE_STATUS_OPTIONS =
   font-size: 13px;
 }
 
+.file-forward-timer-history{
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 11px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.file-forward-timer-title{
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #92400e;
+  font-size: 10px;
+  font-weight: 900;
+  margin-bottom: 6px;
+}
+
+.file-forward-timer-row{
+  display: grid;
+  gap: 2px;
+  padding-top: 5px;
+  margin-top: 5px;
+  border-top: 1px dashed #fde68a;
+  color: #7c2d12;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 /* ✅ Admission pipeline file filter */
 .admission-card.file-filter-hidden{
   display: none !important;
@@ -4780,6 +5055,124 @@ const DEFAULT_FEE_STATUS_OPTIONS =
   border: 1px solid #bbf7d0;
   cursor: default;
 }
+.admission-forward-timer-pill{
+  position: relative;
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 5px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #854d0e;
+  background: #fef9c3;
+  border: 1px solid #fde68a;
+  font-size: 10px;
+  line-height: 1.15;
+  font-weight: 900;
+  box-shadow: 0 8px 16px rgba(245,158,11,.12);
+  cursor: default;
+}
+
+.admission-forward-timer-pill i{
+  color: #ca8a04;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.admission-forward-timer-time{
+  color: #7c2d12;
+  font-weight: 1000;
+  white-space: nowrap;
+}
+
+.admission-forward-timer-tooltip{
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  width: 285px;
+  max-width: calc(100vw - 40px);
+  padding: 11px 12px;
+  border-radius: 14px;
+  color: #7c2d12;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  box-shadow: 0 18px 42px rgba(15,23,42,.18);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-5px);
+  transition: all .16s ease;
+  z-index: 99999;
+  pointer-events: none;
+  text-align: left;
+}
+
+.admission-forward-timer-pill:hover .admission-forward-timer-tooltip{
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.timer-tooltip-title{
+  display: block;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 1000;
+  margin-bottom: 7px;
+}
+
+.timer-tooltip-section-title{
+  display: block;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px dashed #fde68a;
+  color: #92400e;
+  font-size: 10px;
+  font-weight: 1000;
+}
+
+.timer-tooltip-row{
+  display: block;
+  color: #7c2d12;
+  font-size: 10px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.timer-tooltip-row b{
+  color: #7c2d12;
+  font-weight: 1000;
+}
+
+.admission-forward-timer-note{
+  margin-top: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #7c2d12;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.admission-forward-timer-note i{
+  color: #ca8a04;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.admission-forward-current-holder,
+.admission-forward-current-duration{
+  color: #7c2d12;
+  font-weight: 1000;
+}
+
+.admission-forward-current-context{
+  color: #92400e;
+  font-weight: 800;
+}
 .admission-forward-note{
   margin-top: 10px;
   padding-top: 10px;
@@ -5118,7 +5511,12 @@ const DEFAULT_FEE_STATUS_OPTIONS =
   padding-left: 8px;
   border-left: 1px solid #bfdbfe;
 }
-
+.school-not-forwarded-filter-group,
+.school-accounts-old-stage-group{
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid #bfdbfe;
+}
 .accounts-source-filter-group{
   display: flex;
   align-items: center;
@@ -6549,6 +6947,104 @@ const DEFAULT_FEE_STATUS_OPTIONS =
 
     closeBtn.addEventListener('click', close);
   })();
+
+  (function () {
+    const STORAGE_KEY = 'ivsFeeWorkflowForwardNotice';
+
+    function cleanText(value) {
+      return String(value || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function readForwardNotice() {
+      try {
+        const raw = window.sessionStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function removeForwardNotice() {
+      try {
+        window.sessionStorage.removeItem(STORAGE_KEY);
+      } catch (error) {}
+    }
+
+    function buildForwardMessage(notice) {
+      const existingMessage = cleanText(notice && notice.message);
+      if (existingMessage) return existingMessage;
+
+      const studentText =
+        cleanText(notice && notice.studentText) ||
+        (
+          Array.isArray(notice && notice.studentNames) &&
+          notice.studentNames.length
+            ? notice.studentNames.map(cleanText).filter(Boolean).join(', ')
+            : ''
+        ) ||
+        'this student';
+
+      const targetUserName =
+        cleanText(notice && notice.targetUserName) ||
+        'selected user';
+
+      const departmentName =
+        cleanText(notice && notice.departmentName) ||
+        'School Accounts Dept';
+
+      const pipelineType =
+        cleanText(notice && notice.pipelineType) ||
+        'selected pipeline';
+
+      return `The admission of ${studentText} has been forwarded to ${targetUserName} in ${departmentName}, ${pipelineType} pipeline.`;
+    }
+
+    function showForwardNotice() {
+      const notice = readForwardNotice();
+
+      if (
+        !notice ||
+        notice.type !== 'fee_workflow_forward_success'
+      ) {
+        return;
+      }
+
+      removeForwardNotice();
+
+      const createdAt = Number(notice.createdAt || 0);
+      const isOldNotice =
+        createdAt > 0 &&
+        Date.now() - createdAt > 5 * 60 * 1000;
+
+      if (isOldNotice) return;
+
+      const title =
+        cleanText(notice.title) ||
+        'Admission Forwarded Successfully';
+
+      const message = buildForwardMessage(notice);
+
+      setTimeout(function () {
+        if (typeof window.showUploadFlash === 'function') {
+          window.showUploadFlash('success', title, message);
+        } else {
+          alert(message || title);
+        }
+      }, 250);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', showForwardNotice);
+    } else {
+      showForwardNotice();
+    }
+  })();
+
 /* ✅ Apply colors to Current Status + Fee Status selects (Admin) */
   (function () {
     function applyStatusClass(sel) {
@@ -7956,6 +8452,24 @@ if (editBillingStatusSaveBtn) {
     }
 
     function normalizeFileItem(item) {
+      const forward =
+        item.forward || {};
+
+      const currentForwardTimer =
+        item.currentForwardTimer ||
+        item.forwardTimer ||
+        forward.currentTimer ||
+        forward.timer ||
+        null;
+
+      const forwardTimeLogs = Array.isArray(item.forwardTimeLogs)
+        ? item.forwardTimeLogs
+        : (
+            Array.isArray(item.timeLogs)
+              ? item.timeLogs
+              : []
+          );
+
       return {
         uploadId: item.uploadId || item.id || '',
         admissionId: item.admissionId || '',
@@ -7970,8 +8484,99 @@ if (editBillingStatusSaveBtn) {
         dept: item.dept || '',
         grade: item.grade || '',
         registrationNumber: item.registrationNumber || '',
-        familyNumber: item.familyNumber || ''
+        familyNumber: item.familyNumber || '',
+        currentForwardTimer,
+        forwardTimeLogs
       };
+    }
+
+    function getFileTimerLogName(log = {}) {
+      return String(
+        log.name ||
+        log.holderUserName ||
+        log.holder_user_name ||
+        log.userName ||
+        log.user_name ||
+        ''
+      ).trim();
+    }
+
+    function getFileTimerLogDept(log = {}) {
+      return String(
+        log.department ||
+        log.holderDepartment ||
+        log.holder_department ||
+        log.dept ||
+        ''
+      ).trim();
+    }
+
+    function getFileTimerLogType(log = {}) {
+      return String(
+        log.type ||
+        log.holderType ||
+        log.holder_type ||
+        ''
+      ).trim();
+    }
+
+    function getFileTimerLogDuration(log = {}) {
+      const savedLabel = String(
+        log.durationLabel ||
+        log.duration_label ||
+        ''
+      ).trim();
+
+      if (savedLabel) return savedLabel;
+
+      const seconds = Number(
+        log.durationSeconds ||
+        log.duration_seconds ||
+        0
+      );
+
+      const totalMinutes = Math.floor(Math.max(0, seconds) / 60);
+      const days = Math.floor(totalMinutes / 1440);
+      const hours = Math.floor((totalMinutes % 1440) / 60);
+      const minutes = totalMinutes % 60;
+
+      return `${days}d ${hours}h ${minutes}m`;
+    }
+
+    function renderForwardTimerLogsForFile(item = {}) {
+      const logs = Array.isArray(item.forwardTimeLogs)
+        ? item.forwardTimeLogs
+        : [];
+
+      if (!logs.length) {
+        return '';
+      }
+
+      const rows = logs.map(log => {
+        const name = getFileTimerLogName(log) || 'Selected user';
+        const dept = getFileTimerLogDept(log) || '-';
+        const type = getFileTimerLogType(log) || '-';
+        const duration = getFileTimerLogDuration(log);
+
+        return `
+          <div class="file-forward-timer-row">
+            <span><b>Name:</b> ${escapeHtml(name)}</span>
+            <span><b>Dept:</b> ${escapeHtml(dept)}</span>
+            <span><b>Type:</b> ${escapeHtml(type)}</span>
+            <span><b>Time:</b> ${escapeHtml(duration)}</span>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="file-forward-timer-history">
+          <div class="file-forward-timer-title">
+            <i class="bi bi-clock-history"></i>
+            Forward Time History
+          </div>
+          ${rows}
+        </div>
+      `;
     }
     function getAdmissionCardUploadState(card) {
   if (!card) return 'none';
@@ -8120,6 +8725,7 @@ function applyAdmissionPipelineFileFilter(filter) {
               <div><b>Added by:</b> ${escapeHtml(item.addedBy)}${item.addedByRole ? ' (' + escapeHtml(item.addedByRole).replace(/_/g, ' ') + ')' : ''}</div>
               <div><b>File:</b> ${escapeHtml(item.fileName)}</div>
               ${item.uploadedAt ? `<div><b>Date:</b> ${escapeHtml(item.uploadedAt)}</div>` : ''}
+              ${renderForwardTimerLogsForFile(item)}
             </div>
           </button>
         `;
@@ -9389,6 +9995,437 @@ document.addEventListener('click', function (e) {
       note.classList.remove("d-none");
     }
 
+    function parseForwardTimerClientDate(value = "") {
+      const raw = String(value || "").trim();
+      if (!raw) return null;
+
+      const direct = new Date(raw);
+      if (!Number.isNaN(direct.getTime())) {
+        return direct;
+      }
+
+      const sqliteLike = new Date(raw.replace(" ", "T"));
+      if (!Number.isNaN(sqliteLike.getTime())) {
+        return sqliteLike;
+      }
+
+      return null;
+    }
+
+    function formatForwardTimerClientDuration(seconds = 0) {
+      const totalSeconds = Math.max(0, Number(seconds || 0));
+      const totalMinutes = Math.floor(totalSeconds / 60);
+      const days = Math.floor(totalMinutes / 1440);
+      const hours = Math.floor((totalMinutes % 1440) / 60);
+      const minutes = totalMinutes % 60;
+
+      return `${days}d ${hours}h ${minutes}m`;
+    }
+
+    function getForwardTimerFromAdmission(admission = {}) {
+      const forward = admission?.forward || {};
+
+      return (
+        admission?.currentForwardTimer ||
+        admission?.forwardTimer ||
+        forward?.currentTimer ||
+        forward?.forwardTimer ||
+        forward?.timer ||
+        null
+      );
+    }
+
+    function getForwardTimerStartedAt(timer = {}) {
+      return String(
+        timer?.startedAt ||
+        timer?.started_at ||
+        timer?.startAt ||
+        timer?.started ||
+        ""
+      ).trim();
+    }
+
+    function getForwardTimerName(timer = {}, card = null) {
+      return String(
+        timer?.name ||
+        timer?.holderUserName ||
+        timer?.holder_user_name ||
+        timer?.userName ||
+        timer?.user_name ||
+        card?.getAttribute("data-forward-timer-name") ||
+        card?.getAttribute("data-forwarded-owner-user-name") ||
+        ""
+      ).trim();
+    }
+
+    function getForwardTimerDept(timer = {}, card = null) {
+      return String(
+        timer?.department ||
+        timer?.holderDepartment ||
+        timer?.holder_department ||
+        timer?.dept ||
+        card?.getAttribute("data-forward-timer-dept") ||
+        card?.getAttribute("data-forwarded-to") ||
+        ""
+      ).trim();
+    }
+
+    function getForwardTimerType(timer = {}, card = null) {
+      return String(
+        timer?.type ||
+        timer?.holderType ||
+        timer?.holder_type ||
+        timer?.forwardType ||
+        card?.getAttribute("data-forward-timer-type") ||
+        card?.getAttribute("data-forwarded-to-type") ||
+        ""
+      ).trim();
+    }
+
+    function getForwardTimerDurationLabelFromStart(startedAt = "") {
+      const parsed = parseForwardTimerClientDate(startedAt);
+      if (!parsed) return "0d 0h 0m";
+
+      return formatForwardTimerClientDuration(
+        Math.floor((Date.now() - parsed.getTime()) / 1000)
+      );
+    }
+
+    function getForwardTimerContextText(dept = "", type = "") {
+      return [
+        String(dept || "").trim(),
+        getAccountsPipelineLabelClient(type) || String(type || "").trim(),
+      ].filter(Boolean).join(" | ");
+    }
+
+       function getForwardTimerLogsFromAdmission(admission = {}) {
+      const forward = admission?.forward || {};
+
+      if (Array.isArray(admission?.forwardTimeLogs)) {
+        return admission.forwardTimeLogs;
+      }
+
+      if (Array.isArray(admission?.forward_time_logs)) {
+        return admission.forward_time_logs;
+      }
+
+      if (Array.isArray(admission?.timeLogs)) {
+        return admission.timeLogs;
+      }
+
+      if (Array.isArray(forward?.timeLogs)) {
+        return forward.timeLogs;
+      }
+
+      if (Array.isArray(forward?.forwardTimeLogs)) {
+        return forward.forwardTimeLogs;
+      }
+
+      return [];
+    }
+
+    function getForwardTimerLogsFromCard(card) {
+      if (!card) return [];
+
+      const raw =
+        card.getAttribute("data-forward-time-logs") || "";
+
+      if (!raw) return [];
+
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function getForwardTimerLogName(log = {}) {
+      return String(
+        log.name ||
+        log.holderUserName ||
+        log.holder_user_name ||
+        log.userName ||
+        log.user_name ||
+        ""
+      ).trim();
+    }
+
+    function getForwardTimerLogDept(log = {}) {
+      return String(
+        log.department ||
+        log.holderDepartment ||
+        log.holder_department ||
+        log.dept ||
+        ""
+      ).trim();
+    }
+
+    function getForwardTimerLogType(log = {}) {
+      return String(
+        log.type ||
+        log.holderType ||
+        log.holder_type ||
+        log.forwardType ||
+        ""
+      ).trim();
+    }
+
+    function getForwardTimerLogDuration(log = {}) {
+      const savedLabel = String(
+        log.durationLabel ||
+        log.duration_label ||
+        ""
+      ).trim();
+
+      if (savedLabel) {
+        return savedLabel;
+      }
+
+      const seconds = Number(
+        log.durationSeconds ||
+        log.duration_seconds ||
+        0
+      );
+
+      return formatForwardTimerClientDuration(seconds);
+    }
+
+    function renderForwardTimerTooltip({
+      name = "",
+      contextText = "",
+      durationLabel = "",
+      logs = [],
+    } = {}) {
+      const cleanLogs = Array.isArray(logs) ? logs : [];
+
+      const historyRows = cleanLogs.map(log => {
+        const logName =
+          getForwardTimerLogName(log) || "Selected user";
+
+        const logDept =
+          getForwardTimerLogDept(log) || "-";
+
+        const rawType =
+          getForwardTimerLogType(log);
+
+        const logType =
+          getAccountsPipelineLabelClient(rawType) ||
+          rawType ||
+          "-";
+
+        const logDuration =
+          getForwardTimerLogDuration(log);
+
+        return `
+          <span class="timer-tooltip-section-title">Previous Holder</span>
+          <span class="timer-tooltip-row"><b>Name:</b> ${escapeHtml(logName)}</span>
+          <span class="timer-tooltip-row"><b>Dept:</b> ${escapeHtml(logDept)}</span>
+          <span class="timer-tooltip-row"><b>Type:</b> ${escapeHtml(logType)}</span>
+          <span class="timer-tooltip-row"><b>Time:</b> ${escapeHtml(logDuration)}</span>
+        `;
+      }).join("");
+
+      return `
+        <span class="timer-tooltip-title">Current Timer</span>
+        <span class="timer-tooltip-row"><b>Name:</b> ${escapeHtml(name || "selected user")}</span>
+        ${contextText ? `<span class="timer-tooltip-row"><b>Target:</b> ${escapeHtml(contextText)}</span>` : ""}
+        <span class="timer-tooltip-row"><b>Time:</b> ${escapeHtml(durationLabel)}</span>
+        ${historyRows || ""}
+      `;
+    }
+
+    function ensureAdmissionForwardTimerPill(card) {
+      if (!card) return null;
+
+      let pill = card.querySelector("[data-forward-timer-pill]");
+      if (pill) return pill;
+
+      const topRight = card.querySelector(".admission-card-top-right");
+      if (!topRight) return null;
+
+      pill = document.createElement("span");
+      pill.className = "admission-forward-timer-pill d-none";
+      pill.setAttribute("data-forward-timer-pill", "1");
+      pill.innerHTML = `
+        <i class="bi bi-stopwatch"></i>
+        <b class="admission-forward-timer-time" data-forward-timer-time></b>
+        <span class="admission-forward-timer-tooltip" data-forward-timer-tooltip></span>
+      `;
+
+      const workflowTag = topRight.querySelector(".admission-workflow-tag");
+      const rolePill = topRight.querySelector(".admission-role-pill");
+
+      if (workflowTag) {
+        topRight.insertBefore(pill, workflowTag);
+      } else if (rolePill) {
+        topRight.insertBefore(pill, rolePill);
+      } else {
+        topRight.appendChild(pill);
+      }
+
+      return pill;
+    }
+
+    function ensureAdmissionForwardTimerNote(card) {
+      if (!card) return null;
+
+      const existingNote =
+        card.querySelector("[data-forward-timer-note]");
+
+      if (existingNote) {
+        existingNote.remove();
+      }
+
+      return null;
+    }
+
+    function refreshAdmissionForwardTimerCard(card) {
+      if (!card) return;
+
+      const isActive =
+        card.getAttribute("data-forward-timer-active") === "1";
+
+      const startedAt =
+        card.getAttribute("data-forward-timer-started-at") || "";
+
+      const name =
+        card.getAttribute("data-forward-timer-name") || "selected user";
+
+      const dept =
+        card.getAttribute("data-forward-timer-dept") || "";
+
+      const type =
+        card.getAttribute("data-forward-timer-type") || "";
+
+      const contextText =
+        getForwardTimerContextText(dept, type);
+
+      const logs =
+        getForwardTimerLogsFromCard(card);
+
+      const pill = ensureAdmissionForwardTimerPill(card);
+      const note = ensureAdmissionForwardTimerNote(card);
+
+      if (!isActive || !startedAt) {
+        if (pill) pill.classList.add("d-none");
+        if (note) note.classList.add("d-none");
+        return;
+      }
+
+      const durationLabel =
+        getForwardTimerDurationLabelFromStart(startedAt);
+
+      if (pill) {
+        pill.querySelectorAll("[data-forward-timer-time]").forEach(el => {
+          el.textContent = durationLabel;
+        });
+
+        const tooltip =
+          pill.querySelector("[data-forward-timer-tooltip]");
+
+        if (tooltip) {
+          tooltip.innerHTML = renderForwardTimerTooltip({
+            name,
+            contextText,
+            durationLabel,
+            logs,
+          });
+        }
+
+        pill.removeAttribute("title");
+        pill.classList.remove("d-none");
+      }
+
+      if (note) {
+        note.classList.add("d-none");
+      }
+    }
+
+    function refreshAllAdmissionForwardTimers() {
+      document
+        .querySelectorAll(".admission-card")
+        .forEach(refreshAdmissionForwardTimerCard);
+    }
+
+    function upsertAdmissionForwardTimer(card, admission = {}, options = {}) {
+      if (!card) return;
+
+      const timer =
+        getForwardTimerFromAdmission(admission) ||
+        (
+          admission &&
+          (
+            admission.startedAt ||
+            admission.started_at ||
+            admission.holderUserName ||
+            admission.holder_user_name
+          )
+            ? admission
+            : null
+        );
+
+      const forwardStatus = String(
+        options.forwardStatus ||
+        admission?.forwardStatus ||
+        admission?.forward?.status ||
+        card.getAttribute("data-forward-status") ||
+        ""
+      ).trim().toLowerCase();
+
+      const workflowStage = String(
+        options.workflowStage ||
+        admission?.accountsWorkflowStage ||
+        admission?.accounts_workflow_stage ||
+        admission?.forward?.workflowStage ||
+        card.getAttribute("data-accounts-workflow-stage") ||
+        ""
+      ).trim().toLowerCase();
+
+      const startedAt =
+        getForwardTimerStartedAt(timer || {});
+
+      const shouldShow =
+        forwardStatus === "forwarded" &&
+        workflowStage !== "old_admissions" &&
+        !!timer &&
+        !!startedAt;
+
+      if (!shouldShow) {
+        card.setAttribute("data-forward-timer-active", "0");
+        card.setAttribute("data-forward-timer-started-at", "");
+        refreshAdmissionForwardTimerCard(card);
+        return;
+      }
+
+      const name =
+        getForwardTimerName(timer, card) || "selected user";
+
+      const dept =
+        getForwardTimerDept(timer, card);
+
+      const type =
+        getForwardTimerType(timer, card);
+
+      const logs =
+        getForwardTimerLogsFromAdmission(admission);
+
+      card.setAttribute("data-forward-timer-active", "1");
+      card.setAttribute("data-forward-timer-started-at", startedAt);
+      card.setAttribute("data-forward-timer-name", name);
+      card.setAttribute("data-forward-timer-dept", dept);
+      card.setAttribute("data-forward-timer-type", type);
+
+      if (logs.length) {
+        card.setAttribute(
+          "data-forward-time-logs",
+          JSON.stringify(logs)
+        );
+      }
+
+      refreshAdmissionForwardTimerCard(card);
+    }
+
     function syncForwardAction(card, admission = {}
     ) {
       if (!card) return;
@@ -9817,6 +10854,11 @@ document.addEventListener('click', function (e) {
         forwardDisplayText
       );
 
+      upsertAdmissionForwardTimer(card, admission, {
+        forwardStatus,
+        workflowStage: accountsWorkflowStage,
+      });
+
       upsertWorkflowTag(card, workflowTag);
       upsertWorkflowDates(card, registrationDate, assignedDate);
       upsertAccountsWorkflowMeta(card, {
@@ -9864,6 +10906,26 @@ document.addEventListener('click', function (e) {
 
     window.upsertAdmissionForwardDisplayText =
       upsertForwardDisplayText;
+
+    window.upsertAdmissionForwardTimer =
+      upsertAdmissionForwardTimer;
+
+    window.refreshAllAdmissionForwardTimers =
+      refreshAllAdmissionForwardTimers;
+
+    document.addEventListener(
+      "DOMContentLoaded",
+      refreshAllAdmissionForwardTimers
+    );
+
+    if (document.readyState !== "loading") {
+      refreshAllAdmissionForwardTimers();
+    }
+
+    setInterval(
+      refreshAllAdmissionForwardTimers,
+      60000
+    );
 
     const ACCOUNTS_PIPELINE_TYPES = new Set([
       "print_record_update",
@@ -10151,6 +11213,8 @@ document.addEventListener('click', function (e) {
         schoolNotVerifiedCount: finalSchoolNotVerified,
         schoolVerifiedCount: finalSchoolVerified,
         schoolNotReceivedCount: finalSchoolNotReceived,
+        schoolHomeForwardedCount: finalSchoolForwarded,
+        schoolHomeNotForwardedCount: finalSchoolNotForwarded,
         accountsNewAdmissionsCount: finalAccountsNewAdmissions,
         accountsOldAdmissionsCount: finalAccountsOldAdmissions,
         accountsHomeNewCount: finalAccountsNewAdmissions,
@@ -10294,6 +11358,44 @@ document.addEventListener('click', function (e) {
     }
 
     window.showAccountsPipelineHome = showAccountsPipelineHome;
+       function showSchoolForwardWorkspace() {
+      if (!shouldShowSchoolForwardFilters || shouldShowSchoolAccountsWorkflow) return;
+
+      const home = document.getElementById("schoolForwardHome");
+      const workspace = document.getElementById("accountsAdmissionsWorkspace");
+
+      if (home) home.classList.add("d-none");
+      if (workspace) workspace.classList.remove("accounts-workspace-hidden");
+    }
+
+    function showSchoolForwardHome() {
+      if (!shouldShowSchoolForwardFilters || shouldShowSchoolAccountsWorkflow) return;
+
+      const home = document.getElementById("schoolForwardHome");
+      const workspace = document.getElementById("accountsAdmissionsWorkspace");
+
+      if (home) home.classList.remove("d-none");
+      if (workspace) workspace.classList.add("accounts-workspace-hidden");
+
+      activeForwardMainFilter = "";
+      activeForwardSubFilter = "";
+      activeAccountsStageFilter = "";
+      activeAccountsSourceFilter = "";
+
+      document.querySelectorAll(".admission-card").forEach(card => {
+        card.classList.add("forward-filter-hidden");
+      });
+
+      setActiveForwardFilter("");
+      setActiveForwardSubFilter("");
+      setActiveForwardStageFilter("");
+      setActiveAccountsSourceFilter("");
+      toggleForwardedSubfilters(false);
+      toggleAccountsSourceFilters(false);
+      updateForwardCounts();
+    }
+
+    window.showSchoolForwardHome = showSchoolForwardHome;
 
     function applySchoolForwardFilter(
       filter,
@@ -10323,6 +11425,8 @@ document.addEventListener('click', function (e) {
                 : "not_verified"
             )
           : "";
+
+      showSchoolForwardWorkspace();
 
       activeForwardMainFilter = finalFilter;
       activeForwardSubFilter = finalSubFilter;
@@ -10443,7 +11547,19 @@ document.addEventListener('click', function (e) {
       const stageFilter = homeButton.getAttribute("data-accounts-home-stage") || "new_admissions";
       applySchoolAccountsWorkflowFilter(stageFilter, "");
     });
+        document.addEventListener("click", function (event) {
+      const homeButton = event.target.closest("[data-school-home-filter]");
+      if (!homeButton) return;
 
+      event.preventDefault();
+
+      const filter = homeButton.getAttribute("data-school-home-filter") || "";
+
+      applySchoolForwardFilter(
+        filter,
+        filter === "forwarded" ? "not_verified" : ""
+      );
+    });
     document.addEventListener("click", function (event) {
       const backButton = event.target.closest("#backToAccountsPipelinesBtn");
       if (!backButton) return;
@@ -10451,7 +11567,13 @@ document.addEventListener('click', function (e) {
       event.preventDefault();
       showAccountsPipelineHome();
     });
+       document.addEventListener("click", function (event) {
+      const backButton = event.target.closest("#backToSchoolForwardHomeBtn");
+      if (!backButton) return;
 
+      event.preventDefault();
+      showSchoolForwardHome();
+    });
     document.addEventListener("click", function (event) {
       const filterButton = event.target.closest(
         "[data-school-forward-filter]"
@@ -11658,29 +12780,16 @@ document.addEventListener('click', function (e) {
     }
 
     function syncAccountsEmptyState(stage) {
-      const grid = document.querySelector(".admission-card-grid");
-      if (!grid) return;
+  const grid = document.querySelector(".admission-card-grid");
+  if (!grid) return;
 
-      const finalStage = stage === "old_admissions" ? "old_admissions" : "new_admissions";
-      const visibleCards = Array.from(grid.querySelectorAll(".admission-card"))
-        .filter(card =>
-          !card.classList.contains("forward-filter-hidden") &&
-          !card.classList.contains("workflow-date-filter-hidden") &&
-          !card.classList.contains("file-filter-hidden")
-        );
+  const empty = grid.querySelector(".accounts-old-empty");
 
-      let empty = grid.querySelector(".accounts-old-empty");
-      if (!empty) {
-        empty = document.createElement("div");
-        empty.className = "accounts-old-empty d-none";
-        grid.appendChild(empty);
-      }
-
-      empty.textContent = finalStage === "old_admissions"
-        ? "No completed Old Admissions found for your workflow history."
-        : "No admissions found for the selected source.";
-      empty.classList.toggle("d-none", visibleCards.length > 0);
-    }
+  if (empty) {
+    empty.classList.add("d-none");
+    empty.remove();
+  }
+}
 
     async function loadOldAdmissionsCards() {
       if (!shouldShowSchoolAccountsWorkflow || oldAdmissionsLoaded || oldAdmissionsLoading) return;
@@ -11807,6 +12916,10 @@ document.addEventListener('click', function (e) {
 
       if (shouldShowSchoolAccountsWorkflow) {
         showAccountsPipelineHome();
+      }
+
+      if (shouldShowSchoolForwardFilters && !shouldShowSchoolAccountsWorkflow) {
+        showSchoolForwardHome();
       }
     }
 

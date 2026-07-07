@@ -1227,6 +1227,42 @@ let savedMasterBankName = <%- JSON.stringify(masterBankNameSafe) %>;
 const canEditBank = <%- JSON.stringify(!!canEditBank) %>;
 const isPaidSlipWorkflowUser = <%- JSON.stringify(!!isPaidSlipWorkflowUserSafe) %>;
 const feeCollectionBackUrl = <%- JSON.stringify(backUrl) %>;
+const feeWorkflowDashboardUrl = '/dashboard';
+const feeWorkflowDeptName = 'School Accounts Dept';
+const feeWorkflowFromUserName = <%- JSON.stringify(
+  String(U?.name || U?.username || U?.email || 'Current User').trim()
+) %>;
+
+const feeWorkflowAdmissionNamesById = <%- JSON.stringify(
+  rowsSafe.reduce((acc, item) => {
+    const id = Number(item?.id || item?.admissionId || 0);
+    const name = String(
+      item?.student_name ||
+      item?.studentName ||
+      item?.name ||
+      ''
+    ).trim();
+
+    if (id && name) {
+      acc[id] = name;
+    }
+
+    return acc;
+  }, {})
+) %>;
+
+const feeWorkflowDefaultStudentNames = <%- JSON.stringify(
+  [...new Set(
+    rowsSafe
+      .map((item) => String(
+        item?.student_name ||
+        item?.studentName ||
+        item?.name ||
+        ''
+      ).trim())
+      .filter(Boolean)
+  )]
+) %>;
 
 const verificationApprovedInput = document.getElementById('verificationApproved');
 const collectionAccountApprovedInput = document.getElementById('collectionAccountApproved');
@@ -1281,7 +1317,112 @@ let awaitingRecordUpdateForward = false;
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
     }
+    function cleanWorkflowText(value = '') {
+      return String(value || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
 
+    function formatWorkflowPipelineType(value = '') {
+      const key = String(value || '').trim().toLowerCase();
+
+      if (key === 'print_record_update') {
+        return 'Print + Record Update';
+      }
+
+      if (key === 'verification_registration') {
+        return 'Verification & Registration';
+      }
+
+      if (key === 'paid_slip') {
+        return 'Paid Slip';
+      }
+
+      return cleanWorkflowText(value)
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase()) || '-';
+    }
+
+    function getWorkflowSelectedTargetName() {
+      const selectedOption =
+        workflowTargetUserId?.options?.[workflowTargetUserId.selectedIndex];
+
+      const selectedText = cleanWorkflowText(
+        selectedOption?.textContent || ''
+      );
+
+      if (
+        !selectedText ||
+        selectedText.toLowerCase().includes('select')
+      ) {
+        return 'selected user';
+      }
+
+      return selectedText;
+    }
+
+    function getWorkflowStudentNames() {
+      const namesFromIds = pendingWorkflowAdmissionIds
+        .map((id) => {
+          return feeWorkflowAdmissionNamesById[String(id)] ||
+            feeWorkflowAdmissionNamesById[Number(id)] ||
+            '';
+        })
+        .map((name) => cleanWorkflowText(name))
+        .filter(Boolean);
+
+      const finalNames =
+        namesFromIds.length
+          ? namesFromIds
+          : feeWorkflowDefaultStudentNames;
+
+      return [...new Set(finalNames)]
+        .map((name) => cleanWorkflowText(name))
+        .filter(Boolean);
+    }
+
+    function buildWorkflowForwardNotice() {
+      const studentNames = getWorkflowStudentNames();
+      const studentText =
+        studentNames.length
+          ? studentNames.join(', ')
+          : 'this student';
+
+      const targetUserName = getWorkflowSelectedTargetName();
+      const pipelineType = formatWorkflowPipelineType(workflowToType);
+      const destinationLabel = cleanWorkflowText(
+        workflowDestinationLabel?.textContent || pipelineType
+      );
+
+      const message =
+        `The admission of ${studentText} has been forwarded to ${targetUserName} in ${feeWorkflowDeptName}, ${pipelineType} pipeline.`;
+
+      return {
+        type: 'fee_workflow_forward_success',
+        title: 'Admission Forwarded Successfully',
+        message,
+        studentNames,
+        studentText,
+        targetUserName,
+        departmentName: feeWorkflowDeptName,
+        pipelineType,
+        destinationLabel,
+        forwardedBy: feeWorkflowFromUserName,
+        mode: workflowMode,
+        createdAt: Date.now(),
+      };
+    }
+
+    function saveWorkflowForwardNotice() {
+      try {
+        window.sessionStorage.setItem(
+          'ivsFeeWorkflowForwardNotice',
+          JSON.stringify(buildWorkflowForwardNotice())
+        );
+      } catch (error) {
+        console.warn('Forward notice could not be saved.', error);
+      }
+    }
     function setApprovalChip(chip, label, state) {
       if (!chip) return;
 
@@ -1909,6 +2050,8 @@ let awaitingRecordUpdateForward = false;
 
         getWorkflowModalInstance()?.hide();
 
+        saveWorkflowForwardNotice();
+
         showMsg(
           'success',
           workflowMode === 'correction'
@@ -1917,7 +2060,12 @@ let awaitingRecordUpdateForward = false;
         );
 
         setTimeout(() => {
-          window.location.href = feeCollectionBackUrl;
+          if (isPaidSlipWorkflowUser) {
+            window.location.href = feeWorkflowDashboardUrl;
+            return;
+          }
+
+          window.location.reload();
         }, 700);
       } catch (error) {
         setWorkflowModalError(

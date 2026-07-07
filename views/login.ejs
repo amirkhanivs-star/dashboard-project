@@ -176,10 +176,10 @@ body::after{
   z-index:3;
   width:100%;
   min-height:100vh;
-  display:flex;
+  display:grid;
+  grid-template-columns:minmax(480px, 1.1fr) minmax(390px, 450px) minmax(250px, 340px);
   align-items:center;
-  justify-content:space-between;
-  gap:40px;
+  gap:34px;
   padding:36px 52px;
 }
 
@@ -310,12 +310,100 @@ body::after{
   color:var(--active);
 }
 
+/* CENTER ROBOT VISUAL */
+.center-visual{
+  min-height:560px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  position:relative;
+  pointer-events:auto;
+  transform:translateY(200px);
+  cursor:pointer;
+}
+
+.center-visual::before{
+  content:"";
+  position:absolute;
+  width:380px;
+  height:380px;
+  border-radius:999px;
+  background:
+    radial-gradient(circle, var(--active-soft), transparent 68%);
+  filter:blur(8px);
+  opacity:.95;
+  animation:robotGlowFloat 8s ease-in-out infinite;
+}
+
+.center-visual::after{
+  content:"";
+  position:absolute;
+  width:270px;
+  height:270px;
+  border-radius:999px;
+  background:rgba(255,255,255,.58);
+  filter:blur(18px);
+  opacity:.9;
+}
+
+.robot-frame{
+  position:relative;
+  z-index:2;
+  width:min(100%, 350px);
+  padding:0;
+  border-radius:0;
+  background:transparent;
+  border:0;
+  box-shadow:none;
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+}
+
+.robot-frame::before{
+  display:none;
+}
+
+.login-robot{
+  display:block;
+  width:100%;
+  height:auto;
+  border-radius:0;
+  object-fit:contain;
+  mix-blend-mode:multiply;
+  filter:drop-shadow(0 22px 26px rgba(15,23,42,.18));
+  animation:loginRobotFloat 6s ease-in-out infinite;
+}
+.center-visual::before,
+.center-visual::after{
+  pointer-events:none;
+}
+
+.robot-frame{
+  transition:transform .25s ease, filter .25s ease;
+}
+
+.center-visual:hover .robot-frame{
+  transform:translateY(-4px) scale(1.03);
+}
+
+.center-visual:active .robot-frame{
+  transform:translateY(-1px) scale(.99);
+}
+@keyframes loginRobotFloat{
+  0%,100%{ transform:translateY(0); }
+  50%{ transform:translateY(-12px); }
+}
+
+@keyframes robotGlowFloat{
+  0%,100%{ transform:translateY(0) scale(1); }
+  50%{ transform:translateY(-14px) scale(1.04); }
+}
+
 /* RIGHT LOGIN CARD */
 .right{
   width:100%;
-  max-width:520px;
   display:flex;
-  justify-content:flex-end;
+  justify-content:center;
 }
 
 .login-card{
@@ -859,11 +947,25 @@ body::after{
 @media (max-width: 1200px){
   .wrapper{
     padding:30px 30px 70px;
-    gap:28px;
+    gap:24px;
   }
 
   .heading{
     font-size:64px;
+  }
+
+  .center-visual{
+    flex-basis:270px;
+    min-height:470px;
+  }
+
+  .robot-frame{
+    width:min(100%, 270px);
+    border-radius:28px;
+  }
+
+  .login-robot{
+    border-radius:22px;
   }
 
   .login-card{
@@ -878,6 +980,7 @@ body::after{
 
   .wrapper{
     min-height:100vh;
+    display:flex;
     flex-direction:column;
     align-items:flex-start;
     justify-content:center;
@@ -904,6 +1007,34 @@ body::after{
 
   .sub{
     font-size:16px;
+  }
+  .center-visual{
+    width:100%;
+    flex:0 0 auto;
+    min-height:auto;
+    margin:-6px 0 4px;
+    transform:none;
+  }
+
+  .center-visual::before{
+    width:280px;
+    height:280px;
+  }
+
+  .center-visual::after{
+    width:200px;
+    height:200px;
+  }
+
+  .robot-frame{
+    width:min(78vw, 280px);
+    padding:8px;
+    border-radius:26px;
+  }
+
+  .login-robot{
+    border-radius:21px;
+    animation:none;
   }
 
   .right{
@@ -946,6 +1077,30 @@ body::after{
     font-size:38px;
   }
 
+  .center-visual{
+    margin:-8px 0 2px;
+  }
+
+  .center-visual::before{
+    width:220px;
+    height:220px;
+  }
+
+  .center-visual::after{
+    width:165px;
+    height:165px;
+  }
+
+  .robot-frame{
+    width:min(82vw, 220px);
+    padding:7px;
+    border-radius:22px;
+  }
+
+  .login-robot{
+    border-radius:18px;
+  }
+
   .login-card{
     padding:24px 18px;
     border-radius:24px;
@@ -962,6 +1117,504 @@ body::after{
 
   .btn-login{
     padding:13px;
+  }
+}
+/* DEVELOPER PROFILE PREVIEW - SAME AS DEVELOPER DASHBOARD CARD */
+.dev-profile-overlay{
+  position:fixed;
+  inset:0;
+  z-index:10001;
+  background:rgba(15,23,42,.52);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+}
+
+.dev-profile-overlay.show{
+  display:flex;
+}
+
+.dev-profile-overlay .developer-profile-card{
+  width:min(94vw, 980px);
+}
+
+.developer-profile-card{
+  position:relative;
+  overflow:hidden;
+  border-radius:30px;
+  border:1px solid rgba(255,255,255,.78);
+  background:linear-gradient(
+    135deg,
+    rgba(237,233,254,.99) 0%,
+    rgba(243,232,255,.99) 48%,
+    rgba(252,231,243,.99) 100%
+  );
+  box-shadow:
+    0 35px 100px rgba(23,16,54,.34),
+    0 12px 35px rgba(124,58,237,.17);
+  animation:developerModalIn .24s ease-out;
+}
+
+.developer-profile-cover{
+  position:relative;
+  min-height:250px;
+  padding:22px 28px 30px;
+  overflow:hidden;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,255,255,0) 0%,
+      rgba(255,255,255,0) 53%,
+      rgba(255,255,255,.45) 53%,
+      rgba(255,255,255,.45) 100%
+    ),
+    radial-gradient(
+      circle at 18% 18%,
+      rgba(255,255,255,.20) 0 2px,
+      transparent 2px 100%
+    ),
+    linear-gradient(
+      115deg,
+      #8174fa 0%,
+      #ae72ee 48%,
+      #eb75bc 100%
+    );
+  background-size:auto, 22px 22px, auto;
+}
+
+.developer-profile-cover::after{
+  content:"";
+  position:absolute;
+  width:280px;
+  height:280px;
+  right:-100px;
+  top:-145px;
+  border-radius:50%;
+  background:rgba(255,255,255,.12);
+  pointer-events:none;
+}
+
+.developer-profile-top-row{
+  position:relative;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.developer-profile-top-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:9px 13px;
+  border-radius:16px;
+  background:rgba(255,255,255,.93);
+  color:#302d49;
+  font-size:11px;
+  font-weight:950;
+  letter-spacing:.03em;
+  box-shadow:0 10px 28px rgba(41,29,90,.16);
+  text-transform:uppercase;
+}
+
+.developer-profile-chip-number{
+  min-width:32px;
+  height:30px;
+  padding:0 8px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  color:#ffffff;
+  background:#635bff;
+  font-size:10px;
+  font-weight:950;
+}
+
+.developer-profile-close{
+  width:36px;
+  height:36px;
+  border:1px solid rgba(255,255,255,.7);
+  border-radius:12px;
+  background:rgba(17,24,39,.88);
+  color:#ffffff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  transition:.16s ease;
+}
+
+.developer-profile-close:hover{
+  background:#ffffff;
+  color:#111827;
+  transform:rotate(4deg);
+}
+
+.developer-profile-identity{
+  position:relative;
+  z-index:2;
+  display:flex;
+  align-items:flex-end;
+  gap:25px;
+  margin-top:45px;
+}
+
+.developer-card-avatar-shell{
+  position:relative;
+  width:170px;
+  height:170px;
+  border-radius:30px;
+  flex-shrink:0;
+  border:6px solid rgba(255,255,255,.96);
+  background:#111827;
+  box-shadow:
+    0 22px 38px rgba(37,26,82,.28),
+    0 4px 12px rgba(0,0,0,.12);
+}
+
+.developer-card-avatar-image,
+.developer-card-avatar-fallback{
+  width:100%;
+  height:100%;
+  border-radius:22px;
+}
+
+.developer-card-avatar-image{
+  display:block;
+  object-fit:cover;
+  object-position:center top;
+  background:#ffffff;
+  image-rendering:auto;
+  filter:none !important;
+}
+
+.developer-card-avatar-fallback{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#ffffff;
+  font-size:38px;
+  font-weight:950;
+  letter-spacing:-.04em;
+  background:linear-gradient(
+    135deg,
+    #111827 0%,
+    #5b21b6 48%,
+    #db2777 100%
+  );
+}
+
+.developer-card-camera-button{
+  position:absolute;
+  right:-10px;
+  bottom:-10px;
+  width:42px;
+  height:42px;
+  border:4px solid #ffffff;
+  border-radius:50%;
+  background:#111827;
+  color:#ffffff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  font-size:15px;
+  box-shadow:0 9px 22px rgba(0,0,0,.24);
+  transition:.16s ease;
+}
+
+.developer-card-camera-button:hover{
+  background:#635bff;
+  transform:scale(1.06);
+}
+
+.developer-profile-main-info{
+  min-width:0;
+  padding-bottom:7px;
+}
+
+.developer-profile-eyebrow{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:7px;
+}
+
+.developer-profile-role-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.87);
+  color:#5b4fe8;
+  font-size:10px;
+  font-weight:950;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+}
+
+.developer-profile-online{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  color:#059669;
+  font-size:11px;
+  font-weight:950;
+}
+
+.developer-profile-online-dot{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:#10b981;
+  box-shadow:0 0 0 4px rgba(16,185,129,.14);
+}
+
+.developer-profile-name{
+  margin:0;
+  color:#17152d;
+  font-size:38px;
+  line-height:1.05;
+  font-weight:950;
+  letter-spacing:-1.3px;
+  word-break:break-word;
+}
+
+.developer-profile-name-id{
+  color:#6558f5;
+}
+
+.developer-profile-meta-line{
+  display:flex;
+  align-items:center;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-top:11px;
+  color:#706e8c;
+  font-size:13px;
+  font-weight:800;
+}
+
+.developer-profile-meta-line span{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+}
+
+.developer-profile-body{
+  padding:26px 28px 24px;
+}
+
+.developer-card-info-grid{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:15px;
+}
+
+.developer-info-card{
+  min-height:102px;
+  border:1px solid rgba(255,255,255,.80);
+  border-radius:19px;
+  padding:16px;
+  background:rgba(255,255,255,.58);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.88);
+  backdrop-filter:blur(13px);
+  -webkit-backdrop-filter:blur(13px);
+}
+
+.developer-info-head{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:12px;
+  color:#9290b0;
+  font-size:10px;
+  line-height:1;
+  font-weight:950;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+.developer-info-icon{
+  width:32px;
+  height:32px;
+  border-radius:10px;
+  background:#ffffff;
+  color:#6558f5;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  font-size:14px;
+  box-shadow:0 5px 13px rgba(79,70,229,.10);
+}
+
+.developer-info-value{
+  color:#34324a;
+  font-size:14px;
+  line-height:1.4;
+  font-weight:900;
+  overflow-wrap:anywhere;
+}
+
+.developer-profile-divider{
+  height:1px;
+  margin:23px 0 18px;
+  background:rgba(113,99,178,.16);
+}
+
+.developer-profile-footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+}
+
+.developer-profile-dates{
+  display:flex;
+  align-items:center;
+  gap:18px;
+  flex-wrap:wrap;
+  color:#77758e;
+  font-size:10px;
+  font-weight:800;
+}
+
+.developer-profile-dates strong{
+  display:block;
+  margin-top:3px;
+  color:#34324a;
+  font-size:11px;
+  font-weight:950;
+}
+
+.developer-profile-actions{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  flex-wrap:wrap;
+}
+
+.developer-profile-upload-btn{
+  border:0;
+  border-radius:13px;
+  min-height:40px;
+  padding:9px 15px;
+  background:linear-gradient(
+    135deg,
+    #6558f5,
+    #8b5cf6
+  );
+  color:#ffffff;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  font-size:11px;
+  font-weight:950;
+  cursor:pointer;
+  box-shadow:0 10px 22px rgba(99,88,245,.25);
+  transition:.16s ease;
+}
+
+.developer-profile-upload-btn:hover{
+  transform:translateY(-1px);
+  box-shadow:0 13px 26px rgba(99,88,245,.32);
+}
+
+.developer-profile-close-btn{
+  min-height:40px;
+  padding:9px 15px;
+  border:1px solid rgba(98,87,180,.18);
+  border-radius:13px;
+  background:rgba(255,255,255,.72);
+  color:#34324a;
+  font-size:11px;
+  font-weight:950;
+  cursor:pointer;
+}
+
+.developer-profile-close-btn:hover{
+  background:#ffffff;
+}
+
+.developer-profile-upload-note{
+  margin-top:8px;
+  color:#85829d;
+  font-size:9px;
+  font-weight:750;
+}
+
+@media (max-width:760px){
+  .dev-profile-overlay{
+    align-items:flex-start;
+    overflow:auto;
+  }
+
+  .dev-profile-overlay .developer-profile-card{
+    width:min(96vw, 520px);
+  }
+
+  .developer-profile-cover{
+    min-height:auto;
+    padding:18px;
+  }
+
+  .developer-profile-identity{
+    align-items:center;
+    flex-direction:column;
+    text-align:center;
+    margin-top:28px;
+  }
+
+  .developer-profile-eyebrow,
+  .developer-profile-meta-line{
+    justify-content:center;
+  }
+
+  .developer-profile-name{
+    font-size:29px;
+  }
+
+  .developer-profile-body{
+    padding:18px;
+  }
+
+  .developer-card-info-grid{
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+  }
+
+  .developer-profile-footer{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+}
+
+@media (max-width:520px){
+  .developer-card-avatar-shell{
+    width:135px;
+    height:135px;
+  }
+
+  .developer-card-info-grid{
+    grid-template-columns:1fr;
+  }
+
+  .developer-profile-actions{
+    width:100%;
+  }
+
+  .developer-profile-upload-btn,
+  .developer-profile-close-btn{
+    flex:1;
   }
 }
 </style>
@@ -1095,6 +1748,224 @@ body::after{
     </div>
   </div>
 
+  <div class="center-visual" id="robotDeveloperTrigger" role="button" tabindex="0" aria-label="Open developer profile">
+    <div class="robot-frame">
+      <img src="/img/ivs-robot.png" alt="" class="login-robot">
+    </div>
+  </div>
+
+</div>
+<div class="dev-profile-overlay" id="devProfileModal" aria-hidden="true">
+  <div class="developer-profile-card" role="dialog" aria-modal="true" aria-labelledby="profileCardName">
+    <div class="developer-profile-cover">
+
+      <div class="developer-profile-top-row">
+        <div></div>
+
+        <div class="d-flex align-items-center gap-2">
+          <div class="developer-profile-top-chip">
+            <span class="developer-profile-chip-number" id="profileCardTopId">DEV-001</span>
+            Developer Profile
+          </div>
+
+          <button type="button" class="developer-profile-close" id="devProfileCloseBtn" aria-label="Close developer profile">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="developer-profile-identity">
+        <div class="developer-card-avatar-shell">
+          <img
+            id="developerProfileModalAvatarImage"
+            class="developer-card-avatar-image d-none"
+            src=""
+            alt="Developer profile"
+          >
+
+          <div
+            id="developerProfileModalAvatarFallback"
+            class="developer-card-avatar-fallback"
+          >DV</div>
+
+          <button
+            type="button"
+            class="developer-card-camera-button"
+            id="loginProfileCameraBtn"
+            title="Developer login required"
+            aria-label="Developer login required"
+          >
+            <i class="bi bi-camera-fill"></i>
+          </button>
+        </div>
+
+        <div class="developer-profile-main-info">
+          <div class="developer-profile-eyebrow">
+
+            <span class="developer-profile-role-badge">
+              <i class="bi bi-code-slash"></i>
+              Authorized Developer
+            </span>
+
+            <span class="developer-profile-online">
+              <span class="developer-profile-online-dot"></span>
+              Online Now
+            </span>
+
+          </div>
+
+          <h2 class="developer-profile-name">
+            <span id="profileCardName">Developer</span>
+
+            <span
+              class="developer-profile-name-id"
+              id="profileCardNameId"
+            ></span>
+          </h2>
+
+          <div class="developer-profile-meta-line">
+
+            <span>
+              <i class="bi bi-envelope"></i>
+              <span id="profileCardEmailLine">-</span>
+            </span>
+
+            <span>
+              <i class="bi bi-briefcase"></i>
+              <span id="profileCardRoleLine">Developer</span>
+            </span>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="developer-profile-body">
+
+      <div class="developer-card-info-grid">
+
+        <div class="developer-info-card">
+          <div class="developer-info-head">
+            <span class="developer-info-icon">
+              <i class="bi bi-person-vcard"></i>
+            </span>
+            Developer ID
+          </div>
+
+          <div
+            class="developer-info-value"
+            id="profileCardDeveloperId"
+          >-</div>
+        </div>
+
+        <div class="developer-info-card">
+          <div class="developer-info-head">
+            <span class="developer-info-icon">
+              <i class="bi bi-person-badge"></i>
+            </span>
+            Username
+          </div>
+
+          <div
+            class="developer-info-value"
+            id="profileCardUsername"
+          >-</div>
+        </div>
+
+        <div class="developer-info-card">
+          <div class="developer-info-head">
+            <span class="developer-info-icon">
+              <i class="bi bi-envelope-check"></i>
+            </span>
+            Email
+          </div>
+
+          <div
+            class="developer-info-value"
+            id="profileCardEmail"
+          >-</div>
+        </div>
+
+        <div class="developer-info-card">
+          <div class="developer-info-head">
+            <span class="developer-info-icon">
+              <i class="bi bi-code-square"></i>
+            </span>
+            Role
+          </div>
+
+          <div
+            class="developer-info-value"
+            id="profileCardRole"
+          >Developer</div>
+        </div>
+
+        <div class="developer-info-card">
+          <div class="developer-info-head">
+            <span class="developer-info-icon">
+              <i class="bi bi-shield-check"></i>
+            </span>
+            Account Status
+          </div>
+
+          <div
+            class="developer-info-value"
+            id="profileCardStatus"
+          >Active</div>
+        </div>
+
+        <div class="developer-info-card">
+          <div class="developer-info-head">
+            <span class="developer-info-icon">
+              <i class="bi bi-clock-history"></i>
+            </span>
+            Last Login
+          </div>
+
+          <div
+            class="developer-info-value"
+            id="profileCardLastLogin"
+          >-</div>
+        </div>
+
+      </div>
+
+      <div class="developer-profile-divider"></div>
+
+      <div class="developer-profile-footer">
+        <div>
+          <div class="developer-profile-dates">
+
+            <span>
+              Account Created
+              <strong id="profileCardCreatedAt">-</strong>
+            </span>
+
+            <span>
+              Last Updated
+              <strong id="profileCardUpdatedAt">-</strong>
+            </span>
+
+          </div>
+
+          <div class="developer-profile-upload-note">
+            Recommended: 1080 × 1080 px · Minimum: 800 × 800 px · JPG, PNG or WebP · Maximum 15 MB.
+          </div>
+        </div>
+
+        <div class="developer-profile-actions">
+          <button type="button" class="developer-profile-close-btn" id="devProfileFooterCloseBtn">
+            Close
+          </button>
+
+          <button type="button" class="developer-profile-upload-btn" id="devProfileUploadLoginBtn">
+            <i class="bi bi-cloud-arrow-up-fill"></i>
+            Upload Profile Picture
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="mak-footer">
@@ -1177,6 +2048,7 @@ body::after{
     }
 
     const developerTrigger = document.getElementById('developerTrigger');
+    const robotDeveloperTrigger = document.getElementById('robotDeveloperTrigger');
     const developerModal = document.getElementById('developerModal');
     const developerCloseBtn = document.getElementById('developerCloseBtn');
     const developerPasswordInput = document.getElementById('developerPasswordInput');
@@ -1221,7 +2093,246 @@ body::after{
         openDeveloperModal();
       });
     }
+           const devProfileModal = document.getElementById('devProfileModal');
+    const devProfileCloseBtn = document.getElementById('devProfileCloseBtn');
+    const devProfileFooterCloseBtn = document.getElementById('devProfileFooterCloseBtn');
+    const devProfileUploadLoginBtn = document.getElementById('devProfileUploadLoginBtn');
+    const loginProfileCameraBtn = document.getElementById('loginProfileCameraBtn');
 
+    const devProfileFallbackImage = '/img/ivs-robot.png';
+    let devProfileLoading = false;
+
+    function cleanDevText(value) {
+      return String(value || '').trim();
+    }
+
+    function setDevProfileText(selector, value) {
+      const el = document.querySelector(selector);
+      if (el) {
+        el.textContent = value || '-';
+      }
+    }
+
+    function getDeveloperInitials(name) {
+      const cleanName = cleanDevText(name);
+
+      if (!cleanName) {
+        return 'DV';
+      }
+
+      const parts = cleanName
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2);
+
+      return parts
+        .map((part) => part.charAt(0).toUpperCase())
+        .join('') || 'DV';
+    }
+
+    function formatDeveloperDate(value) {
+      if (!value) return '-';
+
+      const date = new Date(value);
+
+      if (Number.isNaN(date.getTime())) {
+        return String(value);
+      }
+
+      return date.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
+    }
+
+    function renderDeveloperAvatar(imageSelector, fallbackSelector, imageUrl, name) {
+      const image = document.querySelector(imageSelector);
+      const fallback = document.querySelector(fallbackSelector);
+
+      if (!image || !fallback) return;
+
+      const initials = getDeveloperInitials(name);
+      const cleanImageUrl = cleanDevText(imageUrl);
+
+      fallback.textContent = initials;
+
+      const showFallback = function () {
+        image.classList.add('d-none');
+        image.removeAttribute('src');
+        fallback.classList.remove('d-none');
+      };
+
+      if (!cleanImageUrl) {
+        showFallback();
+        return;
+      }
+
+      image.onerror = showFallback;
+      image.src = cleanImageUrl;
+      image.classList.remove('d-none');
+      fallback.classList.add('d-none');
+    }
+
+    function renderDeveloperProfilePreview(profile) {
+      const safeProfile = profile || {};
+
+      const developerId = Number(safeProfile.id || 0);
+
+      const displayDeveloperId = developerId
+        ? 'DEV-' + String(developerId).padStart(3, '0')
+        : 'DEV';
+
+      const name =
+        cleanDevText(safeProfile.name) ||
+        cleanDevText(safeProfile.username) ||
+        'Developer';
+
+      const username =
+        cleanDevText(safeProfile.username) ||
+        '-';
+
+      const email =
+        cleanDevText(safeProfile.email) ||
+        '-';
+
+      const role =
+        cleanDevText(safeProfile.role) ||
+        'Developer';
+
+      const imageUrl =
+        cleanDevText(safeProfile.profileImageUrl) ||
+        devProfileFallbackImage;
+
+      renderDeveloperAvatar(
+        '#developerProfileModalAvatarImage',
+        '#developerProfileModalAvatarFallback',
+        imageUrl,
+        name
+      );
+
+      setDevProfileText('#profileCardTopId', displayDeveloperId);
+      setDevProfileText('#profileCardName', name);
+      setDevProfileText('#profileCardNameId', developerId ? '#' + developerId : '');
+      setDevProfileText('#profileCardEmailLine', email);
+      setDevProfileText('#profileCardRoleLine', role);
+
+      setDevProfileText('#profileCardDeveloperId', displayDeveloperId);
+      setDevProfileText('#profileCardUsername', username);
+      setDevProfileText('#profileCardEmail', email);
+      setDevProfileText('#profileCardRole', role);
+      setDevProfileText(
+        '#profileCardStatus',
+        safeProfile.isActive === false ? 'Inactive' : 'Active'
+      );
+      setDevProfileText('#profileCardLastLogin', formatDeveloperDate(safeProfile.lastLoginAt));
+      setDevProfileText('#profileCardCreatedAt', formatDeveloperDate(safeProfile.createdAt));
+      setDevProfileText('#profileCardUpdatedAt', formatDeveloperDate(safeProfile.updatedAt));
+    }
+
+    async function loadDeveloperProfilePreview() {
+      if (devProfileLoading) return;
+
+      devProfileLoading = true;
+
+      try {
+        const res = await fetch('/api/public/developer-profile', {
+          headers: {
+            Accept: 'application/json',
+          },
+          cache: 'no-store',
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data?.success || !data?.profile) {
+          throw new Error(data?.message || 'Developer profile not found.');
+        }
+
+        renderDeveloperProfilePreview(data.profile);
+      } catch (err) {
+        console.error('Developer profile preview error:', err);
+
+        renderDeveloperProfilePreview({
+          id: 1,
+          name: 'Developer',
+          username: 'Developer',
+          email: '',
+          role: 'Developer',
+          profileImageUrl: devProfileFallbackImage,
+          isActive: true,
+          createdAt: '',
+          updatedAt: '',
+          lastLoginAt: '',
+        });
+      } finally {
+        devProfileLoading = false;
+      }
+    }
+
+    function openDevProfileModal() {
+      if (!devProfileModal) return;
+
+      devProfileModal.classList.add('show');
+      devProfileModal.setAttribute('aria-hidden', 'false');
+
+      loadDeveloperProfilePreview();
+    }
+
+    function closeDevProfileModal() {
+      if (!devProfileModal) return;
+
+      devProfileModal.classList.remove('show');
+      devProfileModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function openDeveloperLoginFromProfile() {
+      closeDevProfileModal();
+      openDeveloperModal();
+    }
+
+    if (robotDeveloperTrigger) {
+      robotDeveloperTrigger.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        openDevProfileModal();
+      });
+
+      robotDeveloperTrigger.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openDevProfileModal();
+        }
+      });
+    }
+
+    if (devProfileCloseBtn) {
+      devProfileCloseBtn.addEventListener('click', closeDevProfileModal);
+    }
+
+    if (devProfileFooterCloseBtn) {
+      devProfileFooterCloseBtn.addEventListener('click', closeDevProfileModal);
+    }
+
+    if (devProfileUploadLoginBtn) {
+      devProfileUploadLoginBtn.addEventListener('click', openDeveloperLoginFromProfile);
+    }
+
+    if (loginProfileCameraBtn) {
+      loginProfileCameraBtn.addEventListener('click', openDeveloperLoginFromProfile);
+    }
+
+    if (devProfileModal) {
+      devProfileModal.addEventListener('click', function (event) {
+        if (event.target === devProfileModal) {
+          closeDevProfileModal();
+        }
+      });
+    }
     if (developerCloseBtn) {
       developerCloseBtn.addEventListener('click', closeDeveloperModal);
     }
@@ -1233,13 +2344,15 @@ body::after{
         }
       });
     }
+document.addEventListener('keydown', function (event) {
+  if (event.key === 'Escape' && developerModal && developerModal.classList.contains('show')) {
+    closeDeveloperModal();
+  }
 
-    document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape' && developerModal && developerModal.classList.contains('show')) {
-        closeDeveloperModal();
-      }
-    });
-
+  if (event.key === 'Escape' && devProfileModal && devProfileModal.classList.contains('show')) {
+    closeDevProfileModal();
+  }
+});
     if (developerPasswordInput && toggleDeveloperPassword) {
       toggleDeveloperPassword.addEventListener('click', function () {
         const isPassword = developerPasswordInput.type === 'password';

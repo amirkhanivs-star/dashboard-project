@@ -1039,20 +1039,13 @@ app.use("/uploads", (req, res, next) => {
   }
 
   if (uploadRow.admission_id) {
-    if (
-      !uploadRow.linked_admission_id ||
-      Number(uploadRow.is_deleted || 0) === 1
-    ) {
+    const admissionAccessRow = getActiveAdmissionById(uploadRow.admission_id);
+
+    if (!admissionAccessRow) {
       return res.status(404).send("Admission not found");
     }
 
-    if (
-      !canAccessAdmissionRow(user, {
-        id: uploadRow.linked_admission_id,
-        dept: uploadRow.dept,
-        processed_by: uploadRow.processed_by || "",
-      })
-    ) {
+    if (!canAccessAdmissionRow(user, admissionAccessRow)) {
       return res.status(403).send("Not allowed");
     }
   } else if (user.role !== "super_admin") {
@@ -1438,7 +1431,386 @@ function ensureAdmissionForwardColumns() {
 }
 
 ensureAdmissionForwardColumns();
+function ensureAdmissionForwardTimerTable() {
+  try {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS admission_forward_time_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        admission_id INTEGER NOT NULL,
+        holder_user_id INTEGER,
+        holder_user_name TEXT,
+        holder_user_role TEXT,
+        holder_department TEXT,
+        holder_type TEXT,
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        duration_seconds INTEGER DEFAULT 0,
+        is_current INTEGER DEFAULT 1,
+        ended_by_id INTEGER,
+        ended_by_name TEXT,
+        ended_by_role TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT
+      )
+    `).run();
 
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_admission_forward_time_logs_admission_current
+      ON admission_forward_time_logs (admission_id, is_current)
+    `).run();
+
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_admission_forward_time_logs_admission_started
+      ON admission_forward_time_logs (admission_id, started_at)
+    `).run();
+  } catch (e) {
+    console.error("ensureAdmissionForwardTimerTable error:", e.message);
+  }
+}
+
+ensureAdmissionForwardTimerTable();
+
+function parseForwardTimerDate(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const direct = new Date(raw);
+  if (!Number.isNaN(direct.getTime())) {
+    return direct;
+  }
+
+  const sqliteLike = new Date(raw.replace(" ", "T"));
+  if (!Number.isNaN(sqliteLike.getTime())) {
+    return sqliteLike;
+  }
+
+  return null;
+}
+
+function secondsBetweenForwardTimerDates(startValue = "", endValue = "") {
+  const start = parseForwardTimerDate(startValue);
+  const end = parseForwardTimerDate(endValue) || new Date();
+
+  if (!start || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.floor((end.getTime() - start.getTime()) / 1000)
+  );
+}
+
+function formatForwardTimerDuration(seconds = 0) {
+  const totalSeconds = Math.max(0, Number(seconds || 0));
+  const totalMinutes = Math.floor(totalSeconds / 60);
+
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+
+  return `${days}d ${hours}h ${minutes}m`;
+}
+
+function normalizeForwardTimerDepartment(value = "") {
+  const clean = String(value || "").trim();
+  if (!clean) return "";
+
+  const lower = clean.toLowerCase();
+
+  if (
+    lower === "school" ||
+    lower === "school department" ||
+    lower === "school dept"
+  ) {
+    return "School Department";
+  }
+
+  if (
+    lower === "accounts" ||
+    lower === "school accounts" ||
+    lower === "school accounts department" ||
+    lower === "school accounts dept"
+  ) {
+    return "School Accounts Department";
+  }
+
+  return clean;
+}
+
+function normalizeForwardTimerType(value = "") {
+  const clean = String(value || "").trim();
+  if (!clean) return "";
+
+  const forwardTypeLabel = forwardTypeToDepartmentLabel(clean);
+  if (forwardTypeLabel) return forwardTypeLabel;
+
+  const lower = clean.toLowerCase();
+
+  if (
+    lower === "school_return" ||
+    lower === "school return" ||
+    lower === "not_received" ||
+    lower === "not received"
+  ) {
+    return "Not Received";
+  }
+
+  return clean;
+}
+
+function mapAdmissionForwardTimeLog(row = {}) {
+  if (!row) return null;
+
+  const isCurrent =
+    Number(row.is_current || 0) === 1 &&
+    !String(row.ended_at || "").trim();
+
+  const durationSeconds = isCurrent
+    ? secondsBetweenForwardTimerDates(row.started_at, new Date().toISOString())
+    : Number(
+        row.duration_seconds ||
+        secondsBetweenForwardTimerDates(row.started_at, row.ended_at)
+      );
+
+  const holderName = String(row.holder_user_name || "").trim();
+  const holderDepartment = normalizeForwardTimerDepartment(
+    row.holder_department || ""
+  );
+  const holderType = normalizeForwardTimerType(row.holder_type || "");
+
+  return {
+    id: row.id,
+    admissionId: row.admission_id,
+
+    holderUserId: row.holder_user_id || null,
+    holderUserName: holderName,
+    holderUserRole: row.holder_user_role || "",
+    holderDepartment,
+    holderType,
+
+    name: holderName,
+    department: holderDepartment,
+    type: holderType,
+
+    startedAt: row.started_at || "",
+    endedAt: row.ended_at || "",
+
+    durationSeconds,
+    durationLabel: formatForwardTimerDuration(durationSeconds),
+
+    isCurrent,
+
+    endedById: row.ended_by_id || null,
+    endedByName: row.ended_by_name || "",
+    endedByRole: row.ended_by_role || "",
+
+    label: [
+      holderName ? `With ${holderName}` : "With selected user",
+      holderDepartment,
+      holderType,
+      formatForwardTimerDuration(durationSeconds),
+    ].filter(Boolean).join(" | "),
+  };
+}
+
+function getAdmissionForwardTimeLogs(admissionId) {
+  try {
+    const cleanAdmissionId = Number(admissionId || 0);
+    if (!cleanAdmissionId) return [];
+
+    const rows = db.prepare(`
+      SELECT *
+      FROM admission_forward_time_logs
+      WHERE admission_id = ?
+      ORDER BY
+        datetime(COALESCE(started_at, '1970-01-01')) ASC,
+        id ASC
+    `).all(cleanAdmissionId);
+
+    return rows
+      .map(mapAdmissionForwardTimeLog)
+      .filter(Boolean);
+  } catch (e) {
+    console.error("getAdmissionForwardTimeLogs error:", e.message);
+    return [];
+  }
+}
+function getAdmissionPreviousForwardTimeLogs(admissionId) {
+  return getAdmissionForwardTimeLogs(admissionId)
+    .filter((log) => !log.isCurrent);
+}
+function getAdmissionCurrentForwardTimer(admissionId) {
+  try {
+    const cleanAdmissionId = Number(admissionId || 0);
+    if (!cleanAdmissionId) return null;
+
+    const row = db.prepare(`
+      SELECT *
+      FROM admission_forward_time_logs
+      WHERE admission_id = ?
+        AND is_current = 1
+        AND (
+          ended_at IS NULL
+          OR TRIM(COALESCE(ended_at, '')) = ''
+        )
+      ORDER BY
+        datetime(COALESCE(started_at, '1970-01-01')) DESC,
+        id DESC
+      LIMIT 1
+    `).get(cleanAdmissionId);
+
+    return mapAdmissionForwardTimeLog(row);
+  } catch (e) {
+    console.error("getAdmissionCurrentForwardTimer error:", e.message);
+    return null;
+  }
+}
+
+function finishAdmissionForwardTimer(
+  admissionId,
+  endedAt = new Date().toISOString(),
+  endedByUser = null
+) {
+  try {
+    const cleanAdmissionId = Number(admissionId || 0);
+    if (!cleanAdmissionId) return;
+
+    const finalEndedAt = String(endedAt || new Date().toISOString()).trim();
+
+    const activeRows = db.prepare(`
+      SELECT id, started_at
+      FROM admission_forward_time_logs
+      WHERE admission_id = ?
+        AND is_current = 1
+        AND (
+          ended_at IS NULL
+          OR TRIM(COALESCE(ended_at, '')) = ''
+        )
+      ORDER BY id ASC
+    `).all(cleanAdmissionId);
+
+    for (const row of activeRows) {
+      const durationSeconds = secondsBetweenForwardTimerDates(
+        row.started_at,
+        finalEndedAt
+      );
+
+      db.prepare(`
+        UPDATE admission_forward_time_logs
+        SET ended_at = @ended_at,
+            duration_seconds = @duration_seconds,
+            is_current = 0,
+            ended_by_id = @ended_by_id,
+            ended_by_name = @ended_by_name,
+            ended_by_role = @ended_by_role,
+            updated_at = @updated_at
+        WHERE id = @id
+      `).run({
+        id: row.id,
+        ended_at: finalEndedAt,
+        duration_seconds: durationSeconds,
+        ended_by_id: endedByUser?.id || null,
+        ended_by_name: endedByUser?.name || endedByUser?.email || "",
+        ended_by_role: endedByUser?.role || "",
+        updated_at: finalEndedAt,
+      });
+    }
+  } catch (e) {
+    console.error("finishAdmissionForwardTimer error:", e.message);
+  }
+}
+
+function startAdmissionForwardTimer({
+  admissionId,
+  holderUser = {},
+  holderDepartment = "",
+  holderType = "",
+  startedAt = new Date().toISOString(),
+} = {}) {
+  try {
+    const cleanAdmissionId = Number(admissionId || 0);
+    if (!cleanAdmissionId) return null;
+
+    const finalStartedAt = String(startedAt || new Date().toISOString()).trim();
+
+    const info = db.prepare(`
+      INSERT INTO admission_forward_time_logs (
+        admission_id,
+        holder_user_id,
+        holder_user_name,
+        holder_user_role,
+        holder_department,
+        holder_type,
+        started_at,
+        ended_at,
+        duration_seconds,
+        is_current,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, 1, ?, ?)
+    `).run(
+      cleanAdmissionId,
+      holderUser?.id || null,
+      holderUser?.name || holderUser?.email || "",
+      holderUser?.role || "",
+      normalizeForwardTimerDepartment(holderDepartment),
+      normalizeForwardTimerType(holderType),
+      finalStartedAt,
+      finalStartedAt,
+      finalStartedAt
+    );
+
+    return info.lastInsertRowid || null;
+  } catch (e) {
+    console.error("startAdmissionForwardTimer error:", e.message);
+    return null;
+  }
+}
+
+function restartAdmissionForwardTimer({
+  admissionId,
+  holderUser = {},
+  holderDepartment = "",
+  holderType = "",
+  startedAt = new Date().toISOString(),
+  endedByUser = null,
+} = {}) {
+  const finalStartedAt = String(startedAt || new Date().toISOString()).trim();
+
+  finishAdmissionForwardTimer(
+    admissionId,
+    finalStartedAt,
+    endedByUser
+  );
+
+  return startAdmissionForwardTimer({
+    admissionId,
+    holderUser,
+    holderDepartment,
+    holderType,
+    startedAt: finalStartedAt,
+  });
+}
+
+function getForwardTimerTargetMeta({
+  isReturnToSchool = false,
+  toDepartment = "",
+  toType = "",
+} = {}) {
+  if (isReturnToSchool) {
+    return {
+      holderDepartment: "School Department",
+      holderType: "Not Received",
+    };
+  }
+
+  return {
+    holderDepartment: "School Accounts Department",
+    holderType: forwardTypeToDepartmentLabel(toType) || toDepartment || "",
+  };
+}
 function ensureAdmissionWorkflowTriggers() {
   try {
     db.exec(`
@@ -4454,6 +4826,23 @@ function transferAccountsPipelineAdmissionsForUserChange({
         dept: targetUserRow?.dept || "",
         agentType: cleanPipelineType,
       }, now);
+
+      if (!isOldAdmission) {
+        restartAdmissionForwardTimer({
+          admissionId: row.id,
+          holderUser: {
+            id: targetUserId,
+            name: targetName,
+            role: targetRole,
+            dept: targetUserRow?.dept || "",
+            agentType: cleanPipelineType,
+          },
+          holderDepartment: "School Accounts Department",
+          holderType: forwardTypeToDepartmentLabel(cleanPipelineType),
+          startedAt: now,
+          endedByUser: actorUser,
+        });
+      }
     }
   });
 
@@ -5005,6 +5394,10 @@ function getAdmissionForwardSnapshot(row) {
 
   const workflowStage = getAccountsWorkflowStageFromRow(row);
   const sourceType = getAccountsSourceTypeFromRow(row);
+  const currentTimer =
+    finalStatus === "forwarded"
+      ? getAdmissionCurrentForwardTimer(row?.id)
+      : null;
 
   return {
     status: finalStatus,
@@ -5074,6 +5467,9 @@ function getAdmissionForwardSnapshot(row) {
 
     workflowTag:
       getAdmissionWorkflowTag(row),
+
+    currentTimer,
+    timer: currentTimer,
 
     displayText:
       finalStatus === "forwarded"
@@ -5156,8 +5552,45 @@ function getAdmissionUploadsForViewer(viewerUser = null, filter = "all") {
         a.phone,
                 a.guardian_whatsapp,
         a.processed_by,
-        a.accounts_registration_number,
+                a.accounts_registration_number,
         a.accounts_family_number,
+
+        a.forward_status,
+        a.forwarded_to_department,
+        a.forwarded_to_type,
+        a.forwarded_at,
+        a.forwarded_from_department,
+        a.forwarded_from_type,
+        a.accounts_workflow_stage,
+        a.accounts_issue_message,
+        a.accounts_issue_fields,
+        a.accounts_issue_by_id,
+        a.accounts_issue_by_name,
+        a.accounts_issue_by_role,
+        a.accounts_issue_at,
+        a.accounts_completed_at,
+        a.accounts_completed_by_id,
+        a.accounts_completed_by_name,
+        a.accounts_completed_by_role,
+        a.forwarded_by_id,
+        a.forwarded_by_name,
+        a.forwarded_by_role,
+        a.forwarded_owner_user_id,
+        a.forwarded_owner_user_name,
+        a.forwarded_owner_user_role,
+        a.accounts_transfer_note,
+        a.accounts_transfer_reason,
+        a.accounts_transfer_from_user_id,
+        a.accounts_transfer_from_user_name,
+        a.accounts_transfer_to_user_id,
+        a.accounts_transfer_to_user_name,
+        a.accounts_transfer_by_name,
+        a.accounts_transfer_at,
+        a.school_return_status,
+        a.school_returned_to_user_id,
+        a.school_returned_at,
+        a.school_reuploaded_at,
+        a.reupload_tag_active,
 
         CASE
           WHEN us.id IS NULL THEN 0
@@ -5184,11 +5617,14 @@ function getAdmissionUploadsForViewer(viewerUser = null, filter = "all") {
 
         if (userRole !== "super_admin") {
       safeRows = safeRows.filter((r) => {
-        return canAccessAdmissionRow(viewerUser, {
-          id: r.adm_id || r.admission_id,
-          dept: r.dept,
-          processed_by: r.processed_by || "",
-        });
+        const admissionAccessRow = getActiveAdmissionById(
+          r.adm_id || r.admission_id
+        );
+
+        return !!admissionAccessRow && canAccessAdmissionRow(
+          viewerUser,
+          admissionAccessRow
+        );
       });
     }
 
@@ -5200,31 +5636,84 @@ function getAdmissionUploadsForViewer(viewerUser = null, filter = "all") {
       safeRows = safeRows.filter((r) => Number(r.seen_by_current_user || 0) !== 1);
     }
 
-    return safeRows.map((r) => ({
-      id: r.id,
-      uploadId: r.id,
-      admissionId: r.admission_id,
+    return safeRows.map((r) => {
+      const admissionId =
+        r.adm_id || r.admission_id;
 
-      fileName: r.original_name || r.stored_name || "File",
-      fileUrl: r.file_url || "",
-      mimeType: r.mime_type || "",
-      size: r.size || 0,
+      const forwardSnapshot =
+        getAdmissionForwardSnapshot({
+          id: admissionId,
+          dept: r.dept,
+          forward_status: r.forward_status,
+          forwarded_to_department: r.forwarded_to_department,
+          forwarded_to_type: r.forwarded_to_type,
+          forwarded_at: r.forwarded_at,
+          forwarded_from_department: r.forwarded_from_department,
+          forwarded_from_type: r.forwarded_from_type,
+          accounts_workflow_stage: r.accounts_workflow_stage,
+          accounts_issue_message: r.accounts_issue_message,
+          accounts_issue_fields: r.accounts_issue_fields,
+          accounts_issue_by_id: r.accounts_issue_by_id,
+          accounts_issue_by_name: r.accounts_issue_by_name,
+          accounts_issue_by_role: r.accounts_issue_by_role,
+          accounts_issue_at: r.accounts_issue_at,
+          accounts_completed_at: r.accounts_completed_at,
+          accounts_completed_by_id: r.accounts_completed_by_id,
+          accounts_completed_by_name: r.accounts_completed_by_name,
+          accounts_completed_by_role: r.accounts_completed_by_role,
+          forwarded_by_id: r.forwarded_by_id,
+          forwarded_by_name: r.forwarded_by_name,
+          forwarded_by_role: r.forwarded_by_role,
+          forwarded_owner_user_id: r.forwarded_owner_user_id,
+          forwarded_owner_user_name: r.forwarded_owner_user_name,
+          forwarded_owner_user_role: r.forwarded_owner_user_role,
+          accounts_transfer_note: r.accounts_transfer_note,
+          accounts_transfer_reason: r.accounts_transfer_reason,
+          accounts_transfer_from_user_id: r.accounts_transfer_from_user_id,
+          accounts_transfer_from_user_name: r.accounts_transfer_from_user_name,
+          accounts_transfer_to_user_id: r.accounts_transfer_to_user_id,
+          accounts_transfer_to_user_name: r.accounts_transfer_to_user_name,
+          accounts_transfer_by_name: r.accounts_transfer_by_name,
+          accounts_transfer_at: r.accounts_transfer_at,
+          school_return_status: r.school_return_status,
+          school_returned_to_user_id: r.school_returned_to_user_id,
+          school_returned_at: r.school_returned_at,
+          school_reuploaded_at: r.school_reuploaded_at,
+          reupload_tag_active: r.reupload_tag_active,
+          accounts_registration_number: r.accounts_registration_number,
+        });
 
-      addedBy: r.uploaded_by_name || r.uploaded_by_role || "System / Old Record",
-      addedByRole: r.uploaded_by_role || (r.uploaded_by_name ? "" : "Old file record"),
-      uploadedAt: r.uploaded_at || "",
+      return {
+        id: r.id,
+        uploadId: r.id,
+        admissionId: r.admission_id,
 
-      seen: Number(r.seen_by_current_user || 0) === 1,
-      seenByCurrentUser: Number(r.seen_by_current_user || 0) === 1,
+        fileName: r.original_name || r.stored_name || "File",
+        fileUrl: r.file_url || "",
+        mimeType: r.mime_type || "",
+        size: r.size || 0,
 
-      student: r.student_name || "No Name",
-      father: r.father_name || "-",
-      dept: r.dept || "",
-      grade: r.grade || r.tuition_grade || "",
-      phone: r.phone || r.guardian_whatsapp || "",
-      registrationNumber: r.accounts_registration_number || "",
-      familyNumber: r.accounts_family_number || "",
-    }));
+        addedBy: r.uploaded_by_name || r.uploaded_by_role || "System / Old Record",
+        addedByRole: r.uploaded_by_role || (r.uploaded_by_name ? "" : "Old file record"),
+        uploadedAt: r.uploaded_at || "",
+
+        seen: Number(r.seen_by_current_user || 0) === 1,
+        seenByCurrentUser: Number(r.seen_by_current_user || 0) === 1,
+
+        student: r.student_name || "No Name",
+        father: r.father_name || "-",
+        dept: r.dept || "",
+        grade: r.grade || r.tuition_grade || "",
+        phone: r.phone || r.guardian_whatsapp || "",
+        registrationNumber: r.accounts_registration_number || "",
+        familyNumber: r.accounts_family_number || "",
+
+        forward: forwardSnapshot,
+        forwardTimer: forwardSnapshot.currentTimer,
+        currentForwardTimer: forwardSnapshot.currentTimer,
+        forwardTimeLogs: getAdmissionPreviousForwardTimeLogs(admissionId),
+      };
+    });
   } catch (e) {
     console.error("getAdmissionUploadsForViewer error:", e.message);
     return [];
@@ -5417,6 +5906,12 @@ function findDuplicateAdmissionFromForm(row) {
 /* ========== ADMISSIONS HELPERS (DB -> pipeline object) ========== */
 function mapAdmissionRow(row) {
   if (!row) return null;
+
+  const forwardSnapshot = getAdmissionForwardSnapshot(row);
+
+  const forwardTimeLogs =
+    getAdmissionPreviousForwardTimeLogs(row.id);
+
   return {
     id: row.id,
     entryNumber: row.entry_number || row.id,
@@ -5561,7 +6056,18 @@ duplicateWithId: row.duplicateWithId || "",
     forwardScopeVisibleForCurrentUser: !!row.forwardScopeVisibleForCurrentUser,
     forwardDisplayText: buildForwardDisplayText(row),
     canShowForwardButton: !!row.canShowForwardButton,
-    forward: getAdmissionForwardSnapshot(row),
+    forwardTimer: forwardSnapshot.currentTimer,
+    currentForwardTimer: forwardSnapshot.currentTimer,
+
+    forwardTimeLogs,
+    forward_time_logs: forwardTimeLogs,
+    timeLogs: forwardTimeLogs,
+
+    forward: {
+      ...forwardSnapshot,
+      forwardTimeLogs,
+      timeLogs: forwardTimeLogs,
+    },
    accounts: {
      paymentStatus: row.accounts_payment_status || "",
      paidUpto: row.accounts_paid_upto || "",
@@ -6654,6 +7160,11 @@ totalPages,
 }
 
 function buildPipelineSnapshotFromRow(row) {
+  const forwardSnapshot = getAdmissionForwardSnapshot(row);
+
+  const forwardTimeLogs =
+    getAdmissionPreviousForwardTimeLogs(row.id);
+
   return {
     id: row.id,
     entryNumber: row.entry_number || row.id,
@@ -6748,6 +7259,22 @@ function buildPipelineSnapshotFromRow(row) {
       row.accounts_issue_message || "",
     accountsIssueFields:
       safeJsonParse(row.accounts_issue_fields) || [],
+
+    forwardTimer:
+      forwardSnapshot.currentTimer,
+
+    currentForwardTimer:
+      forwardSnapshot.currentTimer,
+
+    forwardTimeLogs,
+    forward_time_logs: forwardTimeLogs,
+    timeLogs: forwardTimeLogs,
+
+    forward: {
+      ...forwardSnapshot,
+      forwardTimeLogs,
+      timeLogs: forwardTimeLogs,
+    },
 
     accounts: {
       paymentStatus:
@@ -9278,8 +9805,7 @@ app.post("/api/uploads/:uploadId/seen", requireLogin, requireViewFiles, (req, re
             SELECT
         u.id,
         u.admission_id,
-        a.dept,
-        a.processed_by
+        a.id AS linked_admission_id
       FROM uploads u
       LEFT JOIN admissions a
         ON a.id = u.admission_id
@@ -9301,11 +9827,18 @@ app.post("/api/uploads/:uploadId/seen", requireLogin, requireViewFiles, (req, re
       });
     }
 
-        if (!canAccessAdmissionRow(user, {
-      id: uploadRow.admission_id,
-      dept: uploadRow.dept,
-      processed_by: uploadRow.processed_by || "",
-    })) {
+    const admissionAccessRow = getActiveAdmissionById(
+      uploadRow.linked_admission_id || uploadRow.admission_id
+    );
+
+    if (!admissionAccessRow) {
+      return res.status(404).json({
+        success: false,
+        message: "Admission not found",
+      });
+    }
+
+    if (!canAccessAdmissionRow(user, admissionAccessRow)) {
       return res.status(403).json({
         success: false,
         message: "Not allowed",
@@ -12471,8 +13004,32 @@ app.get("/api/admissions/:id", requireLogin, (req, res) => {
     safe.forwardSubStatus =
       getForwardSubStatus(row);
 
-    safe.forward =
+    const forwardSnapshot =
       getAdmissionForwardSnapshot(row);
+
+    const forwardTimeLogs =
+      getAdmissionPreviousForwardTimeLogs(id);
+
+    safe.forward = {
+      ...forwardSnapshot,
+      forwardTimeLogs,
+      timeLogs: forwardTimeLogs,
+    };
+
+    safe.forwardTimer =
+      forwardSnapshot.currentTimer;
+
+    safe.currentForwardTimer =
+      forwardSnapshot.currentTimer;
+
+    safe.forwardTimeLogs =
+      forwardTimeLogs;
+
+    safe.forward_time_logs =
+      forwardTimeLogs;
+
+    safe.timeLogs =
+      forwardTimeLogs;
 
     safe.notReceivedVisibleForCurrentUser =
       isNotReceivedVisibleForCurrentUser(
@@ -12505,6 +13062,53 @@ app.get("/api/admissions/:id", requireLogin, (req, res) => {
     });
   }
 });
+
+// ✅ Forward timer history for one admission
+app.get("/api/admissions/:id/forward-time-logs", requireLogin, (req, res) => {
+  try {
+    const user = req.session.user;
+    const admissionId = Number(req.params.id || 0);
+
+    if (!admissionId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid admission id",
+      });
+    }
+
+    const row = getActiveAdmissionById(admissionId);
+
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        message: "Admission not found",
+      });
+    }
+
+    if (!canAccessAdmissionRow(user, row)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not allowed",
+      });
+    }
+
+    const forwardSnapshot = getAdmissionForwardSnapshot(row);
+
+    return res.json({
+      success: true,
+      admissionId,
+      currentTimer: forwardSnapshot.currentTimer,
+      logs: getAdmissionForwardTimeLogs(admissionId),
+    });
+  } catch (err) {
+    console.error("GET /api/admissions/:id/forward-time-logs error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Could not load forward timer history.",
+    });
+  }
+});
+
 // ✅ Backward compatibility (optional)
 app.get("/admissions/:id/details", requireLogin, (req, res) => {
   return res.redirect(`/dashboard/super/admission/${req.params.id}`);
@@ -12820,6 +13424,13 @@ app.post("/api/admissions/:id/forward", requireLogin, (req, res) => {
           nextReuploadTagActive,
       });
 
+    const forwardTimerTargetMeta =
+      getForwardTimerTargetMeta({
+        isReturnToSchool,
+        toDepartment,
+        toType,
+      });
+
     const savedIssueMessage = issueReturnRequested
       ? issueMessage
       : "";
@@ -12972,6 +13583,23 @@ app.post("/api/admissions/:id/forward", requireLogin, (req, res) => {
         nextReuploadTagActive,
     });
 
+    restartAdmissionForwardTimer({
+      admissionId,
+      holderUser: {
+        id: forwardOwner.id || null,
+        name: forwardOwner.name || "",
+        role: forwardOwner.role || "",
+      },
+      holderDepartment:
+        forwardTimerTargetMeta.holderDepartment,
+      holderType:
+        forwardTimerTargetMeta.holderType,
+      startedAt:
+        forwardedAt,
+      endedByUser:
+        user,
+    });
+
     if (!isReturnToSchool) {
       rememberAccountsWorkflowUser(
         admissionId,
@@ -12989,6 +13617,12 @@ app.post("/api/admissions/:id/forward", requireLogin, (req, res) => {
     }
 
     touchAdmissionActivity(admissionId);
+
+    const currentForwardTimer =
+      getAdmissionCurrentForwardTimer(admissionId);
+
+    const forwardTimeLogs =
+      getAdmissionPreviousForwardTimeLogs(admissionId);
 
     const eventType = isReturnToSchool
       ? "admission_returned_to_school"
@@ -13168,6 +13802,15 @@ app.post("/api/admissions/:id/forward", requireLogin, (req, res) => {
               school_return_status:
                 nextSchoolReturnStatus,
             }),
+
+      forwardTimer:
+        currentForwardTimer,
+
+      currentForwardTimer,
+
+      forwardTimeLogs,
+      forward_time_logs: forwardTimeLogs,
+      timeLogs: forwardTimeLogs,
     });
 
     return res.json({
@@ -13255,6 +13898,15 @@ app.post("/api/admissions/:id/forward", requireLogin, (req, res) => {
 
       workflowTag:
         nextWorkflowTag,
+
+      forwardTimer:
+        currentForwardTimer,
+
+      currentForwardTimer,
+
+      forwardTimeLogs,
+      forward_time_logs: forwardTimeLogs,
+      timeLogs: forwardTimeLogs,
 
       forwardDisplayText,
     });
@@ -13416,7 +14068,16 @@ app.post(
         accounts_completed_by_role: user?.role || "",
       });
 
+      finishAdmissionForwardTimer(
+        admissionId,
+        completedAt,
+        user
+      );
+
       touchAdmissionActivity(admissionId);
+
+      const forwardTimeLogs =
+        getAdmissionForwardTimeLogs(admissionId);
 
       logAudit("accounts_record_update_completed", user, {
         dept: row.dept || "",
@@ -13435,6 +14096,7 @@ app.post(
         dept: row.dept || "",
         accountsWorkflowStage: "old_admissions",
         completedAt,
+        forwardTimeLogs,
       });
 
       return res.json({
@@ -13443,6 +14105,7 @@ app.post(
         admissionId,
         accountsWorkflowStage: "old_admissions",
         completedAt,
+        forwardTimeLogs,
       });
     } catch (err) {
       console.error(
@@ -16692,7 +17355,49 @@ app.post(
 );
 
 // ================== DEVELOPER PROFILE SETTINGS ==================
+// Public developer profile preview for login page robot card.
+// Password/hash/security fields are never exposed here.
+app.get("/api/public/developer-profile", (req, res) => {
+  try {
+    const row = db.prepare(`
+      SELECT
+        id,
+        name,
+        username,
+        email,
+        profile_image_url,
+        is_active,
+        created_at,
+        updated_at,
+        last_login_at
+      FROM developer_accounts
+      WHERE is_active = 1
+      ORDER BY id ASC
+      LIMIT 1
+    `).get();
 
+    if (!row) {
+      return res.status(404).json({
+        success: false,
+        message: "Developer profile not found.",
+      });
+    }
+
+    res.set("Cache-Control", "no-store");
+
+    return res.json({
+      success: true,
+      profile: mapDeveloperRow(row),
+    });
+  } catch (err) {
+    console.error("GET /api/public/developer-profile error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Could not load Developer profile preview.",
+    });
+  }
+});
 app.get(
   "/api/developer/profile",
   requireDeveloperLogin,
@@ -18218,9 +18923,10 @@ if (user?.role !== "super_admin") {
 
 if (admissionId) {
   baseAdmission = db.prepare(`
-        SELECT id, dept, student_name, accounts_family_number, processed_by
+        SELECT *
     FROM admissions
     WHERE id = ?
+      AND COALESCE(is_deleted, 0) = 0
   `).get(admissionId);
 
   if (!baseAdmission) return res.status(404).send("Admission not found");
@@ -18274,14 +18980,17 @@ if (admissionId) {
     ORDER BY u.id DESC
   `).all();
 
-  if (user?.role !== "super_admin" && !isAccountsUser(user)) {
-    files = files.filter((f) =>
-      canAccessAdmissionRow(user, {
-        id: f.linked_admission_id || f.admission_id,
-        dept: f.dept,
-        processed_by: f.processed_by || "",
-      })
-    );
+  if (user?.role !== "super_admin") {
+    files = files.filter((f) => {
+      const admissionAccessRow = getActiveAdmissionById(
+        f.linked_admission_id || f.admission_id
+      );
+
+      return !!admissionAccessRow && canAccessAdmissionRow(
+        user,
+        admissionAccessRow
+      );
+    });
   }
 }
 
@@ -20455,9 +21164,10 @@ app.get("/files", requireLogin, requirePerm("btnFiles"), (req, res) => {
     let familyAdmissionIds = [];
 
     const adm = db.prepare(`
-    SELECT id, dept, student_name, accounts_family_number, processed_by
+    SELECT *
   FROM admissions
   WHERE id = ?
+    AND COALESCE(is_deleted, 0) = 0
 `).get(admissionId);
 
 if (!adm) return res.status(404).send("Admission not found");
