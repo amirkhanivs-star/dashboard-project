@@ -274,6 +274,24 @@
   const shouldShowSchoolAccountsNewAdmissions =
     shouldShowSchoolAccountsWorkflow;
 
+  const accountsNumberNoteData =
+    (typeof accountsNumberNote !== 'undefined' && accountsNumberNote)
+      ? accountsNumberNote
+      : {
+          enabled: false,
+          latestHighest: null,
+          records: [],
+          total: 0
+        };
+
+  const shouldRenderAccountsNumberNote =
+    !!(
+      !isComingSoonDept &&
+      shouldShowSchoolAccountsWorkflow &&
+      accountsNumberNoteData &&
+      accountsNumberNoteData.enabled
+    );
+
   const schoolForwardCountData =
     (typeof schoolForwardCounts !== 'undefined' && schoolForwardCounts)
       ? schoolForwardCounts
@@ -790,6 +808,57 @@
       <div>Super Admin can see everything in real time.</div>
     </div>
   </div>
+
+  <% if (shouldRenderAccountsNumberNote) { %>
+    <div
+      class="accounts-number-note"
+      id="accountsNumberNoteWidget"
+      data-hidden-storage-key="ivs_accounts_number_note_hidden_super">
+
+      <div class="accounts-number-note-head">
+        <div>
+          <div class="accounts-number-note-title">
+            Latest Verif + Reg Updates
+          </div>
+          <div class="accounts-number-note-subtitle">
+            Recent updates first
+            <span id="accountsNumberNoteTotal">
+              <%= Number(accountsNumberNoteData.total || 0) %>
+            </span>
+            records
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="accounts-number-note-hide-btn"
+          id="accountsNumberNoteHideBtn"
+          title="Hide note">
+          <i class="bi bi-eye-slash"></i>
+        </button>
+      </div>
+
+      <div
+        class="accounts-number-note-list"
+        id="accountsNumberNoteList">
+      </div>
+
+      <div
+        class="accounts-number-note-empty d-none"
+        id="accountsNumberNoteEmpty">
+        No verification or registration number found yet.
+      </div>
+    </div>
+
+    <button
+      type="button"
+      class="accounts-number-note-open d-none"
+      id="accountsNumberNoteOpenBtn"
+      title="Show latest numbers">
+      <i class="bi bi-stickies"></i>
+      Latest Numbers
+    </button>
+  <% } %>
 
   <!-- TOP STATS ROW -->
   <div class="row g-3 mb-3 super-stat-row">
@@ -1664,7 +1733,7 @@
     <% if (P.btn.edit) { %>
     <a
       href="/dashboard/super/admission/<%= a.id %>/edit?focus=<%= encodeURIComponent(field.key || '') %>"
-      class="admission-field-link <%= getCardFieldClass(field) %>"
+      class="admission-field-link <%= getCardFieldClass(field) %> js-dashboard-edit-return-link"
       data-field-key="<%= field.key || '' %>"
       style="<%= getCardFieldStyle(field) %>">
       <span class="field-label"><%= field.label %></span>
@@ -1693,7 +1762,7 @@
             <% } %>
 
                        <% if (P.btn.edit) { %>
-              <a href="/dashboard/super/admission/<%= a.id %>/edit" class="mini-action-btn mini-red">
+                           <a href="/dashboard/super/admission/<%= a.id %>/edit" class="mini-action-btn mini-red js-dashboard-edit-return-link">
                 <i class="bi bi-pencil-square"></i> Edit
               </a>
             <% } %>
@@ -5222,7 +5291,237 @@
     gap: 4px;
   }
 }
+/* =========================
+   Accounts Number Sticky Note
+   ========================= */
+.accounts-number-note{
+  position: fixed;
+  top: 104px;
+  right: 18px;
+  width: min(365px, calc(100vw - 28px));
+  max-height: calc(100vh - 135px);
+  z-index: 1045;
+  border-radius: 18px;
+  background: #020617;
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,.12);
+  box-shadow: 0 22px 55px rgba(2,8,23,.42);
+  overflow: hidden;
+}
 
+.accounts-number-note-head{
+  padding: 12px 13px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255,255,255,.10);
+  background: linear-gradient(135deg, #020617, #111827);
+}
+
+.accounts-number-note-title{
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 1000;
+  line-height: 1.2;
+}
+
+.accounts-number-note-subtitle{
+  margin-top: 3px;
+  color: rgba(255,255,255,.62);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.accounts-number-note-hide-btn{
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 30px;
+}
+
+.accounts-number-note-hide-btn:hover{
+  background: rgba(255,255,255,.14);
+}
+
+.accounts-number-note-list{
+  max-height: 390px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 9px;
+}
+
+.accounts-number-note-list::-webkit-scrollbar{
+  width: 7px;
+}
+
+.accounts-number-note-list::-webkit-scrollbar-thumb{
+  background: rgba(148,163,184,.7);
+  border-radius: 999px;
+}
+
+.accounts-number-note-row{
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.10);
+  margin-bottom: 8px;
+}
+
+.accounts-number-note-row:first-child{
+  border-color: rgba(34,197,94,.50);
+  box-shadow: inset 3px 0 0 #22c55e;
+}
+
+.accounts-number-note-row-head{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.accounts-number-note-student{
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 1000;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.accounts-number-note-entry{
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: rgba(34,197,94,.16);
+  border: 1px solid rgba(34,197,94,.35);
+  color: #bbf7d0;
+  font-size: 10px;
+  font-weight: 1000;
+}
+
+.accounts-number-note-meta{
+  margin-top: 5px;
+  color: rgba(255,255,255,.62);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.accounts-number-note-numbers{
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.accounts-number-note-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(255,255,255,.10);
+  border: 1px solid rgba(255,255,255,.13);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 1000;
+  line-height: 1;
+}
+
+.accounts-number-note-chip-label{
+  color: rgba(255,255,255,.58);
+  font-weight: 900;
+}
+
+.accounts-number-note-chip-value{
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accounts-number-note-chip.missing{
+  background: rgba(127,29,29,.90);
+  border-color: rgba(248,113,113,.85);
+  color: #fecaca;
+}
+
+.accounts-number-note-chip.missing .accounts-number-note-chip-label,
+.accounts-number-note-chip.missing .accounts-number-note-chip-value{
+  color: #fecaca;
+}
+
+.accounts-number-note-copy{
+  margin-top: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #ffffff;
+  color: #020617;
+  font-size: 11px;
+  font-weight: 1000;
+  line-height: 1;
+}
+
+.accounts-number-note-copy:hover{
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.accounts-number-note-empty{
+  padding: 15px 12px;
+  color: rgba(255,255,255,.70);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.accounts-number-note-open{
+  position: fixed;
+  top: 104px;
+  right: 18px;
+  z-index: 1045;
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 13px;
+  background: #020617;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 1000;
+  box-shadow: 0 14px 32px rgba(2,8,23,.30);
+}
+
+.accounts-number-note-open:hover{
+  background: #111827;
+  color: #ffffff;
+}
+
+@media (max-width: 767.98px){
+  .accounts-number-note{
+    top: auto;
+    right: 10px;
+    left: 10px;
+    bottom: 14px;
+    width: auto;
+    max-height: 55vh;
+  }
+
+  .accounts-number-note-open{
+    top: auto;
+    right: 10px;
+    bottom: 14px;
+  }
+}
 </style>
 
 <div id="upload-flash-overlay"
@@ -8139,12 +8438,100 @@ if (feeLabel) {
 
     if (!canUseSchoolForwarding) return;
 
-    let activeForwardAdmissionId = "";
+        let activeForwardAdmissionId = "";
     let activeForwardStudentName = "";
     let activeForwardMainFilter = "";
     let activeForwardSubFilter = "";
     let activeAccountsStageFilter = "";
     let activeAccountsPipelineFilter = "";
+
+    function getDashboardReturnUrlForEdit() {
+      const returnUrl = new URL(window.location.href);
+
+      if (activeForwardMainFilter) {
+        returnUrl.searchParams.set(
+          "schoolForwardFilter",
+          activeForwardMainFilter
+        );
+
+        if (activeForwardSubFilter) {
+          returnUrl.searchParams.set(
+            "forwardedSubFilter",
+            activeForwardSubFilter
+          );
+        } else {
+          returnUrl.searchParams.delete("forwardedSubFilter");
+        }
+      } else {
+        returnUrl.searchParams.delete("schoolForwardFilter");
+        returnUrl.searchParams.delete("forwardedSubFilter");
+      }
+
+      if (activeAccountsStageFilter) {
+        returnUrl.searchParams.set(
+          "accountsStageFilter",
+          activeAccountsStageFilter
+        );
+
+        if (activeAccountsPipelineFilter) {
+          returnUrl.searchParams.set(
+            "accountsPipelineFilter",
+            activeAccountsPipelineFilter
+          );
+        } else {
+          returnUrl.searchParams.delete("accountsPipelineFilter");
+        }
+      } else {
+        returnUrl.searchParams.delete("accountsStageFilter");
+        returnUrl.searchParams.delete("accountsPipelineFilter");
+      }
+
+      return (
+        returnUrl.pathname +
+        returnUrl.search +
+        returnUrl.hash
+      );
+    }
+
+    function attachDashboardReturnToEditLink(link) {
+      if (!link) return;
+
+      try {
+        const editUrl = new URL(
+          link.getAttribute("href") || "",
+          window.location.origin
+        );
+
+        editUrl.searchParams.set(
+          "returnTo",
+          getDashboardReturnUrlForEdit()
+        );
+
+        link.setAttribute(
+          "href",
+          editUrl.pathname + editUrl.search + editUrl.hash
+        );
+      } catch (err) {
+        console.error(
+          "attachDashboardReturnToEditLink error:",
+          err.message
+        );
+      }
+    }
+
+    document.addEventListener(
+      "click",
+      function (event) {
+        const editLink = event.target.closest(
+          ".js-dashboard-edit-return-link"
+        );
+
+        if (!editLink) return;
+
+        attachDashboardReturnToEditLink(editLink);
+      },
+      true
+    );
 
     function showPopup(type, title, message) {
       if (typeof window.showUploadFlash === "function") {
@@ -11131,6 +11518,54 @@ if (feeLabel) {
     }
 
     function initializeForwardWorkflow() {
+      const params =
+        new URLSearchParams(window.location.search);
+
+      const requestedSchoolFilter =
+        String(params.get("schoolForwardFilter") || "")
+          .trim()
+          .toLowerCase();
+
+      const requestedForwardedSubFilter =
+        String(params.get("forwardedSubFilter") || "")
+          .trim()
+          .toLowerCase();
+
+      const requestedAccountsStageFilter =
+        String(params.get("accountsStageFilter") || "")
+          .trim()
+          .toLowerCase();
+
+      const requestedAccountsPipelineFilter =
+        String(params.get("accountsPipelineFilter") || "")
+          .trim()
+          .toLowerCase();
+
+      if (requestedAccountsStageFilter) {
+        applySchoolAccountsWorkflowFilter(
+          requestedAccountsStageFilter,
+          requestedAccountsPipelineFilter
+        );
+
+        applyWorkflowDateFilters();
+        return;
+      }
+
+      if (requestedSchoolFilter) {
+        applySchoolForwardFilter(
+          requestedSchoolFilter,
+          requestedSchoolFilter === "forwarded"
+            ? (
+                requestedForwardedSubFilter ||
+                "not_verified"
+              )
+            : ""
+        );
+
+        applyWorkflowDateFilters();
+        return;
+      }
+
       toggleForwardedSubfilters(false);
       toggleAccountsPipelineFilters(false);
       setActiveForwardFilter("");
@@ -11159,9 +11594,306 @@ if (feeLabel) {
   window.CURRENT_USER = <%- JSON.stringify(user || null) %>;
   window.USER_PERMS   = <%- JSON.stringify(_perms || null) %>;
   window.IS_SUPER     = <%- JSON.stringify(!!_isSuper) %>;
+  window.ACCOUNTS_NUMBER_NOTE = <%- JSON.stringify(accountsNumberNoteData || {
+    enabled: false,
+    latestHighest: null,
+    records: [],
+    total: 0
+  }) %>;
+  window.SHOW_ACCOUNTS_NUMBER_NOTE = <%- JSON.stringify(!!shouldRenderAccountsNumberNote) %>;
 </script>
 
 <script src="/js/user-perms-live.js"></script>
+
+<script>
+  (function () {
+    const canShowNote = window.SHOW_ACCOUNTS_NUMBER_NOTE === true;
+    const widget = document.getElementById("accountsNumberNoteWidget");
+    const openBtn = document.getElementById("accountsNumberNoteOpenBtn");
+    const hideBtn = document.getElementById("accountsNumberNoteHideBtn");
+    const listEl = document.getElementById("accountsNumberNoteList");
+    const emptyEl = document.getElementById("accountsNumberNoteEmpty");
+    const totalEl = document.getElementById("accountsNumberNoteTotal");
+
+    if (!canShowNote || !widget || !listEl) {
+      return;
+    }
+
+    const storageKey =
+      widget.getAttribute("data-hidden-storage-key") ||
+      "ivs_accounts_number_note_hidden_super";
+
+    let currentRecords = [];
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function normalizeRecord(record = {}) {
+      const verificationNumber =
+        String(record.verificationNumber || record.rawVerificationNumber || "").trim() || "?";
+
+      const registrationNumber =
+        String(record.registrationNumber || record.rawRegistrationNumber || "").trim() || "?";
+
+      const missingVerificationNumber =
+        record.missingVerificationNumber === true ||
+        verificationNumber === "?";
+
+      const missingRegistrationNumber =
+        record.missingRegistrationNumber === true ||
+        registrationNumber === "?";
+
+      return {
+        admissionId: record.admissionId || record.id || "",
+        entryNumber: record.entryNumber || record.entry_number || record.admissionId || record.id || "-",
+        studentName: record.studentName || record.student_name || "No Name",
+        fatherName: record.fatherName || record.father_name || "",
+        grade: record.grade || "",
+        verificationNumber,
+        registrationNumber,
+        missingVerificationNumber,
+        missingRegistrationNumber,
+        updatedAt: record.updatedAt || record.updated_at || "",
+        updatedByName: record.updatedByName || record.updated_by_name || "",
+        copyText:
+          record.copyText ||
+          [
+            `Entry: ${record.entryNumber || record.admissionId || record.id || "-"}`,
+            `Student: ${record.studentName || record.student_name || "No Name"}`,
+            `VERIF: ${verificationNumber}`,
+            `REG: ${registrationNumber}`
+          ].join(" | ")
+      };
+    }
+
+    function formatDate(value) {
+      const raw = String(value || "").trim();
+
+      if (!raw) return "";
+
+      const parsed = new Date(raw);
+
+      if (Number.isNaN(parsed.getTime())) {
+        return raw;
+      }
+
+      const dd = String(parsed.getDate()).padStart(2, "0");
+      const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+      const yyyy = parsed.getFullYear();
+
+      return `${dd}-${mm}-${yyyy}`;
+    }
+
+    function makeChip(label, value, missing) {
+      return `
+        <span class="accounts-number-note-chip ${missing ? "missing" : ""}" title="${escapeHtml(value)}">
+          <span class="accounts-number-note-chip-label">${escapeHtml(label)}</span>
+          <span class="accounts-number-note-chip-value">${escapeHtml(value)}</span>
+        </span>
+      `;
+    }
+
+    function renderAccountsNumberNote(data = {}) {
+      const records = Array.isArray(data.records)
+        ? data.records.map(normalizeRecord)
+        : [];
+
+      currentRecords = records;
+
+      if (totalEl) {
+        totalEl.textContent = String(data.total || records.length || 0);
+      }
+
+      if (!records.length) {
+        listEl.innerHTML = "";
+
+        if (emptyEl) {
+          emptyEl.classList.remove("d-none");
+        }
+
+        return;
+      }
+
+      if (emptyEl) {
+        emptyEl.classList.add("d-none");
+      }
+
+      listEl.innerHTML = records.map((record, index) => {
+        const metaParts = [
+          record.fatherName ? `Father: ${record.fatherName}` : "",
+          record.grade ? `Grade: ${record.grade}` : "",
+          record.updatedAt ? `Updated: ${formatDate(record.updatedAt)}` : "",
+          record.updatedByName ? `By: ${record.updatedByName}` : ""
+        ].filter(Boolean);
+
+        return `
+          <div class="accounts-number-note-row">
+            <div class="accounts-number-note-row-head">
+              <div class="accounts-number-note-student">
+                ${escapeHtml(record.studentName)}
+              </div>
+
+              <div class="accounts-number-note-entry">
+                #${escapeHtml(record.entryNumber)}
+              </div>
+            </div>
+
+            <div class="accounts-number-note-meta">
+              ${escapeHtml(metaParts.join(" | ") || "Admission number update")}
+            </div>
+
+            <div class="accounts-number-note-numbers">
+              ${makeChip("VERIF", record.verificationNumber, record.missingVerificationNumber)}
+              ${makeChip("REG", record.registrationNumber, record.missingRegistrationNumber)}
+            </div>
+
+            <button
+              type="button"
+              class="accounts-number-note-copy"
+              data-copy-index="${index}">
+              <i class="bi bi-copy me-1"></i>
+              Copy
+            </button>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function copyText(text) {
+      const finalText = String(text || "").trim();
+
+      if (!finalText) return;
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(finalText);
+        } else {
+          const textarea = document.createElement("textarea");
+          textarea.value = finalText;
+          textarea.setAttribute("readonly", "readonly");
+          textarea.style.position = "fixed";
+          textarea.style.left = "-9999px";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          textarea.remove();
+        }
+
+        if (typeof window.showUploadFlash === "function") {
+          window.showUploadFlash("success", "Copied", "Verification and registration number copied.");
+        }
+      } catch (err) {
+        console.error("Copy failed:", err);
+
+        if (typeof window.showUploadFlash === "function") {
+          window.showUploadFlash("danger", "Copy Failed", "Could not copy number.");
+        }
+      }
+    }
+
+    function setNoteHidden(hidden) {
+      const shouldHide = !!hidden;
+
+      widget.classList.toggle("d-none", shouldHide);
+
+      if (openBtn) {
+        openBtn.classList.toggle("d-none", !shouldHide);
+      }
+
+      localStorage.setItem(storageKey, shouldHide ? "1" : "0");
+    }
+
+    async function refreshAccountsNumberNote() {
+      try {
+        const res = await fetch("/api/accounts-number-note", {
+          method: "GET",
+          credentials: "same-origin",
+          headers: {
+            "Accept": "application/json"
+          }
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || data.success === false) {
+          return;
+        }
+
+        const noteData = data.accountsNumberNote || {
+          enabled: false,
+          latestHighest: null,
+          records: [],
+          total: 0
+        };
+
+        window.ACCOUNTS_NUMBER_NOTE = noteData;
+
+        if (noteData.enabled) {
+          renderAccountsNumberNote(noteData);
+        }
+      } catch (err) {
+        console.error("Accounts number note refresh failed:", err);
+      }
+    }
+
+    listEl.addEventListener("click", function (event) {
+      const btn = event.target.closest("[data-copy-index]");
+      if (!btn) return;
+
+      const index = Number(btn.getAttribute("data-copy-index") || -1);
+      const record = currentRecords[index];
+
+      if (!record) return;
+
+      copyText(record.copyText);
+    });
+
+    if (hideBtn) {
+      hideBtn.addEventListener("click", function () {
+        setNoteHidden(true);
+      });
+    }
+
+    if (openBtn) {
+      openBtn.addEventListener("click", function () {
+        setNoteHidden(false);
+      });
+    }
+
+    renderAccountsNumberNote(window.ACCOUNTS_NUMBER_NOTE || {});
+
+    const isHidden =
+      localStorage.getItem(storageKey) === "1";
+
+    setNoteHidden(isHidden);
+
+    window.refreshAccountsNumberNote = refreshAccountsNumberNote;
+
+    document.addEventListener("DOMContentLoaded", function () {
+      refreshAccountsNumberNote();
+    });
+
+    setInterval(refreshAccountsNumberNote, 60000);
+
+    if (typeof io !== "undefined") {
+      try {
+        const noteSocket = io();
+
+        noteSocket.on("admission:changed", function () {
+          setTimeout(refreshAccountsNumberNote, 700);
+        });
+      } catch (err) {
+        console.error("Accounts number note socket failed:", err);
+      }
+    }
+  })();
+</script>
 
 <script>
   (function () {

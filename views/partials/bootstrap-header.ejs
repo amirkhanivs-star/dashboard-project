@@ -536,6 +536,129 @@ html.ivs-ready .ivs-topbar {
       cursor: not-allowed;
       transform: none;
     }
+              /* =========================
+       Sidebar Latest Numbers Compact Style
+       ========================= */
+    .sidebar-number-note-card{
+      margin: 4px 0 4px;
+      padding: 0;
+      border-radius: 0;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+      color: var(--ivs-text);
+    }
+
+    .sidebar-number-note-title{
+      padding: .70rem .95rem .45rem;
+      color: var(--ivs-text-muted);
+      opacity: .95;
+      font-size: .64rem;
+      font-weight: 800;
+      line-height: 1.2;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+    }
+
+    .sidebar-number-note-subtitle{
+      display: none !important;
+    }
+
+    .sidebar-number-note-empty{
+      margin: 4px 10px 0;
+      color: rgba(255,255,255,.82);
+      font-size: .70rem;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .sidebar-number-note-meta{
+      margin: 2px 10px 7px;
+      color: #ffffff;
+      font-size: .70rem;
+      font-weight: 900;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar-number-note-row{
+      margin: 0 10px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .sidebar-number-note-chip{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      min-height: 25px;
+      border-radius: 7px;
+      padding: 4px 7px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+
+    .sidebar-number-note-chip-label{
+      color: rgba(255,255,255,.78);
+      font-size: .62rem;
+      font-weight: 1000;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+
+    .sidebar-number-note-chip-value{
+      min-width: 0;
+      color: #ffffff;
+      font-size: .72rem;
+      font-weight: 1000;
+      line-height: 1;
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sidebar-number-note-chip.missing{
+      background: rgba(239,68,68,.18);
+      border-color: rgba(248,113,113,.38);
+    }
+
+    .sidebar-number-note-chip.missing .sidebar-number-note-chip-label,
+    .sidebar-number-note-chip.missing .sidebar-number-note-chip-value{
+      color: #fecaca;
+    }
+
+    .sidebar-number-note-copy{
+      width: calc(100% - 20px);
+      margin: 6px 10px 0;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 7px;
+      padding: 5px 7px;
+      background: rgba(255,255,255,0.10);
+      color: #ffffff;
+      font-size: .68rem;
+      font-weight: 1000;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .sidebar-number-note-copy:hover{
+      background: rgba(255,255,255,0.18);
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+
+    .sidebar-number-note-copy:disabled{
+      opacity: .65;
+      cursor: not-allowed;
+      transform: none;
+    }
     .sidebar-footer{
       padding:.90rem .95rem;
       border-top:1px solid var(--ivs-sidebar-border);
@@ -826,6 +949,99 @@ html.ivs-ready .ivs-topbar {
         ? (u.admissionLink || u.admission_link)
         : '';
 
+  const headerAccountsNumberNoteData =
+    (typeof accountsNumberNote !== 'undefined' && accountsNumberNote)
+      ? accountsNumberNote
+      : {
+          enabled: false,
+          latestHighest: null,
+          records: [],
+          total: 0
+        };
+
+  const shouldRenderSidebarAccountsNumberNote =
+    !!(
+      !isSuper &&
+      isSchoolAccountsDept &&
+      headerAccountsNumberNoteData &&
+      headerAccountsNumberNoteData.enabled
+    );
+
+  const sidebarLatestAccountsNumberNote =
+    headerAccountsNumberNoteData.latestHighest || null;
+
+  const sidebarAccountsNumberNoteHasRecord =
+    !!sidebarLatestAccountsNumberNote;
+
+  const sidebarLatestVerificationNumber =
+    String(
+      (
+        sidebarLatestAccountsNumberNote &&
+        (
+          sidebarLatestAccountsNumberNote.verificationNumber ||
+          sidebarLatestAccountsNumberNote.rawVerificationNumber
+        )
+      ) ||
+      ''
+    ).trim() || '?';
+
+  const sidebarLatestRegistrationNumber =
+    String(
+      (
+        sidebarLatestAccountsNumberNote &&
+        (
+          sidebarLatestAccountsNumberNote.registrationNumber ||
+          sidebarLatestAccountsNumberNote.rawRegistrationNumber
+        )
+      ) ||
+      ''
+    ).trim() || '?';
+
+  const sidebarMissingVerificationNumber =
+    !sidebarAccountsNumberNoteHasRecord ||
+    sidebarLatestAccountsNumberNote.missingVerificationNumber === true ||
+    sidebarLatestVerificationNumber === '?';
+
+  const sidebarMissingRegistrationNumber =
+    !sidebarAccountsNumberNoteHasRecord ||
+    sidebarLatestAccountsNumberNote.missingRegistrationNumber === true ||
+    sidebarLatestRegistrationNumber === '?';
+
+  const sidebarLatestEntryNumber =
+    (
+      sidebarLatestAccountsNumberNote &&
+      (
+        sidebarLatestAccountsNumberNote.entryNumber ||
+        sidebarLatestAccountsNumberNote.entry_number ||
+        sidebarLatestAccountsNumberNote.admissionId ||
+        sidebarLatestAccountsNumberNote.id
+      )
+    ) ||
+    '';
+
+  const sidebarLatestStudentName =
+    (
+      sidebarLatestAccountsNumberNote &&
+      (
+        sidebarLatestAccountsNumberNote.studentName ||
+        sidebarLatestAccountsNumberNote.student_name
+      )
+    ) ||
+    '';
+
+  const sidebarLatestAccountsCopyText =
+    (
+      sidebarLatestAccountsNumberNote &&
+      sidebarLatestAccountsNumberNote.copyText
+    )
+      ? sidebarLatestAccountsNumberNote.copyText
+      : [
+          sidebarLatestEntryNumber ? `Entry: ${sidebarLatestEntryNumber}` : '',
+          sidebarLatestStudentName ? `Student: ${sidebarLatestStudentName}` : '',
+          `VERIF: ${sidebarLatestVerificationNumber}`,
+          `REG: ${sidebarLatestRegistrationNumber}`
+        ].filter(Boolean).join(' | ');
+
   const clientUser = {
     id: u.id || null,
     role,
@@ -849,6 +1065,13 @@ html.ivs-ready .ivs-topbar {
   window.CURRENT_USER = <%- safeScriptJson(clientUser) %>;
   window.USER_PERMS = <%- safeScriptJson(headerPerms || null) %>;
   window.IS_SUPER = <%- safeScriptJson(isSuper) %>;
+  window.SIDEBAR_ACCOUNTS_NUMBER_NOTE = <%- safeScriptJson(headerAccountsNumberNoteData || {
+    enabled: false,
+    latestHighest: null,
+    records: [],
+    total: 0
+  }) %>;
+  window.SHOW_SIDEBAR_ACCOUNTS_NUMBER_NOTE = <%- safeScriptJson(!!shouldRenderSidebarAccountsNumberNote) %>;
 </script>
  <div id="ivsGlobalLoader" aria-hidden="false">
   <div class="ivs-luxury-orb orb-red"></div>
@@ -1032,6 +1255,72 @@ html.ivs-ready .ivs-topbar {
         </div>
       <% } %>
 
+      <% if (shouldRenderSidebarAccountsNumberNote) { %>
+        <div
+          class="sidebar-number-note-card"
+          id="sidebarAccountsNumberNote"
+          data-copy-text="<%= sidebarLatestAccountsCopyText %>"
+          data-has-record="<%= sidebarAccountsNumberNoteHasRecord ? '1' : '0' %>">
+
+                   <div class="sidebar-number-note-title">
+            Latest Verif + Reg
+          </div>
+
+          <div class="sidebar-number-note-subtitle"></div>
+
+          <div
+            class="sidebar-number-note-empty <%= sidebarAccountsNumberNoteHasRecord ? 'd-none' : '' %>"
+            id="sidebarAccountsNumberEmpty">
+            No verification or registration number found yet.
+          </div>
+
+          <div
+            class="<%= sidebarAccountsNumberNoteHasRecord ? '' : 'd-none' %>"
+            id="sidebarAccountsNumberBody">
+
+            <div class="sidebar-number-note-meta" id="sidebarAccountsNumberMeta">
+              <%= [
+                sidebarLatestEntryNumber ? `Entry #${sidebarLatestEntryNumber}` : '',
+                sidebarLatestStudentName || ''
+              ].filter(Boolean).join(' | ') || 'Latest account number' %>
+            </div>
+
+            <div class="sidebar-number-note-row">
+              <div
+                class="sidebar-number-note-chip <%= sidebarMissingVerificationNumber ? 'missing' : '' %>"
+                id="sidebarVerifChip">
+                <span class="sidebar-number-note-chip-label">VERIF</span>
+                <span
+                  class="sidebar-number-note-chip-value"
+                  id="sidebarLatestVerifNumber">
+                  <%= sidebarLatestVerificationNumber %>
+                </span>
+              </div>
+
+              <div
+                class="sidebar-number-note-chip <%= sidebarMissingRegistrationNumber ? 'missing' : '' %>"
+                id="sidebarRegChip">
+                <span class="sidebar-number-note-chip-label">REG</span>
+                <span
+                  class="sidebar-number-note-chip-value"
+                  id="sidebarLatestRegNumber">
+                  <%= sidebarLatestRegistrationNumber %>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="sidebar-number-note-copy"
+            id="sidebarAccountsNumberCopyBtn"
+            <%= sidebarAccountsNumberNoteHasRecord ? '' : 'disabled' %>>
+            <i class="bi bi-copy"></i>
+            <span>Copy</span>
+          </button>
+        </div>
+      <% } %>
+
       <div class="sidebar-footer">
         <div class="sidebar-section-label mb-2" style="padding:0; margin:0 0 8px 0;">Sign Out</div>
         <a href="/logout" class="logout-btn d-flex align-items-center justify-content-center gap-2">
@@ -1103,6 +1392,247 @@ html.ivs-ready .ivs-topbar {
     }
   })();
 </script>
+
+<script>
+  (function () {
+    const canShowSidebarNote =
+      window.SHOW_SIDEBAR_ACCOUNTS_NUMBER_NOTE === true;
+
+    const card = document.getElementById('sidebarAccountsNumberNote');
+
+    if (!canShowSidebarNote || !card) {
+      return;
+    }
+
+    const emptyEl = document.getElementById('sidebarAccountsNumberEmpty');
+    const bodyEl = document.getElementById('sidebarAccountsNumberBody');
+    const metaEl = document.getElementById('sidebarAccountsNumberMeta');
+    const verifEl = document.getElementById('sidebarLatestVerifNumber');
+    const regEl = document.getElementById('sidebarLatestRegNumber');
+    const verifChip = document.getElementById('sidebarVerifChip');
+    const regChip = document.getElementById('sidebarRegChip');
+    const copyBtn = document.getElementById('sidebarAccountsNumberCopyBtn');
+
+    function normalizeLatestNote(data) {
+      const latest =
+        data && data.latestHighest
+          ? data.latestHighest
+          : null;
+
+      if (!latest) {
+        return {
+          hasRecord: false,
+          verificationNumber: '?',
+          registrationNumber: '?',
+          missingVerificationNumber: true,
+          missingRegistrationNumber: true,
+          meta: '',
+          copyText: ''
+        };
+      }
+
+      const verificationNumber =
+        String(latest.verificationNumber || latest.rawVerificationNumber || '').trim() || '?';
+
+      const registrationNumber =
+        String(latest.registrationNumber || latest.rawRegistrationNumber || '').trim() || '?';
+
+      const entryNumber =
+        latest.entryNumber ||
+        latest.entry_number ||
+        latest.admissionId ||
+        latest.id ||
+        '';
+
+      const studentName =
+        latest.studentName ||
+        latest.student_name ||
+        '';
+
+      const missingVerificationNumber =
+        latest.missingVerificationNumber === true ||
+        verificationNumber === '?';
+
+      const missingRegistrationNumber =
+        latest.missingRegistrationNumber === true ||
+        registrationNumber === '?';
+
+      const meta = [
+        entryNumber ? `Entry #${entryNumber}` : '',
+        studentName || ''
+      ].filter(Boolean).join(' | ') || 'Latest account number';
+
+      const copyText =
+        latest.copyText ||
+        [
+          entryNumber ? `Entry: ${entryNumber}` : '',
+          studentName ? `Student: ${studentName}` : '',
+          `VERIF: ${verificationNumber}`,
+          `REG: ${registrationNumber}`
+        ].filter(Boolean).join(' | ');
+
+      return {
+        hasRecord: true,
+        verificationNumber,
+        registrationNumber,
+        missingVerificationNumber,
+        missingRegistrationNumber,
+        meta,
+        copyText
+      };
+    }
+
+    function renderSidebarNote(data) {
+      const note = normalizeLatestNote(data || {});
+
+      card.setAttribute('data-has-record', note.hasRecord ? '1' : '0');
+      card.setAttribute('data-copy-text', note.copyText || '');
+
+      if (emptyEl) {
+        emptyEl.classList.toggle('d-none', note.hasRecord);
+      }
+
+      if (bodyEl) {
+        bodyEl.classList.toggle('d-none', !note.hasRecord);
+      }
+
+      if (copyBtn) {
+        copyBtn.disabled = !note.hasRecord;
+      }
+
+      if (metaEl) {
+        metaEl.textContent = note.meta || 'Latest account number';
+      }
+
+      if (verifEl) {
+        verifEl.textContent = note.verificationNumber;
+      }
+
+      if (regEl) {
+        regEl.textContent = note.registrationNumber;
+      }
+
+      if (verifChip) {
+        verifChip.classList.toggle('missing', !!note.missingVerificationNumber);
+      }
+
+      if (regChip) {
+        regChip.classList.toggle('missing', !!note.missingRegistrationNumber);
+      }
+    }
+
+    async function copySidebarText(text) {
+      const cleanText = String(text || '').trim();
+
+      if (!cleanText) {
+        return false;
+      }
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(cleanText);
+          return true;
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = cleanText;
+        textarea.setAttribute('readonly', 'readonly');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        const copied = document.execCommand('copy');
+        textarea.remove();
+
+        return copied;
+      } catch (err) {
+        console.error('Sidebar accounts number copy failed:', err);
+        return false;
+      }
+    }
+
+    async function refreshSidebarAccountsNumberNote() {
+      try {
+        const res = await fetch('/api/accounts-number-note', {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: {
+            Accept: 'application/json'
+          }
+        });
+
+        const data = await res.json().catch(function () {
+          return {};
+        });
+
+        if (!res.ok || data.success === false) {
+          return;
+        }
+
+        const noteData = data.accountsNumberNote || {
+          enabled: false,
+          latestHighest: null,
+          records: [],
+          total: 0
+        };
+
+        window.SIDEBAR_ACCOUNTS_NUMBER_NOTE = noteData;
+
+        if (noteData.enabled) {
+          renderSidebarNote(noteData);
+        }
+      } catch (err) {
+        console.error('Sidebar accounts number refresh failed:', err);
+      }
+    }
+
+    if (copyBtn) {
+      copyBtn.addEventListener('click', async function () {
+        const text = card.getAttribute('data-copy-text') || '';
+        const oldHtml = copyBtn.innerHTML;
+
+        copyBtn.disabled = true;
+        copyBtn.innerHTML = '<i class="bi bi-hourglass-split"></i><span>Copying...</span>';
+
+        const copied = await copySidebarText(text);
+
+        if (copied) {
+          copyBtn.innerHTML = '<i class="bi bi-check2-circle"></i><span>Copied</span>';
+        } else {
+          prompt('Copy latest verification + registration number:', text);
+          copyBtn.innerHTML = oldHtml;
+        }
+
+        setTimeout(function () {
+          copyBtn.disabled = card.getAttribute('data-has-record') !== '1';
+          copyBtn.innerHTML = oldHtml;
+        }, 1200);
+      });
+    }
+
+    renderSidebarNote(window.SIDEBAR_ACCOUNTS_NUMBER_NOTE || {});
+
+    refreshSidebarAccountsNumberNote();
+
+    setInterval(refreshSidebarAccountsNumberNote, 60000);
+
+    if (typeof io !== 'undefined') {
+      try {
+        const sidebarNoteSocket = io();
+
+        sidebarNoteSocket.on('admission:changed', function () {
+          setTimeout(refreshSidebarAccountsNumberNote, 700);
+        });
+      } catch (err) {
+        console.error('Sidebar accounts number socket failed:', err);
+      }
+    }
+  })();
+</script>
+
   <!-- MAIN + TOPBAR -->
   <main class="ivs-main d-flex flex-column">
     <nav class="ivs-topbar navbar">

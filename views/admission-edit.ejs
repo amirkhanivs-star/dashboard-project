@@ -235,6 +235,58 @@ if (roleKey === 'admin') {
     `/dashboard/admission/${encodeURIComponent(A.id || '')}` +
     `?year=${encodeURIComponent(currentYearOnly)}`;
   const backUrl = P.btn.details ? sharedDetailsUrl : dashboardUrl;
+    const editForwardCtx =
+    (typeof editForwardContext !== 'undefined' && editForwardContext)
+      ? editForwardContext
+      : {};
+
+  const editForwardAdmissionIdList =
+    Array.isArray(editForwardCtx.forwardAdmissionIds)
+      ? editForwardCtx.forwardAdmissionIds
+          .map(id => Number(id || 0))
+          .filter(Boolean)
+      : [];
+
+  const canShowUpdatePopupForwardButton =
+    !!(
+      editForwardCtx.canShowForwardButton ||
+      editForwardCtx.canShowEditForwardButton ||
+      (
+        typeof canShowEditForwardButton !== 'undefined' &&
+        canShowEditForwardButton
+      )
+    ) &&
+    editForwardAdmissionIdList.length > 0;
+
+  const editForwardDashboardReturnUrl =
+    String(editForwardCtx.dashboardReturnUrl || dashboardUrl).trim() ||
+    dashboardUrl;
+
+  const editForwardShouldReturnToDashboard =
+    !!editForwardCtx.shouldReturnToDashboardAfterForward;
+
+  const editForwardPrimaryAdmissionId =
+    Number(editForwardCtx.primaryAdmissionId || A.id || 0) || 0;
+
+  const editUserDeptKey =
+    String(user?.dept || '').trim().toLowerCase();
+
+  const editPrimaryForwardStatus =
+    String(
+      A.forwardStatus ||
+      A.forward_status ||
+      A.forward?.status ||
+      ''
+    ).trim().toLowerCase();
+
+  const canShowEditReturnToSchoolOption =
+    (
+      isSuper ||
+      editUserDeptKey === 'accounts' ||
+      editUserDeptKey === 'school accounts' ||
+      editUserDeptKey === 'school_accounts'
+    ) &&
+    editPrimaryForwardStatus === 'forwarded';
 
   const currentStatusVal = String(A.status || A.currentStatus || A.current_status || 'New Admission').trim();
   const feeStatusVal = String(A.feeStatus || A.fee_status || A.feeStatusText || 'New Admission').trim();
@@ -330,6 +382,26 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
     const eCurrencyVal = String(E.currency_code || E.currencyCode || eAdm.currencyCode || eAdm.currency_code || '').trim().toUpperCase();
     const eBankVal = String(E.bank_name || E.bankName || eAdm.bankName || eAdm.bank_name || '').trim();
     const eMonthVal = String(eAdm.month || E.admission_month || '').trim();
+
+    const eVerificationRaw = String(
+      eAcc.verificationNumber ||
+      E.accounts_verification_number ||
+      ''
+    ).trim();
+
+    const eVerificationParts = eVerificationRaw
+      .split('+')
+      .map(part => String(part || '').trim())
+      .filter(Boolean);
+
+    const eVerificationFirst = eVerificationParts[0] || '';
+
+    const eVerificationSecond =
+      eVerificationParts.length > 1
+        ? eVerificationParts.slice(1).join(' + ')
+        : '';
+
+    const eHasSecondVerification = !!eVerificationSecond;
 
     const isActiveCard = Number(E.id || 0) === activeAdmissionId;
   %>
@@ -500,14 +572,43 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
         <% } %>
 
         <% if (P.col.verif) { %>
-          <div class="field-box">
+          <div class="field-box verification-field-box">
             <label>Verification #</label>
-            <input
-              type="text"
-              name="verificationNumber"
-              class="form-control form-control-sm compact-input"
-              value="<%= eAcc.verificationNumber || E.accounts_verification_number || '' %>"
-            >
+
+            <div class="verification-control-wrap">
+              <div class="verification-main-row">
+                <input
+                  type="text"
+                  name="verificationNumber"
+                  class="form-control form-control-sm compact-input js-family-verification-input"
+                  data-verification-part="1"
+                  value="<%= eVerificationFirst %>"
+                  placeholder="Verification # 1"
+                >
+
+                <button
+                  type="button"
+                  class="verification-add-btn js-add-second-verification-btn <%= eHasSecondVerification ? 'd-none' : '' %>"
+                  title="Add second verification number">
+                  +
+                </button>
+              </div>
+
+              <div class="verification-second-row js-family-verification-second-wrap <%= eHasSecondVerification ? '' : 'd-none' %>">
+                <input
+                  type="text"
+                  name="verificationNumber2"
+                  class="form-control form-control-sm compact-input js-family-verification-input"
+                  data-verification-part="2"
+                  value="<%= eVerificationSecond %>"
+                  placeholder="Verification # 2"
+                >
+              </div>
+
+              <div class="verification-hint">
+                Single and double verification number saved in same column.
+              </div>
+            </div>
           </div>
         <% } %>
 
@@ -521,7 +622,12 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
         <% if (P.col.family) { %>
           <div class="field-box">
             <label>Family #</label>
-            <input type="text" name="familyNumber" class="form-control form-control-sm compact-input" value="<%= eAcc.familyNumber || '' %>">
+            <input
+              type="text"
+              name="familyNumber"
+              class="form-control form-control-sm compact-input js-family-number-input"
+              value="<%= eAcc.familyNumber || '' %>"
+            >
           </div>
         <% } %>
 
@@ -964,7 +1070,56 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
     background:#f1f5f9 !important;
     color:#64748b !important;
   }
+  .verification-field-box{
+    min-width:0;
+  }
 
+  .verification-control-wrap{
+    display:grid;
+    gap:6px;
+  }
+
+  .verification-main-row,
+  .verification-second-row{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    min-width:0;
+  }
+
+  .verification-main-row .compact-input,
+  .verification-second-row .compact-input{
+    flex:1 1 auto;
+    min-width:0;
+  }
+
+  .verification-add-btn{
+    width:34px;
+    height:34px;
+    min-width:34px;
+    border:0;
+    border-radius:9px;
+    background:linear-gradient(135deg,var(--theme-main),var(--theme-dark));
+    color:#fff;
+    font-size:20px;
+    font-weight:900;
+    line-height:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 8px 16px var(--theme-glow);
+  }
+
+  .verification-add-btn:hover{
+    filter:brightness(.96);
+  }
+
+  .verification-hint{
+    font-size:10px;
+    line-height:1.2;
+    color:#64748b;
+    font-weight:700;
+  }
   .comment-field-box{
     grid-column: span 2;
   }
@@ -1131,6 +1286,55 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
   color:#64748b;
   background:rgba(248,250,252,.7);
 }
+.forward-dept-list{
+  display:grid;
+  gap:10px;
+}
+
+.forward-dept-option{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  padding:12px 14px;
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:16px;
+  background:#fff;
+  cursor:pointer;
+  transition:.16s ease;
+}
+
+.forward-dept-option:hover{
+  border-color:rgba(34,197,94,.45);
+  box-shadow:0 10px 22px rgba(15,23,42,.08);
+}
+
+.forward-dept-option input{
+  margin-top:4px;
+}
+
+.forward-dept-option b{
+  display:block;
+  color:#0f172a;
+  font-size:14px;
+}
+
+.forward-dept-option small{
+  display:block;
+  color:#64748b;
+  margin-top:2px;
+}
+
+.forward-return-school-option{
+  border-color:rgba(245,158,11,.35);
+  background:#fffbeb;
+}
+
+.forward-target-user-wrap{
+  border:1px solid rgba(15,23,42,.08);
+  border-radius:16px;
+  padding:12px;
+  background:#f8fafc;
+}
 </style>
 <!-- Bank Option Manager Popup -->
 <div id="bankOptionModal" class="billing-status-overlay d-none" aria-hidden="true">
@@ -1279,13 +1483,14 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
       </div>
 
       <div class="modal-footer border-0 justify-content-end">
-        <% if (P.btn.details) { %>
-          <a
-            href="<%= sharedDetailsUrl %>"
-            class="btn btn-outline-secondary rounded-pill px-4 d-none"
-            id="admissionUpdateDetailsLink">
-            Back to Details
-          </a>
+        <% if (canShowUpdatePopupForwardButton) { %>
+          <button
+            type="button"
+            class="btn btn-success rounded-pill px-4 d-none"
+            id="admissionUpdateForwardBtn">
+            <i class="bi bi-send-check me-1"></i>
+            Forward
+          </button>
         <% } %>
 
         <button type="button" class="btn btn-danger rounded-pill px-4 admission-update-close-btn">
@@ -1295,7 +1500,320 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
     </div>
   </div>
 </div>
+<!-- Edit Page Forward Modal -->
+<div class="modal fade" id="editAdmissionForwardModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg rounded-4">
+      <div class="modal-header border-0">
+        <div>
+          <h5 class="modal-title mb-0">
+            <i class="bi bi-send-check me-1 text-success"></i>
+            Forward Admission
+          </h5>
+          <div class="small text-muted">
+            Select where this admission should be forwarded.
+          </div>
+        </div>
 
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body pt-0">
+        <div class="forward-dept-list">
+          <label class="forward-dept-option">
+            <input
+              type="radio"
+              name="editForwardType"
+              value="print_record_update"
+              data-label="Print + Record update">
+
+            <span>
+              <b>Print + Record update</b>
+              <small>Send to Print and Record Update pipeline.</small>
+            </span>
+          </label>
+
+          <label class="forward-dept-option">
+            <input
+              type="radio"
+              name="editForwardType"
+              value="verification_registration"
+              data-label="Verification & Registration">
+
+            <span>
+              <b>Verification & Registration</b>
+              <small>Send to Verification and Registration pipeline.</small>
+            </span>
+          </label>
+
+          <label class="forward-dept-option">
+            <input
+              type="radio"
+              name="editForwardType"
+              value="paid_slip"
+              data-label="Paid slip">
+
+            <span>
+              <b>Paid slip</b>
+              <small>Send to Paid Slip pipeline.</small>
+            </span>
+          </label>
+
+          <% if (canShowEditReturnToSchoolOption) { %>
+            <label class="forward-dept-option forward-return-school-option">
+              <input
+                type="radio"
+                name="editForwardType"
+                value="school_return"
+                data-label="School Department">
+
+              <span>
+                <b>Return to School Department</b>
+                <small>Use this when Accounts sends the admission back for correction or file re-upload.</small>
+              </span>
+            </label>
+          <% } %>
+        </div>
+
+        <div class="forward-target-user-wrap d-none mt-3" id="editForwardTargetUserWrap">
+          <label class="form-label fw-semibold mb-1" for="editForwardTargetUserId">
+            Assign to Agent / Sub-Agent
+          </label>
+
+          <select class="form-select" id="editForwardTargetUserId" disabled>
+            <option value="">Select pipeline first</option>
+          </select>
+
+          <div class="small text-muted mt-2" id="editForwardTargetUserHint">
+            Select the user who should receive this admission.
+          </div>
+        </div>
+
+        <div class="small text-muted mt-3">
+          <% if (editForwardAdmissionIdList.length > 1) { %>
+            This will forward <strong><%= editForwardAdmissionIdList.length %></strong> family admissions.
+          <% } else { %>
+            This will forward the selected admission.
+          <% } %>
+        </div>
+      </div>
+
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">
+          Cancel
+        </button>
+
+        <button type="button" class="btn btn-success rounded-pill px-4" id="sendEditForwardAdmissionBtn">
+          <i class="bi bi-send-check me-1"></i>
+          Send
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const forms = Array.from(document.querySelectorAll('.admission-edit-form'));
+  const isFamilyEditGroup = forms.length > 1;
+
+  if (!forms.length) return;
+
+  function getForm(element) {
+    return element && typeof element.closest === 'function'
+      ? element.closest('.admission-edit-form')
+      : null;
+  }
+
+  function getFirstVerificationInput(form) {
+    return form.querySelector('.js-family-verification-input[data-verification-part="1"]');
+  }
+
+  function getSecondVerificationInput(form) {
+    return form.querySelector('.js-family-verification-input[data-verification-part="2"]');
+  }
+
+  function getSecondVerificationWrap(form) {
+    return form.querySelector('.js-family-verification-second-wrap');
+  }
+
+  function getAddSecondVerificationBtn(form) {
+    return form.querySelector('.js-add-second-verification-btn');
+  }
+
+  function splitVerificationValue(value) {
+    return String(value || '')
+      .split('+')
+      .map(function (part) {
+        return String(part || '').trim();
+      })
+      .filter(Boolean);
+  }
+
+  function showSecondVerificationInput(form) {
+    if (!form) return;
+
+    const wrap = getSecondVerificationWrap(form);
+    const addBtn = getAddSecondVerificationBtn(form);
+
+    if (wrap) {
+      wrap.classList.remove('d-none');
+    }
+
+    if (addBtn) {
+      addBtn.classList.add('d-none');
+    }
+  }
+
+  function hideSecondVerificationInputIfEmpty(form) {
+    if (!form) return;
+
+    const secondInput = getSecondVerificationInput(form);
+    const wrap = getSecondVerificationWrap(form);
+    const addBtn = getAddSecondVerificationBtn(form);
+
+    if (!secondInput || String(secondInput.value || '').trim()) {
+      return;
+    }
+
+    if (wrap) {
+      wrap.classList.add('d-none');
+    }
+
+    if (addBtn) {
+      addBtn.classList.remove('d-none');
+    }
+  }
+
+  function readVerificationParts(form) {
+    const firstInput = getFirstVerificationInput(form);
+    const secondInput = getSecondVerificationInput(form);
+
+    if (!firstInput && !secondInput) {
+      return {
+        first: '',
+        second: ''
+      };
+    }
+
+    let firstValue = String(firstInput?.value || '').trim();
+    let secondValue = String(secondInput?.value || '').trim();
+
+    const pastedFirstParts = splitVerificationValue(firstValue);
+
+    if (pastedFirstParts.length > 1) {
+      firstValue = pastedFirstParts[0] || '';
+      secondValue = secondValue || pastedFirstParts.slice(1).join(' + ');
+
+      if (firstInput) {
+        firstInput.value = firstValue;
+      }
+
+      if (secondInput) {
+        secondInput.value = secondValue;
+      }
+
+      showSecondVerificationInput(form);
+    }
+
+    if (secondValue) {
+      showSecondVerificationInput(form);
+    }
+
+    return {
+      first: firstValue,
+      second: secondValue
+    };
+  }
+
+  function writeVerificationParts(form, parts) {
+    const firstInput = getFirstVerificationInput(form);
+    const secondInput = getSecondVerificationInput(form);
+
+    if (firstInput) {
+      firstInput.value = parts.first || '';
+    }
+
+    if (secondInput) {
+      secondInput.value = parts.second || '';
+
+      if (parts.second) {
+        showSecondVerificationInput(form);
+      } else {
+        hideSecondVerificationInputIfEmpty(form);
+      }
+    }
+  }
+
+  function syncFamilyVerification(sourceForm) {
+    if (!sourceForm) return;
+
+    const parts = readVerificationParts(sourceForm);
+
+    if (!isFamilyEditGroup) {
+      return;
+    }
+
+    forms.forEach(function (form) {
+      if (form === sourceForm) return;
+
+      writeVerificationParts(form, parts);
+    });
+  }
+
+  function syncFamilyNumber(sourceInput) {
+    if (!isFamilyEditGroup || !sourceInput) return;
+
+    const value = String(sourceInput.value || '').trim();
+
+    forms.forEach(function (form) {
+      const input = form.querySelector('.js-family-number-input');
+
+      if (!input || input === sourceInput) return;
+
+      input.value = value;
+    });
+  }
+
+  document.addEventListener('click', function (event) {
+    const btn = event.target.closest('.js-add-second-verification-btn');
+    if (!btn) return;
+
+    const form = getForm(btn);
+    if (!form) return;
+
+    const targetForms = isFamilyEditGroup ? forms : [form];
+
+    targetForms.forEach(function (targetForm) {
+      showSecondVerificationInput(targetForm);
+    });
+
+    const secondInput = getSecondVerificationInput(form);
+
+    if (secondInput) {
+      secondInput.focus();
+    }
+  });
+
+  document.addEventListener('input', function (event) {
+    const target = event.target;
+    if (!target) return;
+
+    if (target.matches('.js-family-verification-input')) {
+      const form = getForm(target);
+      syncFamilyVerification(form);
+      return;
+    }
+
+    if (target.matches('.js-family-number-input')) {
+      syncFamilyNumber(target);
+    }
+  });
+
+  forms.forEach(function (form) {
+    readVerificationParts(form);
+  });
+})();
+</script>
 <script>
   (function () {
     const forms = Array.from(document.querySelectorAll('.admission-edit-form'));
@@ -1303,7 +1821,15 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
 
     const modalEl = document.getElementById('admissionUpdateModal');
     const listEl = document.getElementById('admissionUpdateList');
-    const detailsLinkEl = document.getElementById('admissionUpdateDetailsLink');
+        const updateForwardBtn = document.getElementById('admissionUpdateForwardBtn');
+
+    const EDIT_FORWARD_CONTEXT = <%- JSON.stringify({
+      canShowForwardButton: canShowUpdatePopupForwardButton,
+      forwardAdmissionIds: editForwardAdmissionIdList,
+      primaryAdmissionId: editForwardPrimaryAdmissionId,
+      dashboardReturnUrl: editForwardDashboardReturnUrl,
+      shouldReturnToDashboardAfterForward: editForwardShouldReturnToDashboard
+    }) %>;
 
     if (!forms.length || !updateButtons.length) return;
 
@@ -1321,7 +1847,7 @@ function showUpdateModal(items, titleText, options = {}) {
 
   const {
     subtitle = 'The selected admission fields were updated successfully.',
-    showDetailsLink = false
+    showForwardButton = false
   } = options;
 
   const titleEl = modalEl.querySelector('.modal-title');
@@ -1335,8 +1861,11 @@ function showUpdateModal(items, titleText, options = {}) {
     subTitleEl.textContent = subtitle;
   }
 
-  if (detailsLinkEl) {
-    detailsLinkEl.classList.toggle('d-none', !showDetailsLink);
+  if (updateForwardBtn) {
+    updateForwardBtn.classList.toggle(
+      'd-none',
+      !(showForwardButton && EDIT_FORWARD_CONTEXT.canShowForwardButton)
+    );
   }
 
   let html = '';
@@ -1497,7 +2026,7 @@ function showUpdateModal(items, titleText, options = {}) {
             '<i class="bi bi-info-circle-fill text-primary me-1"></i> No Changes',
             {
               subtitle: 'Nothing was sent to the server.',
-              showDetailsLink: false
+              showForwardButton: false
             }
           );
           return;
@@ -1518,7 +2047,7 @@ function showUpdateModal(items, titleText, options = {}) {
             '<i class="bi bi-check-circle-fill text-success me-1"></i> Admission Updated',
             {
               subtitle: 'The changed admission fields were updated successfully.',
-              showDetailsLink: true
+              showForwardButton: true
             }
           );
 
@@ -1540,7 +2069,7 @@ function showUpdateModal(items, titleText, options = {}) {
             '<i class="bi bi-x-circle-fill text-danger me-1"></i> Update Failed',
             {
               subtitle: 'The update could not be completed. Review the message below.',
-              showDetailsLink: false
+              showForwardButton: false
             }
           );
         } finally {
@@ -1551,6 +2080,280 @@ function showUpdateModal(items, titleText, options = {}) {
     });
   })();
 </script>
+
+<script>
+(function () {
+  const editForwardContext = <%- JSON.stringify({
+    canShowForwardButton: canShowUpdatePopupForwardButton,
+    forwardAdmissionIds: editForwardAdmissionIdList,
+    primaryAdmissionId: editForwardPrimaryAdmissionId,
+    dashboardReturnUrl: editForwardDashboardReturnUrl,
+    shouldReturnToDashboardAfterForward: editForwardShouldReturnToDashboard
+  }) %>;
+
+  const openForwardBtn = document.getElementById('admissionUpdateForwardBtn');
+  const forwardModalEl = document.getElementById('editAdmissionForwardModal');
+  const sendBtn = document.getElementById('sendEditForwardAdmissionBtn');
+  const targetWrap = document.getElementById('editForwardTargetUserWrap');
+  const targetSelect = document.getElementById('editForwardTargetUserId');
+  const targetHint = document.getElementById('editForwardTargetUserHint');
+  const updateModalEl = document.getElementById('admissionUpdateModal');
+
+  if (!editForwardContext.canShowForwardButton || !openForwardBtn || !forwardModalEl || !sendBtn) {
+    return;
+  }
+
+  function getForwardAdmissionIds() {
+    const ids = Array.isArray(editForwardContext.forwardAdmissionIds)
+      ? editForwardContext.forwardAdmissionIds
+      : [];
+
+    return ids
+      .map(function (id) {
+        return Number(id || 0);
+      })
+      .filter(Boolean);
+  }
+
+  function hideUpdateModal() {
+    if (!updateModalEl) return;
+
+    updateModalEl.classList.add('d-none');
+    updateModalEl.setAttribute('aria-hidden', 'true');
+  }
+
+  function resetForwardModal() {
+    forwardModalEl.querySelectorAll('input[name="editForwardType"]').forEach(function (radio) {
+      radio.checked = false;
+    });
+
+    if (targetWrap) {
+      targetWrap.classList.add('d-none');
+    }
+
+    if (targetSelect) {
+      targetSelect.disabled = true;
+      targetSelect.innerHTML = '<option value="">Select pipeline first</option>';
+    }
+
+    if (targetHint) {
+      targetHint.textContent = 'Select the user who should receive this admission.';
+    }
+  }
+
+  function openForwardModal() {
+    hideUpdateModal();
+    resetForwardModal();
+
+    if (typeof bootstrap === 'undefined') {
+      alert('Forward modal could not be opened. Bootstrap is missing.');
+      return;
+    }
+
+    bootstrap.Modal
+      .getOrCreateInstance(forwardModalEl)
+      .show();
+  }
+
+  function escapeHtml(value) {
+    return String(value || '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  async function loadForwardUsers(toType) {
+    if (!targetWrap || !targetSelect) return;
+
+    targetWrap.classList.remove('d-none');
+    targetSelect.disabled = true;
+    targetSelect.innerHTML = '<option value="">Loading users...</option>';
+
+    if (targetHint) {
+      targetHint.textContent = 'Loading available Accounts users...';
+    }
+
+    const response = await fetch(
+      '/api/accounts/forward-users?toType=' + encodeURIComponent(toType),
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json'
+        }
+      }
+    );
+
+    const data = await response.json().catch(function () {
+      return {};
+    });
+
+    if (!response.ok || data.success === false) {
+      throw new Error(data.message || 'Could not load forwarding users.');
+    }
+
+    const users = Array.isArray(data.users) ? data.users : [];
+
+    if (!users.length) {
+      targetSelect.innerHTML = '<option value="">No user found for this pipeline</option>';
+
+      if (targetHint) {
+        targetHint.textContent = 'No Accounts Agent/Sub-Agent is available for this pipeline.';
+      }
+
+      return;
+    }
+
+    targetSelect.innerHTML =
+      '<option value="">Select user</option>' +
+      users.map(function (item) {
+        const label = [
+          item.name || item.email || ('User #' + item.id),
+          item.role ? '(' + item.role.replaceAll('_', ' ') + ')' : ''
+        ].filter(Boolean).join(' ');
+
+        return (
+          '<option value="' + escapeHtml(item.id) + '">' +
+          escapeHtml(label) +
+          '</option>'
+        );
+      }).join('');
+
+    targetSelect.disabled = false;
+
+    if (targetHint) {
+      targetHint.textContent = 'Select the user who should receive this admission.';
+    }
+  }
+
+  document.addEventListener('change', async function (event) {
+    const radio = event.target.closest('input[name="editForwardType"]');
+    if (!radio) return;
+
+    const toType = String(radio.value || '').trim();
+    const isReturnToSchool = toType === 'school_return';
+
+    if (isReturnToSchool) {
+      if (targetWrap) {
+        targetWrap.classList.add('d-none');
+      }
+
+      if (targetSelect) {
+        targetSelect.disabled = true;
+        targetSelect.innerHTML = '<option value="">Not required</option>';
+      }
+
+      return;
+    }
+
+    try {
+      await loadForwardUsers(toType);
+    } catch (err) {
+      alert(err.message || 'Could not load users.');
+    }
+  });
+
+  openForwardBtn.addEventListener('click', function () {
+    openForwardModal();
+  });
+
+  sendBtn.addEventListener('click', async function () {
+    const checked = forwardModalEl.querySelector('input[name="editForwardType"]:checked');
+    const toType = checked ? String(checked.value || '').trim() : '';
+    const isReturnToSchool = toType === 'school_return';
+
+    if (!toType) {
+      alert('Please select forwarding type first.');
+      return;
+    }
+
+    const targetUserId = isReturnToSchool
+      ? 0
+      : Number(targetSelect?.value || 0);
+
+    if (!isReturnToSchool && !targetUserId) {
+      alert('Please select the Accounts Agent or Sub-Agent who should receive this admission.');
+      return;
+    }
+
+    const admissionIds = getForwardAdmissionIds();
+
+    if (!admissionIds.length) {
+      alert('Admission ID not found.');
+      return;
+    }
+
+    const oldHtml = sendBtn.innerHTML;
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Sending...';
+
+    try {
+      let firstResponseData = null;
+
+      for (const admissionId of admissionIds) {
+        const response = await fetch(
+          '/api/admissions/' + encodeURIComponent(admissionId) + '/forward',
+          {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json'
+            },
+            body: JSON.stringify({
+              toType,
+              targetUserId: isReturnToSchool ? null : targetUserId,
+              returnToSchool: isReturnToSchool,
+              returnTo: editForwardContext.dashboardReturnUrl || '/dashboard'
+            })
+          }
+        );
+
+        const data = await response.json().catch(function () {
+          return {};
+        });
+
+        if (!response.ok || data.success === false) {
+          throw new Error(data.message || 'Admission forward failed.');
+        }
+
+        if (!firstResponseData) {
+          firstResponseData = data;
+        }
+      }
+
+      const modalInstance = bootstrap.Modal.getInstance(forwardModalEl);
+
+      if (modalInstance) {
+        modalInstance.hide();
+      }
+
+      const shouldReturnToDashboard =
+        !!(
+          firstResponseData?.shouldReturnToDashboardAfterForward ||
+          editForwardContext.shouldReturnToDashboardAfterForward
+        );
+
+      if (shouldReturnToDashboard) {
+        window.location.href =
+          firstResponseData?.redirectUrl ||
+          editForwardContext.dashboardReturnUrl ||
+          '/dashboard';
+        return;
+      }
+
+      window.location.reload();
+    } catch (err) {
+      alert(err.message || 'Admission forward failed.');
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.innerHTML = oldHtml;
+    }
+  });
+})();
+</script>
+
 <script>
   (function () {
     document.addEventListener('DOMContentLoaded', function () {

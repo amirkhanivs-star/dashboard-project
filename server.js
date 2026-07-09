@@ -853,7 +853,72 @@ function getDeveloperDashboardStats() {
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+// ================== SESSION EXPIRY HELPERS ==================
+const DASHBOARD_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+// Pakistan time fixed UTC+5 hai, is se day-change check safe rahega.
+function getPakistanDateKey(date = new Date()) {
+  const pkTime = new Date(date.getTime() + 5 * 60 * 60 * 1000);
+  return pkTime.toISOString().slice(0, 10);
+}
+
+function markDashboardSessionLogin(req) {
+  const now = Date.now();
+
+  req.session.loginStartedAt = now;
+  req.session.loginDateKey = getPakistanDateKey(new Date(now));
+}
+
+function isDashboardSessionExpired(req) {
+  const hasNormalUser = !!req.session?.user?.id;
+  const hasDeveloperUser = !!req.session?.developer?.id;
+
+  if (!hasNormalUser && !hasDeveloperUser) {
+    return false;
+  }
+
+  const now = Date.now();
+  const currentDateKey = getPakistanDateKey(new Date(now));
+
+  const loginStartedAt = Number(req.session.loginStartedAt || 0);
+  const loginDateKey = String(req.session.loginDateKey || "").trim();
+
+  // Old active sessions ke liye safe fallback.
+  // Deploy ke baad existing logged-in users suddenly logout nahi honge.
+  if (!loginStartedAt || !loginDateKey) {
+    req.session.loginStartedAt = now;
+    req.session.loginDateKey = currentDateKey;
+    return false;
+  }
+
+  const isOlderThan24Hours =
+    now - loginStartedAt >= DASHBOARD_SESSION_MAX_AGE_MS;
+
+  const isNewPakistanDay =
+    loginDateKey !== currentDateKey;
+
+  return isOlderThan24Hours || isNewPakistanDay;
+}
+
+function destroyExpiredDashboardSession(req, res) {
+  req.session.destroy(() => {
+    res.clearCookie("connect.sid");
+
+    const wantsJson =
+      String(req.path || "").startsWith("/api/") ||
+      String(req.headers.accept || "").includes("application/json") ||
+      req.xhr;
+
+    if (wantsJson) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired. Please login again.",
+      });
+    }
+
+    return res.redirect("/login?expired=1");
+  });
+}
 // ----------------- Middlewares -----------------
 app.use(cors()); // ✅ admission form (port 5000) se requests allow
 app.use(express.urlencoded({ extended: true }));
@@ -864,8 +929,21 @@ app.use(
     secret: "ivs-dashboard-secret",
     resave: false,
     saveUninitialized: false,
+    cookie: {
+      maxAge: DASHBOARD_SESSION_MAX_AGE_MS,
+      httpOnly: true,
+      sameSite: "lax",
+    },
   })
 );
+// ✅ Auto logout after 24 hours or Pakistan day change
+app.use((req, res, next) => {
+  if (isDashboardSessionExpired(req)) {
+    return destroyExpiredDashboardSession(req, res);
+  }
+
+  return next();
+});
 
 // 🔔 Flash middleware (popup ke liye)
 app.use((req, res, next) => {
@@ -1848,6 +1926,384 @@ function ensureAdmissionWorkflowTriggers() {
 
 ensureAdmissionWorkflowTriggers();
 
+// ================== ACCOUNTS NUMBER NOTE HELPERS ==================
+function ensureAccountsNumberNoteColumns() {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(admissions)`).all();
+    const existing = new Set(
+      cols.map((column) => String(column.name || "").trim())
+    );
+
+    const addColumn = (name, type) => {
+      if (!existing.has(name)) {
+        db.prepare(`ALTER TABLE admissions ADD COLUMN ${name} ${type}`).run();
+        existing.add(name);
+      }
+    };
+
+    addColumn("accounts_number_note_updated_at", "TEXT");
+    addColumn("accounts_number_note_updated_by_id", "INTEGER");
+    addColumn("accounts_number_note_updated_by_name", "TEXT");
+    addColumn("accounts_number_note_updated_by_role", "TEXT");
+
+    const dateCandidates = [
+      "accounts_registration_number_assigned_at",
+      "last_activity_at",
+      "updated_at",
+      "updatedAt",
+      "created_at",
+      "createdAt",
+      "registration_date",
+    ].filter((columnName) => existing.has(columnName));
+
+    const fallbackDateExpression = dateCandidates.length
+      ? `COALESCE(${dateCandidates
+          .map((columnName) => `NULLIF(TRIM(${sqlSafeColumn(columnName)}), '')`)
+          .join(", ")}, datetime('now'))`
+      : "datetime('now')";
+
+    db.prepare(`
+      UPDATE admissions
+      SET accounts_number_note_updated_at = ${fallbackDateExpression}
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND (
+          TRIM(COALESCE(accounts_verification_number, '')) != ''
+          OR TRIM(COALESCE(accounts_registration_number, '')) != ''
+        )
+        AND (
+          accounts_number_note_updated_at IS NULL
+          OR TRIM(COALESCE(accounts_number_note_updated_at, '')) = ''
+        )
+    `).run();
+  } catch (err) {
+    console.error("ensureAccountsNumberNoteColumns error:", err.message);
+  }
+}
+
+ensureAccountsNumberNoteColumns();
+
+function normalizeAccountsNumberNoteValue(value = "") {
+  return String(value || "").trim();
+}
+
+function accountsNumberNoteValuesChanged(beforeRow = {}, afterRow = {}) {
+  const beforeVerification = normalizeAccountsNumberNoteValue(
+    beforeRow?.accounts_verification_number || ""
+  );
+
+  const afterVerification = normalizeAccountsNumberNoteValue(
+    afterRow?.accounts_verification_number || ""
+  );
+
+  const beforeRegistration = normalizeAccountsNumberNoteValue(
+    beforeRow?.accounts_registration_number || ""
+  );
+
+  const afterRegistration = normalizeAccountsNumberNoteValue(
+    afterRow?.accounts_registration_number || ""
+  );
+
+  return (
+    beforeVerification !== afterVerification ||
+    beforeRegistration !== afterRegistration
+  );
+}
+
+function markAccountsNumberNoteUpdated(
+  admissionIds = [],
+  actorUser = null,
+  updatedAt = new Date().toISOString()
+) {
+  try {
+    const ids = [
+      ...new Set(
+        (Array.isArray(admissionIds) ? admissionIds : [admissionIds])
+          .map((id) => Number(id || 0))
+          .filter(Boolean)
+      ),
+    ];
+
+    if (!ids.length) return;
+
+    const stmt = db.prepare(`
+      UPDATE admissions
+      SET accounts_number_note_updated_at = @updatedAt,
+          accounts_number_note_updated_by_id = @actorId,
+          accounts_number_note_updated_by_name = @actorName,
+          accounts_number_note_updated_by_role = @actorRole
+      WHERE id = @id
+        AND COALESCE(is_deleted, 0) = 0
+    `);
+
+    const updateMany = db.transaction((targetIds) => {
+      for (const id of targetIds) {
+        stmt.run({
+          id,
+          updatedAt,
+          actorId: actorUser?.id || null,
+          actorName: actorUser?.name || actorUser?.email || "",
+          actorRole: actorUser?.role || "",
+        });
+      }
+    });
+
+    updateMany(ids);
+  } catch (err) {
+    console.error("markAccountsNumberNoteUpdated error:", err.message);
+  }
+}
+
+function markAccountsNumberNoteIfChanged({
+  admissionId,
+  beforeRow = {},
+  afterRow = {},
+  actorUser = null,
+} = {}) {
+  if (!admissionId) return;
+
+  if (!accountsNumberNoteValuesChanged(beforeRow, afterRow)) {
+    return;
+  }
+
+  markAccountsNumberNoteUpdated([admissionId], actorUser);
+}
+
+function canSeeAccountsNumberNote(user = null) {
+  if (!user) return false;
+
+  return user.role === "super_admin" || isAccountsUser(user);
+}
+
+function getAccountsNumberNoteTimeMs(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return 0;
+
+  const directDate = new Date(raw);
+  if (!Number.isNaN(directDate.getTime())) {
+    return directDate.getTime();
+  }
+
+  const sqliteDate = new Date(raw.replace(" ", "T"));
+  if (!Number.isNaN(sqliteDate.getTime())) {
+    return sqliteDate.getTime();
+  }
+
+  return 0;
+}
+
+function getAccountsNumberNoteHighestNumber(...values) {
+  let highest = 0;
+
+  for (const value of values) {
+    const matches = String(value || "").match(/\d+/g) || [];
+
+    for (const item of matches) {
+      const numberValue = Number(item || 0);
+      if (Number.isFinite(numberValue)) {
+        highest = Math.max(highest, numberValue);
+      }
+    }
+  }
+
+  return highest;
+}
+
+function getAccountsNumberNoteDateExpression(columnsSet) {
+  const dateCandidates = [
+    "accounts_number_note_updated_at",
+    "accounts_registration_number_assigned_at",
+    "last_activity_at",
+    "updated_at",
+    "updatedAt",
+    "created_at",
+    "createdAt",
+    "registration_date",
+  ].filter((columnName) => columnsSet.has(columnName));
+
+  if (!dateCandidates.length) {
+    return "datetime('now')";
+  }
+
+  return `COALESCE(${dateCandidates
+    .map((columnName) => `NULLIF(TRIM(${sqlSafeColumn(columnName)}), '')`)
+    .join(", ")}, datetime('now'))`;
+}
+
+function getAccountsNumberNoteSelectColumn(columnsSet, columnName, aliasName = columnName) {
+  if (columnsSet.has(columnName)) {
+    return `${sqlSafeColumn(columnName)} AS ${sqlSafeColumn(aliasName)}`;
+  }
+
+  return `'' AS ${sqlSafeColumn(aliasName)}`;
+}
+
+function mapAccountsNumberNoteRow(row = {}) {
+  const admissionId = Number(row.id || 0);
+
+  const verificationNumber = normalizeAccountsNumberNoteValue(
+    row.accounts_verification_number || ""
+  );
+
+  const registrationNumber = normalizeAccountsNumberNoteValue(
+    row.accounts_registration_number || ""
+  );
+
+  const displayVerificationNumber = verificationNumber || "?";
+  const displayRegistrationNumber = registrationNumber || "?";
+
+  const updatedAt = normalizeAccountsNumberNoteValue(
+    row.accounts_number_note_updated_at ||
+      row.accounts_registration_number_assigned_at ||
+      row.last_activity_at ||
+      row.updated_at ||
+      row.created_at ||
+      row.registration_date ||
+      ""
+  );
+
+  const studentName = normalizeAccountsNumberNoteValue(row.student_name || "");
+  const fatherName = normalizeAccountsNumberNoteValue(row.father_name || "");
+  const grade = normalizeAccountsNumberNoteValue(
+    row.grade || row.tuition_grade || ""
+  );
+
+  const entryNumber =
+    normalizeAccountsNumberNoteValue(row.entry_number || "") ||
+    String(admissionId || "");
+
+  const highestNumber = getAccountsNumberNoteHighestNumber(
+    verificationNumber,
+    registrationNumber
+  );
+
+  const copyText = [
+    `Entry: ${entryNumber}`,
+    studentName ? `Student: ${studentName}` : "",
+    `VERIF: ${displayVerificationNumber}`,
+    `REG: ${displayRegistrationNumber}`,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
+  return {
+    admissionId,
+    entryNumber,
+    studentName,
+    fatherName,
+    grade,
+
+    verificationNumber: displayVerificationNumber,
+    registrationNumber: displayRegistrationNumber,
+
+    rawVerificationNumber: verificationNumber,
+    rawRegistrationNumber: registrationNumber,
+
+    missingVerificationNumber: !verificationNumber,
+    missingRegistrationNumber: !registrationNumber,
+
+    highestNumber,
+    updatedAt,
+    updatedByName: row.accounts_number_note_updated_by_name || "",
+    updatedByRole: row.accounts_number_note_updated_by_role || "",
+
+    sortTime: getAccountsNumberNoteTimeMs(updatedAt),
+    copyText,
+  };
+}
+
+function getAccountsNumberNoteData(user = null) {
+  const empty = {
+    enabled: false,
+    latestHighest: null,
+    records: [],
+    total: 0,
+  };
+
+  try {
+    if (!canSeeAccountsNumberNote(user)) {
+      return empty;
+    }
+
+    const columnsSet = new Set(getTableColumnsSafe("admissions"));
+
+    if (
+      !columnsSet.has("accounts_verification_number") ||
+      !columnsSet.has("accounts_registration_number")
+    ) {
+      return {
+        ...empty,
+        enabled: true,
+      };
+    }
+
+    const dateExpression = getAccountsNumberNoteDateExpression(columnsSet);
+
+    const rows = db.prepare(`
+      SELECT
+        id,
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "entry_number")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "student_name")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "father_name")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "grade")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "tuition_grade")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "accounts_verification_number")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "accounts_registration_number")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "accounts_registration_number_assigned_at")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "accounts_number_note_updated_at")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "accounts_number_note_updated_by_name")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "accounts_number_note_updated_by_role")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "last_activity_at")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "updated_at")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "created_at")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "registration_date")}
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND (
+          TRIM(COALESCE(accounts_verification_number, '')) != ''
+          OR TRIM(COALESCE(accounts_registration_number, '')) != ''
+        )
+      ORDER BY
+        datetime(${dateExpression}) DESC,
+        id DESC
+    `).all();
+
+    const records = rows
+      .map(mapAccountsNumberNoteRow)
+      .filter((row) => row.admissionId)
+      .sort((a, b) => {
+        if (b.sortTime !== a.sortTime) return b.sortTime - a.sortTime;
+        return b.admissionId - a.admissionId;
+      });
+
+    const latestHighest =
+      [...records].sort((a, b) => {
+        if (b.highestNumber !== a.highestNumber) {
+          return b.highestNumber - a.highestNumber;
+        }
+
+        if (b.sortTime !== a.sortTime) {
+          return b.sortTime - a.sortTime;
+        }
+
+        return b.admissionId - a.admissionId;
+      })[0] || null;
+
+    return {
+      enabled: true,
+      latestHighest,
+      records,
+      total: records.length,
+    };
+  } catch (err) {
+    console.error("getAccountsNumberNoteData error:", err.message);
+
+    return {
+      ...empty,
+      enabled: canSeeAccountsNumberNote(user),
+    };
+  }
+}
+
 function touchAdmissionActivity(admissionId) {
   try {
     const id = Number(admissionId || 0);
@@ -2473,6 +2929,9 @@ function requireLogin(req, res, next) {
     req.perms = getPerm(req.session.user);
     res.locals.user = req.session.user;
     res.locals.perms = req.perms;
+
+    // ✅ School Accounts Dept + Super Admin ke liye latest verification/registration note data
+    res.locals.accountsNumberNote = getAccountsNumberNoteData(req.session.user);
   } catch {}
 
   next();
@@ -3605,6 +4064,168 @@ function getAccessibleFamilyRowsByAdmission(user, row) {
 
   return rows.filter((familyRow) => canAccessAdmissionRow(user, familyRow));
 }
+
+function normalizeVerificationNumberForSave(value = "") {
+  const rawValues = Array.isArray(value) ? value : [value];
+  const parts = [];
+
+  for (const rawValue of rawValues) {
+    const splitParts = String(rawValue ?? "")
+      .split("+")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    parts.push(...splitParts);
+  }
+
+  return parts.join(" + ");
+}
+
+function pickVerificationNumberFromBody(body = {}, fallback = "") {
+  const keys = [
+    "verificationNumber",
+    "verification_number",
+    "accounts_verification_number",
+    "verificationNumber2",
+    "secondVerificationNumber",
+    "accounts_verification_number_2",
+  ];
+
+  const hasAnyKey = keys.some((key) =>
+    Object.prototype.hasOwnProperty.call(body || {}, key)
+  );
+
+  if (!hasAnyKey) {
+    return String(fallback || "").trim();
+  }
+
+  const values = [];
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(body || {}, key)) {
+      values.push(body[key]);
+    }
+  }
+
+  return normalizeVerificationNumberForSave(values);
+}
+
+function pickFamilyNumberFromBody(body = {}, fallback = "") {
+  const keys = [
+    "familyNumber",
+    "family_number",
+    "accounts_family_number",
+  ];
+
+  const foundKey = keys.find((key) =>
+    Object.prototype.hasOwnProperty.call(body || {}, key)
+  );
+
+  if (!foundKey) {
+    return String(fallback || "").trim();
+  }
+
+  const rawValue = body[foundKey];
+  const finalValue = Array.isArray(rawValue)
+    ? rawValue[rawValue.length - 1]
+    : rawValue;
+
+  return String(finalValue || "").trim();
+}
+
+function syncFamilyVerificationAndFamilyNumber({
+  user,
+  sourceRow,
+  admissionId,
+  verificationNumber,
+  familyNumber,
+  canSyncVerification = false,
+  canSyncFamilyNumber = false,
+} = {}) {
+  try {
+    const cleanAdmissionId = Number(admissionId || sourceRow?.id || 0);
+    if (!cleanAdmissionId) return [];
+
+    const updateSet = [];
+    const params = {};
+
+    if (canSyncVerification) {
+      updateSet.push("accounts_verification_number = @accounts_verification_number");
+      params.accounts_verification_number = String(verificationNumber || "").trim();
+    }
+
+    if (canSyncFamilyNumber) {
+      updateSet.push("accounts_family_number = @accounts_family_number");
+      params.accounts_family_number = String(familyNumber || "").trim();
+    }
+
+    if (!updateSet.length) return [];
+
+    const baseRow =
+      sourceRow?.id
+        ? sourceRow
+        : getActiveAdmissionById(cleanAdmissionId);
+
+    if (!baseRow) return [];
+
+    const familyRows = getAccessibleFamilyRowsByAdmission(user, baseRow);
+    const targetRows = familyRows.length ? familyRows : [baseRow];
+
+    const targetIds = [
+      ...new Set(
+        targetRows
+          .filter((familyRow) => familyRow?.id)
+          .filter((familyRow) =>
+            user?.role === "super_admin" ||
+            canAccessAdmissionRow(user, familyRow)
+          )
+          .map((familyRow) => Number(familyRow.id || 0))
+          .filter(Boolean)
+      ),
+    ];
+
+    if (!targetIds.length) return [];
+
+    const placeholders = targetIds
+      .map((_, index) => `@targetId${index}`)
+      .join(", ");
+
+    targetIds.forEach((targetId, index) => {
+      params[`targetId${index}`] = targetId;
+    });
+
+    const verificationChangedTargetIds =
+      canSyncVerification
+        ? targetRows
+            .filter((familyRow) =>
+              normalizeAccountsNumberNoteValue(
+                familyRow?.accounts_verification_number || ""
+              ) !== normalizeAccountsNumberNoteValue(verificationNumber || "")
+            )
+            .map((familyRow) => Number(familyRow.id || 0))
+            .filter(Boolean)
+        : [];
+
+    db.prepare(`
+      UPDATE admissions
+      SET ${updateSet.join(",\n          ")}
+      WHERE id IN (${placeholders})
+        AND COALESCE(is_deleted, 0) = 0
+    `).run(params);
+
+    if (verificationChangedTargetIds.length) {
+      markAccountsNumberNoteUpdated(
+        verificationChangedTargetIds,
+        user
+      );
+    }
+
+    return targetIds;
+  } catch (err) {
+    console.error("syncFamilyVerificationAndFamilyNumber error:", err.message);
+    return [];
+  }
+}
 // ================== UPLOAD NOTIFICATION HELPERS ==================
 function ensureUploadsNotificationColumns() {
   try {
@@ -4167,6 +4788,141 @@ function canCurrentUserUseForwardForRow(
     !!uploaderId &&
     viewerId === uploaderId
   );
+}
+function getSafeDashboardReturnUrl(value = "", fallback = "/dashboard") {
+  const cleanValue = String(value || "").trim();
+
+  if (!cleanValue) {
+    return fallback;
+  }
+
+  if (
+    cleanValue.startsWith("/dashboard") &&
+    !cleanValue.includes("/edit") &&
+    !cleanValue.includes("\n") &&
+    !cleanValue.includes("\r")
+  ) {
+    return cleanValue;
+  }
+
+  try {
+    const parsedUrl = new URL(cleanValue);
+
+    if (
+      parsedUrl.pathname.startsWith("/dashboard") &&
+      !parsedUrl.pathname.includes("/edit")
+    ) {
+      return `${parsedUrl.pathname}${parsedUrl.search || ""}${parsedUrl.hash || ""}`;
+    }
+  } catch {}
+
+  return fallback;
+}
+
+function getEditForwardContextForAdmission({
+  req = null,
+  user = null,
+  primaryRow = null,
+  familyRows = [],
+} = {}) {
+  const emptyContext = {
+    canShowForwardButton: false,
+    canShowEditForwardButton: false,
+    primaryAdmissionId: primaryRow?.id || null,
+    forwardAdmissionIds: [],
+    familyAdmissionIds: [],
+    forwardCount: 0,
+    isFamilyForward: false,
+    shouldReturnToDashboardAfterForward: false,
+    shouldStayOnEditPageAfterForward: true,
+    dashboardReturnUrl: "/dashboard",
+  };
+
+  try {
+    if (!user || !primaryRow?.id) {
+      return emptyContext;
+    }
+
+    const cleanFamilyRows = Array.isArray(familyRows)
+      ? familyRows.filter((row) => row?.id)
+      : [];
+
+    const candidateRows = cleanFamilyRows.length
+      ? cleanFamilyRows
+      : [primaryRow];
+
+    const primaryLatestUpload =
+      getLatestUploadForAdmission(primaryRow.id, user);
+
+    const primaryCanForward =
+      canCurrentUserUseForwardForRow(
+        user,
+        primaryRow,
+        primaryLatestUpload
+      );
+
+    const forwardableRows = candidateRows.filter((row) => {
+      const latestUpload =
+        getLatestUploadForAdmission(row.id, user);
+
+      return canCurrentUserUseForwardForRow(
+        user,
+        row,
+        latestUpload
+      );
+    });
+
+    const familyAdmissionIds = candidateRows
+      .map((row) => Number(row.id || 0))
+      .filter(Boolean);
+
+    const forwardAdmissionIds = forwardableRows
+      .map((row) => Number(row.id || 0))
+      .filter(Boolean);
+
+    const shouldReturnToDashboardAfterForward =
+      user?.role === "agent" ||
+      user?.role === "sub_agent";
+
+    const dashboardReturnUrl =
+      getSafeDashboardReturnUrl(
+        req?.query?.returnTo ||
+        req?.query?.returnUrl ||
+        req?.query?.back ||
+        req?.query?.from ||
+        ""
+      );
+
+    return {
+      canShowForwardButton:
+        primaryCanForward && forwardAdmissionIds.length > 0,
+
+      canShowEditForwardButton:
+        primaryCanForward && forwardAdmissionIds.length > 0,
+
+      primaryAdmissionId:
+        Number(primaryRow.id || 0) || null,
+
+      forwardAdmissionIds,
+      familyAdmissionIds,
+
+      forwardCount:
+        forwardAdmissionIds.length,
+
+      isFamilyForward:
+        forwardAdmissionIds.length > 1,
+
+      shouldReturnToDashboardAfterForward,
+
+      shouldStayOnEditPageAfterForward:
+        !shouldReturnToDashboardAfterForward,
+
+      dashboardReturnUrl,
+    };
+  } catch (err) {
+    console.error("getEditForwardContextForAdmission error:", err.message);
+    return emptyContext;
+  }
 }
 function findUserByNameForForwardOwner(name = "") {
   try {
@@ -10468,6 +11224,17 @@ function handleSuperFullUpdate(req, res) {
 } = req.body;
 
   const cleanRegistrationNumber = String(registrationNumber || "").trim();
+
+  const cleanVerificationNumber = pickVerificationNumberFromBody(
+    req.body,
+    row.accounts_verification_number || ""
+  );
+
+  const cleanFamilyNumber = pickFamilyNumberFromBody(
+    req.body,
+    row.accounts_family_number || ""
+  );
+
   const resolvedCurrencyCode = pickCurrencyCode(req.body, row.currency_code || "");
 if (resolvedCurrencyCode) {
   const allowedCurrency = db
@@ -10667,7 +11434,7 @@ for (const m of BILLING_MONTHS) {
     accounts_verification_number:
       typeof verificationNumber !== "undefined" &&
       verificationNumber !== null
-        ? verificationNumber
+        ? cleanVerificationNumber
         : row.accounts_verification_number || "",
     accounts_registration_number:
   typeof registrationNumber !== "undefined" &&
@@ -10676,7 +11443,7 @@ for (const m of BILLING_MONTHS) {
     : row.accounts_registration_number || "",
     accounts_family_number:
       typeof familyNumber !== "undefined" && familyNumber !== null
-        ? familyNumber
+        ? cleanFamilyNumber
         : row.accounts_family_number || "",
     admission_registration_fee:
        (typeof registrationFee !== "undefined" && registrationFee !== null && String(registrationFee).trim() !== "")
@@ -10757,9 +11524,26 @@ admission_total_paid: String(receivedPaymentAfterAdmissionMonth || 0),
     monthly_fee_current: incomingFeeNumber > 0 ? incomingFeeNumber : (dues.currentFee || baseFee || 0),
   });
 
+  syncFamilyVerificationAndFamilyNumber({
+    user,
+    sourceRow: row,
+    admissionId: id,
+    verificationNumber: updated.accounts_verification_number,
+    familyNumber: updated.accounts_family_number,
+    canSyncVerification: true,
+    canSyncFamilyNumber: true,
+  });
+
   const afterRow =
     getActiveAdmissionById(id) ||
     { ...row, ...updated };
+
+  markAccountsNumberNoteIfChanged({
+    admissionId: id,
+    beforeRow: beforeRowForAudit,
+    afterRow,
+    actorUser: user,
+  });
 
   const after =
     buildPipelineSnapshotFromRow(afterRow);
@@ -11115,6 +11899,62 @@ function renderSharedAdmissionEdit(req, res) {
 let rows = getAccessibleFamilyRowsByAdmission(user, row);
 if (!rows.length) rows = [row];
 
+    const rawRowsById = new Map(
+      rows.map((item) => [
+        Number(item.id || 0),
+        item,
+      ])
+    );
+
+    const enrichAdmissionForEditPage = (safeAdmission = {}) => {
+      const rawAdmissionRow =
+        rawRowsById.get(Number(safeAdmission?.id || 0)) ||
+        getActiveAdmissionById(safeAdmission?.id);
+
+      if (!rawAdmissionRow) {
+        return safeAdmission;
+      }
+
+      const latestUpload =
+        getLatestUploadForAdmission(rawAdmissionRow.id, user);
+
+      const latestUploadForPage =
+        makeLatestUploadForDashboard(
+          latestUpload,
+          user,
+          perms
+        );
+
+      const canShowForwardButton =
+        canCurrentUserUseForwardForRow(
+          user,
+          rawAdmissionRow,
+          latestUpload
+        );
+
+      return {
+        ...safeAdmission,
+
+        latestUpload: latestUploadForPage,
+        hasLatestUpload: !!latestUpload,
+
+        canShowForwardButton,
+        canShowEditForwardButton: canShowForwardButton,
+
+        forwardStatus:
+          rawAdmissionRow.forward_status || "not_forwarded",
+
+        forwardedToDepartment:
+          rawAdmissionRow.forwarded_to_department || "",
+
+        forwardedToType:
+          rawAdmissionRow.forwarded_to_type || "",
+
+        forwardSubStatus:
+          getForwardSubStatus(rawAdmissionRow),
+      };
+    };
+
     const admissionsFull = rows
       .map((r) => dbGetAdmissionDetailsById(r.id, billingYear))
       .filter(Boolean);
@@ -11123,14 +11963,23 @@ if (!rows.length) rows = [row];
       const safe = maskAdmissionMapped(full, perms);
       const rrow = getActiveAdmissionById(full.id);
       if (rrow) attachComputedMonthFees(rrow, safe, billingYear);
-      return safe;
+      return enrichAdmissionForEditPage(safe);
     });
 
     const primaryFull = dbGetAdmissionDetailsById(id, billingYear);
     if (!primaryFull) return res.status(404).send("Admission not found");
 
-    const primary = maskAdmissionMapped(primaryFull, perms);
+    let primary = maskAdmissionMapped(primaryFull, perms);
     attachComputedMonthFees(row, primary, billingYear);
+    primary = enrichAdmissionForEditPage(primary);
+
+    const editForwardContext =
+      getEditForwardContextForAdmission({
+        req,
+        user,
+        primaryRow: row,
+        familyRows: rows,
+      });
 
     return res.render("admission-edit", {
   user,
@@ -11140,6 +11989,11 @@ if (!rows.length) rows = [row];
   familyNumber,
   billingMonths: BILLING_MONTHS,
   bankOptions: getBankOptions(),
+
+  editForwardContext,
+  canShowEditForwardButton: editForwardContext.canShowForwardButton,
+  editForwardAdmissionIds: editForwardContext.forwardAdmissionIds,
+
   pageTitle: "Edit Admission",
 });
   } catch (err) {
@@ -12623,8 +13477,22 @@ const applied = Array.from(appliedMap.values())
     remainingAmount: registrationRemaining + remaining,
   }));
 
-   const refreshedRows =
-      mode === "family"
+const accountsNumberNoteTouchedIds =
+  !shouldUseMasterVerification && cleanVerificationNumber
+    ? applied
+        .filter((item) => Number(item.usedAmount || 0) > 0)
+        .map((item) => Number(item.admissionId || 0))
+        .filter(Boolean)
+    : [];
+
+if (accountsNumberNoteTouchedIds.length) {
+  markAccountsNumberNoteUpdated(
+    accountsNumberNoteTouchedIds,
+    user
+  );
+}
+
+    const refreshedRows =      mode === "family"
         ? getAccessibleFamilyRowsForRoute(user, {
             familyNumber: cleanFamilyNumber,
             admissionId: cleanAdmissionId,
@@ -13813,8 +14681,33 @@ app.post("/api/admissions/:id/forward", requireLogin, (req, res) => {
       timeLogs: forwardTimeLogs,
     });
 
+    const shouldReturnToDashboardAfterForward =
+      user?.role === "agent" ||
+      user?.role === "sub_agent";
+
+    const safeForwardReturnUrl =
+      getSafeDashboardReturnUrl(
+        req.body?.returnTo ||
+        req.body?.returnUrl ||
+        req.query?.returnTo ||
+        req.query?.returnUrl ||
+        ""
+      );
+
     return res.json({
       success: true,
+
+      shouldReturnToDashboardAfterForward,
+
+      shouldStayOnEditPageAfterForward:
+        !shouldReturnToDashboardAfterForward,
+
+      redirectUrl:
+        shouldReturnToDashboardAfterForward
+          ? safeForwardReturnUrl
+          : "",
+
+      forwardedAdmissionIds: [admissionId],
 
       message: isReturnToSchool
         ? "Admission returned to the School Department."
@@ -15266,6 +16159,13 @@ app.post("/api/admissions/update-row", checkApiKey, (req, res) => {
       `)
       .get(row.id);
 
+    markAccountsNumberNoteIfChanged({
+      admissionId: row.id,
+      beforeRow: row,
+      afterRow: updatedRow,
+      actorUser: user,
+    });
+
     emitAdmissionChanged(req, {
       type: "admission_update_row",
       admissionId: row.id,
@@ -16705,12 +17605,13 @@ app.post("/developer/login", async (req, res) => {
     const developer = mapDeveloperRow(refreshedRow || row);
 
     req.session.developer = developer;
+markDashboardSessionLogin(req);
 
-    logDeveloperAction(req, "developer_login", {
-      loginId,
-    });
+logDeveloperAction(req, "developer_login", {
+  loginId,
+});
 
-    return res.redirect("/developer/welcome");
+return res.redirect("/developer/welcome");
   } catch (err) {
     console.error("POST /developer/login error:", err);
 
@@ -17973,7 +18874,9 @@ app.post("/login", async (req, res) => {
   }
 
   req.session.user = user;
-  return res.redirect("/dashboard");
+markDashboardSessionLogin(req);
+
+return res.redirect("/dashboard");
 });
 
 // Logout
@@ -18158,6 +19061,32 @@ if (user.role === "agent") {
 
   return res.send("Unknown role");
 });
+
+// ==================== API: ACCOUNTS NUMBER NOTE ====================
+app.get("/api/accounts-number-note", requireLogin, (req, res) => {
+  try {
+    const accountsNumberNote = getAccountsNumberNoteData(req.session.user);
+
+    return res.json({
+      success: true,
+      accountsNumberNote,
+    });
+  } catch (err) {
+    console.error("GET /api/accounts-number-note error:", err.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Could not load latest verification and registration numbers",
+      accountsNumberNote: {
+        enabled: false,
+        latestHighest: null,
+        records: [],
+        total: 0,
+      },
+    });
+  }
+});
+
 // ==================== ADMIN: USERS PAGE ====================
 // Dept Admin apne dept ke Agents/Sub Agents list dekh sakay
 app.get("/dashboard/admin/users", requireLogin, (req, res) => {
@@ -20503,6 +21432,16 @@ if (user.role !== "admin" && !perms.btnUpdateRow) {
   } = req.body;
  
     const cleanRegistrationNumber = String(registrationNumber || "").trim();
+
+    const cleanVerificationNumber = pickVerificationNumberFromBody(
+      req.body,
+      row.accounts_verification_number || ""
+    );
+
+    const cleanFamilyNumber = pickFamilyNumberFromBody(
+      req.body,
+      row.accounts_family_number || ""
+    );
     
     const resolvedCurrencyCode = pickCurrencyCode(req.body, row.currency_code || "");
 
@@ -20669,7 +21608,7 @@ admission_month: canAdmissions
       : (row.admission_month || ""),
     accounts_family_number: canAccounts
   ? (typeof familyNumber !== "undefined" && familyNumber !== null
-      ? familyNumber
+      ? cleanFamilyNumber
       : (row.accounts_family_number || ""))
   : (row.accounts_family_number || ""),
   admission_registration_fee: canAdmissions
@@ -20685,7 +21624,7 @@ admission_month: canAdmissions
       ? (typeof paidUpto !== "undefined" && paidUpto !== null ? paidUpto : (row.accounts_paid_upto || ""))
       : (row.accounts_paid_upto || ""),
     accounts_verification_number: canAccounts
-      ? (typeof verificationNumber !== "undefined" && verificationNumber !== null ? verificationNumber : (row.accounts_verification_number || ""))
+      ? (typeof verificationNumber !== "undefined" && verificationNumber !== null ? cleanVerificationNumber : (row.accounts_verification_number || ""))
       : (row.accounts_verification_number || ""),
     accounts_registration_number: canAccounts
       ? (typeof registrationNumber !== "undefined" && registrationNumber !== null ? cleanRegistrationNumber : (row.accounts_registration_number || ""))
@@ -20745,9 +21684,26 @@ admission_month: canAdmissions
     ...billingStringsAfterAdmissionMonth,
   });
 
-   const afterRow =
+  syncFamilyVerificationAndFamilyNumber({
+    user,
+    sourceRow: row,
+    admissionId: id,
+    verificationNumber: updated.accounts_verification_number,
+    familyNumber: updated.accounts_family_number,
+    canSyncVerification: canAccounts,
+    canSyncFamilyNumber: canAccounts,
+  });
+
+      const afterRow =
     getActiveAdmissionById(id) ||
     { ...row, ...updated };
+
+  markAccountsNumberNoteIfChanged({
+    admissionId: id,
+    beforeRow: beforeRowForAudit,
+    afterRow,
+    actorUser: user,
+  });
 
   const after =
     buildPipelineSnapshotFromRow(afterRow);
@@ -20831,6 +21787,17 @@ app.post("/pipeline/update/:id", requireLogin, requirePerm("btnUpdateRow"), (req
 } = req.body;
   
     const cleanRegistrationNumber = String(registrationNumber || "").trim();
+
+  const cleanVerificationNumber = pickVerificationNumberFromBody(
+    req.body,
+    row.accounts_verification_number || ""
+  );
+
+  const cleanFamilyNumber = pickFamilyNumberFromBody(
+    req.body,
+    row.accounts_family_number || ""
+  );
+
   const duplicateReg = checkDuplicateRegistrationNumber(cleanRegistrationNumber, id);
 
 if (duplicateReg) {
@@ -20943,7 +21910,7 @@ for (const m of BILLING_MONTHS) {
   ? pickPaymentStatus(req.body, row.accounts_payment_status || "")
   : row.accounts_payment_status,
     accounts_paid_upto: perms.colPaidUpto ? (paidUpto ?? row.accounts_paid_upto) : row.accounts_paid_upto,
-    accounts_verification_number: perms.colVerificationNumber ? (verificationNumber ?? row.accounts_verification_number) : row.accounts_verification_number,
+    accounts_verification_number: perms.colVerificationNumber ? cleanVerificationNumber : row.accounts_verification_number,
     accounts_registration_number:
       perms.colRegistrationNumber
         ? (
@@ -20953,7 +21920,7 @@ for (const m of BILLING_MONTHS) {
               : row.accounts_registration_number
           )
         : row.accounts_registration_number,
-    accounts_family_number: perms.colFamilyNumber ? (familyNumber ?? row.accounts_family_number) : row.accounts_family_number,
+  accounts_family_number: perms.colFamilyNumber ? cleanFamilyNumber : row.accounts_family_number,
    admission_registration_fee: perms.colRegistrationFee
   ? ((typeof registrationFee !== "undefined" && registrationFee !== null && String(registrationFee).trim() !== "")
       ? String(registrationFee).trim()
@@ -21037,9 +22004,27 @@ admission_month: perms.colMonth ? (month ?? row.admission_month) : row.admission
     ...updated,
     ...billingStringsAfterAdmissionMonth,
   });
+
+  syncFamilyVerificationAndFamilyNumber({
+    user,
+    sourceRow: row,
+    admissionId: id,
+    verificationNumber: updated.accounts_verification_number,
+    familyNumber: updated.accounts_family_number,
+    canSyncVerification: perms.colVerificationNumber,
+    canSyncFamilyNumber: perms.colFamilyNumber,
+  });
+
   const afterRow =
     getActiveAdmissionById(id) ||
     { ...row, ...updated };
+
+markAccountsNumberNoteIfChanged({
+  admissionId: id,
+  beforeRow: beforeRowForAudit,
+  afterRow,
+  actorUser: user,
+});
 
 const after =
   buildPipelineSnapshotFromRow(afterRow);
