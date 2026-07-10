@@ -996,7 +996,7 @@ const DEFAULT_FEE_STATUS_OPTIONS =
       <div class="accounts-number-note-head">
         <div>
           <div class="accounts-number-note-title">
-            Latest Verif + Reg Updates
+            Latest Fam + Verif + Reg Updates
           </div>
           <div class="accounts-number-note-subtitle">
             Recent updates first
@@ -1024,7 +1024,7 @@ const DEFAULT_FEE_STATUS_OPTIONS =
       <div
         class="accounts-number-note-empty d-none"
         id="accountsNumberNoteEmpty">
-        No verification or registration number found yet.
+        No family, verification or registration number found yet.
       </div>
     </div>
 
@@ -1379,7 +1379,10 @@ const DEFAULT_FEE_STATUS_OPTIONS =
       </button>
     </div>
 
-    <% if (shouldShowSchoolForwardFilters) { %>
+    <% if (
+      shouldShowSchoolForwardFilters ||
+      shouldShowSchoolAccountsWorkflow
+    ) { %>
       <div class="dropdown workflow-date-filter-dropdown">
         <button
           type="button"
@@ -3593,6 +3596,13 @@ const DEFAULT_FEE_STATUS_OPTIONS =
   background: rgba(255,255,255,.98);
   z-index: 99999 !important;
   box-shadow: 0 24px 60px rgba(15,23,42,.18) !important;
+
+  /* Keep dropdown inside the dashboard when the WhatsApp button is hidden */
+  top: calc(100% + 6px) !important;
+  right: 0 !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
 }
 
 .files-dropdown-title{
@@ -5763,8 +5773,8 @@ const DEFAULT_FEE_STATUS_OPTIONS =
    ========================= */
 .accounts-number-note{
   position: fixed;
-  top: 104px;
-  right: 18px;
+  top: 13px;
+  right: 104px;
   width: min(365px, calc(100vw - 28px));
   max-height: calc(100vh - 135px);
   z-index: 1045;
@@ -5784,6 +5794,15 @@ const DEFAULT_FEE_STATUS_OPTIONS =
   gap: 10px;
   border-bottom: 1px solid rgba(255,255,255,.10);
   background: linear-gradient(135deg, #020617, #111827);
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.accounts-number-note.is-dragging,
+.accounts-number-note-open.is-dragging{
+  cursor: grabbing;
+  transition: none !important;
 }
 
 .accounts-number-note-title{
@@ -5932,8 +5951,8 @@ const DEFAULT_FEE_STATUS_OPTIONS =
 
 .accounts-number-note-open{
   position: fixed;
-  top: 104px;
-  right: 18px;
+  top: 13px;
+  right: 104px;
   z-index: 1045;
   border: 0;
   border-radius: 999px;
@@ -5943,8 +5962,122 @@ const DEFAULT_FEE_STATUS_OPTIONS =
   font-size: 12px;
   font-weight: 1000;
   box-shadow: 0 14px 32px rgba(2,8,23,.30);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+/* ✅ Simple Light Gray Accounts Number Note */
+.accounts-number-note{
+  background: #f3f4f6 !important;
+  color: #111111 !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: 0 14px 34px rgba(0,0,0,.18) !important;
 }
 
+.accounts-number-note-head{
+  background: #f3f4f6 !important;
+  border-bottom: 1px solid #d1d5db !important;
+  color: #111111 !important;
+}
+
+.accounts-number-note-title,
+.accounts-number-note-subtitle,
+.accounts-number-note-student,
+.accounts-number-note-meta,
+.accounts-number-note-empty{
+  color: #111111 !important;
+}
+
+.accounts-number-note-subtitle,
+.accounts-number-note-meta{
+  opacity: .78;
+}
+
+.accounts-number-note-hide-btn{
+  background: transparent !important;
+  color: #111111 !important;
+  border: 1px solid #9ca3af !important;
+}
+
+.accounts-number-note-hide-btn:hover{
+  background: #e5e7eb !important;
+  color: #000000 !important;
+}
+
+.accounts-number-note-list{
+  background: #f3f4f6 !important;
+}
+
+.accounts-number-note-row{
+  background: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: none !important;
+}
+
+.accounts-number-note-row:first-child{
+  border-color: #d1d5db !important;
+  box-shadow: none !important;
+}
+
+.accounts-number-note-entry{
+  background: transparent !important;
+  border: 0 !important;
+  color: #000000 !important;
+  font-weight: 1000 !important;
+}
+
+.accounts-number-note-numbers{
+  gap: 8px;
+}
+
+.accounts-number-note-chip,
+.accounts-number-note-chip.missing{
+  background: transparent !important;
+  border: 0 !important;
+  color: #000000 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+.accounts-number-note-chip-label,
+.accounts-number-note-chip-value,
+.accounts-number-note-chip.missing .accounts-number-note-chip-label,
+.accounts-number-note-chip.missing .accounts-number-note-chip-value{
+  color: #000000 !important;
+}
+
+.accounts-number-note-chip-label{
+  font-weight: 800 !important;
+}
+
+.accounts-number-note-chip-value{
+  font-weight: 1000 !important;
+  max-width: 140px;
+}
+
+.accounts-number-note-copy{
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: none !important;
+}
+
+.accounts-number-note-copy:hover{
+  background: #e5e7eb !important;
+  color: #000000 !important;
+}
+
+.accounts-number-note-open{
+  background: #f3f4f6 !important;
+  color: #111111 !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: 0 10px 24px rgba(0,0,0,.16) !important;
+}
+
+.accounts-number-note-open:hover{
+  background: #e5e7eb !important;
+  color: #000000 !important;
+}
 @media (max-width: 767.98px){
   .accounts-number-note{
     top: auto;
@@ -8729,6 +8862,202 @@ if (editBillingStatusSaveBtn) {
 
     let currentRecords = [];
 
+    const positionStorageKey = `${storageKey}_position_v2`;
+    let openBtnDragMoved = false;
+
+    function isAccountsNumberNoteMobile() {
+      return window.matchMedia("(max-width: 767.98px)").matches;
+    }
+
+    function clearAccountsNumberNoteInlinePosition(element) {
+      if (!element) return;
+
+      element.style.left = "";
+      element.style.top = "";
+      element.style.right = "";
+      element.style.bottom = "";
+    }
+
+    function clampAccountsNumberNotePosition(left, top, element) {
+      const rect = element.getBoundingClientRect();
+      const margin = 10;
+      const width = rect.width || 160;
+      const height = rect.height || 44;
+
+      return {
+        left: Math.min(
+          Math.max(margin, left),
+          Math.max(margin, window.innerWidth - width - margin)
+        ),
+        top: Math.min(
+          Math.max(margin, top),
+          Math.max(margin, window.innerHeight - height - margin)
+        )
+      };
+    }
+
+    function setAccountsNumberNotePosition(element, left, top) {
+      if (!element) return;
+
+      element.style.left = `${Math.round(left)}px`;
+      element.style.top = `${Math.round(top)}px`;
+      element.style.right = "auto";
+      element.style.bottom = "auto";
+    }
+
+    function saveAccountsNumberNotePosition(left, top) {
+      localStorage.setItem(
+        positionStorageKey,
+        JSON.stringify({
+          left: Math.round(left),
+          top: Math.round(top)
+        })
+      );
+    }
+
+    function readAccountsNumberNotePosition() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(positionStorageKey) || "null");
+
+        if (
+          !parsed ||
+          !Number.isFinite(Number(parsed.left)) ||
+          !Number.isFinite(Number(parsed.top))
+        ) {
+          return null;
+        }
+
+        return {
+          left: Number(parsed.left),
+          top: Number(parsed.top)
+        };
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function applySavedAccountsNumberNotePosition() {
+      if (isAccountsNumberNoteMobile()) {
+        clearAccountsNumberNoteInlinePosition(widget);
+        clearAccountsNumberNoteInlinePosition(openBtn);
+        return;
+      }
+
+      const savedPosition = readAccountsNumberNotePosition();
+
+      if (!savedPosition) {
+        return;
+      }
+
+      const activeElement =
+        widget && !widget.classList.contains("d-none")
+          ? widget
+          : (openBtn || widget);
+
+      const clamped = clampAccountsNumberNotePosition(
+        savedPosition.left,
+        savedPosition.top,
+        activeElement
+      );
+
+      setAccountsNumberNotePosition(widget, clamped.left, clamped.top);
+      setAccountsNumberNotePosition(openBtn, clamped.left, clamped.top);
+      saveAccountsNumberNotePosition(clamped.left, clamped.top);
+    }
+
+    function startAccountsNumberNoteDrag(event, dragElement) {
+      if (!dragElement || isAccountsNumberNoteMobile()) {
+        return;
+      }
+
+      if (event.button !== undefined && event.button !== 0) {
+        return;
+      }
+
+      if (
+        dragElement === widget &&
+        event.target.closest(".accounts-number-note-hide-btn")
+      ) {
+        return;
+      }
+
+      const startRect = dragElement.getBoundingClientRect();
+      const startClientX = event.clientX;
+      const startClientY = event.clientY;
+      let latestLeft = startRect.left;
+      let latestTop = startRect.top;
+      let didMove = false;
+
+      dragElement.classList.add("is-dragging");
+      event.preventDefault();
+
+      function handlePointerMove(moveEvent) {
+        const deltaX = moveEvent.clientX - startClientX;
+        const deltaY = moveEvent.clientY - startClientY;
+
+        if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+          didMove = true;
+        }
+
+        const activeElement =
+          widget && !widget.classList.contains("d-none")
+            ? widget
+            : dragElement;
+
+        const nextPosition = clampAccountsNumberNotePosition(
+          startRect.left + deltaX,
+          startRect.top + deltaY,
+          activeElement
+        );
+
+        latestLeft = nextPosition.left;
+        latestTop = nextPosition.top;
+
+        setAccountsNumberNotePosition(widget, latestLeft, latestTop);
+        setAccountsNumberNotePosition(openBtn, latestLeft, latestTop);
+      }
+
+      function handlePointerUp() {
+        document.removeEventListener("pointermove", handlePointerMove);
+        dragElement.classList.remove("is-dragging");
+
+        if (didMove) {
+          saveAccountsNumberNotePosition(latestLeft, latestTop);
+
+          if (dragElement === openBtn) {
+            openBtnDragMoved = true;
+
+            setTimeout(function () {
+              openBtnDragMoved = false;
+            }, 0);
+          }
+        }
+      }
+
+      document.addEventListener("pointermove", handlePointerMove);
+      document.addEventListener("pointerup", handlePointerUp, { once: true });
+    }
+
+    function initAccountsNumberNoteDrag() {
+      const noteHead = widget.querySelector(".accounts-number-note-head");
+
+      if (noteHead) {
+        noteHead.addEventListener("pointerdown", function (event) {
+          startAccountsNumberNoteDrag(event, widget);
+        });
+      }
+
+      if (openBtn) {
+        openBtn.addEventListener("pointerdown", function (event) {
+          startAccountsNumberNoteDrag(event, openBtn);
+        });
+      }
+
+      applySavedAccountsNumberNotePosition();
+
+      window.addEventListener("resize", applySavedAccountsNumberNotePosition);
+    }
+
     function escapeHtml(value) {
       return String(value ?? "")
         .replace(/&/g, "&amp;")
@@ -8745,6 +9074,15 @@ if (editBillingStatusSaveBtn) {
       const registrationNumber =
         String(record.registrationNumber || record.rawRegistrationNumber || "").trim() || "?";
 
+      const familyNumber =
+        String(
+          record.familyNumber ||
+          record.rawFamilyNumber ||
+          record.accountsFamilyNumber ||
+          record.accounts_family_number ||
+          ""
+        ).trim() || "?";
+
       const missingVerificationNumber =
         record.missingVerificationNumber === true ||
         verificationNumber === "?";
@@ -8753,14 +9091,20 @@ if (editBillingStatusSaveBtn) {
         record.missingRegistrationNumber === true ||
         registrationNumber === "?";
 
+      const missingFamilyNumber =
+        record.missingFamilyNumber === true ||
+        familyNumber === "?";
+
       return {
         admissionId: record.admissionId || record.id || "",
         entryNumber: record.entryNumber || record.entry_number || record.admissionId || record.id || "-",
         studentName: record.studentName || record.student_name || "No Name",
         fatherName: record.fatherName || record.father_name || "",
         grade: record.grade || "",
+        familyNumber,
         verificationNumber,
         registrationNumber,
+        missingFamilyNumber,
         missingVerificationNumber,
         missingRegistrationNumber,
         updatedAt: record.updatedAt || record.updated_at || "",
@@ -8770,6 +9114,7 @@ if (editBillingStatusSaveBtn) {
           [
             `Entry: ${record.entryNumber || record.admissionId || record.id || "-"}`,
             `Student: ${record.studentName || record.student_name || "No Name"}`,
+            `FAM: ${familyNumber}`,
             `VERIF: ${verificationNumber}`,
             `REG: ${registrationNumber}`
           ].join(" | ")
@@ -8825,6 +9170,11 @@ if (editBillingStatusSaveBtn) {
             </div>
 
             <div class="accounts-number-note-numbers">
+              <span class="accounts-number-note-chip ${record.missingFamilyNumber ? "missing" : ""}">
+                <span class="accounts-number-note-chip-label">FAM</span>
+                <span class="accounts-number-note-chip-value">${escapeHtml(record.familyNumber)}</span>
+              </span>
+
               <span class="accounts-number-note-chip ${record.missingVerificationNumber ? "missing" : ""}">
                 <span class="accounts-number-note-chip-label">VERIF</span>
                 <span class="accounts-number-note-chip-value">${escapeHtml(record.verificationNumber)}</span>
@@ -8869,7 +9219,7 @@ if (editBillingStatusSaveBtn) {
         }
 
         if (typeof window.showUploadFlash === "function") {
-          window.showUploadFlash("success", "Copied", "Verification and registration number copied.");
+          window.showUploadFlash("success", "Copied", "Family, verification and registration numbers copied.");
         }
       } catch (err) {
         console.error("Copy failed:", err);
@@ -8886,6 +9236,8 @@ if (editBillingStatusSaveBtn) {
       }
 
       localStorage.setItem(storageKey, shouldHide ? "1" : "0");
+
+      requestAnimationFrame(applySavedAccountsNumberNotePosition);
     }
 
     async function refreshAccountsNumberNote() {
@@ -8941,9 +9293,16 @@ if (editBillingStatusSaveBtn) {
 
     if (openBtn) {
       openBtn.addEventListener("click", function () {
+        if (openBtnDragMoved) {
+          openBtnDragMoved = false;
+          return;
+        }
+
         setNoteHidden(false);
       });
     }
+
+    initAccountsNumberNoteDrag();
 
     renderAccountsNumberNote(window.ACCOUNTS_NUMBER_NOTE || {});
 

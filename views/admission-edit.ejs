@@ -307,6 +307,22 @@ if (roleKey === 'admin') {
     { full: 'November', short: 'Nov' },
     { full: 'December', short: 'Dec' }
   ];
+
+  const accountsNumberNoteData =
+    (typeof accountsNumberNote !== 'undefined' && accountsNumberNote)
+      ? accountsNumberNote
+      : {
+          enabled: false,
+          latestHighest: null,
+          records: [],
+          total: 0
+        };
+
+  const shouldRenderAccountsNumberNote =
+    !!(
+      accountsNumberNoteData &&
+      accountsNumberNoteData.enabled
+    );
 %>
 
 <%
@@ -340,6 +356,57 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
   class="compact-edit-page <%= themeClass %>"
   data-billing-year="<%= currentYearOnly %>"
   data-details-url="<%= sharedDetailsUrl %>">
+
+  <% if (shouldRenderAccountsNumberNote) { %>
+    <div
+      class="accounts-number-note"
+      id="accountsNumberNoteWidget"
+      data-hidden-storage-key="ivs_accounts_number_note_hidden_edit">
+
+      <div class="accounts-number-note-head">
+        <div>
+          <div class="accounts-number-note-title">
+            Latest Fam + Verif + Reg Updates
+          </div>
+          <div class="accounts-number-note-subtitle">
+            Recent updates first
+            <span id="accountsNumberNoteTotal">
+              <%= Number(accountsNumberNoteData.total || 0) %>
+            </span>
+            records
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="accounts-number-note-hide-btn"
+          id="accountsNumberNoteHideBtn"
+          title="Hide note">
+          <i class="bi bi-eye-slash"></i>
+        </button>
+      </div>
+
+      <div
+        class="accounts-number-note-list"
+        id="accountsNumberNoteList">
+      </div>
+
+      <div
+        class="accounts-number-note-empty d-none"
+        id="accountsNumberNoteEmpty">
+        No family, verification or registration number found yet.
+      </div>
+    </div>
+
+    <button
+      type="button"
+      class="accounts-number-note-open d-none"
+      id="accountsNumberNoteOpenBtn"
+      title="Show latest numbers">
+      <i class="bi bi-stickies"></i>
+      Latest Numbers
+    </button>
+  <% } %>
 
   <% if (hasFamilyEditGroup) { %>
     <div class="family-edit-banner">
@@ -1334,6 +1401,236 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
   border-radius:16px;
   padding:12px;
   background:#f8fafc;
+}
+
+/* ✅ Latest Numbers Note - Edit Page */
+.accounts-number-note{
+  position: fixed;
+  top: 13px;
+  right: 104px;
+  z-index: 1045;
+  width: 330px;
+  max-width: calc(100vw - 32px);
+  max-height: 420px;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #f3f4f6;
+  color: #111111;
+  border: 1px solid #d1d5db;
+  box-shadow: 0 14px 34px rgba(0,0,0,.18);
+}
+
+.accounts-number-note-head{
+  padding: 12px 13px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid #d1d5db;
+  background: #f3f4f6;
+  color: #111111;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.accounts-number-note.is-dragging,
+.accounts-number-note-open.is-dragging{
+  cursor: grabbing;
+  transition: none !important;
+}
+
+.accounts-number-note-title{
+  color: #111111;
+  font-size: 12px;
+  font-weight: 1000;
+  line-height: 1.2;
+}
+
+.accounts-number-note-subtitle{
+  margin-top: 3px;
+  color: #111111;
+  opacity: .78;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.accounts-number-note-hide-btn{
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 999px;
+  border: 1px solid #9ca3af;
+  background: transparent;
+  color: #111111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.accounts-number-note-hide-btn:hover{
+  background: #e5e7eb;
+  color: #000000;
+}
+
+.accounts-number-note-list{
+  max-height: 350px;
+  overflow-y: auto;
+  padding: 9px;
+  background: #f3f4f6;
+}
+
+.accounts-number-note-row{
+  padding: 10px;
+  border-radius: 13px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  box-shadow: none;
+}
+
+.accounts-number-note-row + .accounts-number-note-row{
+  margin-top: 8px;
+}
+
+.accounts-number-note-row-head{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.accounts-number-note-student{
+  color: #111111;
+  font-size: 12px;
+  font-weight: 1000;
+  line-height: 1.25;
+}
+
+.accounts-number-note-entry{
+  background: transparent;
+  border: 0;
+  color: #000000;
+  font-size: 11px;
+  font-weight: 1000;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.accounts-number-note-meta{
+  margin-top: 5px;
+  color: #111111;
+  opacity: .78;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.accounts-number-note-numbers{
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.accounts-number-note-chip,
+.accounts-number-note-chip.missing{
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  background: transparent;
+  border: 0;
+  color: #000000;
+  padding: 0;
+  border-radius: 0;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.accounts-number-note-chip-label,
+.accounts-number-note-chip-value,
+.accounts-number-note-chip.missing .accounts-number-note-chip-label,
+.accounts-number-note-chip.missing .accounts-number-note-chip-value{
+  color: #000000;
+}
+
+.accounts-number-note-chip-label{
+  font-weight: 800;
+}
+
+.accounts-number-note-chip-value{
+  font-weight: 1000;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accounts-number-note-copy{
+  margin-top: 8px;
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #ffffff;
+  color: #000000;
+  font-size: 11px;
+  font-weight: 1000;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.accounts-number-note-copy:hover{
+  background: #e5e7eb;
+  color: #000000;
+}
+
+.accounts-number-note-empty{
+  padding: 15px 12px;
+  color: #111111;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.accounts-number-note-open{
+  position: fixed;
+  top: 13px;
+  right: 104px;
+  z-index: 1045;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 9px 13px;
+  background: #f3f4f6;
+  color: #111111;
+  font-size: 12px;
+  font-weight: 1000;
+  box-shadow: 0 10px 24px rgba(0,0,0,.16);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.accounts-number-note-open:hover{
+  background: #e5e7eb;
+  color: #000000;
+}
+
+@media (max-width: 767.98px){
+  .accounts-number-note{
+    top: auto;
+    right: 10px;
+    left: 10px;
+    bottom: 14px;
+    width: auto;
+    max-height: 55vh;
+  }
+
+  .accounts-number-note-open{
+    top: auto;
+    right: 10px;
+    bottom: 14px;
+  }
 }
 </style>
 <!-- Bank Option Manager Popup -->
@@ -3340,6 +3637,464 @@ const boxes = Array.from(scope.querySelectorAll('.field-box'));
   loadCurrencyOptionsAndRefresh().catch(function (err) {
     console.error('Currency options load error:', err);
   });
+})();
+</script>
+<script>
+(function () {
+  const widget = document.getElementById("accountsNumberNoteWidget");
+  const openBtn = document.getElementById("accountsNumberNoteOpenBtn");
+
+  if (!widget) return;
+
+  const listEl = document.getElementById("accountsNumberNoteList");
+  const emptyEl = document.getElementById("accountsNumberNoteEmpty");
+  const totalEl = document.getElementById("accountsNumberNoteTotal");
+  const hideBtn = document.getElementById("accountsNumberNoteHideBtn");
+
+  const storageKey =
+    widget.getAttribute("data-hidden-storage-key") ||
+    "ivs_accounts_number_note_hidden_edit";
+
+  const positionStorageKey = `${storageKey}_position_v2`;
+  let currentRecords = [];
+  let openBtnDragMoved = false;
+
+  window.ACCOUNTS_NUMBER_NOTE = <%- JSON.stringify(accountsNumberNoteData || {}) %>;
+
+  function isAccountsNumberNoteMobile() {
+    return window.matchMedia("(max-width: 767.98px)").matches;
+  }
+
+  function clearAccountsNumberNoteInlinePosition(element) {
+    if (!element) return;
+
+    element.style.left = "";
+    element.style.top = "";
+    element.style.right = "";
+    element.style.bottom = "";
+  }
+
+  function clampAccountsNumberNotePosition(left, top, element) {
+    const rect = element.getBoundingClientRect();
+    const margin = 10;
+    const width = rect.width || 160;
+    const height = rect.height || 44;
+
+    return {
+      left: Math.min(
+        Math.max(margin, left),
+        Math.max(margin, window.innerWidth - width - margin)
+      ),
+      top: Math.min(
+        Math.max(margin, top),
+        Math.max(margin, window.innerHeight - height - margin)
+      )
+    };
+  }
+
+  function setAccountsNumberNotePosition(element, left, top) {
+    if (!element) return;
+
+    element.style.left = `${Math.round(left)}px`;
+    element.style.top = `${Math.round(top)}px`;
+    element.style.right = "auto";
+    element.style.bottom = "auto";
+  }
+
+  function saveAccountsNumberNotePosition(left, top) {
+    localStorage.setItem(
+      positionStorageKey,
+      JSON.stringify({
+        left: Math.round(left),
+        top: Math.round(top)
+      })
+    );
+  }
+
+  function readAccountsNumberNotePosition() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(positionStorageKey) || "null");
+
+      if (
+        !parsed ||
+        !Number.isFinite(Number(parsed.left)) ||
+        !Number.isFinite(Number(parsed.top))
+      ) {
+        return null;
+      }
+
+      return {
+        left: Number(parsed.left),
+        top: Number(parsed.top)
+      };
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function applySavedAccountsNumberNotePosition() {
+    if (isAccountsNumberNoteMobile()) {
+      clearAccountsNumberNoteInlinePosition(widget);
+      clearAccountsNumberNoteInlinePosition(openBtn);
+      return;
+    }
+
+    const savedPosition = readAccountsNumberNotePosition();
+
+    if (!savedPosition) {
+      return;
+    }
+
+    const activeElement =
+      widget && !widget.classList.contains("d-none")
+        ? widget
+        : (openBtn || widget);
+
+    const clamped = clampAccountsNumberNotePosition(
+      savedPosition.left,
+      savedPosition.top,
+      activeElement
+    );
+
+    setAccountsNumberNotePosition(widget, clamped.left, clamped.top);
+    setAccountsNumberNotePosition(openBtn, clamped.left, clamped.top);
+    saveAccountsNumberNotePosition(clamped.left, clamped.top);
+  }
+
+  function startAccountsNumberNoteDrag(event, dragElement) {
+    if (!dragElement || isAccountsNumberNoteMobile()) {
+      return;
+    }
+
+    if (event.button !== undefined && event.button !== 0) {
+      return;
+    }
+
+    if (
+      dragElement === widget &&
+      event.target.closest(".accounts-number-note-hide-btn")
+    ) {
+      return;
+    }
+
+    const startRect = dragElement.getBoundingClientRect();
+    const startClientX = event.clientX;
+    const startClientY = event.clientY;
+    let latestLeft = startRect.left;
+    let latestTop = startRect.top;
+    let didMove = false;
+
+    dragElement.classList.add("is-dragging");
+    event.preventDefault();
+
+    function handlePointerMove(moveEvent) {
+      const deltaX = moveEvent.clientX - startClientX;
+      const deltaY = moveEvent.clientY - startClientY;
+
+      if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+        didMove = true;
+      }
+
+      const activeElement =
+        widget && !widget.classList.contains("d-none")
+          ? widget
+          : dragElement;
+
+      const nextPosition = clampAccountsNumberNotePosition(
+        startRect.left + deltaX,
+        startRect.top + deltaY,
+        activeElement
+      );
+
+      latestLeft = nextPosition.left;
+      latestTop = nextPosition.top;
+
+      setAccountsNumberNotePosition(widget, latestLeft, latestTop);
+      setAccountsNumberNotePosition(openBtn, latestLeft, latestTop);
+    }
+
+    function handlePointerUp() {
+      document.removeEventListener("pointermove", handlePointerMove);
+      dragElement.classList.remove("is-dragging");
+
+      if (didMove) {
+        saveAccountsNumberNotePosition(latestLeft, latestTop);
+
+        if (dragElement === openBtn) {
+          openBtnDragMoved = true;
+
+          setTimeout(function () {
+            openBtnDragMoved = false;
+          }, 0);
+        }
+      }
+    }
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", handlePointerUp, { once: true });
+  }
+
+  function initAccountsNumberNoteDrag() {
+    const noteHead = widget.querySelector(".accounts-number-note-head");
+
+    if (noteHead) {
+      noteHead.addEventListener("pointerdown", function (event) {
+        startAccountsNumberNoteDrag(event, widget);
+      });
+    }
+
+    if (openBtn) {
+      openBtn.addEventListener("pointerdown", function (event) {
+        startAccountsNumberNoteDrag(event, openBtn);
+      });
+    }
+
+    applySavedAccountsNumberNotePosition();
+
+    window.addEventListener("resize", applySavedAccountsNumberNotePosition);
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function normalizeRecord(record = {}) {
+    const verificationNumber =
+      String(record.verificationNumber || record.rawVerificationNumber || "").trim() || "?";
+
+    const registrationNumber =
+      String(record.registrationNumber || record.rawRegistrationNumber || "").trim() || "?";
+
+    const familyNumber =
+      String(
+        record.familyNumber ||
+        record.rawFamilyNumber ||
+        record.accountsFamilyNumber ||
+        record.accounts_family_number ||
+        ""
+      ).trim() || "?";
+
+    const missingVerificationNumber =
+      record.missingVerificationNumber === true ||
+      verificationNumber === "?";
+
+    const missingRegistrationNumber =
+      record.missingRegistrationNumber === true ||
+      registrationNumber === "?";
+
+    const missingFamilyNumber =
+      record.missingFamilyNumber === true ||
+      familyNumber === "?";
+
+    return {
+      admissionId: record.admissionId || record.id || "",
+      entryNumber: record.entryNumber || record.entry_number || record.admissionId || record.id || "-",
+      studentName: record.studentName || record.student_name || "No Name",
+      fatherName: record.fatherName || record.father_name || "",
+      grade: record.grade || "",
+      familyNumber,
+      verificationNumber,
+      registrationNumber,
+      missingFamilyNumber,
+      missingVerificationNumber,
+      missingRegistrationNumber,
+      updatedAt: record.updatedAt || record.updated_at || "",
+      updatedByName: record.updatedByName || record.updated_by_name || "",
+      copyText:
+        record.copyText ||
+        [
+          `Entry: ${record.entryNumber || record.admissionId || record.id || "-"}`,
+          `Student: ${record.studentName || record.student_name || "No Name"}`,
+          `FAM: ${familyNumber}`,
+          `VERIF: ${verificationNumber}`,
+          `REG: ${registrationNumber}`
+        ].join(" | ")
+    };
+  }
+
+  function renderAccountsNumberNote(data = {}) {
+    const records = Array.isArray(data.records)
+      ? data.records.map(normalizeRecord)
+      : [];
+
+    currentRecords = records;
+
+    if (totalEl) {
+      totalEl.textContent = String(data.total || records.length || 0);
+    }
+
+    if (!records.length) {
+      listEl.innerHTML = "";
+
+      if (emptyEl) {
+        emptyEl.classList.remove("d-none");
+      }
+
+      return;
+    }
+
+    if (emptyEl) {
+      emptyEl.classList.add("d-none");
+    }
+
+    listEl.innerHTML = records.map((record, index) => {
+      const metaParts = [
+        record.fatherName ? `Father: ${record.fatherName}` : "",
+        record.grade ? `Grade: ${record.grade}` : "",
+        record.updatedByName ? `By: ${record.updatedByName}` : ""
+      ].filter(Boolean);
+
+      return `
+        <div class="accounts-number-note-row">
+          <div class="accounts-number-note-row-head">
+            <div class="accounts-number-note-student">
+              ${escapeHtml(record.studentName)}
+            </div>
+
+            <div class="accounts-number-note-entry">
+              #${escapeHtml(record.entryNumber)}
+            </div>
+          </div>
+
+          <div class="accounts-number-note-meta">
+            ${escapeHtml(metaParts.join(" | ") || "Admission number update")}
+          </div>
+
+          <div class="accounts-number-note-numbers">
+            <span class="accounts-number-note-chip ${record.missingFamilyNumber ? "missing" : ""}">
+              <span class="accounts-number-note-chip-label">FAM</span>
+              <span class="accounts-number-note-chip-value">${escapeHtml(record.familyNumber)}</span>
+            </span>
+
+            <span class="accounts-number-note-chip ${record.missingVerificationNumber ? "missing" : ""}">
+              <span class="accounts-number-note-chip-label">VERIF</span>
+              <span class="accounts-number-note-chip-value">${escapeHtml(record.verificationNumber)}</span>
+            </span>
+
+            <span class="accounts-number-note-chip ${record.missingRegistrationNumber ? "missing" : ""}">
+              <span class="accounts-number-note-chip-label">REG</span>
+              <span class="accounts-number-note-chip-value">${escapeHtml(record.registrationNumber)}</span>
+            </span>
+          </div>
+
+          <button
+            type="button"
+            class="accounts-number-note-copy"
+            data-copy-index="${index}">
+            <i class="bi bi-copy me-1"></i>
+            Copy
+          </button>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function setNoteHidden(hidden) {
+    const shouldHide = !!hidden;
+
+    widget.classList.toggle("d-none", shouldHide);
+
+    if (openBtn) {
+      openBtn.classList.toggle("d-none", !shouldHide);
+    }
+
+    localStorage.setItem(storageKey, shouldHide ? "1" : "0");
+
+    requestAnimationFrame(applySavedAccountsNumberNotePosition);
+  }
+
+  async function refreshAccountsNumberNote() {
+    try {
+      const response = await fetch("/api/accounts-number-note", {
+        headers: {
+          Accept: "application/json"
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.success === false || !data.note) {
+        return;
+      }
+
+      renderAccountsNumberNote(data.note);
+    } catch (err) {
+      console.warn("accounts number note refresh failed", err);
+    }
+  }
+
+  if (hideBtn) {
+    hideBtn.addEventListener("click", function () {
+      setNoteHidden(true);
+    });
+  }
+
+  if (openBtn) {
+    openBtn.addEventListener("click", function () {
+      if (openBtnDragMoved) {
+        openBtnDragMoved = false;
+        return;
+      }
+
+      setNoteHidden(false);
+    });
+  }
+
+  widget.addEventListener("click", async function (event) {
+    const copyBtn = event.target.closest(".accounts-number-note-copy");
+
+    if (!copyBtn) return;
+
+    const index = Number(copyBtn.getAttribute("data-copy-index") || -1);
+    const record = currentRecords[index];
+
+    if (!record) return;
+
+    try {
+      await navigator.clipboard.writeText(record.copyText || "");
+
+      const oldHtml = copyBtn.innerHTML;
+      copyBtn.innerHTML = '<i class="bi bi-check2 me-1"></i> Copied';
+
+      if (typeof window.showUploadFlash === "function") {
+        window.showUploadFlash(
+          "success",
+          "Copied",
+          "Family, verification and registration numbers copied."
+        );
+      }
+
+      setTimeout(function () {
+        copyBtn.innerHTML = oldHtml;
+      }, 1200);
+    } catch (err) {
+      alert("Copy failed. Please copy manually.");
+    }
+  });
+
+  initAccountsNumberNoteDrag();
+
+  renderAccountsNumberNote(window.ACCOUNTS_NUMBER_NOTE || {});
+
+  const hidden = localStorage.getItem(storageKey) === "1";
+  setNoteHidden(hidden);
+
+  if (typeof io === "function") {
+    try {
+      const socket = io();
+
+      socket.on("admission:changed", function () {
+        refreshAccountsNumberNote();
+      });
+    } catch (err) {
+      console.warn("accounts number note socket failed", err);
+    }
+  }
 })();
 </script>
 <%- include('partials/bootstrap-footer') %>

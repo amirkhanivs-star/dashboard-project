@@ -997,6 +997,20 @@ html.ivs-ready .ivs-topbar {
       ''
     ).trim() || '?';
 
+  const sidebarLatestFamilyNumber =
+    String(
+      (
+        sidebarLatestAccountsNumberNote &&
+        (
+          sidebarLatestAccountsNumberNote.familyNumber ||
+          sidebarLatestAccountsNumberNote.rawFamilyNumber ||
+          sidebarLatestAccountsNumberNote.accountsFamilyNumber ||
+          sidebarLatestAccountsNumberNote.accounts_family_number
+        )
+      ) ||
+      ''
+    ).trim() || '?';
+
   const sidebarMissingVerificationNumber =
     !sidebarAccountsNumberNoteHasRecord ||
     sidebarLatestAccountsNumberNote.missingVerificationNumber === true ||
@@ -1006,6 +1020,11 @@ html.ivs-ready .ivs-topbar {
     !sidebarAccountsNumberNoteHasRecord ||
     sidebarLatestAccountsNumberNote.missingRegistrationNumber === true ||
     sidebarLatestRegistrationNumber === '?';
+
+  const sidebarMissingFamilyNumber =
+    !sidebarAccountsNumberNoteHasRecord ||
+    sidebarLatestAccountsNumberNote.missingFamilyNumber === true ||
+    sidebarLatestFamilyNumber === '?';
 
   const sidebarLatestEntryNumber =
     (
@@ -1038,6 +1057,7 @@ html.ivs-ready .ivs-topbar {
       : [
           sidebarLatestEntryNumber ? `Entry: ${sidebarLatestEntryNumber}` : '',
           sidebarLatestStudentName ? `Student: ${sidebarLatestStudentName}` : '',
+          `FAM: ${sidebarLatestFamilyNumber}`,
           `VERIF: ${sidebarLatestVerificationNumber}`,
           `REG: ${sidebarLatestRegistrationNumber}`
         ].filter(Boolean).join(' | ');
@@ -1263,7 +1283,7 @@ html.ivs-ready .ivs-topbar {
           data-has-record="<%= sidebarAccountsNumberNoteHasRecord ? '1' : '0' %>">
 
                    <div class="sidebar-number-note-title">
-            Latest Verif + Reg
+            Latest Fam + Verif + Reg
           </div>
 
           <div class="sidebar-number-note-subtitle"></div>
@@ -1271,7 +1291,7 @@ html.ivs-ready .ivs-topbar {
           <div
             class="sidebar-number-note-empty <%= sidebarAccountsNumberNoteHasRecord ? 'd-none' : '' %>"
             id="sidebarAccountsNumberEmpty">
-            No verification or registration number found yet.
+            No family, verification or registration number found yet.
           </div>
 
           <div
@@ -1286,6 +1306,17 @@ html.ivs-ready .ivs-topbar {
             </div>
 
             <div class="sidebar-number-note-row">
+              <div
+                class="sidebar-number-note-chip <%= sidebarMissingFamilyNumber ? 'missing' : '' %>"
+                id="sidebarFamilyChip">
+                <span class="sidebar-number-note-chip-label">FAM</span>
+                <span
+                  class="sidebar-number-note-chip-value"
+                  id="sidebarLatestFamilyNumber">
+                  <%= sidebarLatestFamilyNumber %>
+                </span>
+              </div>
+
               <div
                 class="sidebar-number-note-chip <%= sidebarMissingVerificationNumber ? 'missing' : '' %>"
                 id="sidebarVerifChip">
@@ -1407,8 +1438,10 @@ html.ivs-ready .ivs-topbar {
     const emptyEl = document.getElementById('sidebarAccountsNumberEmpty');
     const bodyEl = document.getElementById('sidebarAccountsNumberBody');
     const metaEl = document.getElementById('sidebarAccountsNumberMeta');
+    const familyEl = document.getElementById('sidebarLatestFamilyNumber');
     const verifEl = document.getElementById('sidebarLatestVerifNumber');
     const regEl = document.getElementById('sidebarLatestRegNumber');
+    const familyChip = document.getElementById('sidebarFamilyChip');
     const verifChip = document.getElementById('sidebarVerifChip');
     const regChip = document.getElementById('sidebarRegChip');
     const copyBtn = document.getElementById('sidebarAccountsNumberCopyBtn');
@@ -1422,8 +1455,10 @@ html.ivs-ready .ivs-topbar {
       if (!latest) {
         return {
           hasRecord: false,
+          familyNumber: '?',
           verificationNumber: '?',
           registrationNumber: '?',
+          missingFamilyNumber: true,
           missingVerificationNumber: true,
           missingRegistrationNumber: true,
           meta: '',
@@ -1436,6 +1471,15 @@ html.ivs-ready .ivs-topbar {
 
       const registrationNumber =
         String(latest.registrationNumber || latest.rawRegistrationNumber || '').trim() || '?';
+
+      const familyNumber =
+        String(
+          latest.familyNumber ||
+          latest.rawFamilyNumber ||
+          latest.accountsFamilyNumber ||
+          latest.accounts_family_number ||
+          ''
+        ).trim() || '?';
 
       const entryNumber =
         latest.entryNumber ||
@@ -1457,6 +1501,10 @@ html.ivs-ready .ivs-topbar {
         latest.missingRegistrationNumber === true ||
         registrationNumber === '?';
 
+      const missingFamilyNumber =
+        latest.missingFamilyNumber === true ||
+        familyNumber === '?';
+
       const meta = [
         entryNumber ? `Entry #${entryNumber}` : '',
         studentName || ''
@@ -1467,14 +1515,17 @@ html.ivs-ready .ivs-topbar {
         [
           entryNumber ? `Entry: ${entryNumber}` : '',
           studentName ? `Student: ${studentName}` : '',
+          `FAM: ${familyNumber}`,
           `VERIF: ${verificationNumber}`,
           `REG: ${registrationNumber}`
         ].filter(Boolean).join(' | ');
 
       return {
         hasRecord: true,
+        familyNumber,
         verificationNumber,
         registrationNumber,
+        missingFamilyNumber,
         missingVerificationNumber,
         missingRegistrationNumber,
         meta,
@@ -1504,12 +1555,20 @@ html.ivs-ready .ivs-topbar {
         metaEl.textContent = note.meta || 'Latest account number';
       }
 
+      if (familyEl) {
+        familyEl.textContent = note.familyNumber;
+      }
+
       if (verifEl) {
         verifEl.textContent = note.verificationNumber;
       }
 
       if (regEl) {
         regEl.textContent = note.registrationNumber;
+      }
+
+      if (familyChip) {
+        familyChip.classList.toggle('missing', !!note.missingFamilyNumber);
       }
 
       if (verifChip) {
@@ -1602,7 +1661,7 @@ html.ivs-ready .ivs-topbar {
         if (copied) {
           copyBtn.innerHTML = '<i class="bi bi-check2-circle"></i><span>Copied</span>';
         } else {
-          prompt('Copy latest verification + registration number:', text);
+          prompt('Copy latest family, verification + registration number:', text);
           copyBtn.innerHTML = oldHtml;
         }
 

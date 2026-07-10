@@ -1946,6 +1946,9 @@ function ensureAccountsNumberNoteColumns() {
     addColumn("accounts_number_note_updated_by_name", "TEXT");
     addColumn("accounts_number_note_updated_by_role", "TEXT");
 
+    // Safe fallback: old DB me family number column missing ho to add ho jaye.
+    addColumn("accounts_family_number", "TEXT");
+
     const dateCandidates = [
       "accounts_registration_number_assigned_at",
       "last_activity_at",
@@ -1969,6 +1972,7 @@ function ensureAccountsNumberNoteColumns() {
         AND (
           TRIM(COALESCE(accounts_verification_number, '')) != ''
           OR TRIM(COALESCE(accounts_registration_number, '')) != ''
+          OR TRIM(COALESCE(accounts_family_number, '')) != ''
         )
         AND (
           accounts_number_note_updated_at IS NULL
@@ -2003,9 +2007,18 @@ function accountsNumberNoteValuesChanged(beforeRow = {}, afterRow = {}) {
     afterRow?.accounts_registration_number || ""
   );
 
+  const beforeFamily = normalizeAccountsNumberNoteValue(
+    beforeRow?.accounts_family_number || ""
+  );
+
+  const afterFamily = normalizeAccountsNumberNoteValue(
+    afterRow?.accounts_family_number || ""
+  );
+
   return (
     beforeVerification !== afterVerification ||
-    beforeRegistration !== afterRegistration
+    beforeRegistration !== afterRegistration ||
+    beforeFamily !== afterFamily
   );
 }
 
@@ -2148,8 +2161,13 @@ function mapAccountsNumberNoteRow(row = {}) {
     row.accounts_registration_number || ""
   );
 
+  const familyNumber = normalizeAccountsNumberNoteValue(
+    row.accounts_family_number || ""
+  );
+
   const displayVerificationNumber = verificationNumber || "?";
   const displayRegistrationNumber = registrationNumber || "?";
+  const displayFamilyNumber = familyNumber || "?";
 
   const updatedAt = normalizeAccountsNumberNoteValue(
     row.accounts_number_note_updated_at ||
@@ -2179,6 +2197,7 @@ function mapAccountsNumberNoteRow(row = {}) {
   const copyText = [
     `Entry: ${entryNumber}`,
     studentName ? `Student: ${studentName}` : "",
+    `FAM: ${displayFamilyNumber}`,
     `VERIF: ${displayVerificationNumber}`,
     `REG: ${displayRegistrationNumber}`,
   ]
@@ -2192,12 +2211,15 @@ function mapAccountsNumberNoteRow(row = {}) {
     fatherName,
     grade,
 
+    familyNumber: displayFamilyNumber,
     verificationNumber: displayVerificationNumber,
     registrationNumber: displayRegistrationNumber,
 
+    rawFamilyNumber: familyNumber,
     rawVerificationNumber: verificationNumber,
     rawRegistrationNumber: registrationNumber,
 
+    missingFamilyNumber: !familyNumber,
     missingVerificationNumber: !verificationNumber,
     missingRegistrationNumber: !registrationNumber,
 
@@ -2248,6 +2270,7 @@ function getAccountsNumberNoteData(user = null) {
         ${getAccountsNumberNoteSelectColumn(columnsSet, "tuition_grade")},
         ${getAccountsNumberNoteSelectColumn(columnsSet, "accounts_verification_number")},
         ${getAccountsNumberNoteSelectColumn(columnsSet, "accounts_registration_number")},
+        ${getAccountsNumberNoteSelectColumn(columnsSet, "accounts_family_number")},
         ${getAccountsNumberNoteSelectColumn(columnsSet, "accounts_registration_number_assigned_at")},
         ${getAccountsNumberNoteSelectColumn(columnsSet, "accounts_number_note_updated_at")},
         ${getAccountsNumberNoteSelectColumn(columnsSet, "accounts_number_note_updated_by_name")},
@@ -2261,6 +2284,7 @@ function getAccountsNumberNoteData(user = null) {
         AND (
           TRIM(COALESCE(accounts_verification_number, '')) != ''
           OR TRIM(COALESCE(accounts_registration_number, '')) != ''
+          OR TRIM(COALESCE(accounts_family_number, '')) != ''
         )
       ORDER BY
         datetime(${dateExpression}) DESC,
@@ -4194,17 +4218,36 @@ function syncFamilyVerificationAndFamilyNumber({
       params[`targetId${index}`] = targetId;
     });
 
-    const verificationChangedTargetIds =
-      canSyncVerification
-        ? targetRows
-            .filter((familyRow) =>
+    const targetIdSet = new Set(targetIds);
+
+    const accountsNumberNoteChangedTargetIds = [
+      ...new Set(
+        targetRows
+          .filter((familyRow) => {
+            const familyRowId = Number(familyRow?.id || 0);
+
+            if (!familyRowId || !targetIdSet.has(familyRowId)) {
+              return false;
+            }
+
+            const verificationChanged =
+              canSyncVerification &&
               normalizeAccountsNumberNoteValue(
                 familyRow?.accounts_verification_number || ""
-              ) !== normalizeAccountsNumberNoteValue(verificationNumber || "")
-            )
-            .map((familyRow) => Number(familyRow.id || 0))
-            .filter(Boolean)
-        : [];
+              ) !== normalizeAccountsNumberNoteValue(verificationNumber || "");
+
+            const familyChanged =
+              canSyncFamilyNumber &&
+              normalizeAccountsNumberNoteValue(
+                familyRow?.accounts_family_number || ""
+              ) !== normalizeAccountsNumberNoteValue(familyNumber || "");
+
+            return verificationChanged || familyChanged;
+          })
+          .map((familyRow) => Number(familyRow.id || 0))
+          .filter(Boolean)
+      ),
+    ];
 
     db.prepare(`
       UPDATE admissions
@@ -4213,9 +4256,9 @@ function syncFamilyVerificationAndFamilyNumber({
         AND COALESCE(is_deleted, 0) = 0
     `).run(params);
 
-    if (verificationChangedTargetIds.length) {
+    if (accountsNumberNoteChangedTargetIds.length) {
       markAccountsNumberNoteUpdated(
-        verificationChangedTargetIds,
+        accountsNumberNoteChangedTargetIds,
         user
       );
     }
@@ -11989,6 +12032,7 @@ if (!rows.length) rows = [row];
   familyNumber,
   billingMonths: BILLING_MONTHS,
   bankOptions: getBankOptions(),
+  accountsNumberNote: getAccountsNumberNoteData(user),
 
   editForwardContext,
   canShowEditForwardButton: editForwardContext.canShowForwardButton,
@@ -12145,14 +12189,15 @@ primary.bank_name = String(row.bank_name || "").trim();
 attachComputedMonthFees(row, primary, billingYear);
 
     return res.render(viewName, {
-      user,
-      perms,
-      admission: primary,
-      admissions,
-      familyNumber,
-      billingMonths: BILLING_MONTHS,
-      pageTitle: "Admission Details",
-    });
+  user,
+  perms,
+  admission: primary,
+  admissions,
+  familyNumber,
+  billingMonths: BILLING_MONTHS,
+  accountsNumberNote: getAccountsNumberNoteData(user),
+  pageTitle: "Admission Details",
+});
   } catch (err) {
     console.error("renderSharedAdmissionDetails error:", err);
     return res.status(500).send("Server error");
@@ -12234,23 +12279,24 @@ const familyLabelForView =
     : (familyNumber || String(primaryRow?.accounts_family_number || "").trim());
 
     return res.render("fee-collection", {
-      user,
-      perms,
-      pageTitle: "Fee Collection",
-      billingYear,
-      mode,
-      admissionId: primaryRow?.id || "",
-      familyNumber: familyLabelForView,
-      masterVerificationNumber: String(primaryRow?.accounts_verification_number || "").trim(),
-      masterBankName: String(primaryRow?.bank_name || "").trim(),
-      rows,
-      feeRows,
-      paidRows,
-      excludedRows,
-      summary,
-      bankOptions: getBankOptions(),
-      isPaidSlipWorkflowUser: isPaidSlipAgentOrSubAgent(user),
-    });
+  user,
+  perms,
+  pageTitle: "Fee Collection",
+  billingYear,
+  mode,
+  admissionId: primaryRow?.id || "",
+  familyNumber: familyLabelForView,
+  masterVerificationNumber: String(primaryRow?.accounts_verification_number || "").trim(),
+  masterBankName: String(primaryRow?.bank_name || "").trim(),
+  rows,
+  feeRows,
+  paidRows,
+  excludedRows,
+  summary,
+  bankOptions: getBankOptions(),
+  accountsNumberNote: getAccountsNumberNoteData(user),
+  isPaidSlipWorkflowUser: isPaidSlipAgentOrSubAgent(user),
+});
   } catch (err) {
     console.error("renderFeeCollectionPage error:", err);
     return res.status(500).send("Server error");
