@@ -19006,9 +19006,19 @@ const limit = Math.max(parseInt(req.query.limit, 10) || 200, 1);
   const selectedSchoolTeamUserId =
     selectedSchoolTeamUser?.id || 0;
 
-  const accessibleAdmissions = fetchAdmissionsForUser(user, {
-    schoolTeamUserId: selectedSchoolTeamUserId,
-  });
+  const accessibleAdmissions =
+    isAccountsUser(user) && user.role === "admin"
+      ? [
+          ...fetchAdmissionsForUser(user, {
+            accountsView: "new_admissions",
+          }),
+          ...fetchAdmissionsForUser(user, {
+            accountsView: "old_admissions",
+          }),
+        ]
+      : fetchAdmissionsForUser(user, {
+          schoolTeamUserId: selectedSchoolTeamUserId,
+        });
 
   const totalRecords = accessibleAdmissions.length;
   const totalPages = Math.max(Math.ceil(totalRecords / limit), 1);
