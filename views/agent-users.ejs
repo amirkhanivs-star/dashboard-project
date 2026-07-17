@@ -17,36 +17,162 @@ const formatDeptLabel = (dept) => {
     : (dept || '-');
 };
   const managerName = user.name || 'Manager';
-  const ALL_COLS = [
-  { key: 'colStatus' },
-  { key: 'colFeeStatus' },
-  { key: 'colDept' },
-  { key: 'colStudentName' },
-  { key: 'colFatherName' },
-  { key: 'colFatherEmail' },
-  { key: 'colGrade' },
-  { key: 'colTuitionGrade' },
-  { key: 'colPhone' },
-  { key: 'colProcessedBy' },
-  { key: 'colPaymentStatus' },
-  { key: 'colPaidUpto' },
-  { key: 'colVerificationNumber' },
-  { key: 'colRegistrationNumber' },
-  { key: 'colFamilyNumber' },
-  { key: 'colRegistrationFee' },
-  { key: 'colFees' },
-  { key: 'colCurrency' },
-  { key: 'colBank' },
-  { key: 'colMonth' },
-  { key: 'colTotalFees' },
-  { key: 'colPendingDues' },
-{ key: 'colReceivedPayment' },
-{ key: 'colComment' },
-{ key: 'colInvoiceStatus' },
-{ key: 'colInvoiceStatusTimestamp' },
-{ key: 'colPaidInvoiceStatus' },
-{ key: 'colPaidInvoiceStatusTimestamp' },
-];
+    const COLUMN_ACCESS = [
+    {
+      view: 'colStatus',
+      edit: 'editStatus',
+      label: 'Current Status'
+    },
+    {
+      view: 'colFeeStatus',
+      edit: 'editFeeStatus',
+      label: 'Fee Status'
+    },
+    {
+      view: 'colDept',
+      edit: 'editDept',
+      label: 'Department'
+    },
+    {
+      view: 'colStudentName',
+      edit: 'editStudentName',
+      label: 'Student',
+      legacy: ['colStudent']
+    },
+    {
+      view: 'colFatherName',
+      edit: 'editFatherName',
+      label: 'Father',
+      legacy: ['colFather']
+    },
+    {
+      view: 'colFatherEmail',
+      edit: 'editFatherEmail',
+      label: 'Father Email'
+    },
+    {
+      view: 'colGrade',
+      edit: 'editGrade',
+      label: 'Grade'
+    },
+    {
+      view: 'colTuitionGrade',
+      edit: 'editTuitionGrade',
+      label: 'Grade Section'
+    },
+    {
+      view: 'colPhone',
+      edit: 'editPhone',
+      label: 'Phone Number',
+      legacy: ['showPhone']
+    },
+    {
+      view: 'colProcessedBy',
+      edit: '',
+      label: 'Processed By'
+    },
+
+    {
+      view: 'colPaymentStatus',
+      edit: 'editPaymentStatus',
+      label: 'Payment Status',
+      legacy: ['showPaymentStatus']
+    },
+    {
+      view: 'colPaidUpto',
+      edit: '',
+      label: 'Paid Upto',
+      legacy: ['showPaidUpto']
+    },
+    {
+      view: 'colVerificationNumber',
+      edit: 'editVerificationNumber',
+      label: 'Verification #',
+      legacy: ['showVerificationNumber']
+    },
+    {
+      view: 'colRegistrationNumber',
+      edit: 'editRegistrationNumber',
+      label: 'Registration #',
+      legacy: ['showRegistrationNumber']
+    },
+    {
+      view: 'colFamilyNumber',
+      edit: 'editFamilyNumber',
+      label: 'Family #'
+    },
+    {
+      view: 'colRegistrationFee',
+      edit: 'editRegistrationFee',
+      label: 'Registration Fee'
+    },
+    {
+      view: 'colFees',
+      edit: 'editFees',
+      label: 'Fees'
+    },
+    {
+      view: 'colCurrency',
+      edit: 'editCurrency',
+      label: 'Currency'
+    },
+    {
+      view: 'colBank',
+      edit: 'editBank',
+      label: 'Bank'
+    },
+    {
+      view: 'colMonth',
+      edit: 'editMonth',
+      label: 'Month'
+    },
+
+    {
+      view: 'colTotalFees',
+      edit: '',
+      label: 'Total Fees'
+    },
+    {
+      view: 'colPendingDues',
+      edit: '',
+      label: 'Pending Dues'
+    },
+    {
+      view: 'colReceivedPayment',
+      edit: '',
+      label: 'Received Payment'
+    },
+    {
+      view: 'colComment',
+      edit: 'editComment',
+      label: 'Comment'
+    },
+    {
+      view: 'colInvoiceStatus',
+      edit: '',
+      label: 'Invoice Status'
+    },
+    {
+      view: 'colInvoiceStatusTimestamp',
+      edit: '',
+      label: 'Invoice Status Time'
+    },
+    {
+      view: 'colPaidInvoiceStatus',
+      edit: '',
+      label: 'Paid Invoice Status'
+    },
+    {
+      view: 'colPaidInvoiceStatusTimestamp',
+      edit: '',
+      label: 'Paid Invoice Time'
+    },
+    {
+      view: 'colActionButtons',
+      edit: '',
+      label: 'Action Buttons'
+    }
+  ];
 
   let permRaw = user && (user.permissions || user.perms || user.permissionMap)
     ? (user.permissions || user.perms || user.permissionMap)
@@ -635,7 +761,7 @@ const formatDeptLabel = (dept) => {
         <span>My Sub Agents</span>
       </h4>
       <p class="text-muted small mb-0">
-        This page shows only the sub agents created under your account.
+        Review each Sub Agent's Can View, Can Edit, button, and team access.
       </p>
     </div>
 
@@ -716,14 +842,133 @@ const formatDeptLabel = (dept) => {
           let p = sa.permissions || {};
           try { if (typeof p === 'string') p = JSON.parse(p); } catch (e) { p = {}; }
 
-          const isColOn = (key, legacy) => {
-            if (typeof p[key] !== 'undefined') return !!p[key];
-            if (legacy && typeof p[legacy] !== 'undefined') return !!p[legacy];
+          const permissionEnabled = (value) => {
+            return (
+              value === true ||
+              value === 1 ||
+              value === '1' ||
+              value === 'true' ||
+              value === 'on'
+            );
+          };
+
+          const hasOwnPermission = (key) => {
+            return Object.prototype.hasOwnProperty.call(
+              p || {},
+              key
+            );
+          };
+
+          /*
+           * Kisi bhi edit* permission ki presence ka matlab hai
+           * ke user new Can View / Can Edit schema par save ho chuka hai.
+           */
+          const hasViewEditSchema = COLUMN_ACCESS.some((item) => {
+            return item.edit && hasOwnPermission(item.edit);
+          });
+
+          const isViewOn = (item) => {
+            if (hasOwnPermission(item.view)) {
+              return permissionEnabled(p[item.view]);
+            }
+
+            const legacyKeys = Array.isArray(item.legacy)
+              ? item.legacy
+              : item.legacy
+                ? [item.legacy]
+                : [];
+
+            for (const legacyKey of legacyKeys) {
+              if (hasOwnPermission(legacyKey)) {
+                return permissionEnabled(p[legacyKey]);
+              }
+            }
+
             return false;
           };
 
-          const isBtnOn = (key) => !!p[key];
-          const canDeleteAdmissions = !!p.canDeleteAdmissions;
+          const isEditOn = (item) => {
+            if (!item.edit || !isViewOn(item)) {
+              return false;
+            }
+
+            /*
+             * Existing legacy Sub Agents without edit* keys:
+             * unka old visible column access View + Edit rahega.
+             */
+            if (!hasViewEditSchema) {
+              return true;
+            }
+
+            return permissionEnabled(p[item.edit]);
+          };
+
+          const BUTTON_PERMISSION_ALIASES = {
+            btnEditRow: [
+              'btnEditRow'
+            ],
+
+            btnDetails: [
+              'btnDetails'
+            ],
+
+            btnUpdateRow: [
+              'btnUpdateRow',
+              'canUpdateAdmissions',
+              'canUpdateAccounts'
+            ],
+
+            btnPdf: [
+              'btnPdf',
+              'canDownloadPdf'
+            ],
+
+            btnBilling: [
+              'btnBilling',
+              'canOpenBilling',
+              'canSaveBilling'
+            ],
+
+            btnWhatsApp: [
+              'btnWhatsApp',
+              'canSendWhatsApp'
+            ],
+
+            btnUpload: [
+              'btnUpload',
+              'canUploadFiles'
+            ],
+
+            btnFiles: [
+              'btnFiles'
+            ],
+
+            canDeleteFiles: [
+              'canDeleteFiles'
+            ],
+
+            canDeleteAdmissions: [
+              'canDeleteAdmissions'
+            ]
+          };
+
+          const isBtnOn = (key) => {
+            const candidateKeys =
+              BUTTON_PERMISSION_ALIASES[key] || [key];
+
+            return candidateKeys.some((candidateKey) => {
+              return (
+                hasOwnPermission(candidateKey) &&
+                permissionEnabled(p[candidateKey])
+              );
+            });
+          };
+
+          const canDeleteFiles =
+            isBtnOn('canDeleteFiles');
+
+          const canDeleteAdmissions =
+            isBtnOn('canDeleteAdmissions');
 
           const assignedAdminDisplay =
             sa.assignedAdminName ||
@@ -748,8 +993,26 @@ const formatDeptLabel = (dept) => {
             String(sa.access_scope || '').trim() === 'own' ? 'Own Admissions' :
             'Own Admissions';
 
-          const enabledCols = ALL_COLS.reduce((acc, c) => acc + (isColOn(c.key, c.legacy) ? 1 : 0), 0);
-          const totalCols = ALL_COLS.length;
+          const enabledViewCols = COLUMN_ACCESS.reduce(
+            (total, item) => {
+              return total + (isViewOn(item) ? 1 : 0);
+            },
+            0
+          );
+
+          const editableColumns = COLUMN_ACCESS.filter(
+            (item) => !!item.edit
+          );
+
+          const enabledEditCols = editableColumns.reduce(
+            (total, item) => {
+              return total + (isEditOn(item) ? 1 : 0);
+            },
+            0
+          );
+
+          const totalViewCols = COLUMN_ACCESS.length;
+          const totalEditCols = editableColumns.length;
           const typeValue = String(sa.agentType || '').toLowerCase() || 'unknown';
           const firstLetter = (sa.name && String(sa.name).trim()) ? String(sa.name).trim().charAt(0).toUpperCase() : '#';
         %>
@@ -841,9 +1104,24 @@ const formatDeptLabel = (dept) => {
                   <div class="text-muted mb-1">Access summary</div>
 
                   <div class="d-flex flex-wrap gap-1">
-                    <span class="badge rounded-pill bg-light text-dark border">
-                      <i class="bi bi-table me-1"></i>
-                      Columns: <strong><%= enabledCols %>/<%= totalCols %></strong>
+                    <span
+                      class="badge rounded-pill bg-success-subtle text-success border"
+                      title="Columns this Sub Agent can see">
+                      <i class="bi bi-eye me-1"></i>
+                      Can View:
+                      <strong>
+                        <%= enabledViewCols %>/<%= totalViewCols %>
+                      </strong>
+                    </span>
+
+                    <span
+                      class="badge rounded-pill bg-primary-subtle text-primary border"
+                      title="Columns this Sub Agent can update">
+                      <i class="bi bi-pencil-square me-1"></i>
+                      Can Edit:
+                      <strong>
+                        <%= enabledEditCols %>/<%= totalEditCols %>
+                      </strong>
                     </span>
 
                                         <span class="badge rounded-pill <%= isBtnOn('btnDetails') ? 'bg-primary-subtle text-primary' : 'bg-light text-muted border' %>">
@@ -878,8 +1156,20 @@ const formatDeptLabel = (dept) => {
                       <i class="bi bi-folder2-open me-1"></i>Files
                     </span>
 
-                    <span class="badge rounded-pill <%= canDeleteAdmissions ? 'bg-danger-subtle text-danger' : 'bg-light text-muted border' %>">
-                      <i class="bi bi-trash3 me-1"></i>Delete Admissions
+                    <span
+                      class="badge rounded-pill <%= canDeleteFiles
+                        ? 'bg-danger-subtle text-danger'
+                        : 'bg-light text-muted border' %>">
+                      <i class="bi bi-file-earmark-x me-1"></i>
+                      Delete Files
+                    </span>
+
+                    <span
+                      class="badge rounded-pill <%= canDeleteAdmissions
+                        ? 'bg-danger-subtle text-danger'
+                        : 'bg-light text-muted border' %>">
+                      <i class="bi bi-trash3 me-1"></i>
+                      Delete Admissions
                     </span>
                                     </div>
 
@@ -1050,8 +1340,6 @@ const formatDeptLabel = (dept) => {
     });
   })();
 </script>
-<%- include('partials/bootstrap-footer') %>
-
 <div id="deleteConfirmOverlay"
      class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center d-none"
      style="background:rgba(15,23,42,0.35); z-index:1080;">
@@ -1145,3 +1433,6 @@ const formatDeptLabel = (dept) => {
     });
   })();
 </script>
+
+<%- include('partials/bootstrap-footer') %>
+

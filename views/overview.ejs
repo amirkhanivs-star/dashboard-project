@@ -468,706 +468,3036 @@
 </style>
 
 <%
-  const safeOverview = overviewData || {};
-  const summaryCards = Array.isArray(safeOverview.summaryCards) ? safeOverview.summaryCards : [];
-  const departmentStats = safeOverview.departmentStats || {};
-  const statusStats = Array.isArray(safeOverview.statusStats) ? safeOverview.statusStats : [];
-  const feeStats = Array.isArray(safeOverview.feeStats) ? safeOverview.feeStats : [];
-  const currencyStats = Array.isArray(safeOverview.currencyStats) ? safeOverview.currencyStats : [];
-  const recentAdmissions = Array.isArray(safeOverview.recentAdmissions) ? safeOverview.recentAdmissions : [];
-  const recentAdmissionsPageData = recentAdmissions;
-  const recentBillingChanges = Array.isArray(safeOverview.recentBillingChanges) ? safeOverview.recentBillingChanges : [];
-  const recentBillingPageData = recentBillingChanges;
-  const billingStats = safeOverview.billingStats || {};
-  const billingBreakdown = Array.isArray(billingStats.billingBreakdown) ? billingStats.billingBreakdown : [];
-  const pendingDueAdmissions = Array.isArray(billingStats.pendingDueAdmissions) ? billingStats.pendingDueAdmissions : [];
-  const pendingDuePageData = pendingDueAdmissions;
-  const noPaymentAdmissions = Array.isArray(billingStats.noPaymentAdmissions) ? billingStats.noPaymentAdmissions : [];
-  const noPaymentPageData = noPaymentAdmissions;
-  const processedByStatsFromServer = Array.isArray(safeOverview.processedByStats) ? safeOverview.processedByStats : [];
-  const dailyAdmissionStatsFromServer = Array.isArray(safeOverview.dailyAdmissionStats) ? safeOverview.dailyAdmissionStats : [];
-  const searchResultsFromServer = Array.isArray(safeOverview.searchResults) ? safeOverview.searchResults : [];
-  const missingInsightsFromServer = Array.isArray(safeOverview.missingInsights) ? safeOverview.missingInsights : [];
-  const queryFilters = safeOverview.filters || {};
-  const urlFilters = typeof req !== 'undefined' && req.query ? req.query : {};
-  const activeSearch = String(queryFilters.q || urlFilters.q || '').trim();
-  const activeDept = String(queryFilters.department || urlFilters.department || '').trim();
-  const activeStatus = String(queryFilters.status || urlFilters.status || '').trim();
-  const activeFeeStatus = String(queryFilters.feeStatus || urlFilters.feeStatus || '').trim();
-  const activeProcessedBy = String(queryFilters.processedBy || urlFilters.processedBy || '').trim();
-  const activeFromDate = String(queryFilters.fromDate || urlFilters.fromDate || '').trim();
-  const activeToDate = String(queryFilters.toDate || urlFilters.toDate || '').trim();
+  let overviewPerms =
+    (typeof perms !== 'undefined' && perms)
+      ? perms
+      : (
+          user?.permissions ||
+          user?.perms ||
+          user?.permission ||
+          user?.permissionMap ||
+          {}
+        );
+
+  try {
+    if (typeof overviewPerms === 'string') {
+      overviewPerms = JSON.parse(
+        overviewPerms
+      );
+    }
+  } catch (error) {
+    overviewPerms = {};
+  }
+
+  function overviewPermissionEnabled(value) {
+    if (value === true || value === 1) {
+      return true;
+    }
+
+    if (
+      value === false ||
+      value === 0 ||
+      value === null ||
+      typeof value === 'undefined'
+    ) {
+      return false;
+    }
+
+    return [
+      '1',
+      'true',
+      'on',
+      'yes'
+    ].includes(
+      String(value)
+        .trim()
+        .toLowerCase()
+    );
+  }
+
+  function hasOverviewPermission(key) {
+    const cleanKey =
+      String(key || '').trim();
+
+    if (!cleanKey || !overviewPerms) {
+      return false;
+    }
+
+    if (overviewPerms === true) {
+      return true;
+    }
+
+    if (Array.isArray(overviewPerms)) {
+      return (
+        overviewPerms.includes(cleanKey) ||
+        overviewPerms.includes('*') ||
+        overviewPerms.includes('all')
+      );
+    }
+
+    if (typeof overviewPerms === 'object') {
+      if (
+        Object.prototype.hasOwnProperty.call(
+          overviewPerms,
+          cleanKey
+        )
+      ) {
+        return overviewPermissionEnabled(
+          overviewPerms[cleanKey]
+        );
+      }
+
+      const alternateKey =
+        cleanKey.replace(/\./g, '_');
+
+      if (
+        Object.prototype.hasOwnProperty.call(
+          overviewPerms,
+          alternateKey
+        )
+      ) {
+        return overviewPermissionEnabled(
+          overviewPerms[alternateKey]
+        );
+      }
+    }
+
+    return false;
+  }
+
+  const OVERVIEW_VIEW_PERMISSION_KEYS =
+    Object.freeze({
+      status: 'colStatus',
+      feeStatus: 'colFeeStatus',
+      dept: 'colDept',
+      student: 'colStudentName',
+      father: 'colFatherName',
+      fatherEmail: 'colFatherEmail',
+      grade: 'colGrade',
+      tuitionGrade:
+        'colTuitionGrade',
+      phone: 'colPhone',
+      processedBy:
+        'colProcessedBy',
+      paymentStatus:
+        'colPaymentStatus',
+      paidUpto: 'colPaidUpto',
+      verificationNumber:
+        'colVerificationNumber',
+      registrationNumber:
+        'colRegistrationNumber',
+      familyNumber:
+        'colFamilyNumber',
+      registrationFee:
+        'colRegistrationFee',
+      fees: 'colFees',
+      currency: 'colCurrency',
+      bank: 'colBank',
+      month: 'colMonth',
+      totalFees: 'colTotalFees',
+      pendingDues:
+        'colPendingDues',
+      receivedPayment:
+        'colReceivedPayment',
+      comment: 'colComment',
+      invoiceStatus:
+        'colInvoiceStatus',
+      invoiceStatusTimestamp:
+        'colInvoiceStatusTimestamp',
+      paidInvoiceStatus:
+        'colPaidInvoiceStatus',
+      paidInvoiceStatusTimestamp:
+        'colPaidInvoiceStatusTimestamp',
+      actionButtons:
+        'colActionButtons'
+    });
+
+  const OVERVIEW_LEGACY_VIEW_KEYS =
+    Object.freeze({
+      phone: [
+        'showPhone'
+      ],
+
+      paymentStatus: [
+        'showPaymentStatus'
+      ],
+
+      paidUpto: [
+        'showPaidUpto'
+      ],
+
+      verificationNumber: [
+        'showVerificationNumber'
+      ],
+
+      registrationNumber: [
+        'showRegistrationNumber'
+      ]
+    });
+
+  function canViewOverviewColumn(name) {
+    const key =
+      String(name || '').trim();
+
+    const permissionKey =
+      OVERVIEW_VIEW_PERMISSION_KEYS[key];
+
+    if (!permissionKey) {
+      return false;
+    }
+
+    const legacyKeys =
+      OVERVIEW_LEGACY_VIEW_KEYS[key] ||
+      [];
+
+    const pascalKey =
+      key.charAt(0).toUpperCase() +
+      key.slice(1);
+
+    const possibleKeys = [
+      permissionKey,
+      ...legacyKeys,
+
+      `col.${key}`,
+      `show_${key}`,
+      `show${pascalKey}`,
+
+      `super.col.${key}`,
+      `super.column.${key}`,
+
+      `dashboard_super.col.${key}`,
+      `dashboard-super.col.${key}`,
+
+      `perm.super.col.${key}`,
+
+      key
+    ];
+
+    return possibleKeys.some(
+      hasOverviewPermission
+    );
+  }
+
+  const P = {
+    col: {
+      status:
+        canViewOverviewColumn('status'),
+
+      feeStatus:
+        canViewOverviewColumn('feeStatus'),
+
+      dept:
+        canViewOverviewColumn('dept'),
+
+      student:
+        canViewOverviewColumn('student'),
+
+      father:
+        canViewOverviewColumn('father'),
+
+      fatherEmail:
+        canViewOverviewColumn(
+          'fatherEmail'
+        ),
+
+      grade:
+        canViewOverviewColumn('grade'),
+
+      tuitionGrade:
+        canViewOverviewColumn(
+          'tuitionGrade'
+        ),
+
+      phone:
+        canViewOverviewColumn('phone'),
+
+      processedBy:
+        canViewOverviewColumn(
+          'processedBy'
+        ),
+
+      paymentStatus:
+        canViewOverviewColumn(
+          'paymentStatus'
+        ),
+
+      paidUpto:
+        canViewOverviewColumn(
+          'paidUpto'
+        ),
+
+      verificationNumber:
+        canViewOverviewColumn(
+          'verificationNumber'
+        ),
+
+      registrationNumber:
+        canViewOverviewColumn(
+          'registrationNumber'
+        ),
+
+      familyNumber:
+        canViewOverviewColumn(
+          'familyNumber'
+        ),
+
+      registrationFee:
+        canViewOverviewColumn(
+          'registrationFee'
+        ),
+
+      fees:
+        canViewOverviewColumn('fees'),
+
+      currency:
+        canViewOverviewColumn(
+          'currency'
+        ),
+
+      bank:
+        canViewOverviewColumn('bank'),
+
+      month:
+        canViewOverviewColumn('month'),
+
+      totalFees:
+        canViewOverviewColumn(
+          'totalFees'
+        ),
+
+      pendingDues:
+        canViewOverviewColumn(
+          'pendingDues'
+        ),
+
+      receivedPayment:
+        canViewOverviewColumn(
+          'receivedPayment'
+        ),
+
+      comment:
+        canViewOverviewColumn(
+          'comment'
+        ),
+
+      invoiceStatus:
+        canViewOverviewColumn(
+          'invoiceStatus'
+        ),
+
+      invoiceStatusTimestamp:
+        canViewOverviewColumn(
+          'invoiceStatusTimestamp'
+        ),
+
+      paidInvoiceStatus:
+        canViewOverviewColumn(
+          'paidInvoiceStatus'
+        ),
+
+      paidInvoiceStatusTimestamp:
+        canViewOverviewColumn(
+          'paidInvoiceStatusTimestamp'
+        ),
+
+      actionButtons:
+        canViewOverviewColumn(
+          'actionButtons'
+        )
+    }
+  };
+
+  const canViewAdmissionCounts =
+    !!(
+      P.col.student ||
+      P.col.dept ||
+      P.col.status ||
+      P.col.feeStatus ||
+      P.col.processedBy ||
+      P.col.registrationNumber ||
+      P.col.phone ||
+      P.col.paymentStatus ||
+      P.col.fees ||
+      P.col.currency ||
+      P.col.month ||
+      P.col.pendingDues ||
+      P.col.receivedPayment
+    );
+
+  const canViewSearchResults =
+    !!(
+      P.col.student ||
+      P.col.registrationNumber ||
+      P.col.dept ||
+      P.col.status ||
+      P.col.feeStatus ||
+      P.col.processedBy ||
+      P.col.phone
+    );
+
+  const canViewBillingAnalytics =
+    !!(
+      P.col.paymentStatus ||
+      P.col.totalFees ||
+      P.col.pendingDues ||
+      P.col.receivedPayment
+    );
+
+  const canViewInvoiceAnalytics =
+    !!(
+      P.col.invoiceStatus ||
+      P.col.invoiceStatusTimestamp ||
+      P.col.paidInvoiceStatus ||
+      P.col.paidInvoiceStatusTimestamp
+    );
+
+  const safeOverview =
+    overviewData || {};
+
+  const summaryCards =
+    Array.isArray(safeOverview.summaryCards)
+      ? safeOverview.summaryCards
+      : [];
+
+  const departmentStats =
+    safeOverview.departmentStats || {};
+
+  const statusStats =
+    Array.isArray(safeOverview.statusStats)
+      ? safeOverview.statusStats
+      : [];
+
+  const feeStats =
+    Array.isArray(safeOverview.feeStats)
+      ? safeOverview.feeStats
+      : [];
+
+  const currencyStats =
+    Array.isArray(safeOverview.currencyStats)
+      ? safeOverview.currencyStats
+      : [];
+
+  const recentAdmissions =
+    Array.isArray(safeOverview.recentAdmissions)
+      ? safeOverview.recentAdmissions
+      : [];
+
+  const recentAdmissionsPageData =
+    recentAdmissions;
+
+  const recentBillingChanges =
+    Array.isArray(safeOverview.recentBillingChanges)
+      ? safeOverview.recentBillingChanges
+      : [];
+
+  const recentBillingPageData =
+    recentBillingChanges;
+
+  const billingStats =
+    safeOverview.billingStats || {};
+
+  const billingBreakdown =
+    Array.isArray(billingStats.billingBreakdown)
+      ? billingStats.billingBreakdown
+      : [];
+
+  const pendingDueAdmissions =
+    Array.isArray(billingStats.pendingDueAdmissions)
+      ? billingStats.pendingDueAdmissions
+      : [];
+
+  const pendingDuePageData =
+    pendingDueAdmissions;
+
+  const noPaymentAdmissions =
+    Array.isArray(billingStats.noPaymentAdmissions)
+      ? billingStats.noPaymentAdmissions
+      : [];
+
+  const noPaymentPageData =
+    noPaymentAdmissions;
+
+  const processedByStatsFromServer =
+    Array.isArray(safeOverview.processedByStats)
+      ? safeOverview.processedByStats
+      : [];
+
+  const dailyAdmissionStatsFromServer =
+    Array.isArray(safeOverview.dailyAdmissionStats)
+      ? safeOverview.dailyAdmissionStats
+      : [];
+
+  const searchResultsFromServer =
+    Array.isArray(safeOverview.searchResults)
+      ? safeOverview.searchResults
+      : [];
+
+  const missingInsightsFromServer =
+    Array.isArray(safeOverview.missingInsights)
+      ? safeOverview.missingInsights
+      : [];
+
+  const queryFilters =
+    safeOverview.filters || {};
+
+  const urlFilters =
+    typeof req !== 'undefined' && req.query
+      ? req.query
+      : {};
 
   function cleanText(value) {
     return String(value || '').trim();
   }
 
+  function cleanOverviewFilter(value) {
+    const cleanedValue =
+      cleanText(value);
+
+    if (
+      !cleanedValue ||
+      cleanedValue.toLowerCase() === 'all'
+    ) {
+      return '';
+    }
+
+    return cleanedValue;
+  }
+
   function getAdmissionDate(item) {
-    return cleanText(item.createdAt || item.created_at || item.registration_date || item.date || item.admissionDate).slice(0, 10);
+    return cleanText(
+      item.createdAt ||
+      item.created_at ||
+      item.registration_date ||
+      item.date ||
+      item.admissionDate
+    ).slice(0, 10);
   }
 
   function getProcessedBy(item) {
-    return cleanText(item.processedBy || item.processed_by || item.createdBy || item.created_by || item.agentName || item.agent_name || item.userName || item.user_name || 'Not Assigned');
+    return cleanText(
+      item.processedBy ||
+      item.processed_by ||
+      item.createdBy ||
+      item.created_by ||
+      item.agentName ||
+      item.agent_name ||
+      item.userName ||
+      item.user_name ||
+      'Not Assigned'
+    );
   }
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const canViewSearchTextFilter =
+    !!(
+      P.col.student ||
+      P.col.registrationNumber ||
+      P.col.phone ||
+      P.col.processedBy
+    );
+
+  const canViewCeoSearch =
+    !!(
+      canViewSearchTextFilter ||
+      P.col.dept ||
+      P.col.status ||
+      P.col.feeStatus ||
+      canViewAdmissionCounts
+    );
+
+  const canViewDateAnalytics =
+    !!canViewAdmissionCounts;
+
+  const canViewExecutiveQuickNumbers =
+    !!(
+      canViewAdmissionCounts ||
+      P.col.receivedPayment ||
+      P.col.paymentStatus
+    );
+
+  const canViewDepartmentSummary =
+    !!(
+      P.col.dept &&
+      (
+        canViewAdmissionCounts ||
+        P.col.status ||
+        P.col.feeStatus ||
+        P.col.paymentStatus ||
+        P.col.currency
+      )
+    );
+
+  const canViewRecentAdmissions =
+    !!(
+      P.col.student ||
+      P.col.dept ||
+      P.col.status ||
+      P.col.processedBy ||
+      canViewAdmissionCounts
+    );
+
+  const canViewRecentBilling =
+    !!(
+      P.col.student ||
+      P.col.month ||
+      P.col.paymentStatus ||
+      P.col.invoiceStatusTimestamp
+    );
+
+  const canViewPendingDueRows =
+    !!P.col.pendingDues;
+
+  const canViewNoPaymentRows =
+    !!P.col.paymentStatus;
+
+  const activeSearch =
+    canViewSearchTextFilter
+      ? cleanOverviewFilter(
+          queryFilters.q ||
+          urlFilters.q
+        )
+      : '';
+
+  const activeDept =
+    P.col.dept
+      ? cleanOverviewFilter(
+          queryFilters.department ||
+          urlFilters.department
+        )
+      : '';
+
+  const activeStatus =
+    P.col.status
+      ? cleanOverviewFilter(
+          queryFilters.status ||
+          urlFilters.status
+        )
+      : '';
+
+  const activeFeeStatus =
+    P.col.feeStatus
+      ? cleanOverviewFilter(
+          queryFilters.feeStatus ||
+          urlFilters.feeStatus
+        )
+      : '';
+
+  const activeProcessedBy =
+    P.col.processedBy
+      ? cleanOverviewFilter(
+          queryFilters.processedBy ||
+          urlFilters.processedBy
+        )
+      : '';
+
+  const activeFromDate =
+    canViewAdmissionCounts
+      ? cleanOverviewFilter(
+          queryFilters.startDate ||
+          queryFilters.fromDate ||
+          urlFilters.startDate ||
+          urlFilters.fromDate
+        )
+      : '';
+
+  const activeToDate =
+    canViewAdmissionCounts
+      ? cleanOverviewFilter(
+          queryFilters.endDate ||
+          queryFilters.toDate ||
+          urlFilters.endDate ||
+          urlFilters.toDate
+        )
+      : '';
+
+  const todayIso =
+    new Date().toISOString().slice(0, 10);
+
   const fallbackProcessedMap = {};
   const fallbackDailyMap = {};
   let todayAdmissionsCount = 0;
-  recentAdmissions.forEach((item) => {
-    const processor = getProcessedBy(item);
-    const dept = cleanText(item.dept || item.department || 'Unknown') || 'Unknown';
-    const date = getAdmissionDate(item) || 'No Date';
-    if (!fallbackProcessedMap[processor]) {
-      fallbackProcessedMap[processor] = { name: processor, total: 0, school: 0, tuition: 0, quran: 0, latestDate: '' };
-    }
-    fallbackProcessedMap[processor].total += 1;
-    const deptLower = dept.toLowerCase();
-    if (deptLower.includes('school')) fallbackProcessedMap[processor].school += 1;
-    if (deptLower.includes('tuition')) fallbackProcessedMap[processor].tuition += 1;
-    if (deptLower.includes('quran')) fallbackProcessedMap[processor].quran += 1;
-    if (date && date !== 'No Date') fallbackProcessedMap[processor].latestDate = date;
 
-    if (!fallbackDailyMap[date]) fallbackDailyMap[date] = { date, total: 0, school: 0, tuition: 0, quran: 0 };
-    fallbackDailyMap[date].total += 1;
-    if (deptLower.includes('school')) fallbackDailyMap[date].school += 1;
-    if (deptLower.includes('tuition')) fallbackDailyMap[date].tuition += 1;
-    if (deptLower.includes('quran')) fallbackDailyMap[date].quran += 1;
-    if (date === todayIso) todayAdmissionsCount += 1;
-  });
+  if (
+    P.col.processedBy ||
+    canViewDateAnalytics
+  ) {
+    recentAdmissions.forEach((item) => {
+      const processor =
+        getProcessedBy(item);
 
-  const processedByStats = processedByStatsFromServer.length ? processedByStatsFromServer : Object.values(fallbackProcessedMap).sort((a, b) => (b.total || 0) - (a.total || 0));
-  const dailyAdmissionStats = dailyAdmissionStatsFromServer.length ? dailyAdmissionStatsFromServer : Object.values(fallbackDailyMap).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  const searchResults = searchResultsFromServer.length ? searchResultsFromServer : recentAdmissions;
-  const selectedProcessorTotal = activeProcessedBy ? processedByStats.filter(x => cleanText(x.name || x.processedBy || x.processed_by).toLowerCase().includes(activeProcessedBy.toLowerCase())).reduce((sum, x) => sum + Number(x.total || 0), 0) : 0;
-  const totalAdmissions = ['school','tuition','quran'].reduce((sum, key) => sum + Number(departmentStats?.[key]?.total || 0), 0);
-  const totalRecentAdmissions = recentAdmissions.length;
-  const totalProcessedPeople = processedByStats.length;
-  const latestDailyAdmissions = dailyAdmissionStats[0]?.total || todayAdmissionsCount || 0;
-  const missingInsights = missingInsightsFromServer.length ? missingInsightsFromServer : [
-    { title: 'Processed By tracking', description: processedByStatsFromServer.length ? 'Processed By data is connected.' : 'If full processed-by counts are required, pass overviewData.processedByStats from server.js.' },
-    { title: 'Daily admissions tracking', description: dailyAdmissionStatsFromServer.length ? 'Daily admissions data is connected.' : 'If full date-wise counts are required, pass overviewData.dailyAdmissionStats from server.js.' },
-    { title: 'CEO search results', description: searchResultsFromServer.length ? 'Server search results are connected.' : 'This page can show recent admissions now. For all records, pass overviewData.searchResults from server.js.' }
-  ];
+      const dept =
+        cleanText(
+          item.dept ||
+          item.department ||
+          'Unknown'
+        ) || 'Unknown';
+
+      const date =
+        getAdmissionDate(item) ||
+        'No Date';
+
+      const deptLower =
+        dept.toLowerCase();
+
+      if (P.col.processedBy) {
+        if (!fallbackProcessedMap[processor]) {
+          fallbackProcessedMap[processor] = {
+            name: processor,
+            total: 0,
+            school: 0,
+            tuition: 0,
+            quran: 0,
+            latestDate: ''
+          };
+        }
+
+        fallbackProcessedMap[processor].total += 1;
+
+        if (deptLower.includes('school')) {
+          fallbackProcessedMap[processor].school += 1;
+        }
+
+        if (deptLower.includes('tuition')) {
+          fallbackProcessedMap[processor].tuition += 1;
+        }
+
+        if (deptLower.includes('quran')) {
+          fallbackProcessedMap[processor].quran += 1;
+        }
+
+        if (
+          date &&
+          date !== 'No Date'
+        ) {
+          fallbackProcessedMap[processor].latestDate =
+            date;
+        }
+      }
+
+      if (canViewDateAnalytics) {
+        if (!fallbackDailyMap[date]) {
+          fallbackDailyMap[date] = {
+            date,
+            total: 0,
+            school: 0,
+            tuition: 0,
+            quran: 0
+          };
+        }
+
+        fallbackDailyMap[date].total += 1;
+
+        if (deptLower.includes('school')) {
+          fallbackDailyMap[date].school += 1;
+        }
+
+        if (deptLower.includes('tuition')) {
+          fallbackDailyMap[date].tuition += 1;
+        }
+
+        if (deptLower.includes('quran')) {
+          fallbackDailyMap[date].quran += 1;
+        }
+
+        if (date === todayIso) {
+          todayAdmissionsCount += 1;
+        }
+      }
+    });
+  }
+
+  const processedByStats =
+    P.col.processedBy
+      ? (
+          processedByStatsFromServer.length
+            ? processedByStatsFromServer
+            : Object.values(
+                fallbackProcessedMap
+              ).sort(
+                (a, b) =>
+                  Number(b.total || 0) -
+                  Number(a.total || 0)
+              )
+        )
+      : [];
+
+  const dailyAdmissionStats =
+    canViewDateAnalytics
+      ? (
+          dailyAdmissionStatsFromServer.length
+            ? dailyAdmissionStatsFromServer
+            : Object.values(
+                fallbackDailyMap
+              ).sort(
+                (a, b) =>
+                  String(b.date).localeCompare(
+                    String(a.date)
+                  )
+              )
+        )
+      : [];
+
+  const searchResults =
+    canViewSearchResults
+      ? (
+          searchResultsFromServer.length
+            ? searchResultsFromServer
+            : recentAdmissions
+        )
+      : [];
+
+  const selectedProcessorTotal =
+    P.col.processedBy && activeProcessedBy
+      ? processedByStats
+          .filter((item) =>
+            cleanText(
+              item.name ||
+              item.processedBy ||
+              item.processed_by
+            )
+              .toLowerCase()
+              .includes(
+                activeProcessedBy.toLowerCase()
+              )
+          )
+          .reduce(
+            (sum, item) =>
+              sum + Number(item.total || 0),
+            0
+          )
+      : 0;
+
+  const totalAdmissions =
+    canViewAdmissionCounts
+      ? ['school', 'tuition', 'quran']
+          .reduce(
+            (sum, key) =>
+              sum + Number(
+                departmentStats?.[key]?.total ||
+                0
+              ),
+            0
+          )
+      : 0;
+
+  const totalRecentAdmissions =
+    canViewAdmissionCounts
+      ? recentAdmissions.length
+      : 0;
+
+  const totalProcessedPeople =
+    P.col.processedBy
+      ? processedByStats.length
+      : 0;
+
+  const latestDailyAdmissions =
+    canViewDateAnalytics
+      ? (
+          dailyAdmissionStats[0]?.total ||
+          todayAdmissionsCount ||
+          0
+        )
+      : 0;
+
+  const generatedInsights = [];
+
+  if (P.col.processedBy) {
+    generatedInsights.push({
+      title: 'Processed By tracking',
+      description:
+        processedByStatsFromServer.length
+          ? 'Processed By data is connected.'
+          : 'Full processed-by counts require overviewData.processedByStats from server.js.'
+    });
+  }
+
+  if (canViewDateAnalytics) {
+    generatedInsights.push({
+      title: 'Daily admissions tracking',
+      description:
+        dailyAdmissionStatsFromServer.length
+          ? 'Daily admissions data is connected.'
+          : 'Full date-wise counts require overviewData.dailyAdmissionStats from server.js.'
+    });
+  }
+
+  if (canViewSearchResults) {
+    generatedInsights.push({
+      title: 'CEO search results',
+      description:
+        searchResultsFromServer.length
+          ? 'Server search results are connected.'
+          : 'For all matched records, pass overviewData.searchResults from server.js.'
+    });
+  }
+
+  const canViewMissingInsights =
+    !!(
+      P.col.processedBy ||
+      canViewDateAnalytics ||
+      canViewSearchResults
+    );
+
+  const canViewAllOverviewColumns =
+    Object.values(P.col).every(Boolean);
+
+  const missingInsights =
+    !canViewMissingInsights
+      ? []
+      : (
+          canViewAllOverviewColumns &&
+          missingInsightsFromServer.length
+            ? missingInsightsFromServer
+            : generatedInsights
+        );
+
+  const rawOverviewCharts =
+    safeOverview.charts &&
+    typeof safeOverview.charts === 'object'
+      ? safeOverview.charts
+      : {};
+
+  const safeOverviewCharts = {};
+
+  if (
+    P.col.dept &&
+    canViewAdmissionCounts
+  ) {
+    safeOverviewCharts.departmentComparison =
+      rawOverviewCharts.departmentComparison ||
+      {};
+  }
+
+  if (P.col.status) {
+    safeOverviewCharts.statusDistribution =
+      Array.isArray(
+        rawOverviewCharts.statusDistribution
+      )
+        ? rawOverviewCharts.statusDistribution
+        : [];
+  }
+
+  if (P.col.feeStatus) {
+    safeOverviewCharts.feeDistribution =
+      Array.isArray(
+        rawOverviewCharts.feeDistribution
+      )
+        ? rawOverviewCharts.feeDistribution
+        : [];
+  }
+
+  const safeOverviewChartsJson =
+    JSON.stringify(safeOverviewCharts)
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e')
+      .replace(/&/g, '\\u0026');
+
+  const canViewCharts =
+    Object.keys(safeOverviewCharts).length > 0;
+
+  const dailyAdmissionsVisibleColumnCount =
+    Math.max(
+      1,
+      2 + (P.col.dept ? 3 : 0)
+    );
+
+  const departmentSummaryVisibleColumnCount =
+    Math.max(
+      1,
+      1 +
+      (canViewAdmissionCounts ? 1 : 0) +
+      (P.col.status ? 1 : 0) +
+      (P.col.feeStatus ? 1 : 0) +
+      (P.col.paymentStatus ? 1 : 0) +
+      (P.col.currency ? 1 : 0) +
+      (canViewDateAnalytics ? 3 : 0)
+    );
+
+  const statusSummaryVisibleColumnCount =
+    Math.max(
+      1,
+      2 + (P.col.dept ? 3 : 0)
+    );
+
+  const feeSummaryVisibleColumnCount =
+    Math.max(
+      1,
+      2 + (P.col.dept ? 3 : 0)
+    );
+
+  const currencySummaryVisibleColumnCount =
+    Math.max(
+      1,
+      1 +
+      (canViewAdmissionCounts ? 1 : 0) +
+      (P.col.receivedPayment ? 1 : 0) +
+      (P.col.pendingDues ? 1 : 0)
+    );
+
+  const searchResultsVisibleColumnCount =
+    Math.max(
+      1,
+      (P.col.student ? 1 : 0) +
+      (P.col.registrationNumber ? 1 : 0) +
+      (P.col.dept ? 1 : 0) +
+      (P.col.status ? 1 : 0) +
+      (P.col.feeStatus ? 1 : 0) +
+      (P.col.processedBy ? 1 : 0) +
+      (canViewAdmissionCounts ? 1 : 0) +
+      (P.col.phone ? 1 : 0)
+    );
+
+  const recentAdmissionsVisibleColumnCount =
+    Math.max(
+      1,
+      (P.col.student ? 1 : 0) +
+      (P.col.dept ? 1 : 0) +
+      (P.col.status ? 1 : 0) +
+      (P.col.processedBy ? 1 : 0) +
+      (canViewAdmissionCounts ? 1 : 0)
+    );
+
+  const recentBillingVisibleColumnCount =
+    Math.max(
+      1,
+      (P.col.student ? 1 : 0) +
+      (P.col.month ? 1 : 0) +
+      (P.col.paymentStatus ? 1 : 0) +
+      (P.col.invoiceStatusTimestamp ? 1 : 0)
+    );
+
+  const pendingDueVisibleColumnCount =
+    Math.max(
+      1,
+      (P.col.student ? 1 : 0) +
+      (P.col.dept ? 1 : 0) +
+      1 +
+      (P.col.month ? 2 : 0) +
+      1
+    );
+
+  const noPaymentVisibleColumnCount =
+    Math.max(
+      1,
+      (P.col.student ? 1 : 0) +
+      (P.col.dept ? 1 : 0) +
+      (P.col.pendingDues || P.col.fees ? 1 : 0) +
+      (P.col.month ? 2 : 0) +
+      1
+    );
 %>
 
 <div class="overview-page">
   <div class="overview-hero mb-3">
     <div class="row g-3 align-items-center">
-      <div class="col-lg-8">
-        <div class="small text-uppercase fw-bold mb-2" style="letter-spacing:.08em;color:rgba(255,255,255,.72);">
+      <div class="<%= P.col.dept && canViewAdmissionCounts ? 'col-lg-8' : 'col-12' %>">
+        <div
+          class="small text-uppercase fw-bold mb-2"
+          style="letter-spacing:.08em;color:rgba(255,255,255,.72);">
           Super Admin Intelligence Panel
         </div>
+
         <h1>Overview Dashboard</h1>
-        <p>CEO-level overview for admissions, processed-by performance, date-wise intake, billing health, status insights and missing operational data.</p>
 
-        <div class="overview-chip-wrap">
-          <span class="overview-chip"><i class="bi bi-mortarboard-fill"></i> School</span>
-          <span class="overview-chip"><i class="bi bi-journal-bookmark-fill"></i> Tuition</span>
-          <span class="overview-chip"><i class="bi bi-book-half"></i> Quran</span>
-          <span class="overview-chip"><i class="bi bi-person-check-fill"></i> Processed By</span>
-          <span class="overview-chip"><i class="bi bi-calendar2-check-fill"></i> Daily Intake</span>
+        <p>
+          Permission-controlled overview for admissions, processed-by performance,
+          date-wise intake, billing health and operational analytics.
+        </p>
+
+        <% if (
+          P.col.dept ||
+          P.col.processedBy ||
+          canViewDateAnalytics
+        ) { %>
+          <div class="overview-chip-wrap">
+            <% if (P.col.dept) { %>
+              <span class="overview-chip">
+                <i class="bi bi-mortarboard-fill"></i>
+                School
+              </span>
+
+              <span class="overview-chip">
+                <i class="bi bi-journal-bookmark-fill"></i>
+                Tuition
+              </span>
+
+              <span class="overview-chip">
+                <i class="bi bi-book-half"></i>
+                Quran
+              </span>
+            <% } %>
+
+            <% if (P.col.processedBy) { %>
+              <span class="overview-chip">
+                <i class="bi bi-person-check-fill"></i>
+                Processed By
+              </span>
+            <% } %>
+
+            <% if (canViewDateAnalytics) { %>
+              <span class="overview-chip">
+                <i class="bi bi-calendar2-check-fill"></i>
+                Daily Intake
+              </span>
+            <% } %>
+          </div>
+        <% } %>
+      </div>
+
+      <% if (P.col.dept && canViewAdmissionCounts) { %>
+        <div class="col-lg-4">
+          <div
+            class="panel-card p-3 h-100"
+            style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);box-shadow:none;">
+            <div class="section-title mb-2">
+              <div>
+                <h6 class="text-white mb-1">
+                  Department Snapshot
+                </h6>
+
+                <div style="color:rgba(255,255,255,.72);font-size:.74rem;">
+                  Quick department totals
+                </div>
+              </div>
+            </div>
+
+            <div class="mini-grid snapshot-mini-grid">
+              <div class="mini-stat">
+                <div class="title">School</div>
+                <div class="num">
+                  <%= departmentStats.school?.total || 0 %>
+                </div>
+              </div>
+
+              <div class="mini-stat">
+                <div class="title">Tuition</div>
+                <div class="num">
+                  <%= departmentStats.tuition?.total || 0 %>
+                </div>
+              </div>
+
+              <div class="mini-stat">
+                <div class="title">Quran</div>
+                <div class="num">
+                  <%= departmentStats.quran?.total || 0 %>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+  <% if (
+    canViewAdmissionCounts ||
+    P.col.processedBy ||
+    canViewSearchResults ||
+    P.col.pendingDues ||
+    missingInsights.length
+  ) { %>
+    <div class="summary-grid mb-3">
+      <% if (canViewAdmissionCounts) { %>
+        <div class="summary-card">
+          <div class="icon-wrap">
+            <i class="bi bi-people-fill"></i>
+          </div>
+
+          <div class="label">
+            Total Admissions
+          </div>
+
+          <div class="value">
+            <%= totalAdmissions %>
+          </div>
+
+          <div class="hint">
+            Current permitted result set
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div class="icon-wrap">
+            <i class="bi bi-calendar-check-fill"></i>
+          </div>
+
+          <div class="label">
+            Today Admissions
+          </div>
+
+          <div class="value">
+            <%= todayAdmissionsCount || 0 %>
+          </div>
+
+          <div class="hint">
+            <%= todayIso %>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (P.col.processedBy) { %>
+        <div class="summary-card">
+          <div class="icon-wrap">
+            <i class="bi bi-person-lines-fill"></i>
+          </div>
+
+          <div class="label">
+            Processed People
+          </div>
+
+          <div class="value">
+            <%= totalProcessedPeople %>
+          </div>
+
+          <div class="hint">
+            Based on processed-by data
+          </div>
+        </div>
+      <% } %>
+
+      <% if (canViewSearchResults) { %>
+        <div class="summary-card">
+          <div class="icon-wrap">
+            <i class="bi bi-search-heart-fill"></i>
+          </div>
+
+          <div class="label">
+            Search Results
+          </div>
+
+          <div class="value">
+            <%= searchResults.length %>
+          </div>
+
+          <div class="hint">
+            Current visible result set
+          </div>
+        </div>
+      <% } %>
+
+      <% if (P.col.pendingDues) { %>
+        <div class="summary-card">
+          <div class="icon-wrap">
+            <i class="bi bi-wallet2"></i>
+          </div>
+
+          <div class="label">
+            Pending Dues
+          </div>
+
+          <div class="value">
+            <%= billingStats.totalPendingDues || 0 %>
+          </div>
+
+          <div class="hint">
+            Billing amount pending
+          </div>
+        </div>
+      <% } %>
+
+      <% if (missingInsights.length) { %>
+        <div class="summary-card">
+          <div class="icon-wrap">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+          </div>
+
+          <div class="label">
+            Missing Checks
+          </div>
+
+          <div class="value">
+            <%= missingInsights.length %>
+          </div>
+
+          <div class="hint">
+            Permitted items to verify
+          </div>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+
+  <% if (canViewCeoSearch) { %>
+    <div class="ceo-filter-card p-3 mb-3">
+      <div class="section-title">
+        <div>
+          <h5>CEO Search Center</h5>
+
+          <div class="section-sub">
+            Only filters allowed by the selected user's Can View permissions are shown.
+          </div>
         </div>
       </div>
 
-      <div class="col-lg-4">
-        <div class="panel-card p-3 h-100" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);box-shadow:none;">
-          <div class="section-title mb-2">
-            <div>
-              <h6 class="text-white mb-1">Department Snapshot</h6>
-              <div style="color:rgba(255,255,255,.72);font-size:.74rem;">Quick department totals</div>
-            </div>
-          </div>
-
-          <div class="mini-grid snapshot-mini-grid">
-            <div class="mini-stat">
-              <div class="title">School</div>
-              <div class="num"><%= departmentStats.school?.total || 0 %></div>
-            </div>
-            <div class="mini-stat">
-              <div class="title">Tuition</div>
-              <div class="num"><%= departmentStats.tuition?.total || 0 %></div>
-            </div>
-            <div class="mini-stat">
-              <div class="title">Quran</div>
-              <div class="num"><%= departmentStats.quran?.total || 0 %></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="summary-grid mb-3">
-    <div class="summary-card">
-      <div class="icon-wrap"><i class="bi bi-people-fill"></i></div>
-      <div class="label">Total Admissions</div>
-      <div class="value"><%= totalAdmissions %></div>
-      <div class="hint">School, Tuition and Quran</div>
-    </div>
-    <div class="summary-card">
-      <div class="icon-wrap"><i class="bi bi-calendar-check-fill"></i></div>
-      <div class="label">Today Admissions</div>
-      <div class="value"><%= todayAdmissionsCount || 0 %></div>
-      <div class="hint"><%= todayIso %></div>
-    </div>
-    <div class="summary-card">
-      <div class="icon-wrap"><i class="bi bi-person-lines-fill"></i></div>
-      <div class="label">Processed People</div>
-      <div class="value"><%= totalProcessedPeople %></div>
-      <div class="hint">Based on processed-by data</div>
-    </div>
-    <div class="summary-card">
-      <div class="icon-wrap"><i class="bi bi-search-heart-fill"></i></div>
-      <div class="label">Search Results</div>
-      <div class="value"><%= searchResults.length %></div>
-      <div class="hint">Current visible result set</div>
-    </div>
-    <div class="summary-card">
-      <div class="icon-wrap"><i class="bi bi-wallet2"></i></div>
-      <div class="label">Pending Dues</div>
-      <div class="value"><%= billingStats.totalPendingDues || 0 %></div>
-      <div class="hint">Billing amount pending</div>
-    </div>
-    <div class="summary-card">
-      <div class="icon-wrap"><i class="bi bi-exclamation-triangle-fill"></i></div>
-      <div class="label">Missing Checks</div>
-      <div class="value"><%= missingInsights.length %></div>
-      <div class="hint">Items to verify</div>
-    </div>
-  </div>
-
-  <div class="ceo-filter-card p-3 mb-3">
-    <div class="section-title">
-      <div>
-        <h5>CEO Search Center</h5>
-        <div class="section-sub">Search by student, registration, phone, department, status, fee status, processed by, or admission date.</div>
-      </div>
-    </div>
-
-    <form method="GET" action="" class="filter-grid">
-      <div>
-        <label class="form-label">Search</label>
-        <input type="text" class="form-control" name="q" value="<%= activeSearch %>" placeholder="Student, reg no, phone, processed by">
-      </div>
-      <div>
-        <label class="form-label">Department</label>
-        <select class="form-select" name="department">
-          <option value="">All</option>
-          <option value="school" <%= activeDept === 'school' ? 'selected' : '' %>>School</option>
-          <option value="tuition" <%= activeDept === 'tuition' ? 'selected' : '' %>>Tuition</option>
-          <option value="quran" <%= activeDept === 'quran' ? 'selected' : '' %>>Quran</option>
-        </select>
-      </div>
-      <div>
-        <label class="form-label">Status</label>
-        <input type="text" class="form-control" name="status" value="<%= activeStatus %>" placeholder="Current status">
-      </div>
-      <div>
-        <label class="form-label">Fee Status</label>
-        <input type="text" class="form-control" name="feeStatus" value="<%= activeFeeStatus %>" placeholder="Fee status">
-      </div>
-      <div>
-        <label class="form-label">Processed By</label>
-        <input type="text" class="form-control" name="processedBy" value="<%= activeProcessedBy %>" placeholder="Agent/Admin name">
-      </div>
-      <div>
-        <label class="form-label">From</label>
-        <input type="date" class="form-control" name="fromDate" value="<%= activeFromDate %>">
-      </div>
-      <div>
-        <label class="form-label">To</label>
-        <input type="date" class="form-control" name="toDate" value="<%= activeToDate %>">
-      </div>
-      <div class="filter-actions">
-        <button type="submit" class="btn-ceo"><i class="bi bi-funnel-fill me-1"></i> Apply</button>
-        <a href="/dashboard/overview" class="btn-soft text-decoration-none"><i class="bi bi-arrow-counterclockwise me-1"></i> Reset</a>
-      </div>
-    </form>
-  </div>
-
-  <div class="row g-3 mb-3">
-    <div class="col-xl-8">
-      <div class="panel-card p-3 h-100">
-        <div class="section-title">
+      <form method="GET" action="" class="filter-grid">
+        <% if (canViewSearchTextFilter) { %>
           <div>
-            <h5>Processed By Performance</h5>
-            <div class="section-sub">How many admissions each person processed. Search a name above to narrow server results.</div>
-          </div>
-          <% if (activeProcessedBy) { %>
-            <span class="soft-badge danger-badge">Selected total: <%= selectedProcessorTotal %></span>
-          <% } %>
-        </div>
+            <label class="form-label">
+              Search
+            </label>
 
-        <% if (processedByStats.length) { %>
-          <div class="row g-2">
-            <% processedByStats.slice(0, 12).forEach((item) => { 
-              const personName = item.name || item.processedBy || item.processed_by || 'Not Assigned';
-            %>
-              <div class="col-md-6 col-xl-4">
-                <div class="person-card">
-                  <div class="name"><i class="bi bi-person-badge me-1 text-danger"></i><%= personName %></div>
-                  <div class="person-stats">
-                    <span><b><%= item.total || 0 %></b>Total</span>
-                    <span><b><%= item.school || 0 %></b>School</span>
-                    <span><b><%= item.tuition || 0 %></b>Tuition</span>
+            <input
+              type="text"
+              class="form-control"
+              name="q"
+              value="<%= activeSearch %>"
+              placeholder="Search permitted record fields">
+          </div>
+        <% } %>
+
+        <% if (P.col.dept) { %>
+          <div>
+            <label class="form-label">
+              Department
+            </label>
+
+            <select
+              class="form-select"
+              name="department">
+              <option value="">All</option>
+
+              <option
+                value="school"
+                <%= activeDept === 'school' ? 'selected' : '' %>>
+                School
+              </option>
+
+              <option
+                value="tuition"
+                <%= activeDept === 'tuition' ? 'selected' : '' %>>
+                Tuition
+              </option>
+
+              <option
+                value="quran"
+                <%= activeDept === 'quran' ? 'selected' : '' %>>
+                Quran
+              </option>
+            </select>
+          </div>
+        <% } %>
+
+        <% if (P.col.status) { %>
+          <div>
+            <label class="form-label">
+              Status
+            </label>
+
+            <input
+              type="text"
+              class="form-control"
+              name="status"
+              value="<%= activeStatus %>"
+              placeholder="Current status">
+          </div>
+        <% } %>
+
+        <% if (P.col.feeStatus) { %>
+          <div>
+            <label class="form-label">
+              Fee Status
+            </label>
+
+            <input
+              type="text"
+              class="form-control"
+              name="feeStatus"
+              value="<%= activeFeeStatus %>"
+              placeholder="Fee status">
+          </div>
+        <% } %>
+
+        <% if (P.col.processedBy) { %>
+          <div>
+            <label class="form-label">
+              Processed By
+            </label>
+
+            <input
+              type="text"
+              class="form-control"
+              name="processedBy"
+              value="<%= activeProcessedBy %>"
+              placeholder="Agent/Admin name">
+          </div>
+        <% } %>
+
+        <% if (canViewAdmissionCounts) { %>
+          <div>
+            <label class="form-label">
+              From
+            </label>
+
+            <input
+              type="date"
+              class="form-control"
+              name="startDate"
+              value="<%= activeFromDate %>">
+          </div>
+
+          <div>
+            <label class="form-label">
+              To
+            </label>
+
+            <input
+              type="date"
+              class="form-control"
+              name="endDate"
+              value="<%= activeToDate %>">
+          </div>
+        <% } %>
+
+        <div class="filter-actions">
+          <button
+            type="submit"
+            class="btn-ceo">
+            <i class="bi bi-funnel-fill me-1"></i>
+            Apply
+          </button>
+
+          <a
+            href="/dashboard/overview"
+            class="btn-soft text-decoration-none">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>
+            Reset
+          </a>
+        </div>
+      </form>
+    </div>
+  <% } %>
+
+  <% if (P.col.processedBy || missingInsights.length) { %>
+    <div class="row g-3 mb-3">
+      <% if (P.col.processedBy) { %>
+        <div class="<%= missingInsights.length ? 'col-xl-8' : 'col-12' %>">
+          <div class="panel-card p-3 h-100">
+            <div class="section-title">
+              <div>
+                <h5>Processed By Performance</h5>
+
+                <div class="section-sub">
+                  How many admissions each person processed.
+                </div>
+              </div>
+
+              <% if (activeProcessedBy) { %>
+                <span class="soft-badge danger-badge">
+                  Selected total:
+                  <%= selectedProcessorTotal %>
+                </span>
+              <% } %>
+            </div>
+
+            <% if (processedByStats.length) { %>
+              <div class="row g-2">
+                <% processedByStats.slice(0, 12).forEach((item) => {
+                  const personName =
+                    item.name ||
+                    item.processedBy ||
+                    item.processed_by ||
+                    'Not Assigned';
+                %>
+                  <div class="col-md-6 col-xl-4">
+                    <div class="person-card">
+                      <div class="name">
+                        <i class="bi bi-person-badge me-1 text-danger"></i>
+                        <%= personName %>
+                      </div>
+
+                      <div class="person-stats">
+                        <span>
+                          <b><%= item.total || 0 %></b>
+                          Total
+                        </span>
+
+                        <% if (P.col.dept) { %>
+                          <span>
+                            <b><%= item.school || 0 %></b>
+                            School
+                          </span>
+
+                          <span>
+                            <b><%= item.tuition || 0 %></b>
+                            Tuition
+                          </span>
+                        <% } %>
+                      </div>
+
+                      <div class="mt-2 d-flex justify-content-between align-items-center">
+                        <% if (P.col.dept) { %>
+                          <span class="soft-badge dark-badge">
+                            Quran:
+                            <%= item.quran || 0 %>
+                          </span>
+                        <% } %>
+
+                        <% if (canViewDateAnalytics) { %>
+                          <small class="text-muted">
+                            <%= item.latestDate || item.lastDate || '' %>
+                          </small>
+                        <% } %>
+                      </div>
+                    </div>
                   </div>
-                  <div class="mt-2 d-flex justify-content-between align-items-center">
-                    <span class="soft-badge dark-badge">Quran: <%= item.quran || 0 %></span>
-                    <small class="text-muted"><%= item.latestDate || item.lastDate || '' %></small>
+                <% }) %>
+              </div>
+            <% } else { %>
+              <div class="empty-state">
+                No processed-by data found
+              </div>
+            <% } %>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (missingInsights.length) { %>
+        <div class="<%= P.col.processedBy ? 'col-xl-4' : 'col-12' %>">
+          <div class="panel-card p-3 h-100">
+            <div class="section-title">
+              <div>
+                <h5>Missing Data Monitor</h5>
+
+                <div class="section-sub">
+                  Only permitted operational checks are shown.
+                </div>
+              </div>
+            </div>
+
+            <div class="insight-list">
+              <% missingInsights.forEach((item) => { %>
+                <div class="insight-item">
+                  <i class="bi bi-info-circle-fill"></i>
+
+                  <div>
+                    <strong>
+                      <%= item.title || 'Insight' %>
+                    </strong>
+
+                    <div class="text-muted">
+                      <%= item.description || item.message || '-' %>
+                    </div>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+
+  <% if (
+    canViewDateAnalytics ||
+    canViewExecutiveQuickNumbers
+  ) { %>
+    <div class="row g-3 mb-3">
+      <% if (canViewDateAnalytics) { %>
+        <div class="<%= canViewExecutiveQuickNumbers ? 'col-xl-7' : 'col-12' %>">
+          <div class="panel-card p-3 h-100">
+            <div class="section-title">
+              <div>
+                <h5>Date-wise Admissions</h5>
+
+                <div class="section-sub">
+                  Admissions by day with permitted totals.
+                </div>
+              </div>
+
+              <input
+                type="text"
+                class="form-control table-search"
+                id="dailyAdmissionsSearch"
+                placeholder="Search date">
+            </div>
+
+            <% if (dailyAdmissionStats.length) { %>
+              <div class="table-responsive overview-scroll-box">
+                <table
+                  class="table table-premium table-compact align-middle mb-0"
+                  id="dailyAdmissionsTable">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Total Admissions</th>
+
+                      <% if (P.col.dept) { %>
+                        <th>School</th>
+                        <th>Tuition</th>
+                        <th>Quran</th>
+                      <% } %>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    <% dailyAdmissionStats.slice(0, 20).forEach((item) => { %>
+                      <tr>
+                        <td>
+                          <span class="soft-badge dark-badge">
+                            <%= item.date || item.day || '-' %>
+                          </span>
+                        </td>
+
+                        <td>
+                          <strong>
+                            <%= item.total || 0 %>
+                          </strong>
+                        </td>
+
+                        <% if (P.col.dept) { %>
+                          <td><%= item.school || 0 %></td>
+                          <td><%= item.tuition || 0 %></td>
+                          <td><%= item.quran || 0 %></td>
+                        <% } %>
+                      </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+
+                <div
+                  class="super-pagination-wrap pt-3"
+                  id="dailyAdmissionsPagination">
+                </div>
+              </div>
+            <% } else { %>
+              <div class="empty-state">
+                No date-wise admission data found
+              </div>
+            <% } %>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (canViewExecutiveQuickNumbers) { %>
+        <div class="<%= canViewDateAnalytics ? 'col-xl-5' : 'col-12' %>">
+          <div class="panel-card p-3 h-100">
+            <div class="section-title">
+              <div>
+                <h5>Executive Quick Numbers</h5>
+
+                <div class="section-sub">
+                  Compact numbers allowed by Can View permissions.
+                </div>
+              </div>
+            </div>
+
+            <div class="mini-grid three mb-3">
+              <% if (canViewAdmissionCounts) { %>
+                <div class="mini-stat">
+                  <div class="title">
+                    Recent Admissions
+                  </div>
+
+                  <div class="num">
+                    <%= totalRecentAdmissions %>
+                  </div>
+                </div>
+
+                <div class="mini-stat">
+                  <div class="title">
+                    Latest Day Intake
+                  </div>
+
+                  <div class="num">
+                    <%= latestDailyAdmissions %>
+                  </div>
+                </div>
+              <% } %>
+
+              <% if (P.col.receivedPayment) { %>
+                <div class="mini-stat">
+                  <div class="title">
+                    Received
+                  </div>
+
+                  <div class="num">
+                    <%= billingStats.totalReceivedAmount || 0 %>
+                  </div>
+                </div>
+              <% } %>
+
+              <% if (P.col.paymentStatus) { %>
+                <div class="mini-stat">
+                  <div class="title">
+                    Fully Paid
+                  </div>
+
+                  <div class="num">
+                    <%= billingStats.totalFullyPaidAdmissions || 0 %>
+                  </div>
+                </div>
+
+                <div class="mini-stat">
+                  <div class="title">
+                    Partial Paid
+                  </div>
+
+                  <div class="num">
+                    <%= billingStats.totalPartiallyPaidAdmissions || 0 %>
+                  </div>
+                </div>
+
+                <div class="mini-stat">
+                  <div class="title">
+                    Unpaid
+                  </div>
+
+                  <div class="num">
+                    <%= billingStats.totalUnpaidAdmissions || 0 %>
+                  </div>
+                </div>
+              <% } %>
+            </div>
+
+            <div class="empty-state py-3">
+              Search and analytics follow the selected user's Can View permissions.
+            </div>
+          </div>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+
+  <% if (canViewCharts) { %>
+    <div class="panel-card p-3 mb-3">
+      <div class="section-title d-flex align-items-center justify-content-between">
+        <div>
+          <button
+            type="button"
+            class="analytics-toggle-btn is-collapsed"
+            id="analyticsChartsToggle"
+            aria-expanded="false"
+            aria-controls="analyticsChartsBody">
+            <span>Analytics Charts</span>
+
+            <i
+              class="bi bi-chevron-up"
+              id="analyticsChartsToggleIcon">
+            </i>
+          </button>
+
+          <div class="section-sub">
+            Permission-safe analytics charts
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="row g-3 is-hidden"
+        id="analyticsChartsBody">
+
+        <% if (
+          P.col.dept &&
+          canViewAdmissionCounts
+        ) { %>
+          <div class="col-lg-4">
+            <div class="panel-card tight p-3">
+              <div class="section-title mb-2">
+                <div>
+                  <h6>
+                    Department Comparison
+                  </h6>
+
+                  <div class="section-sub">
+                    School, Tuition and Quran comparison
                   </div>
                 </div>
               </div>
-            <% }) %>
-          </div>
-        <% } else { %>
-          <div class="empty-state">No processed-by data found</div>
-        <% } %>
-      </div>
-    </div>
 
-    <div class="col-xl-4">
-      <div class="panel-card p-3 h-100">
-        <div class="section-title">
-          <div>
-            <h5>Missing Data Monitor</h5>
-            <div class="section-sub">CEO can quickly see what is missing or not connected.</div>
-          </div>
-        </div>
-        <div class="insight-list">
-          <% missingInsights.forEach((item) => { %>
-            <div class="insight-item">
-              <i class="bi bi-info-circle-fill"></i>
-              <div>
-                <strong><%= item.title || 'Insight' %></strong>
-                <div class="text-muted"><%= item.description || item.message || '-' %></div>
+              <div class="chart-box chart-box-sm">
+                <canvas id="departmentComparisonChart"></canvas>
               </div>
             </div>
-          <% }) %>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="row g-3 mb-3">
-    <div class="col-xl-7">
-      <div class="panel-card p-3 h-100">
-        <div class="section-title">
-          <div>
-            <h5>Date-wise Admissions</h5>
-            <div class="section-sub">Admissions by day with total admission number.</div>
           </div>
-          <input type="text" class="form-control table-search" id="dailyAdmissionsSearch" placeholder="Search date">
-        </div>
-        <% if (dailyAdmissionStats.length) { %>
-          <div class="table-responsive overview-scroll-box">
-            <table class="table table-premium table-compact align-middle mb-0" id="dailyAdmissionsTable">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Total Admissions</th>
-                  <th>School</th>
-                  <th>Tuition</th>
-                  <th>Quran</th>
-                </tr>
-              </thead>
-              <tbody>
-                <% dailyAdmissionStats.slice(0, 20).forEach((item) => { %>
-                  <tr>
-                    <td><span class="soft-badge dark-badge"><%= item.date || item.day || '-' %></span></td>
-                    <td><strong><%= item.total || 0 %></strong></td>
-                    <td><%= item.school || 0 %></td>
-                    <td><%= item.tuition || 0 %></td>
-                    <td><%= item.quran || 0 %></td>
-                  </tr>
-                <% }) %>
-              </tbody>
-            </table>
-            <div class="super-pagination-wrap pt-3" id="dailyAdmissionsPagination"></div>
-          </div>
-        <% } else { %>
-          <div class="empty-state">No date-wise admission data found</div>
         <% } %>
-      </div>
-    </div>
 
-    <div class="col-xl-5">
-      <div class="panel-card p-3 h-100">
-        <div class="section-title">
-          <div>
-            <h5>Executive Quick Numbers</h5>
-            <div class="section-sub">Compact numbers for quick CEO review.</div>
-          </div>
-        </div>
-        <div class="mini-grid three mb-3">
-          <div class="mini-stat"><div class="title">Recent Admissions</div><div class="num"><%= totalRecentAdmissions %></div></div>
-          <div class="mini-stat"><div class="title">Latest Day Intake</div><div class="num"><%= latestDailyAdmissions %></div></div>
-          <div class="mini-stat"><div class="title">Received</div><div class="num"><%= billingStats.totalReceivedAmount || 0 %></div></div>
-          <div class="mini-stat"><div class="title">Fully Paid</div><div class="num"><%= billingStats.totalFullyPaidAdmissions || 0 %></div></div>
-          <div class="mini-stat"><div class="title">Partial Paid</div><div class="num"><%= billingStats.totalPartiallyPaidAdmissions || 0 %></div></div>
-          <div class="mini-stat"><div class="title">Unpaid</div><div class="num"><%= billingStats.totalUnpaidAdmissions || 0 %></div></div>
-        </div>
-        <div class="empty-state py-3">Use the search filters to review exact records by name, date, status, fee status or processed-by person.</div>
-      </div>
-    </div>
-  </div>
+        <% if (P.col.status) { %>
+          <div class="col-lg-4">
+            <div class="panel-card tight p-3">
+              <div class="section-title mb-2">
+                <div>
+                  <h6>
+                    Status Distribution
+                  </h6>
 
-  <div class="panel-card p-3 mb-3">
-    <div class="section-title d-flex align-items-center justify-content-between">
-      <div>
-        <button type="button" class="analytics-toggle-btn is-collapsed" id="analyticsChartsToggle" aria-expanded="false" aria-controls="analyticsChartsBody">
-          <span>Analytics Charts</span>
-          <i class="bi bi-chevron-up" id="analyticsChartsToggleIcon"></i>
-        </button>
-        <div class="section-sub">Line, bar, pie and doughnut charts</div>
-      </div>
-    </div>
+                  <div class="section-sub">
+                    Dynamic current statuses
+                  </div>
+                </div>
+              </div>
 
-    <div class="row g-3 is-hidden" id="analyticsChartsBody">
-      <div class="col-lg-4">
-        <div class="panel-card tight p-3">
-          <div class="section-title mb-2">
-            <div>
-              <h6>Department Comparison</h6>
-              <div class="section-sub">School, Tuition, Quran comparison</div>
+              <div class="chart-box chart-box-sm">
+                <canvas id="statusDistributionChart"></canvas>
+              </div>
             </div>
           </div>
-          <div class="chart-box chart-box-sm"><canvas id="departmentComparisonChart"></canvas></div>
-        </div>
-      </div>
-      <div class="col-lg-4">
-        <div class="panel-card tight p-3">
-          <div class="section-title mb-2">
-            <div>
-              <h6>Status Distribution</h6>
-              <div class="section-sub">Dynamic current statuses</div>
+        <% } %>
+
+        <% if (P.col.feeStatus) { %>
+          <div class="col-lg-4">
+            <div class="panel-card tight p-3">
+              <div class="section-title mb-2">
+                <div>
+                  <h6>
+                    Fee Distribution
+                  </h6>
+
+                  <div class="section-sub">
+                    Dynamic fee statuses
+                  </div>
+                </div>
+              </div>
+
+              <div class="chart-box chart-box-sm">
+                <canvas id="feeDistributionChart"></canvas>
+              </div>
             </div>
           </div>
-          <div class="chart-box chart-box-sm"><canvas id="statusDistributionChart"></canvas></div>
+        <% } %>
+
+      </div>
+    </div>
+  <% } %>
+
+  <% if (canViewDepartmentSummary) { %>
+    <div class="panel-card p-3 mb-3">
+      <div class="section-title">
+        <div>
+          <h5>Department Summary</h5>
+
+          <div class="section-sub">
+            Department-wise values allowed by Can View permissions.
+          </div>
         </div>
       </div>
-      <div class="col-lg-4">
-        <div class="panel-card tight p-3">
-          <div class="section-title mb-2">
-            <div>
-              <h6>Fee Distribution</h6>
-              <div class="section-sub">Paid, unpaid, partial and more</div>
-            </div>
-          </div>
-          <div class="chart-box chart-box-sm"><canvas id="feeDistributionChart"></canvas></div>
-        </div>
-      </div>
-    </div>
-  </div>
 
-  <div class="panel-card p-3 mb-3">
-    <div class="section-title">
-      <div>
-        <h5>Department Summary</h5>
-        <div class="section-sub">Department-wise totals, statuses, fee health, billing health and intake.</div>
-      </div>
-    </div>
+      <div class="table-responsive overview-scroll-box">
+        <table
+          class="table table-premium table-compact align-middle mb-0"
+          id="departmentSummaryTable">
 
-    <div class="table-responsive overview-scroll-box">
-  <table class="table table-premium table-compact align-middle mb-0" id="departmentSummaryTable">
-        <thead>
-          <tr>
-            <th>Department</th>
-            <th>Total</th>
-            <th>Statuses</th>
-            <th>Fee Statuses</th>
-            <th>Billing Statuses</th>
-            <th>Currencies</th>
-            <th>Yearly Intake</th>
-            <th>Monthly Intake</th>
-            <th>Daily Intake</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% ['school','tuition','quran'].forEach((deptKey) => { const dept = departmentStats?.[deptKey] || {}; %>
-            <tr>
-              <td><span class="soft-badge"><%= deptKey.charAt(0).toUpperCase() + deptKey.slice(1) %></span></td>
-              <td><strong><%= dept.total || 0 %></strong></td>
-              <td><%= Object.keys(dept.currentStatus || {}).length %></td>
-              <td><%= Object.keys(dept.feeStatus || {}).length %></td>
-              <td><%= Object.keys(dept.billingStatus || {}).length %></td>
-              <td><%= Object.keys(dept.currency || {}).length %></td>
-              <td><%= Object.keys(dept.yearlyIntake || {}).length %></td>
-              <td><%= Object.keys(dept.monthlyIntake || {}).length %></td>
-              <td><%= Object.keys(dept.dailyIntake || {}).length %></td>
-            </tr>
-          <% }) %>
-        </tbody>
-      </table>
-      <div class="super-pagination-wrap pt-3" id="departmentSummaryPagination"></div>
-    </div>
-  </div>
-
-  <div class="row g-3 mb-3">
-    <div class="col-xl-6">
-      <div class="panel-card p-3 h-100">
-        <div class="section-title"><div><h5>Status Summary</h5><div class="section-sub">Dynamic current statuses with department-wise count</div></div></div>
-        <% if (statusStats.length) { %>
-         <div class="table-responsive overview-scroll-box">
-  <table class="table table-premium table-compact align-middle mb-0" id="statusSummaryTable">
-    <thead><tr><th>Status</th><th>Total</th><th>School</th><th>Tuition</th><th>Quran</th></tr></thead>
-              <tbody>
-                <% statusStats.forEach((item) => { %>
-                  <tr>
-                    <td><span class="soft-badge" style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>"><%= item.label || item.name || 'Unknown' %></span></td>
-                    <td><strong><%= item.total || 0 %></strong></td><td><%= item.school || 0 %></td><td><%= item.tuition || 0 %></td><td><%= item.quran || 0 %></td>
-                  </tr>
-                <% }) %>
-              </tbody>
-                        </table>
-            <div class="super-pagination-wrap pt-3" id="statusSummaryPagination"></div>
-          </div>
-        <% } else { %><div class="empty-state">No status analytics found</div><% } %>
-      </div>
-    </div>
-
-    <div class="col-xl-6">
-      <div class="panel-card p-3 h-100">
-        <div class="section-title"><div><h5>Fee Summary</h5><div class="section-sub">Dynamic fee status breakdown with department-wise count</div></div></div>
-        <% if (feeStats.length) { %>
-        <div class="table-responsive overview-scroll-box">
-  <table class="table table-premium table-compact align-middle mb-0" id="feeSummaryTable">
-    <thead><tr><th>Fee Status</th><th>Total</th><th>School</th><th>Tuition</th><th>Quran</th></tr></thead>
-              <tbody>
-                <% feeStats.forEach((item) => { %>
-                  <tr>
-                    <td><span class="soft-badge" style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>"><%= item.label || item.name || 'Unknown' %></span></td>
-                    <td><strong><%= item.total || 0 %></strong></td><td><%= item.school || 0 %></td><td><%= item.tuition || 0 %></td><td><%= item.quran || 0 %></td>
-                  </tr>
-                <% }) %>
-              </tbody>
-                        </table>
-            <div class="super-pagination-wrap pt-3" id="feeSummaryPagination"></div>
-          </div>
-        <% } else { %><div class="empty-state">No fee analytics found</div><% } %>
-      </div>
-    </div>
-  </div>
-
-  <div class="row g-3 mb-3">
-    <div class="col-xl-6">
-      <div class="panel-card p-3 h-100">
-        <div class="section-title"><div><h5>Currency Summary</h5><div class="section-sub">Dynamic currencies with received and pending amounts</div></div></div>
-        <% if (currencyStats.length) { %>
-          <div class="table-responsive overview-scroll-box">
-  <table class="table table-premium table-compact align-middle mb-0" id="currencySummaryTable">
-    <thead><tr><th>Currency</th><th>Total Admissions</th><th>Received</th><th>Pending</th></tr></thead>
-              <tbody>
-                <% currencyStats.forEach((item) => { %>
-                  <tr><td><span class="soft-badge"><%= item.currency || item.label || 'Unknown' %></span></td><td><strong><%= item.total || 0 %></strong></td><td><%= item.received || 0 %></td><td><%= item.pending || 0 %></td></tr>
-                <% }) %>
-              </tbody>
-                        </table>
-            <div class="super-pagination-wrap pt-3" id="currencySummaryPagination"></div>
-          </div>
-        <% } else { %><div class="empty-state">No currency analytics found</div><% } %>
-      </div>
-    </div>
-
-    <div class="col-xl-6">
-      <div class="panel-card p-3 h-100">
-        <div class="section-title"><div><h5>Billing Summary</h5><div class="section-sub">Billing health, invoice status and dues insight</div></div></div>
-        <div class="mini-grid mb-3">
-          <div class="mini-stat"><div class="title">Total Billed</div><div class="num"><%= billingStats.totalBilled || 0 %></div></div>
-          <div class="mini-stat"><div class="title">Pending Dues</div><div class="num"><%= billingStats.totalPendingDues || 0 %></div></div>
-          <div class="mini-stat"><div class="title">Received Amount</div><div class="num"><%= billingStats.totalReceivedAmount || 0 %></div></div>
-          <div class="mini-stat"><div class="title">No Payment</div><div class="num"><%= billingStats.totalNoPaymentAdmissions || 0 %></div></div>
-        </div>
-       <div class="table-responsive overview-scroll-box">
-  <table class="table table-premium table-compact align-middle mb-0" id="billingSummaryTable">
-    <thead><tr><th>Billing Status</th><th>Total</th></tr></thead>
-            <tbody>
-              <% billingBreakdown.forEach((item) => { %>
-                <tr><td><span class="soft-badge" style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>"><%= item.label || 'Unknown' %></span></td><td><strong><%= item.total || 0 %></strong></td></tr>
-              <% }) %>
-              <% if (!billingBreakdown.length) { %><tr><td colspan="2" class="text-center text-muted py-3">No billing summary found</td></tr><% } %>
-            </tbody>
-                    </table>
-          <div class="super-pagination-wrap pt-3" id="billingSummaryPagination"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="panel-card p-3 mb-3">
-    <div class="section-title">
-      <div>
-        <h5>Search Result Details</h5>
-        <div class="section-sub">Records visible for CEO review. Backend can pass all matched admissions through overviewData.searchResults.</div>
-      </div>
-      <input type="text" class="form-control table-search" id="searchResultsTableSearch" placeholder="Search table">
-    </div>
-    <% if (searchResults.length) { %>
-  <div class="table-responsive overview-scroll-box">
-    <table class="table table-premium table-compact align-middle mb-0" id="searchResultsTable">
           <thead>
             <tr>
-              <th>Student</th>
-              <th>Registration</th>
               <th>Department</th>
-              <th>Current Status</th>
-              <th>Fee Status</th>
-              <th>Processed By</th>
-              <th>Admission Date</th>
-              <th>Phone</th>
+
+              <% if (canViewAdmissionCounts) { %>
+                <th>Total</th>
+              <% } %>
+
+              <% if (P.col.status) { %>
+                <th>Statuses</th>
+              <% } %>
+
+              <% if (P.col.feeStatus) { %>
+                <th>Fee Statuses</th>
+              <% } %>
+
+              <% if (P.col.paymentStatus) { %>
+                <th>Billing Statuses</th>
+              <% } %>
+
+              <% if (P.col.currency) { %>
+                <th>Currencies</th>
+              <% } %>
+
+              <% if (canViewDateAnalytics) { %>
+                <th>Yearly Intake</th>
+                <th>Monthly Intake</th>
+                <th>Daily Intake</th>
+              <% } %>
             </tr>
           </thead>
+
           <tbody>
-            <% searchResults.slice(0, 100).forEach((item) => { %>
+            <% ['school', 'tuition', 'quran'].forEach((deptKey) => {
+              const dept =
+                departmentStats?.[deptKey] || {};
+            %>
               <tr>
-                <td><strong><%= item.studentName || item.student_name || item.name || '-' %></strong></td>
-                <td><%= item.registrationNo || item.registration_no || item.regNo || item.reg_no || '-' %></td>
-                <td><span class="soft-badge"><%= item.dept || item.department || '-' %></span></td>
-                <td><%= item.status || item.currentStatus || item.current_status || '-' %></td>
-                <td><%= item.feeStatus || item.fee_status || '-' %></td>
-                <td><%= getProcessedBy(item) %></td>
-                <td><%= getAdmissionDate(item) || '-' %></td>
-                <td><%= item.phone || item.contact || item.mobile || '-' %></td>
+                <td>
+                  <span class="soft-badge">
+                    <%= deptKey.charAt(0).toUpperCase() + deptKey.slice(1) %>
+                  </span>
+                </td>
+
+                <% if (canViewAdmissionCounts) { %>
+                  <td>
+                    <strong>
+                      <%= dept.total || 0 %>
+                    </strong>
+                  </td>
+                <% } %>
+
+                <% if (P.col.status) { %>
+                  <td>
+                    <%= Object.keys(dept.currentStatus || {}).length %>
+                  </td>
+                <% } %>
+
+                <% if (P.col.feeStatus) { %>
+                  <td>
+                    <%= Object.keys(dept.feeStatus || {}).length %>
+                  </td>
+                <% } %>
+
+                <% if (P.col.paymentStatus) { %>
+                  <td>
+                    <%= Object.keys(dept.billingStatus || {}).length %>
+                  </td>
+                <% } %>
+
+                <% if (P.col.currency) { %>
+                  <td>
+                    <%= Object.keys(dept.currency || {}).length %>
+                  </td>
+                <% } %>
+
+                <% if (canViewDateAnalytics) { %>
+                  <td>
+                    <%= Object.keys(dept.yearlyIntake || {}).length %>
+                  </td>
+
+                  <td>
+                    <%= Object.keys(dept.monthlyIntake || {}).length %>
+                  </td>
+
+                  <td>
+                    <%= Object.keys(dept.dailyIntake || {}).length %>
+                  </td>
+                <% } %>
               </tr>
             <% }) %>
           </tbody>
+        </table>
+
+        <div
+          class="super-pagination-wrap pt-3"
+          id="departmentSummaryPagination">
+        </div>
+      </div>
+    </div>
+  <% } %>
+
+  <% if (P.col.status || P.col.feeStatus) { %>
+    <div class="row g-3 mb-3">
+
+      <% if (P.col.status) { %>
+        <div class="<%= P.col.feeStatus ? 'col-xl-6' : 'col-12' %>">
+          <div class="panel-card p-3 h-100">
+            <div class="section-title">
+              <div>
+                <h5>Status Summary</h5>
+
+                <div class="section-sub">
+                  Dynamic current statuses
+                </div>
+              </div>
+            </div>
+
+            <% if (statusStats.length) { %>
+              <div class="table-responsive overview-scroll-box">
+                <table
+                  class="table table-premium table-compact align-middle mb-0"
+                  id="statusSummaryTable">
+
+                  <thead>
+                    <tr>
+                      <th>Status</th>
+                      <th>Total</th>
+
+                      <% if (P.col.dept) { %>
+                        <th>School</th>
+                        <th>Tuition</th>
+                        <th>Quran</th>
+                      <% } %>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    <% statusStats.forEach((item) => { %>
+                      <tr>
+                        <td>
+                          <span
+                            class="soft-badge"
+                            style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>">
+                            <%= item.label || item.name || 'Unknown' %>
+                          </span>
+                        </td>
+
+                        <td>
+                          <strong>
+                            <%= item.total || 0 %>
+                          </strong>
+                        </td>
+
+                        <% if (P.col.dept) { %>
+                          <td><%= item.school || 0 %></td>
+                          <td><%= item.tuition || 0 %></td>
+                          <td><%= item.quran || 0 %></td>
+                        <% } %>
+                      </tr>
+                    <% }) %>
+                  </tbody>
                 </table>
-        <div class="super-pagination-wrap pt-3" id="searchResultsPagination"></div>
-      </div>
-    <% } else { %>
-      <div class="empty-state">No search results found</div>
-    <% } %>
-  </div>
 
-  <div class="panel-card p-3 mb-3">
-    <div class="section-title">
-      <div>
-        <h5>Invoice & Report Status Summary</h5>
-        <div class="section-sub">Deliverability, paid invoice status and timestamps overview</div>
+                <div
+                  class="super-pagination-wrap pt-3"
+                  id="statusSummaryPagination">
+                </div>
+              </div>
+            <% } else { %>
+              <div class="empty-state">
+                No status analytics found
+              </div>
+            <% } %>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (P.col.feeStatus) { %>
+        <div class="<%= P.col.status ? 'col-xl-6' : 'col-12' %>">
+          <div class="panel-card p-3 h-100">
+            <div class="section-title">
+              <div>
+                <h5>Fee Summary</h5>
+
+                <div class="section-sub">
+                  Dynamic fee status breakdown
+                </div>
+              </div>
+            </div>
+
+            <% if (feeStats.length) { %>
+              <div class="table-responsive overview-scroll-box">
+                <table
+                  class="table table-premium table-compact align-middle mb-0"
+                  id="feeSummaryTable">
+
+                  <thead>
+                    <tr>
+                      <th>Fee Status</th>
+                      <th>Total</th>
+
+                      <% if (P.col.dept) { %>
+                        <th>School</th>
+                        <th>Tuition</th>
+                        <th>Quran</th>
+                      <% } %>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    <% feeStats.forEach((item) => { %>
+                      <tr>
+                        <td>
+                          <span
+                            class="soft-badge"
+                            style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>">
+                            <%= item.label || item.name || 'Unknown' %>
+                          </span>
+                        </td>
+
+                        <td>
+                          <strong>
+                            <%= item.total || 0 %>
+                          </strong>
+                        </td>
+
+                        <% if (P.col.dept) { %>
+                          <td><%= item.school || 0 %></td>
+                          <td><%= item.tuition || 0 %></td>
+                          <td><%= item.quran || 0 %></td>
+                        <% } %>
+                      </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+
+                <div
+                  class="super-pagination-wrap pt-3"
+                  id="feeSummaryPagination">
+                </div>
+              </div>
+            <% } else { %>
+              <div class="empty-state">
+                No fee analytics found
+              </div>
+            <% } %>
+          </div>
+        </div>
+      <% } %>
+
+    </div>
+  <% } %>
+
+  <% if (
+    P.col.currency ||
+    canViewBillingAnalytics
+  ) { %>
+    <div class="row g-3 mb-3">
+
+      <% if (P.col.currency) { %>
+        <div class="<%= canViewBillingAnalytics ? 'col-xl-6' : 'col-12' %>">
+          <div class="panel-card p-3 h-100">
+            <div class="section-title">
+              <div>
+                <h5>Currency Summary</h5>
+
+                <div class="section-sub">
+                  Currency values allowed by Can View permissions.
+                </div>
+              </div>
+            </div>
+
+            <% if (currencyStats.length) { %>
+              <div class="table-responsive overview-scroll-box">
+                <table
+                  class="table table-premium table-compact align-middle mb-0"
+                  id="currencySummaryTable">
+
+                  <thead>
+                    <tr>
+                      <th>Currency</th>
+
+                      <% if (canViewAdmissionCounts) { %>
+                        <th>Total Admissions</th>
+                      <% } %>
+
+                      <% if (P.col.receivedPayment) { %>
+                        <th>Received</th>
+                      <% } %>
+
+                      <% if (P.col.pendingDues) { %>
+                        <th>Pending</th>
+                      <% } %>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    <% currencyStats.forEach((item) => { %>
+                      <tr>
+                        <td>
+                          <span class="soft-badge">
+                            <%= item.currency || item.label || 'Unknown' %>
+                          </span>
+                        </td>
+
+                        <% if (canViewAdmissionCounts) { %>
+                          <td>
+                            <strong>
+                              <%= item.total || 0 %>
+                            </strong>
+                          </td>
+                        <% } %>
+
+                        <% if (P.col.receivedPayment) { %>
+                          <td>
+                            <%= item.received || 0 %>
+                          </td>
+                        <% } %>
+
+                        <% if (P.col.pendingDues) { %>
+                          <td>
+                            <%= item.pending || 0 %>
+                          </td>
+                        <% } %>
+                      </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+
+                <div
+                  class="super-pagination-wrap pt-3"
+                  id="currencySummaryPagination">
+                </div>
+              </div>
+            <% } else { %>
+              <div class="empty-state">
+                No currency analytics found
+              </div>
+            <% } %>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (canViewBillingAnalytics) { %>
+        <div class="<%= P.col.currency ? 'col-xl-6' : 'col-12' %>">
+          <div class="panel-card p-3 h-100">
+            <div class="section-title">
+              <div>
+                <h5>Billing Summary</h5>
+
+                <div class="section-sub">
+                  Permission-controlled billing health.
+                </div>
+              </div>
+            </div>
+
+            <div class="mini-grid mb-3">
+
+              <% if (P.col.totalFees) { %>
+                <div class="mini-stat">
+                  <div class="title">
+                    Total Billed
+                  </div>
+
+                  <div class="num">
+                    <%= billingStats.totalBilled || 0 %>
+                  </div>
+                </div>
+              <% } %>
+
+              <% if (P.col.pendingDues) { %>
+                <div class="mini-stat">
+                  <div class="title">
+                    Pending Dues
+                  </div>
+
+                  <div class="num">
+                    <%= billingStats.totalPendingDues || 0 %>
+                  </div>
+                </div>
+              <% } %>
+
+              <% if (P.col.receivedPayment) { %>
+                <div class="mini-stat">
+                  <div class="title">
+                    Received Amount
+                  </div>
+
+                  <div class="num">
+                    <%= billingStats.totalReceivedAmount || 0 %>
+                  </div>
+                </div>
+              <% } %>
+
+              <% if (P.col.paymentStatus) { %>
+                <div class="mini-stat">
+                  <div class="title">
+                    No Payment
+                  </div>
+
+                  <div class="num">
+                    <%= billingStats.totalNoPaymentAdmissions || 0 %>
+                  </div>
+                </div>
+              <% } %>
+
+            </div>
+
+            <% if (P.col.paymentStatus) { %>
+              <div class="table-responsive overview-scroll-box">
+                <table
+                  class="table table-premium table-compact align-middle mb-0"
+                  id="billingSummaryTable">
+
+                  <thead>
+                    <tr>
+                      <th>Billing Status</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    <% billingBreakdown.forEach((item) => { %>
+                      <tr>
+                        <td>
+                          <span
+                            class="soft-badge"
+                            style="<%= item.color ? `background:${item.color}22;color:${item.color};` : '' %>">
+                            <%= item.label || 'Unknown' %>
+                          </span>
+                        </td>
+
+                        <td>
+                          <strong>
+                            <%= item.total || 0 %>
+                          </strong>
+                        </td>
+                      </tr>
+                    <% }) %>
+
+                    <% if (!billingBreakdown.length) { %>
+                      <tr>
+                        <td
+                          colspan="2"
+                          class="text-center text-muted py-3">
+                          No billing summary found
+                        </td>
+                      </tr>
+                    <% } %>
+                  </tbody>
+                </table>
+
+                <div
+                  class="super-pagination-wrap pt-3"
+                  id="billingSummaryPagination">
+                </div>
+              </div>
+            <% } %>
+
+          </div>
+        </div>
+      <% } %>
+
+    </div>
+  <% } %>
+
+  <% if (canViewSearchResults) { %>
+    <div class="panel-card p-3 mb-3">
+      <div class="section-title">
+        <div>
+          <h5>Search Result Details</h5>
+
+          <div class="section-sub">
+            Only permitted admission fields are rendered.
+          </div>
+        </div>
+
+        <input
+          type="text"
+          class="form-control table-search"
+          id="searchResultsTableSearch"
+          placeholder="Search visible table">
       </div>
+
+      <% if (searchResults.length) { %>
+        <div class="table-responsive overview-scroll-box">
+          <table
+            class="table table-premium table-compact align-middle mb-0"
+            id="searchResultsTable">
+
+            <thead>
+              <tr>
+                <% if (P.col.student) { %>
+                  <th>Student</th>
+                <% } %>
+
+                <% if (P.col.registrationNumber) { %>
+                  <th>Registration</th>
+                <% } %>
+
+                <% if (P.col.dept) { %>
+                  <th>Department</th>
+                <% } %>
+
+                <% if (P.col.status) { %>
+                  <th>Current Status</th>
+                <% } %>
+
+                <% if (P.col.feeStatus) { %>
+                  <th>Fee Status</th>
+                <% } %>
+
+                <% if (P.col.processedBy) { %>
+                  <th>Processed By</th>
+                <% } %>
+
+                <% if (canViewAdmissionCounts) { %>
+                  <th>Admission Date</th>
+                <% } %>
+
+                <% if (P.col.phone) { %>
+                  <th>Phone</th>
+                <% } %>
+              </tr>
+            </thead>
+
+            <tbody>
+              <% searchResults.slice(0, 100).forEach((item) => { %>
+                <tr>
+                  <% if (P.col.student) { %>
+                    <td>
+                      <strong>
+                        <%= item.studentName || item.student_name || item.name || '-' %>
+                      </strong>
+                    </td>
+                  <% } %>
+
+                  <% if (P.col.registrationNumber) { %>
+                    <td>
+                      <%= item.registrationNumber || item.registration_number || item.registrationNo || item.registration_no || item.regNo || item.reg_no || '-' %>
+                    </td>
+                  <% } %>
+
+                  <% if (P.col.dept) { %>
+                    <td>
+                      <span class="soft-badge">
+                        <%= item.dept || item.department || '-' %>
+                      </span>
+                    </td>
+                  <% } %>
+
+                  <% if (P.col.status) { %>
+                    <td>
+                      <%= item.status || item.currentStatus || item.current_status || '-' %>
+                    </td>
+                  <% } %>
+
+                  <% if (P.col.feeStatus) { %>
+                    <td>
+                      <%= item.feeStatus || item.fee_status || '-' %>
+                    </td>
+                  <% } %>
+
+                  <% if (P.col.processedBy) { %>
+                    <td>
+                      <%= getProcessedBy(item) %>
+                    </td>
+                  <% } %>
+
+                  <% if (canViewAdmissionCounts) { %>
+                    <td>
+                      <%= getAdmissionDate(item) || '-' %>
+                    </td>
+                  <% } %>
+
+                  <% if (P.col.phone) { %>
+                    <td>
+                      <%= item.phone || item.contact || item.mobile || '-' %>
+                    </td>
+                  <% } %>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+
+          <div
+            class="super-pagination-wrap pt-3"
+            id="searchResultsPagination">
+          </div>
+        </div>
+      <% } else { %>
+        <div class="empty-state">
+          No search results found
+        </div>
+      <% } %>
     </div>
-    <div class="mini-grid three mb-3">
-      <div class="mini-stat"><div class="title">Invoice Status Types</div><div class="num"><%= billingStats.invoiceStatusTotals || 0 %></div></div>
-      <div class="mini-stat"><div class="title">Paid Invoice Status Types</div><div class="num"><%= billingStats.paidInvoiceStatusTotals || 0 %></div></div>
-      <div class="mini-stat"><div class="title">Timestamped Updates</div><div class="num"><%= billingStats.invoiceTimestampTotals || 0 %></div></div>
+  <% } %>
+
+  <% if (canViewInvoiceAnalytics) { %>
+    <div class="panel-card p-3 mb-3">
+      <div class="section-title">
+        <div>
+          <h5>
+            Invoice & Report Status Summary
+          </h5>
+
+          <div class="section-sub">
+            Permission-controlled invoice status overview.
+          </div>
+        </div>
+      </div>
+
+      <div class="mini-grid three mb-3">
+
+        <% if (P.col.invoiceStatus) { %>
+          <div class="mini-stat">
+            <div class="title">
+              Invoice Status Types
+            </div>
+
+            <div class="num">
+              <%= billingStats.invoiceStatusTotals || 0 %>
+            </div>
+          </div>
+        <% } %>
+
+        <% if (P.col.paidInvoiceStatus) { %>
+          <div class="mini-stat">
+            <div class="title">
+              Paid Invoice Status Types
+            </div>
+
+            <div class="num">
+              <%= billingStats.paidInvoiceStatusTotals || 0 %>
+            </div>
+          </div>
+        <% } %>
+
+        <% if (
+          P.col.invoiceStatusTimestamp &&
+          P.col.paidInvoiceStatusTimestamp
+        ) { %>
+          <div class="mini-stat">
+            <div class="title">
+              Timestamped Updates
+            </div>
+
+            <div class="num">
+              <%= billingStats.invoiceTimestampTotals || 0 %>
+            </div>
+          </div>
+        <% } else if (
+          P.col.invoiceStatusTimestamp ||
+          P.col.paidInvoiceStatusTimestamp
+        ) { %>
+          <div class="mini-stat">
+            <div class="title">
+              <%= P.col.invoiceStatusTimestamp
+                ? 'Invoice Timestamp Access'
+                : 'Paid Invoice Timestamp Access' %>
+            </div>
+
+            <div class="num">
+              Enabled
+            </div>
+          </div>
+        <% } %>
+
+      </div>
+
+      <% if (
+        P.col.invoiceStatus ||
+        P.col.paidInvoiceStatus
+      ) { %>
+        <div class="row g-3">
+
+          <% if (P.col.invoiceStatus) { %>
+            <div class="<%= P.col.paidInvoiceStatus ? 'col-lg-6' : 'col-12' %>">
+              <div class="table-responsive overview-scroll-box">
+                <table
+                  class="table table-premium table-compact align-middle mb-0"
+                  id="invoiceStatusTable">
+
+                  <thead>
+                    <tr>
+                      <th>Invoice Status</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    <% (billingStats.invoiceStatusBreakdown || []).forEach((item) => { %>
+                      <tr>
+                        <td>
+                          <span class="soft-badge">
+                            <%= item.label || '-' %>
+                          </span>
+                        </td>
+
+                        <td>
+                          <strong>
+                            <%= item.total || 0 %>
+                          </strong>
+                        </td>
+                      </tr>
+                    <% }) %>
+
+                    <% if (!(billingStats.invoiceStatusBreakdown || []).length) { %>
+                      <tr>
+                        <td
+                          colspan="2"
+                          class="text-center text-muted py-3">
+                          No invoice status data found
+                        </td>
+                      </tr>
+                    <% } %>
+                  </tbody>
+                </table>
+
+                <div
+                  class="super-pagination-wrap pt-3"
+                  id="invoiceStatusPagination">
+                </div>
+              </div>
+            </div>
+          <% } %>
+
+          <% if (P.col.paidInvoiceStatus) { %>
+            <div class="<%= P.col.invoiceStatus ? 'col-lg-6' : 'col-12' %>">
+              <div class="table-responsive overview-scroll-box">
+                <table
+                  class="table table-premium table-compact align-middle mb-0"
+                  id="paidInvoiceStatusTable">
+
+                  <thead>
+                    <tr>
+                      <th>Paid Invoice Status</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    <% (billingStats.paidInvoiceStatusBreakdown || []).forEach((item) => { %>
+                      <tr>
+                        <td>
+                          <span class="soft-badge">
+                            <%= item.label || '-' %>
+                          </span>
+                        </td>
+
+                        <td>
+                          <strong>
+                            <%= item.total || 0 %>
+                          </strong>
+                        </td>
+                      </tr>
+                    <% }) %>
+
+                    <% if (!(billingStats.paidInvoiceStatusBreakdown || []).length) { %>
+                      <tr>
+                        <td
+                          colspan="2"
+                          class="text-center text-muted py-3">
+                          No paid invoice status data found
+                        </td>
+                      </tr>
+                    <% } %>
+                  </tbody>
+                </table>
+
+                <div
+                  class="super-pagination-wrap pt-3"
+                  id="paidInvoiceStatusPagination">
+                </div>
+              </div>
+            </div>
+          <% } %>
+
+        </div>
+      <% } %>
     </div>
+  <% } %>
+
+  <% if (
+    canViewRecentAdmissions ||
+    canViewRecentBilling
+  ) { %>
     <div class="row g-3">
-      <div class="col-lg-6">
-       <div class="table-responsive overview-scroll-box">
-  <table class="table table-premium table-compact align-middle mb-0" id="invoiceStatusTable">
-    <thead><tr><th>Invoice Status</th><th>Total</th></tr></thead>
-            <tbody>
-              <% (billingStats.invoiceStatusBreakdown || []).forEach((item) => { %><tr><td><span class="soft-badge"><%= item.label || '-' %></span></td><td><strong><%= item.total || 0 %></strong></td></tr><% }) %>
-              <% if (!(billingStats.invoiceStatusBreakdown || []).length) { %><tr><td colspan="2" class="text-center text-muted py-3">No invoice status data found</td></tr><% } %>
-            </tbody>
-                    </table>
-          <div class="super-pagination-wrap pt-3" id="invoiceStatusPagination"></div>
-        </div>
-      </div>
-      <div class="col-lg-6">
-        <div class="table-responsive overview-scroll-box">
-  <table class="table table-premium table-compact align-middle mb-0" id="paidInvoiceStatusTable">
-    <thead><tr><th>Paid Invoice Status</th><th>Total</th></tr></thead>
-            <tbody>
-              <% (billingStats.paidInvoiceStatusBreakdown || []).forEach((item) => { %><tr><td><span class="soft-badge"><%= item.label || '-' %></span></td><td><strong><%= item.total || 0 %></strong></td></tr><% }) %>
-              <% if (!(billingStats.paidInvoiceStatusBreakdown || []).length) { %><tr><td colspan="2" class="text-center text-muted py-3">No paid invoice status data found</td></tr><% } %>
-            </tbody>
-                    </table>
-          <div class="super-pagination-wrap pt-3" id="paidInvoiceStatusPagination"></div>
-        </div>
-      </div>
-    </div>
-  </div>
 
-  <div class="row g-3">
-    <div class="col-xl-6">
-      <div class="panel-card p-3 h-100">
-        <div class="section-title">
-          <div><h5>Recent Admissions</h5><div class="section-sub">Latest admissions</div></div>
-          <input type="text" class="form-control table-search" id="recentAdmissionsSearch" placeholder="Search admissions">
-        </div>
-        <% if (recentAdmissions.length) { %>
-          <div class="table-responsive overview-scroll-box">
-            <table class="table table-premium table-compact align-middle mb-0" id="recentAdmissionsTable">
-              <thead><tr><th>Student</th><th>Department</th><th>Status</th><th>Processed By</th><th>Created</th></tr></thead>
-              <tbody>
-                <% recentAdmissionsPageData.forEach((item) => { %>
-                  <tr><td><strong><%= item.studentName || item.student_name || '-' %></strong></td><td><%= item.dept || '-' %></td><td><span class="soft-badge"><%= item.status || '-' %></span></td><td><%= getProcessedBy(item) %></td><td><%= item.createdAt || item.registration_date || '-' %></td></tr>
-                <% }) %>
-              </tbody>
-            </table>
-            
-            <div class="super-pagination-wrap pt-3" id="recentAdmissionsPagination"></div>
+      <% if (canViewRecentAdmissions) { %>
+        <div class="<%= canViewRecentBilling ? 'col-xl-6' : 'col-12' %>">
+          <div class="panel-card p-3 h-100">
+            <div class="section-title">
+              <div>
+                <h5>Recent Admissions</h5>
+
+                <div class="section-sub">
+                  Latest permitted admission fields
+                </div>
+              </div>
+
+              <input
+                type="text"
+                class="form-control table-search"
+                id="recentAdmissionsSearch"
+                placeholder="Search visible admissions">
+            </div>
+
+            <% if (recentAdmissions.length) { %>
+              <div class="table-responsive overview-scroll-box">
+                <table
+                  class="table table-premium table-compact align-middle mb-0"
+                  id="recentAdmissionsTable">
+
+                  <thead>
+                    <tr>
+                      <% if (P.col.student) { %>
+                        <th>Student</th>
+                      <% } %>
+
+                      <% if (P.col.dept) { %>
+                        <th>Department</th>
+                      <% } %>
+
+                      <% if (P.col.status) { %>
+                        <th>Status</th>
+                      <% } %>
+
+                      <% if (P.col.processedBy) { %>
+                        <th>Processed By</th>
+                      <% } %>
+
+                      <% if (canViewAdmissionCounts) { %>
+                        <th>Created</th>
+                      <% } %>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    <% recentAdmissionsPageData.forEach((item) => { %>
+                      <tr>
+                        <% if (P.col.student) { %>
+                          <td>
+                            <strong>
+                              <%= item.studentName || item.student_name || '-' %>
+                            </strong>
+                          </td>
+                        <% } %>
+
+                        <% if (P.col.dept) { %>
+                          <td>
+                            <%= item.dept || item.department || '-' %>
+                          </td>
+                        <% } %>
+
+                        <% if (P.col.status) { %>
+                          <td>
+                            <span class="soft-badge">
+                              <%= item.status || item.currentStatus || item.current_status || '-' %>
+                            </span>
+                          </td>
+                        <% } %>
+
+                        <% if (P.col.processedBy) { %>
+                          <td>
+                            <%= getProcessedBy(item) %>
+                          </td>
+                        <% } %>
+
+                        <% if (canViewAdmissionCounts) { %>
+                          <td>
+                            <%= item.createdAt || item.created_at || item.registration_date || '-' %>
+                          </td>
+                        <% } %>
+                      </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+
+                <div
+                  class="super-pagination-wrap pt-3"
+                  id="recentAdmissionsPagination">
+                </div>
+              </div>
+            <% } else { %>
+              <div class="empty-state">
+                No recent admissions found
+              </div>
+            <% } %>
           </div>
-        <% } else { %><div class="empty-state">No recent admissions found</div><% } %>
-      </div>
-    </div>
-
-    <div class="col-xl-6">
-      <div class="panel-card p-3 h-100">
-        <div class="section-title">
-          <div><h5>Recent Billing Changes</h5><div class="section-sub">Latest billing updates</div></div>
-          <input type="text" class="form-control table-search" id="recentBillingSearch" placeholder="Search billing">
         </div>
-        <% if (recentBillingChanges.length) { %>
-          <div class="table-responsive overview-scroll-box">
-            <table class="table table-premium table-compact align-middle mb-0" id="recentBillingTable">
-              <thead><tr><th>Student</th><th>Month</th><th>Status</th><th>Updated</th></tr></thead>
-              <tbody>
-                <% recentBillingPageData.forEach((item) => { %>
-                  <tr><td><strong><%= item.studentName || item.student_name || '-' %></strong></td><td><%= item.month || '-' %></td><td><span class="soft-badge"><%= item.status || '-' %></span></td><td><%= item.updatedAt || '-' %></td></tr>
-                <% }) %>
-              </tbody>
-            </table>
-            <div class="super-pagination-wrap pt-3" id="recentBillingPagination"></div>
+      <% } %>
+
+      <% if (canViewRecentBilling) { %>
+        <div class="<%= canViewRecentAdmissions ? 'col-xl-6' : 'col-12' %>">
+          <div class="panel-card p-3 h-100">
+            <div class="section-title">
+              <div>
+                <h5>Recent Billing Changes</h5>
+
+                <div class="section-sub">
+                  Latest permitted billing fields
+                </div>
+              </div>
+
+              <input
+                type="text"
+                class="form-control table-search"
+                id="recentBillingSearch"
+                placeholder="Search visible billing">
+            </div>
+
+            <% if (recentBillingChanges.length) { %>
+              <div class="table-responsive overview-scroll-box">
+                <table
+                  class="table table-premium table-compact align-middle mb-0"
+                  id="recentBillingTable">
+
+                  <thead>
+                    <tr>
+                      <% if (P.col.student) { %>
+                        <th>Student</th>
+                      <% } %>
+
+                      <% if (P.col.month) { %>
+                        <th>Month</th>
+                      <% } %>
+
+                      <% if (P.col.paymentStatus) { %>
+                        <th>Status</th>
+                      <% } %>
+
+                      <% if (P.col.invoiceStatusTimestamp) { %>
+                        <th>Updated</th>
+                      <% } %>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    <% recentBillingPageData.forEach((item) => { %>
+                      <tr>
+                        <% if (P.col.student) { %>
+                          <td>
+                            <strong>
+                              <%= item.studentName || item.student_name || '-' %>
+                            </strong>
+                          </td>
+                        <% } %>
+
+                        <% if (P.col.month) { %>
+                          <td>
+                            <%= item.monthLabel || item.month || '-' %>
+                          </td>
+                        <% } %>
+
+                        <% if (P.col.paymentStatus) { %>
+                          <td>
+                            <span class="soft-badge">
+                              <%= item.status || item.paymentStatus || item.payment_status || '-' %>
+                            </span>
+                          </td>
+                        <% } %>
+
+                        <% if (P.col.invoiceStatusTimestamp) { %>
+                          <td>
+                            <%= item.updatedAt || item.updated_at || '-' %>
+                          </td>
+                        <% } %>
+                      </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+
+                <div
+                  class="super-pagination-wrap pt-3"
+                  id="recentBillingPagination">
+                </div>
+              </div>
+            <% } else { %>
+              <div class="empty-state">
+                No recent billing changes found
+              </div>
+            <% } %>
           </div>
-        <% } else { %><div class="empty-state">No recent billing changes found</div><% } %>
-      </div>
-    </div>
-  </div>
-
-  <div class="row g-3 mt-1">
-    <div class="col-xl-6">
-      <div class="panel-card p-3 h-100">
-        <div class="section-title"><div><h5>Pending Due Admissions</h5><div class="section-sub">Admissions with pending dues</div></div></div>
-        <div class="table-responsive overview-scroll-box">
-         <table class="table table-premium table-compact align-middle mb-0" id="pendingDueTable">
-            <thead><tr><th>Student</th><th>Dept</th><th>Amount</th><th>Month</th><th>Year</th><th>Entered</th></tr></thead>
-            <tbody>
-              <% pendingDuePageData.forEach((item) => { %>
-                <tr><td><strong><%= item.studentName || '-' %></strong></td><td><%= item.dept || '-' %></td><td><%= item.amount || 0 %></td><td><%= item.monthLabel || item.month || '-' %></td><td><%= item.billingYear || '-' %></td><td><%= item.enteredAt || '-' %></td></tr>
-              <% }) %>
-              <% if (!pendingDueAdmissions.length) { %><tr><td colspan="6" class="text-center text-muted py-3">No pending dues found</td></tr><% } %>
-            </tbody>
-          </table>
-          <div class="super-pagination-wrap pt-3" id="pendingDuePagination"></div>
         </div>
-      </div>
-    </div>
+      <% } %>
 
-    <div class="col-xl-6">
-      <div class="panel-card p-3 h-100">
-        <div class="section-title"><div><h5>No Payment Admissions</h5><div class="section-sub">Admissions where no-payment status was found</div></div></div>
-        <div class="table-responsive overview-scroll-box">
-          <table class="table table-premium table-compact align-middle mb-0" id="noPaymentTable">
-            <thead><tr><th>Student</th><th>Dept</th><th>Amount</th><th>Month</th><th>Year</th><th>Entered</th></tr></thead>
-            <tbody>
-              <% noPaymentPageData.forEach((item) => { %>
-                <tr><td><strong><%= item.studentName || '-' %></strong></td><td><%= item.dept || '-' %></td><td><%= item.amount || 0 %></td><td><%= item.monthLabel || item.month || '-' %></td><td><%= item.billingYear || '-' %></td><td><%= item.enteredAt || '-' %></td></tr>
-              <% }) %>
-              <% if (!noPaymentAdmissions.length) { %><tr><td colspan="6" class="text-center text-muted py-3">No no-payment admissions found</td></tr><% } %>
-            </tbody>
-          </table>
-         <div class="super-pagination-wrap pt-3" id="noPaymentPagination"></div>
-        </div>
-      </div>
     </div>
-  </div>
+  <% } %>
+
+  <% if (
+    canViewPendingDueRows ||
+    canViewNoPaymentRows
+  ) { %>
+    <div class="row g-3 mt-1">
+
+      <% if (canViewPendingDueRows) { %>
+        <div class="<%= canViewNoPaymentRows ? 'col-xl-6' : 'col-12' %>">
+          <div class="panel-card p-3 h-100">
+            <div class="section-title">
+              <div>
+                <h5>Pending Due Admissions</h5>
+
+                <div class="section-sub">
+                  Admissions with pending dues
+                </div>
+              </div>
+            </div>
+
+            <div class="table-responsive overview-scroll-box">
+              <table
+                class="table table-premium table-compact align-middle mb-0"
+                id="pendingDueTable">
+
+                <thead>
+                  <tr>
+                    <% if (P.col.student) { %>
+                      <th>Student</th>
+                    <% } %>
+
+                    <% if (P.col.dept) { %>
+                      <th>Dept</th>
+                    <% } %>
+
+                    <th>Amount</th>
+
+                    <% if (P.col.month) { %>
+                      <th>Month</th>
+                      <th>Year</th>
+                    <% } %>
+
+                    <th>Entered</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <% pendingDuePageData.forEach((item) => { %>
+                    <tr>
+                      <% if (P.col.student) { %>
+                        <td>
+                          <strong>
+                            <%= item.studentName || item.student_name || '-' %>
+                          </strong>
+                        </td>
+                      <% } %>
+
+                      <% if (P.col.dept) { %>
+                        <td>
+                          <%= item.dept || item.department || '-' %>
+                        </td>
+                      <% } %>
+
+                      <td>
+                        <%= item.amount || item.pendingDues || item.pending_dues || 0 %>
+                      </td>
+
+                      <% if (P.col.month) { %>
+                        <td>
+                          <%= item.monthLabel || item.month || '-' %>
+                        </td>
+
+                        <td>
+                          <%= item.billingYear || item.billing_year || '-' %>
+                        </td>
+                      <% } %>
+
+                      <td>
+                        <%= item.enteredAt || item.entered_at || '-' %>
+                      </td>
+                    </tr>
+                  <% }) %>
+
+                  <% if (!pendingDueAdmissions.length) { %>
+                    <tr>
+                      <td
+                        colspan="<%= pendingDueVisibleColumnCount %>"
+                        class="text-center text-muted py-3">
+                        No pending dues found
+                      </td>
+                    </tr>
+                  <% } %>
+                </tbody>
+              </table>
+
+              <div
+                class="super-pagination-wrap pt-3"
+                id="pendingDuePagination">
+              </div>
+            </div>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (canViewNoPaymentRows) { %>
+        <div class="<%= canViewPendingDueRows ? 'col-xl-6' : 'col-12' %>">
+          <div class="panel-card p-3 h-100">
+            <div class="section-title">
+              <div>
+                <h5>No Payment Admissions</h5>
+
+                <div class="section-sub">
+                  Admissions where no-payment status was found
+                </div>
+              </div>
+            </div>
+
+            <div class="table-responsive overview-scroll-box">
+              <table
+                class="table table-premium table-compact align-middle mb-0"
+                id="noPaymentTable">
+
+                <thead>
+                  <tr>
+                    <% if (P.col.student) { %>
+                      <th>Student</th>
+                    <% } %>
+
+                    <% if (P.col.dept) { %>
+                      <th>Dept</th>
+                    <% } %>
+
+                    <% if (
+                      P.col.pendingDues ||
+                      P.col.fees
+                    ) { %>
+                      <th>Amount</th>
+                    <% } %>
+
+                    <% if (P.col.month) { %>
+                      <th>Month</th>
+                      <th>Year</th>
+                    <% } %>
+
+                    <th>Entered</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <% noPaymentPageData.forEach((item) => { %>
+                    <tr>
+                      <% if (P.col.student) { %>
+                        <td>
+                          <strong>
+                            <%= item.studentName || item.student_name || '-' %>
+                          </strong>
+                        </td>
+                      <% } %>
+
+                      <% if (P.col.dept) { %>
+                        <td>
+                          <%= item.dept || item.department || '-' %>
+                        </td>
+                      <% } %>
+
+                      <% if (
+                        P.col.pendingDues ||
+                        P.col.fees
+                      ) { %>
+                        <td>
+                          <%= item.amount || item.pendingDues || item.pending_dues || 0 %>
+                        </td>
+                      <% } %>
+
+                      <% if (P.col.month) { %>
+                        <td>
+                          <%= item.monthLabel || item.month || '-' %>
+                        </td>
+
+                        <td>
+                          <%= item.billingYear || item.billing_year || '-' %>
+                        </td>
+                      <% } %>
+
+                      <td>
+                        <%= item.enteredAt || item.entered_at || '-' %>
+                      </td>
+                    </tr>
+                  <% }) %>
+
+                  <% if (!noPaymentAdmissions.length) { %>
+                    <tr>
+                      <td
+                        colspan="<%= noPaymentVisibleColumnCount %>"
+                        class="text-center text-muted py-3">
+                        No no-payment admissions found
+                      </td>
+                    </tr>
+                  <% } %>
+                </tbody>
+              </table>
+
+              <div
+                class="super-pagination-wrap pt-3"
+                id="noPaymentPagination">
+              </div>
+            </div>
+          </div>
+        </div>
+      <% } %>
+
+    </div>
+  <% } %>
+
+  <% if (
+    !canViewAdmissionCounts &&
+    !P.col.processedBy &&
+    !canViewBillingAnalytics &&
+    !canViewInvoiceAnalytics &&
+    !canViewSearchResults &&
+    !P.col.status &&
+    !P.col.feeStatus &&
+    !P.col.currency
+  ) { %>
+    <div class="empty-state">
+      No Overview data permissions are enabled for this user.
+    </div>
+  <% } %>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  const overviewCharts = <%- JSON.stringify(safeOverview.charts || {}) %>;
+  const overviewCharts = <%- safeOverviewChartsJson %>;
 
   function buildColors(items, fallback) {
     return (items || []).map((x, idx) => x.color || fallback[idx % fallback.length]);

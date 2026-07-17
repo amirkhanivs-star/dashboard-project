@@ -12,56 +12,90 @@
   let childPermsRaw = (editUser && editUser.permissions) ? editUser.permissions : {};
   try { if (typeof childPermsRaw === 'string') childPermsRaw = JSON.parse(childPermsRaw); } catch(e) { childPermsRaw = {}; }
 
-  const isAllowed = (key) => !!parentPerms[key];
-  const isChecked = (key) => !!childPermsRaw[key];
+   const permissionOn = (value) => {
+    return (
+      value === true ||
+      value === 1 ||
+      value === '1' ||
+      value === 'true' ||
+      value === 'on'
+    );
+  };
 
- const COL_LABELS = {
-  colStatus: "Current Status",
-  colFeeStatus: "Fee Status",
-  colDept: "Dept",
-  colStudentName: "Student",
-  colFatherName: "Father",
-  colFatherEmail: "Father Email",
-  colGrade: "Grade",
-  colTuitionGrade: "Grade Section",
-  colPhone: "Phone Number",
-  colProcessedBy: "Processed By",
-  colPaymentStatus: "Payment Status",
-  colPaidUpto: "Paid Upto",
-  colVerificationNumber: "Verification #",
-  colRegistrationNumber: "Reg #",
-  colFamilyNumber: "Family Number",
-  colRegistrationFee: "Registration Fee",
-  colFees: "Fees",
-  colCurrency: "Currency",
-  colBank: "Bank",
-  colMonth: "Month",
-  colTotalFees: "Total Fees",
-  colPendingDues: "Pending Dues",
-  colReceivedPayment: "Received Payment",
-  colComment: "Comment",
-  colInvoiceStatus: "Invoice Status",
-  colInvoiceStatusTimestamp: "Invoice Status Timestamp",
-  colPaidInvoiceStatus: "Paid Invoice Status",
-  colPaidInvoiceStatusTimestamp: "Paid Invoice Status Timestamp",
-  colActionButtons: "Action Buttons"
-};
+  const isAllowed = (key) => {
+    return permissionOn(parentPerms[key]);
+  };
 
-const BTN_LABELS = {
-  btnEditRow: "Show Edit Button",
-  btnDetails: "Show View Details Button",
-  btnUpdateRow: "Show Update/Save Button",
-  btnPdf: "Show PDF Button",
-  btnBilling: "Show Billing Button",
-  btnWhatsApp: "Show WhatsApp Button",
-  btnUpload: "Show Upload Button",
-  btnFiles: "Show Files Button",
-  canDeleteFiles: "Can Delete Files",
-  canDeleteAdmissions: "Can Delete Admissions"
-};
+  const isChecked = (key) => {
+    return permissionOn(childPermsRaw[key]);
+  };
 
-  const COL_KEYS = Object.keys(COL_LABELS).filter(k => isAllowed(k));
-  const BTN_KEYS = Object.keys(BTN_LABELS).filter(k => isAllowed(k));
+  const COLUMN_PERMISSION_GROUPS = [
+    {
+      title: 'Admission Details',
+      icon: 'bi-person-vcard',
+      items: [
+        { view: 'colStatus', edit: 'editStatus', label: 'Current Status' },
+        { view: 'colFeeStatus', edit: 'editFeeStatus', label: 'Fee Status' },
+        { view: 'colDept', edit: 'editDept', label: 'Department' },
+        { view: 'colStudentName', edit: 'editStudentName', label: 'Student' },
+        { view: 'colFatherName', edit: 'editFatherName', label: 'Father' },
+        { view: 'colFatherEmail', edit: 'editFatherEmail', label: 'Father Email' },
+        { view: 'colGrade', edit: 'editGrade', label: 'Grade' },
+        { view: 'colTuitionGrade', edit: 'editTuitionGrade', label: 'Grade Section' },
+        { view: 'colPhone', edit: 'editPhone', label: 'Phone Number' },
+        { view: 'colProcessedBy', edit: '', label: 'Processed By' }
+      ]
+    },
+    {
+      title: 'Accounts & Fees',
+      icon: 'bi-cash-stack',
+      items: [
+        { view: 'colPaymentStatus', edit: 'editPaymentStatus', label: 'Payment Status' },
+        { view: 'colPaidUpto', edit: '', label: 'Paid Upto' },
+        { view: 'colVerificationNumber', edit: 'editVerificationNumber', label: 'Verification #' },
+        { view: 'colRegistrationNumber', edit: 'editRegistrationNumber', label: 'Registration #' },
+        { view: 'colFamilyNumber', edit: 'editFamilyNumber', label: 'Family #' },
+        { view: 'colRegistrationFee', edit: 'editRegistrationFee', label: 'Registration Fee' },
+        { view: 'colFees', edit: 'editFees', label: 'Fees' },
+        { view: 'colCurrency', edit: 'editCurrency', label: 'Currency' },
+        { view: 'colBank', edit: 'editBank', label: 'Bank' },
+        { view: 'colMonth', edit: 'editMonth', label: 'Month' }
+      ]
+    },
+    {
+      title: 'Totals & Invoice',
+      icon: 'bi-receipt',
+      items: [
+        { view: 'colTotalFees', edit: '', label: 'Total Fees' },
+        { view: 'colPendingDues', edit: '', label: 'Pending Dues' },
+        { view: 'colReceivedPayment', edit: '', label: 'Received Payment' },
+        { view: 'colComment', edit: 'editComment', label: 'Comment' },
+        { view: 'colInvoiceStatus', edit: '', label: 'Invoice Status' },
+        { view: 'colInvoiceStatusTimestamp', edit: '', label: 'Invoice Status Time' },
+        { view: 'colPaidInvoiceStatus', edit: '', label: 'Paid Invoice Status' },
+        { view: 'colPaidInvoiceStatusTimestamp', edit: '', label: 'Paid Invoice Time' },
+        { view: 'colActionButtons', edit: '', label: 'Action Buttons' }
+      ]
+    }
+  ];
+
+  const BTN_LABELS = {
+    btnEditRow: 'Show Edit Button',
+    btnDetails: 'Show View Details Button',
+    btnUpdateRow: 'Show Update/Save Button',
+    btnPdf: 'Show PDF Button',
+    btnBilling: 'Show Billing Button',
+    btnWhatsApp: 'Show WhatsApp Button',
+    btnUpload: 'Show Upload Button',
+    btnFiles: 'Show Files Button',
+    canDeleteFiles: 'Can Delete Files',
+    canDeleteAdmissions: 'Can Delete Admissions'
+  };
+
+  const BTN_KEYS = Object.keys(BTN_LABELS).filter(function (key) {
+    return isAllowed(key);
+  });
 const isAgentRoute = BASE_PATH.includes('/dashboard/agent');
 
 const themeTextClass = isAgentRoute ? 'agent-purple-text' : 'text-success';
@@ -383,6 +417,184 @@ const pipelineTypeLabel = (value) => {
     font-size: .78rem;
     line-height: 1.45;
   }
+    /* ================== CAN VIEW / CAN EDIT MATRIX ================== */
+  .permission-quickbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: #f8fafc;
+  }
+
+  .permission-quickbar-label {
+    margin-right: 2px;
+    color: #475569;
+    font-size: .70rem;
+    font-weight: 800;
+  }
+
+  .permission-quickbar .btn {
+    padding: 4px 10px;
+    font-size: .68rem;
+    font-weight: 700;
+  }
+
+  .permission-default-note {
+    margin-left: auto;
+    color: #64748b;
+    font-size: .66rem;
+    font-weight: 700;
+  }
+
+  .permission-groups-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .permission-group-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: #ffffff;
+  }
+
+  .permission-group-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 10px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f8fafc;
+    color: #1f2937;
+    font-size: .74rem;
+    font-weight: 800;
+  }
+
+  .permission-group-title i {
+    font-size: .78rem;
+  }
+
+  .permission-matrix-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 43px 43px;
+    align-items: stretch;
+    min-height: 34px;
+    border-top: 1px solid #f1f5f9;
+  }
+
+  .permission-matrix-row:first-of-type {
+    border-top: 0;
+  }
+
+  .permission-matrix-head {
+    min-height: 29px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: .59rem;
+    font-weight: 800;
+    letter-spacing: .035em;
+    text-transform: uppercase;
+  }
+
+  .permission-matrix-head > span:first-child {
+    display: flex;
+    align-items: center;
+    padding: 5px 9px;
+  }
+
+  .permission-field-label {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    margin: 0;
+    padding: 6px 9px;
+    color: #334155;
+    font-size: .69rem;
+    font-weight: 700;
+    line-height: 1.15;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+
+  .permission-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-left: 1px solid #eef2f7;
+  }
+
+  .permission-cell .form-check-input {
+    float: none;
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .permission-cell .form-check-input:disabled {
+    opacity: .42;
+    cursor: not-allowed;
+  }
+
+  .permission-lock {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    background: #f1f5f9;
+    color: #94a3b8;
+    font-size: .65rem;
+  }
+
+  .permission-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-bottom: 9px;
+    color: #64748b;
+    font-size: .67rem;
+  }
+
+  .permission-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    background: #ffffff;
+    font-weight: 700;
+  }
+
+  .permission-legend-item i {
+    font-size: .68rem;
+  }
+
+  @media (max-width: 1199.98px) {
+    .permission-groups-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    .permission-groups-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .permission-default-note {
+      width: 100%;
+      margin-top: 3px;
+      margin-left: 0;
+    }
+  }
 </style>
 
 <div class="container-fluid py-4 <%= isAgentRoute ? 'agent-edit-purple' : '' %>">
@@ -454,7 +666,7 @@ const pipelineTypeLabel = (value) => {
           </p>
 
                     <p class="text-muted mb-0">
-            From here, you can update the name, email, pipeline type, and allowed permissions.
+            From here, you can update the name, email, pipeline type, and allowed View, Edit, and button permissions.
           </p>
         </div>
       </div>
@@ -468,7 +680,7 @@ const pipelineTypeLabel = (value) => {
             Edit Agent / Sub Agent
           </h5>
           <small class="text-muted">
-            Permissions that are not enabled for the parent account will not appear here.
+            Only Can View, Can Edit, and button permissions allowed by the parent account can be assigned here.
           </small>
         </div>
 
@@ -634,28 +846,77 @@ const pipelineTypeLabel = (value) => {
               </div>
             </div>
             <hr>
-           <div class="mb-2">
-  <div class="d-flex flex-wrap align-items-center gap-2 small">
-    <span class="text-dark fw-semibold">Quick:</span>
+            <!-- QUICK PERMISSION CONTROLS -->
+            <div class="mb-3">
+              <div class="permission-quickbar">
+                <span class="permission-quickbar-label">
+                  <i class="bi bi-eye me-1"></i>
+                  Columns:
+                </span>
 
-    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1" id="btnSelectAll">
-      Select all
-    </button>
+                <button
+                  type="button"
+                  class="btn btn-outline-secondary btn-sm rounded-pill"
+                  id="btnViewAll">
+                  View all
+                </button>
 
-    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1" id="btnSelectNone">
-      Select none
-    </button>
+                <button
+                  type="button"
+                  class="btn btn-outline-secondary btn-sm rounded-pill"
+                  id="btnViewNone">
+                  View none
+                </button>
 
-    <% if (isAgentRoute) { %>
-      <span class="text-muted">
-        Only your own allowed permissions can be assigned to this Sub Agent.
-      </span>
-    <% } %>
-  </div>
-</div>
+                <button
+                  type="button"
+                  class="btn btn-outline-secondary btn-sm rounded-pill"
+                  id="btnEditAll">
+                  Edit all
+                </button>
+
+                <button
+                  type="button"
+                  class="btn btn-outline-secondary btn-sm rounded-pill"
+                  id="btnEditNone">
+                  Edit none
+                </button>
+
+                <span class="permission-quickbar-label ms-md-2">
+                  <i class="bi bi-hand-index-thumb me-1"></i>
+                  Buttons:
+                </span>
+
+                <button
+                  type="button"
+                  class="btn btn-outline-secondary btn-sm rounded-pill"
+                  id="btnButtonsAll">
+                  All on
+                </button>
+
+                <button
+                  type="button"
+                  class="btn btn-outline-secondary btn-sm rounded-pill"
+                  id="btnButtonsNone">
+                  All off
+                </button>
+
+                <span class="permission-default-note">
+                  Current saved permissions are loaded below
+                </span>
+              </div>
+
+              <% if (isAgentRoute) { %>
+                <div class="small text-muted mt-2">
+                  Only your own allowed permissions can be assigned to this Sub Agent.
+                </div>
+              <% } %>
+            </div>
 <div class="mb-2">
-  <h6 class="mb-1">2. Columns & Buttons Permissions</h6>
-    <p class="text-muted small mb-2">Turn columns, buttons, and special permissions on or off.</p>
+  <h6 class="mb-1">2. Column View/Edit &amp; Button Permissions</h6>
+    <p class="text-muted small mb-2">
+  Review the user's saved Can View, Can Edit, button, and special permissions.
+</p>
 </div>
 
             <div class="accordion" id="permAccordion">
@@ -669,28 +930,160 @@ const pipelineTypeLabel = (value) => {
                   </button>
                 </h2>
 
-                <div id="collapseCols" class="accordion-collapse collapse show" aria-labelledby="headingCols" data-bs-parent="#permAccordion">
+                <div
+                  id="collapseCols"
+                  class="accordion-collapse collapse show"
+                  aria-labelledby="headingCols"
+                  data-bs-parent="#permAccordion">
+
                   <div class="accordion-body">
-                    <% if (!COL_KEYS.length) { %>
+                    <div class="permission-legend">
+                      <span class="permission-legend-item">
+                        <i class="bi bi-eye text-success"></i>
+                        Can View
+                      </span>
+
+                      <span class="permission-legend-item">
+                        <i class="bi bi-pencil-square text-primary"></i>
+                        Can Edit
+                      </span>
+
+                      <span class="permission-legend-item">
+                        <i class="bi bi-lock-fill text-secondary"></i>
+                        Not available
+                      </span>
+                    </div>
+
+                    <!--
+                      Parent ke paas View permission nahi hai to field
+                      show nahi hogi, lekin explicit OFF submit hoga.
+                    -->
+                    <% COLUMN_PERMISSION_GROUPS.forEach(function(group) { %>
+                      <% group.items.forEach(function(item) { %>
+                        <% if (!isAllowed(item.view)) { %>
+                          <input
+                            type="hidden"
+                            name="<%= item.view %>"
+                            value="">
+
+                          <% if (item.edit) { %>
+                            <input
+                              type="hidden"
+                              name="<%= item.edit %>"
+                              value="">
+                          <% } %>
+                        <% } %>
+                      <% }) %>
+                    <% }) %>
+
+                    <%
+                      const visibleColumnGroups =
+                        COLUMN_PERMISSION_GROUPS
+                          .map(function(group) {
+                            return {
+                              title: group.title,
+                              icon: group.icon,
+                              items: group.items.filter(function(item) {
+                                return isAllowed(item.view);
+                              })
+                            };
+                          })
+                          .filter(function(group) {
+                            return group.items.length > 0;
+                          });
+                    %>
+
+                    <% if (!visibleColumnGroups.length) { %>
                       <div class="alert alert-light border small mb-0">
-                        Only the columns allowed for this admin can be assigned here.
+                        You do not currently have any column permissions
+                        that can be assigned to this user.
                       </div>
                     <% } else { %>
-                      <div class="row g-2">
-                        <% COL_KEYS.forEach(function(k){ %>
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <% if (canEditPerms) { %>
-  <input type="hidden" name="<%= k %>" value="">
-  <input class="form-check-input perm-toggle" type="checkbox" id="<%= k %>" name="<%= k %>" value="on"
-         <%= isChecked(k) ? 'checked' : '' %>>
-<% } else { %>
-  <input type="hidden" name="<%= k %>" value="<%= isChecked(k) ? 'on' : '' %>">
-  <input class="form-check-input perm-toggle" type="checkbox" id="<%= k %>" value="on"
-         <%= isChecked(k) ? 'checked' : '' %> disabled>
-<% } %>
-                              <label class="form-check-label" for="<%= k %>"><%= COL_LABELS[k] %></label>
+                      <div class="permission-groups-grid">
+                        <% visibleColumnGroups.forEach(function(group) { %>
+                          <div class="permission-group-card">
+                            <div class="permission-group-title">
+                              <i class="bi <%= group.icon %> <%= themeAccordionBtnIconClass %>"></i>
+                              <span><%= group.title %></span>
                             </div>
+
+                            <div class="permission-matrix-row permission-matrix-head">
+                              <span>Column</span>
+                              <span class="permission-cell">View</span>
+                              <span class="permission-cell">Edit</span>
+                            </div>
+
+                            <% group.items.forEach(function(item) { %>
+                              <%
+                                const canGrantEdit =
+                                  !!item.edit &&
+                                  isAllowed(item.edit);
+                              %>
+
+                              <div class="permission-matrix-row">
+                                <label
+                                  class="permission-field-label"
+                                  for="<%= item.view %>">
+                                  <%= item.label %>
+                                </label>
+
+                                <div class="permission-cell">
+                                  <input
+                                    type="hidden"
+                                    name="<%= item.view %>"
+                                    value="">
+
+                                  <input
+                                    class="form-check-input col-toggle view-toggle"
+                                    type="checkbox"
+                                    id="<%= item.view %>"
+                                    name="<%= item.view %>"
+                                    value="on"
+                                    data-edit-target="<%= canGrantEdit ? item.edit : '' %>"
+                                    title="Can View: <%= item.label %>"
+                                    aria-label="Can View <%= item.label %>"
+                                    <%= isChecked(item.view) ? 'checked' : '' %>>
+                                </div>
+
+                                <div class="permission-cell">
+                                  <% if (canGrantEdit) { %>
+                                    <input
+                                      type="hidden"
+                                      name="<%= item.edit %>"
+                                      value="">
+
+                                    <input
+                                      class="form-check-input edit-toggle"
+                                      type="checkbox"
+                                      id="<%= item.edit %>"
+                                      name="<%= item.edit %>"
+                                      value="on"
+                                      data-view-target="<%= item.view %>"
+                                      title="Can Edit: <%= item.label %>"
+                                      aria-label="Can Edit <%= item.label %>"
+                                      <%= (
+                                        isChecked(item.view) &&
+                                        isChecked(item.edit)
+                                      ) ? 'checked' : '' %>>
+                                  <% } else { %>
+                                    <% if (item.edit) { %>
+                                      <input
+                                        type="hidden"
+                                        name="<%= item.edit %>"
+                                        value="">
+                                    <% } %>
+
+                                    <span
+                                      class="permission-lock"
+                                      title="<%= item.edit
+                                        ? 'You do not have Can Edit permission for this column'
+                                        : 'This value is calculated or system controlled' %>">
+                                      <i class="bi bi-lock-fill"></i>
+                                    </span>
+                                  <% } %>
+                                </div>
+                              </div>
+                            <% }) %>
                           </div>
                         <% }) %>
                       </div>
@@ -850,8 +1243,12 @@ const pipelineTypeLabel = (value) => {
 
 <script>
   (function () {
-    const btnSelectAll = document.getElementById("btnSelectAll");
-    const btnSelectNone = document.getElementById("btnSelectNone");
+    const btnViewAll = document.getElementById("btnViewAll");
+    const btnViewNone = document.getElementById("btnViewNone");
+    const btnEditAll = document.getElementById("btnEditAll");
+    const btnEditNone = document.getElementById("btnEditNone");
+    const btnButtonsAll = document.getElementById("btnButtonsAll");
+    const btnButtonsNone = document.getElementById("btnButtonsNone");
     const editUserForm = document.getElementById("editUserForm");
     const agentTypeSelect = document.getElementById("agentTypeSelect");
     const pipelineTransferTargetUserIdInput = document.getElementById("pipelineTransferTargetUserId");
@@ -1007,10 +1404,94 @@ const pipelineTypeLabel = (value) => {
         " assigned admissions. Please select a target user before saving."
       );
     }
-    function toggleAll(on) {
-      document.querySelectorAll(".perm-toggle").forEach((cb) => {
-        if (cb.disabled) return;
-        cb.checked = !!on;
+    function syncViewEditPair(viewCheckbox) {
+      if (!viewCheckbox) return;
+
+      const editTargetId = String(
+        viewCheckbox.getAttribute("data-edit-target") || ""
+      ).trim();
+
+      if (!editTargetId) return;
+
+      const editCheckbox = document.getElementById(editTargetId);
+      if (!editCheckbox) return;
+
+      if (!viewCheckbox.checked) {
+        editCheckbox.checked = false;
+        editCheckbox.disabled = true;
+      } else {
+        editCheckbox.disabled = false;
+      }
+    }
+
+    function setAllViews(enabled) {
+      document.querySelectorAll(".view-toggle").forEach((viewCheckbox) => {
+        if (viewCheckbox.disabled) return;
+
+        viewCheckbox.checked = !!enabled;
+        syncViewEditPair(viewCheckbox);
+      });
+    }
+
+    function setAllEdits(enabled) {
+      document.querySelectorAll(".edit-toggle").forEach((editCheckbox) => {
+        const viewTargetId = String(
+          editCheckbox.getAttribute("data-view-target") || ""
+        ).trim();
+
+        const viewCheckbox = viewTargetId
+          ? document.getElementById(viewTargetId)
+          : null;
+
+        if (enabled) {
+          if (!viewCheckbox || viewCheckbox.disabled) return;
+
+          viewCheckbox.checked = true;
+          editCheckbox.disabled = false;
+          editCheckbox.checked = true;
+        } else {
+          editCheckbox.checked = false;
+
+          if (viewCheckbox) {
+            syncViewEditPair(viewCheckbox);
+          }
+        }
+      });
+    }
+
+    function setAllButtons(enabled) {
+      document.querySelectorAll(".perm-toggle").forEach((checkbox) => {
+        if (checkbox.disabled) return;
+        checkbox.checked = !!enabled;
+      });
+    }
+
+    function bindViewEditPermissionRules() {
+      document.querySelectorAll(".view-toggle").forEach((viewCheckbox) => {
+        viewCheckbox.addEventListener("change", function () {
+          syncViewEditPair(this);
+        });
+
+        syncViewEditPair(viewCheckbox);
+      });
+
+      document.querySelectorAll(".edit-toggle").forEach((editCheckbox) => {
+        editCheckbox.addEventListener("change", function () {
+          if (!this.checked) return;
+
+          const viewTargetId = String(
+            this.getAttribute("data-view-target") || ""
+          ).trim();
+
+          const viewCheckbox = viewTargetId
+            ? document.getElementById(viewTargetId)
+            : null;
+
+          if (viewCheckbox) {
+            viewCheckbox.checked = true;
+            syncViewEditPair(viewCheckbox);
+          }
+        });
       });
     }
         if (editUserNameInput) {
@@ -1109,10 +1590,44 @@ if (!link || link === "Type name to generate link") return;
       });
     }
 
-    if (btnSelectAll) btnSelectAll.addEventListener("click", () => toggleAll(true));
-    if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));
+    if (btnViewAll) {
+      btnViewAll.addEventListener("click", function () {
+        setAllViews(true);
+      });
+    }
 
-        syncEditUserAdmissionLinkPreview();
+    if (btnViewNone) {
+      btnViewNone.addEventListener("click", function () {
+        setAllViews(false);
+      });
+    }
+
+    if (btnEditAll) {
+      btnEditAll.addEventListener("click", function () {
+        setAllEdits(true);
+      });
+    }
+
+    if (btnEditNone) {
+      btnEditNone.addEventListener("click", function () {
+        setAllEdits(false);
+      });
+    }
+
+    if (btnButtonsAll) {
+      btnButtonsAll.addEventListener("click", function () {
+        setAllButtons(true);
+      });
+    }
+
+    if (btnButtonsNone) {
+      btnButtonsNone.addEventListener("click", function () {
+        setAllButtons(false);
+      });
+    }
+
+    bindViewEditPermissionRules();
+    syncEditUserAdmissionLinkPreview();
     syncPipelineTransferWarning();
   })();
 </script>

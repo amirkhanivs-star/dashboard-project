@@ -17,7 +17,7 @@ const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
 
 // ================== ✅ PERMISSIONS SCHEMA ==================
-const PERMISSION_KEYS = [
+const COLUMN_VIEW_PERMISSION_KEYS = [
   "colStatus",
   "colFeeStatus",
   "colDept",
@@ -47,6 +47,41 @@ const PERMISSION_KEYS = [
   "colPaidInvoiceStatus",
   "colPaidInvoiceStatusTimestamp",
   "colActionButtons",
+];
+
+const EDIT_PERMISSION_BY_VIEW = Object.freeze({
+  colStatus: "editStatus",
+  colFeeStatus: "editFeeStatus",
+  colDept: "editDept",
+  colStudentName: "editStudentName",
+  colFatherName: "editFatherName",
+  colFatherEmail: "editFatherEmail",
+  colGrade: "editGrade",
+  colTuitionGrade: "editTuitionGrade",
+  colPhone: "editPhone",
+  colPaymentStatus: "editPaymentStatus",
+  colVerificationNumber: "editVerificationNumber",
+  colRegistrationNumber: "editRegistrationNumber",
+  colFamilyNumber: "editFamilyNumber",
+  colRegistrationFee: "editRegistrationFee",
+  colFees: "editFees",
+  colCurrency: "editCurrency",
+  colBank: "editBank",
+  colMonth: "editMonth",
+  colComment: "editComment",
+});
+
+const COLUMN_EDIT_PERMISSION_KEYS =
+  Object.values(EDIT_PERMISSION_BY_VIEW);
+
+/*
+ * Exported PERMISSION_KEYS mein sirf base permissions rahengi:
+ * Can View columns + button permissions.
+ *
+ * server.js Can Edit permissions ko separately derive karti hai.
+ */
+const PERMISSION_KEYS = [
+  ...COLUMN_VIEW_PERMISSION_KEYS,
 
   "btnEditRow",
   "btnUpdateRow",
@@ -61,13 +96,67 @@ const PERMISSION_KEYS = [
   "canDeleteAdmissions",
 ];
 
-const LEGACY_MAP = {
-  showPhone: "colPhone",
-  showPaymentStatus: "colPaymentStatus",
-  showPaidUpto: "colPaidUpto",
-  showVerificationNumber: "colVerificationNumber",
-  showRegistrationNumber: "colRegistrationNumber",
-};
+/*
+ * Database normalization aur migration ko
+ * base + Can Edit dono permissions handle karni hain.
+ */
+const ALL_PERMISSION_KEYS = [
+  ...PERMISSION_KEYS,
+  ...COLUMN_EDIT_PERMISSION_KEYS,
+];
+
+const LEGACY_ALIASES_BY_PERMISSION =
+  Object.freeze({
+    colStudentName: [
+      "colStudent",
+    ],
+
+    colFatherName: [
+      "colFather",
+    ],
+
+    colPhone: [
+      "showPhone",
+    ],
+
+    colPaymentStatus: [
+      "showPaymentStatus",
+    ],
+
+    colPaidUpto: [
+      "showPaidUpto",
+    ],
+
+    colVerificationNumber: [
+      "showVerificationNumber",
+    ],
+
+    colRegistrationNumber: [
+      "showRegistrationNumber",
+    ],
+
+    btnUpdateRow: [
+      "canUpdateAdmissions",
+      "canUpdateAccounts",
+    ],
+
+    btnPdf: [
+      "canDownloadPdf",
+    ],
+
+    btnBilling: [
+      "canOpenBilling",
+      "canSaveBilling",
+    ],
+
+    btnWhatsApp: [
+      "canSendWhatsApp",
+    ],
+
+    btnUpload: [
+      "canUploadFiles",
+    ],
+  });
 
 function safeParseJson(str, fallback = {}) {
   try {
@@ -105,20 +194,15 @@ function permissionValueEnabled(value) {
   ].includes(normalized);
 }
 
-function buildDefaultPermissions(role) {
-  const roleKey = String(role || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-
-  const isSuper =
-    roleKey === "super_admin" ||
-    roleKey === "superadmin";
-
+function buildDefaultPermissions(_role) {
   const obj = {};
 
-  for (const key of PERMISSION_KEYS) {
-    obj[key] = isSuper;
+  /*
+   * Kisi role ko database layer se automatic full access nahi dena.
+   * Super Admin permissions bhi Developer Dashboard se controlled rahengi.
+   */
+  for (const key of ALL_PERMISSION_KEYS) {
+    obj[key] = false;
   }
 
   return obj;
@@ -134,40 +218,89 @@ function normalizePermissions(rawPermissions, role) {
       ? { ...parsed }
       : {};
 
-  for (const [legacyKey, newKey] of Object.entries(LEGACY_MAP)) {
-    const hasNewKey =
-      Object.prototype.hasOwnProperty.call(
-        raw,
-        newKey
-      );
+  const hasOwn = (key) =>
+    Object.prototype.hasOwnProperty.call(raw, key);
 
-    const hasLegacyKey =
-      Object.prototype.hasOwnProperty.call(
-        raw,
-        legacyKey
-      );
-
-    if (!hasNewKey && hasLegacyKey) {
-      raw[newKey] =
-        permissionValueEnabled(raw[legacyKey]);
+  for (
+    const [newKey, legacyKeys]
+    of Object.entries(
+      LEGACY_ALIASES_BY_PERMISSION
+    )
+  ) {
+    // Explicit new permission ko legacy value
+    // kabhi overwrite nahi karegi.
+    if (hasOwn(newKey)) {
+      continue;
     }
+
+    const existingLegacyKeys =
+      legacyKeys.filter((legacyKey) =>
+        hasOwn(legacyKey)
+      );
+
+    if (!existingLegacyKeys.length) {
+      continue;
+    }
+
+    /*
+     * Ek permission ke multiple old aliases ho
+     * sakte hain. Kisi ek old alias ka ON hona
+     * new permission ko safely ON preserve karega.
+     */
+    raw[newKey] =
+      existingLegacyKeys.some(
+        (legacyKey) =>
+          permissionValueEnabled(
+            raw[legacyKey]
+          )
+      );
   }
+
+  /*
+   * Purane users ke permissions object mein koi edit* key nahi hoti.
+   * Unke old visible editable columns ko View + Edit preserve karna hai.
+   *
+   * New schema mein kam az kam ek edit* key present hoti hai;
+   * us case mein missing Edit permissions automatic ON nahi hongi.
+   */
+  const hasExplicitEditSchema =
+    COLUMN_EDIT_PERMISSION_KEYS.some((key) =>
+      hasOwn(key)
+    );
 
   const defaults =
     buildDefaultPermissions(role);
 
   const clean = {};
 
-  for (const key of PERMISSION_KEYS) {
-    const hasSavedValue =
-      Object.prototype.hasOwnProperty.call(
-        raw,
-        key
-      );
-
-    clean[key] = hasSavedValue
+  for (const key of ALL_PERMISSION_KEYS) {
+    clean[key] = hasOwn(key)
       ? permissionValueEnabled(raw[key])
       : defaults[key];
+  }
+
+  if (!hasExplicitEditSchema) {
+    for (
+      const [viewKey, editKey]
+      of Object.entries(EDIT_PERMISSION_BY_VIEW)
+    ) {
+      clean[editKey] = !!clean[viewKey];
+    }
+  }
+
+  /*
+   * Edit permission kabhi View ke baghair active nahi reh sakti.
+   *
+   * Can Edit ko Can View ke saath clamp karo.
+   * Edit permission kabhi bhi View permission ko automatic ON nahi karegi.
+   */
+  for (
+    const [viewKey, editKey]
+    of Object.entries(EDIT_PERMISSION_BY_VIEW)
+  ) {
+    clean[editKey] =
+      !!clean[viewKey] &&
+      !!clean[editKey];
   }
 
   return clean;
@@ -247,6 +380,14 @@ db.exec(`
     accounts_registration_number_assigned_at TEXT,
     registration_number_removed INTEGER DEFAULT 0,
     accounts_family_number TEXT,
+    accounts_family_number_updated_at TEXT,
+    accounts_verification_number_updated_at TEXT,
+    accounts_registration_number_updated_at TEXT,
+
+    accounts_number_note_updated_at TEXT,
+    accounts_number_note_updated_by_id INTEGER,
+    accounts_number_note_updated_by_name TEXT,
+    accounts_number_note_updated_by_role TEXT,
 
     school_return_status TEXT DEFAULT '',
     school_returned_to_user_id INTEGER,
@@ -281,6 +422,22 @@ db.exec(`
     forwarded_owner_user_id INTEGER,
     forwarded_owner_user_name TEXT,
     forwarded_owner_user_role TEXT,
+
+    accounts_transfer_note TEXT,
+    accounts_transfer_reason TEXT,
+
+    accounts_transfer_from_user_id INTEGER,
+    accounts_transfer_from_user_name TEXT,
+    accounts_transfer_from_user_role TEXT,
+
+    accounts_transfer_to_user_id INTEGER,
+    accounts_transfer_to_user_name TEXT,
+    accounts_transfer_to_user_role TEXT,
+
+    accounts_transfer_by_id INTEGER,
+    accounts_transfer_by_name TEXT,
+    accounts_transfer_by_role TEXT,
+    accounts_transfer_at TEXT,
 
     admission_registration_fee TEXT,
     admission_fees TEXT,
@@ -488,10 +645,71 @@ ensureColumn("admissions", "accounts_payment_status", "TEXT");
 ensureColumn("admissions", "accounts_paid_upto", "TEXT");
 ensureColumn("admissions", "accounts_verification_number", "TEXT");
 ensureColumn("admissions", "accounts_registration_number", "TEXT");
-ensureColumn("admissions", "accounts_registration_number_assigned_at", "TEXT");
-ensureColumn("admissions", "registration_number_removed", "INTEGER DEFAULT 0");
-ensureColumn("admissions", "accounts_family_number", "TEXT");
-ensureColumn("admissions", "school_return_status", "TEXT DEFAULT ''");
+ensureColumn(
+  "admissions",
+  "accounts_registration_number_assigned_at",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "registration_number_removed",
+  "INTEGER DEFAULT 0"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_family_number",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_family_number_updated_at",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_verification_number_updated_at",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_registration_number_updated_at",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_number_note_updated_at",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_number_note_updated_by_id",
+  "INTEGER"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_number_note_updated_by_name",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_number_note_updated_by_role",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "school_return_status",
+  "TEXT DEFAULT ''"
+);
 ensureColumn("admissions", "school_returned_to_user_id", "INTEGER");
 ensureColumn("admissions", "school_returned_at", "TEXT");
 ensureColumn("admissions", "school_reuploaded_at", "TEXT");
@@ -524,6 +742,69 @@ ensureColumn("admissions", "forwarded_by_role", "TEXT");
 ensureColumn("admissions", "forwarded_owner_user_id", "INTEGER");
 ensureColumn("admissions", "forwarded_owner_user_name", "TEXT");
 ensureColumn("admissions", "forwarded_owner_user_role", "TEXT");
+
+ensureColumn("admissions", "accounts_transfer_note", "TEXT");
+ensureColumn("admissions", "accounts_transfer_reason", "TEXT");
+
+ensureColumn(
+  "admissions",
+  "accounts_transfer_from_user_id",
+  "INTEGER"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_transfer_from_user_name",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_transfer_from_user_role",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_transfer_to_user_id",
+  "INTEGER"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_transfer_to_user_name",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_transfer_to_user_role",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_transfer_by_id",
+  "INTEGER"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_transfer_by_name",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_transfer_by_role",
+  "TEXT"
+);
+
+ensureColumn(
+  "admissions",
+  "accounts_transfer_at",
+  "TEXT"
+);
 
 try {
   db.exec(`
@@ -959,9 +1240,17 @@ try {
         accounts_paid_upto TEXT,
         accounts_verification_number TEXT,
         accounts_registration_number TEXT,
-        accounts_registration_number_assigned_at TEXT,
+      accounts_registration_number_assigned_at TEXT,
         registration_number_removed INTEGER DEFAULT 0,
         accounts_family_number TEXT,
+        accounts_family_number_updated_at TEXT,
+        accounts_verification_number_updated_at TEXT,
+        accounts_registration_number_updated_at TEXT,
+
+        accounts_number_note_updated_at TEXT,
+        accounts_number_note_updated_by_id INTEGER,
+        accounts_number_note_updated_by_name TEXT,
+        accounts_number_note_updated_by_role TEXT,
 
         school_return_status TEXT DEFAULT '',
         school_returned_to_user_id INTEGER,
@@ -996,6 +1285,22 @@ try {
         forwarded_owner_user_id INTEGER,
         forwarded_owner_user_name TEXT,
         forwarded_owner_user_role TEXT,
+
+        accounts_transfer_note TEXT,
+        accounts_transfer_reason TEXT,
+
+        accounts_transfer_from_user_id INTEGER,
+        accounts_transfer_from_user_name TEXT,
+        accounts_transfer_from_user_role TEXT,
+
+        accounts_transfer_to_user_id INTEGER,
+        accounts_transfer_to_user_name TEXT,
+        accounts_transfer_to_user_role TEXT,
+
+        accounts_transfer_by_id INTEGER,
+        accounts_transfer_by_name TEXT,
+        accounts_transfer_by_role TEXT,
+        accounts_transfer_at TEXT,
 
         admission_registration_fee TEXT,
         admission_fees TEXT,
@@ -1056,6 +1361,15 @@ try {
         accounts_payment_status, accounts_paid_upto, accounts_verification_number,
         accounts_registration_number, accounts_registration_number_assigned_at,
         registration_number_removed, accounts_family_number,
+        accounts_family_number_updated_at,
+        accounts_verification_number_updated_at,
+        accounts_registration_number_updated_at,
+
+        accounts_number_note_updated_at,
+        accounts_number_note_updated_by_id,
+        accounts_number_note_updated_by_name,
+        accounts_number_note_updated_by_role,
+
         school_return_status, school_returned_to_user_id, school_returned_at, school_reuploaded_at,
         reupload_tag_active,
         forward_status, forwarded_to_department, forwarded_to_type, forwarded_at,
@@ -1065,13 +1379,26 @@ try {
         accounts_completed_at, accounts_completed_by_id, accounts_completed_by_name, accounts_completed_by_role,
         forwarded_by_id, forwarded_by_name, forwarded_by_role,
         forwarded_owner_user_id, forwarded_owner_user_name, forwarded_owner_user_role,
-                admission_registration_fee, admission_fees, currency_code, bank_name, fee_history, admission_month,
+
+        accounts_transfer_note, accounts_transfer_reason,
+        accounts_transfer_from_user_id,
+        accounts_transfer_from_user_name,
+        accounts_transfer_from_user_role,
+        accounts_transfer_to_user_id,
+        accounts_transfer_to_user_name,
+        accounts_transfer_to_user_role,
+        accounts_transfer_by_id,
+        accounts_transfer_by_name,
+        accounts_transfer_by_role,
+        accounts_transfer_at,
+
+        admission_registration_fee, admission_fees, currency_code, bank_name, fee_history, admission_month,
         admission_total_paid, admission_total_fees, admission_pending_dues, admission_comment,
         admission_invoice_status, admission_invoice_status_timestamp,
         admission_paid_invoice_status, admission_paid_invoice_status_timestamp,
         january, february, march, april, may, june, july, august, september, october, november, december,
         billing_json, monthly_fee_current, has_extra_fee,
-                whatsapp, pdf_path,
+        whatsapp, pdf_path,
         is_deleted, deleted_at, deleted_by, deleted_by_id,
         created_at
       )
@@ -1086,10 +1413,19 @@ try {
         student_name, gender, dob, grade, father_name, guardian_whatsapp, religion, father_email, father_occupation, nationality,
         present_address, city, state, secondary_contact, session, registration_date, processed_by,
         tuition_grade, phone,
-                accounts_payment_status, accounts_paid_upto, accounts_verification_number,
+        accounts_payment_status, accounts_paid_upto, accounts_verification_number,
         accounts_registration_number, accounts_registration_number_assigned_at,
-        registration_number_removed, accounts_family_number,
-                school_return_status, school_returned_to_user_id, school_returned_at, school_reuploaded_at,
+                registration_number_removed, accounts_family_number,
+        accounts_family_number_updated_at,
+        accounts_verification_number_updated_at,
+        accounts_registration_number_updated_at,
+
+        accounts_number_note_updated_at,
+        accounts_number_note_updated_by_id,
+        accounts_number_note_updated_by_name,
+        accounts_number_note_updated_by_role,
+
+        school_return_status, school_returned_to_user_id, school_returned_at, school_reuploaded_at,
         COALESCE(reupload_tag_active, 0),
         COALESCE(NULLIF(TRIM(forward_status), ''), 'not_forwarded'),
         forwarded_to_department, forwarded_to_type, forwarded_at,
@@ -1100,13 +1436,26 @@ try {
         accounts_completed_at, accounts_completed_by_id, accounts_completed_by_name, accounts_completed_by_role,
         forwarded_by_id, forwarded_by_name, forwarded_by_role,
         forwarded_owner_user_id, forwarded_owner_user_name, forwarded_owner_user_role,
-                admission_registration_fee, admission_fees, currency_code, bank_name, fee_history, admission_month,
-                admission_total_paid, admission_total_fees, admission_pending_dues, admission_comment,
+
+        accounts_transfer_note, accounts_transfer_reason,
+        accounts_transfer_from_user_id,
+        accounts_transfer_from_user_name,
+        accounts_transfer_from_user_role,
+        accounts_transfer_to_user_id,
+        accounts_transfer_to_user_name,
+        accounts_transfer_to_user_role,
+        accounts_transfer_by_id,
+        accounts_transfer_by_name,
+        accounts_transfer_by_role,
+        accounts_transfer_at,
+
+        admission_registration_fee, admission_fees, currency_code, bank_name, fee_history, admission_month,
+        admission_total_paid, admission_total_fees, admission_pending_dues, admission_comment,
         admission_invoice_status, admission_invoice_status_timestamp,
         admission_paid_invoice_status, admission_paid_invoice_status_timestamp,
         january, february, march, april, may, june, july, august, september, october, november, december,
         billing_json, monthly_fee_current, has_extra_fee,
-               whatsapp, pdf_path,
+        whatsapp, pdf_path,
         COALESCE(is_deleted, 0), deleted_at, deleted_by, deleted_by_id,
         created_at
       FROM admissions;
@@ -1166,19 +1515,56 @@ try {
 
 // ================== ✅ PERMISSIONS MIGRATION ==================
 try {
-  const rows = db.prepare("SELECT id, role, permissions FROM users").all();
-  const upd = db.prepare("UPDATE users SET permissions = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?");
+  const rows = db
+    .prepare("SELECT id, role, permissions FROM users")
+    .all();
+
+  const upd = db.prepare(`
+    UPDATE users
+    SET permissions = ?
+    WHERE id = ?
+  `);
+
+  let migratedUsers = 0;
 
   const tx = db.transaction(() => {
-    for (const r of rows) {
-      const normalized = normalizePermissions(r.permissions, r.role);
-      upd.run(JSON.stringify(normalized), r.id);
+    for (const row of rows) {
+      const currentPermissions =
+        safeParseJson(row.permissions, {});
+
+      const normalizedPermissions =
+        normalizePermissions(
+          currentPermissions,
+          row.role
+        );
+
+      const currentJson =
+        JSON.stringify(currentPermissions);
+
+      const normalizedJson =
+        JSON.stringify(normalizedPermissions);
+
+      if (currentJson === normalizedJson) {
+        continue;
+      }
+
+      upd.run(normalizedJson, row.id);
+      migratedUsers += 1;
     }
   });
 
   tx();
+
+  if (migratedUsers > 0) {
+    console.log(
+      `Normalized permissions for ${migratedUsers} user(s)`
+    );
+  }
 } catch (e) {
-  console.error("permissions normalize error:", e.message);
+  console.error(
+    "permissions normalize error:",
+    e.message
+  );
 }
 
 // ================== ✅ Seed default WhatsApp options if table is empty ==================

@@ -2164,7 +2164,6 @@
                 <th>ID</th>
                 <th>Name</th>
                 <th>Email</th>
-                <th>Password</th>
                 <th>Role</th>
                 <th>Department</th>
                 <th>Agent Type</th>
@@ -2174,7 +2173,7 @@
               </tr>
             </thead>
             <tbody id="usersTableBody">
-              <tr><td colspan="10">Loading users...</td></tr>
+              <tr><td colspan="9">Loading users...</td></tr>
             </tbody>
           </table>
         </div>
@@ -2678,24 +2677,65 @@
               <option value="school">School</option>
               <option value="quran">Quran</option>
               <option value="tuition">Tuition</option>
-              <option value="accounts">Accounts</option>
-              <option value="school accounts">School Accounts</option>
+              <option value="accounts">School Accounts</option>
             </select>
           </div>
 
           <div class="col-md-4">
-            <div class="mini-label">Agent Type</div>
-            <input class="mini-input" id="editAgentType" type="text" placeholder="accounts / admission / management">
+            <div class="mini-label">Pipeline / Agent Type</div>
+
+            <select
+              class="mini-select"
+              id="editAgentType"
+            >
+              <option value="">
+                Select pipeline / agent type
+              </option>
+            </select>
+
+            <div class="setting-note">
+              Required only for Agent and Sub Agent.
+            </div>
           </div>
 
           <div class="col-md-6">
-            <div class="mini-label">Access Scope</div>
-            <select class="mini-select" id="editAccessScope">
-              <option value="own">Own</option>
-              <option value="team">Team</option>
-              <option value="all">All</option>
-              <option value="school_accounts">School Accounts</option>
+            <div class="mini-label">
+              Access Scope
+            </div>
+
+            <input
+              class="mini-input bg-light"
+              id="editAccessScope"
+              type="text"
+              value="own"
+              readonly
+            >
+
+            <div class="setting-note">
+              Automatically controlled by role and department.
+            </div>
+          </div>
+
+          <div
+            class="col-md-6"
+            id="editAssignedAdminWrap"
+          >
+            <div class="mini-label">
+              Assigned Admin
+            </div>
+
+            <select
+              class="mini-select"
+              id="editAssignedAdmin"
+            >
+              <option value="">
+                Select assigned admin
+              </option>
             </select>
+
+            <div class="setting-note">
+              Required for Agent and Sub Agent.
+            </div>
           </div>
 
           <div class="col-md-6">
@@ -2776,24 +2816,70 @@
               <option value="school" selected>School</option>
               <option value="quran">Quran</option>
               <option value="tuition">Tuition</option>
-              <option value="accounts">Accounts</option>
-              <option value="school accounts">School Accounts</option>
+              <option value="accounts">School Accounts</option>
             </select>
           </div>
 
           <div class="col-md-3">
-            <div class="mini-label">Agent Type</div>
-            <input class="mini-input" id="createAgentType" type="text" placeholder="accounts / admission / management">
+            <div class="mini-label">
+              Pipeline / Agent Type
+            </div>
+
+            <select
+              class="mini-select"
+              id="createAgentType"
+            >
+              <option value="">
+                Select pipeline / agent type
+              </option>
+            </select>
+
+            <div class="setting-note">
+              Required only for Agent and Sub Agent.
+            </div>
           </div>
 
           <div class="col-md-3">
-            <div class="mini-label">Access Scope</div>
-            <select class="mini-select" id="createAccessScope">
-              <option value="own" selected>Own</option>
-              <option value="team">Team</option>
-              <option value="all">All</option>
-              <option value="school_accounts">School Accounts</option>
+            <div class="mini-label">
+              Access Scope
+            </div>
+
+            <input
+              class="mini-input bg-light"
+              id="createAccessScope"
+              type="text"
+              value="own"
+              readonly
+            >
+
+            <div class="setting-note">
+              Automatically controlled by role and department.
+            </div>
+          </div>
+
+          <div
+            class="col-md-6"
+            id="createAssignedAdminWrap"
+          >
+            <div class="mini-label">
+              Assigned Admin
+            </div>
+
+            <select
+              class="mini-select"
+              id="createAssignedAdmin"
+            >
+              <option value="">
+                Select assigned admin
+              </option>
             </select>
+
+            <div
+              class="setting-note"
+              id="createAssignedAdminNote"
+            >
+              Required for Agent and Sub Agent.
+            </div>
           </div>
 
           <div class="col-12">
@@ -3336,101 +3422,160 @@ filteredUsers: [],
     'GEMINI_MODEL'
   ];
   const HIDDEN_PERMISSION_KEYS = new Set([
-  'viewAdmissions',
-  'viewAccounts',
-  'viewManagement',
-  'colMessageStatus'
-]);
+    'viewAdmissions',
+    'viewAccounts',
+    'viewManagement',
+    'colMessageStatus'
+  ]);
+
+  const VIEW_PERMISSION_KEYS = [
+    'colStatus',
+    'colFeeStatus',
+    'colDept',
+    'colStudentName',
+    'colFatherName',
+    'colFatherEmail',
+    'colGrade',
+    'colTuitionGrade',
+    'colPhone',
+    'colProcessedBy',
+    'colPaymentStatus',
+    'colPaidUpto',
+    'colVerificationNumber',
+    'colRegistrationNumber',
+    'colFamilyNumber',
+    'colRegistrationFee',
+    'colFees',
+    'colCurrency',
+    'colBank',
+    'colMonth',
+    'colTotalFees',
+    'colPendingDues',
+    'colReceivedPayment',
+    'colComment',
+    'colInvoiceStatus',
+    'colInvoiceStatusTimestamp',
+    'colPaidInvoiceStatus',
+    'colPaidInvoiceStatusTimestamp',
+    'colActionButtons'
+  ];
+
+  const EDIT_PERMISSION_BY_VIEW = Object.freeze({
+    colStatus: 'editStatus',
+    colFeeStatus: 'editFeeStatus',
+    colDept: 'editDept',
+    colStudentName: 'editStudentName',
+    colFatherName: 'editFatherName',
+    colFatherEmail: 'editFatherEmail',
+    colGrade: 'editGrade',
+    colTuitionGrade: 'editTuitionGrade',
+    colPhone: 'editPhone',
+    colPaymentStatus: 'editPaymentStatus',
+    colVerificationNumber: 'editVerificationNumber',
+    colRegistrationNumber: 'editRegistrationNumber',
+    colFamilyNumber: 'editFamilyNumber',
+    colRegistrationFee: 'editRegistrationFee',
+    colFees: 'editFees',
+    colCurrency: 'editCurrency',
+    colBank: 'editBank',
+    colMonth: 'editMonth',
+    colComment: 'editComment'
+  });
+
+  const EDIT_PERMISSION_KEYS =
+    Object.values(EDIT_PERMISSION_BY_VIEW);
+
+  const VIEW_PERMISSION_BY_EDIT = Object.freeze(
+    Object.entries(EDIT_PERMISSION_BY_VIEW)
+      .reduce((map, [viewKey, editKey]) => {
+        map[editKey] = viewKey;
+        return map;
+      }, {})
+  );
+
+  const ACTION_PERMISSION_KEYS = [
+    'btnEditRow',
+    'btnUpdateRow',
+    'btnPdf',
+    'btnBilling',
+    'btnWhatsApp',
+    'btnUpload',
+    'btnFiles',
+    'btnDetails',
+    'canDeleteFiles',
+    'canDeleteAdmissions'
+  ];
 
   const ALL_PERMISSION_KEYS = [
-  'colStatus',
-  'colFeeStatus',
-  'colDept',
-  'colStudentName',
-  'colFatherName',
-  'colFatherEmail',
-  'colGrade',
-  'colTuitionGrade',
-  'colPhone',
-  'colProcessedBy',
+    ...VIEW_PERMISSION_KEYS,
+    ...EDIT_PERMISSION_KEYS,
+    ...ACTION_PERMISSION_KEYS
+  ];
 
-  'colPaymentStatus',
-  'colPaidUpto',
-  'colVerificationNumber',
-  'colRegistrationNumber',
-  'colFamilyNumber',
-  'colRegistrationFee',
-  'colFees',
-  'colCurrency',
-  'colBank',
-  'colMonth',
-  'colTotalFees',
-  'colPendingDues',
-  'colReceivedPayment',
-  'colComment',
-  'colInvoiceStatus',
-  'colInvoiceStatusTimestamp',
-  'colPaidInvoiceStatus',
-  'colPaidInvoiceStatusTimestamp',
-  'colActionButtons',
+  const VIEW_PERMISSION_LABELS = {
+    colStatus: 'Can View: Current Status',
+    colFeeStatus: 'Can View: Fee Status',
+    colDept: 'Can View: Department',
+    colStudentName: 'Can View: Student',
+    colFatherName: 'Can View: Father',
+    colFatherEmail: 'Can View: Father Email',
+    colGrade: 'Can View: Grade',
+    colTuitionGrade: 'Can View: Grade Section',
+    colPhone: 'Can View: Phone Number',
+    colProcessedBy: 'Can View: Processed By',
+    colPaymentStatus: 'Can View: Payment Status',
+    colPaidUpto: 'Can View: Paid Upto',
+    colVerificationNumber: 'Can View: Verification #',
+    colRegistrationNumber: 'Can View: Registration #',
+    colFamilyNumber: 'Can View: Family #',
+    colRegistrationFee: 'Can View: Registration Fee',
+    colFees: 'Can View: Fees',
+    colCurrency: 'Can View: Currency',
+    colBank: 'Can View: Bank',
+    colMonth: 'Can View: Month',
+    colTotalFees: 'Can View: Total Fees',
+    colPendingDues: 'Can View: Pending Dues',
+    colReceivedPayment: 'Can View: Received Payment',
+    colComment: 'Can View: Comment',
+    colInvoiceStatus: 'Can View: Invoice Status',
+    colInvoiceStatusTimestamp: 'Can View: Invoice Status Time',
+    colPaidInvoiceStatus: 'Can View: Paid Invoice Status',
+    colPaidInvoiceStatusTimestamp: 'Can View: Paid Invoice Time',
+    colActionButtons: 'Can View: Action Buttons'
+  };
 
-  'btnEditRow',
-  'btnDetails',
-  'btnUpdateRow',
-  'btnPdf',
-  'btnBilling',
-  'btnWhatsApp',
-  'btnUpload',
-  'btnFiles',
+  const ACTION_PERMISSION_LABELS = {
+    btnEditRow: 'Edit Button',
+    btnUpdateRow: 'Update / Save Button',
+    btnPdf: 'PDF Button',
+    btnBilling: 'Billing Button',
+    btnWhatsApp: 'WhatsApp Button',
+    btnUpload: 'Upload Button',
+    btnFiles: 'Files Button',
+    btnDetails: 'View Details Button',
+    canDeleteFiles: 'Delete Files',
+    canDeleteAdmissions: 'Delete Admissions'
+  };
 
-  'canDeleteFiles',
-  'canDeleteAdmissions'
-];
+  const PERMISSION_LABELS = Object.freeze({
+    ...VIEW_PERMISSION_LABELS,
 
-const PERMISSION_LABELS = {
-  colStatus: 'Current Status Column',
-  colFeeStatus: 'Fee Status Column',
-  colDept: 'Dept Column',
-  colStudentName: 'Student Column',
-  colFatherName: 'Father Column',
-  colFatherEmail: 'Father Email Column',
-  colGrade: 'Grade Column',
-  colTuitionGrade: 'Grade Section Column',
-  colPhone: 'Phone Number Column',
-  colProcessedBy: 'Processed By Column',
+    ...Object.entries(EDIT_PERMISSION_BY_VIEW)
+      .reduce((map, [viewKey, editKey]) => {
+        map[editKey] = String(
+          VIEW_PERMISSION_LABELS[viewKey] ||
+          viewKey
+        ).replace(
+          /^Can View:/,
+          'Can Edit:'
+        );
 
-  colPaymentStatus: 'Payment Status Column',
-  colPaidUpto: 'Paid Upto Column',
-  colVerificationNumber: 'Verif # Column',
-  colRegistrationNumber: 'Reg # Column',
-  colFamilyNumber: 'Family Num # Column',
-  colRegistrationFee: 'Registration Fee Column',
-  colFees: 'Fees Column',
-  colCurrency: 'Currency Column',
-  colBank: 'Bank Column',
-  colMonth: 'Month Column',
-  colTotalFees: 'Total Fees Column',
-  colPendingDues: 'Pending Dues Column',
-  colReceivedPayment: 'Received Payment Column',
-  colComment: 'Comment Column',
-  colInvoiceStatus: 'Invoice Status Column',
-  colInvoiceStatusTimestamp: 'Invoice Status Timestamp Column',
-  colPaidInvoiceStatus: 'Paid Invoice Status Column',
-  colPaidInvoiceStatusTimestamp: 'Paid Invoice Status Timestamp Column',
-  colActionButtons: 'Action Buttons Column',
+        return map;
+      }, {}),
 
-  btnEditRow: 'Edit Button',
-  btnDetails: 'View Details Button',
-  btnUpdateRow: 'Update/Save Button',
-  btnPdf: 'PDF Button',
-  btnBilling: 'Billing Button',
-  btnWhatsApp: 'WhatsApp Button',
-  btnUpload: 'Upload Button',
-  btnFiles: 'Files Button',
+    ...ACTION_PERMISSION_LABELS
+  });
 
-  canDeleteFiles: 'Delete Files Button',
-  canDeleteAdmissions: 'Delete Admissions Button'
-};
   function qs(selector){
     return document.querySelector(selector);
   }
@@ -3475,6 +3620,452 @@ const PERMISSION_LABELS = {
 
   function normalize(value){
     return cleanText(value).toLowerCase();
+  }
+
+  function normalizeUserDepartmentKey(value){
+    const cleanValue = normalize(value)
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (
+      [
+        'accounts',
+        'account',
+        'school account',
+        'school accounts',
+        'accounts department',
+        'account department',
+        'school accounts department'
+      ].includes(cleanValue)
+    ) {
+      return 'accounts';
+    }
+
+    if (
+      [
+        'school',
+        'school dept',
+        'school department'
+      ].includes(cleanValue)
+    ) {
+      return 'school';
+    }
+
+    if (
+      [
+        'quran',
+        'quran dept',
+        'quran department'
+      ].includes(cleanValue)
+    ) {
+      return 'quran';
+    }
+
+    if (
+      [
+        'tuition',
+        'tuition dept',
+        'tuition department'
+      ].includes(cleanValue)
+    ) {
+      return 'tuition';
+    }
+
+    return cleanValue;
+  }
+
+  const SCHOOL_AGENT_TYPE_OPTIONS = [
+    {
+      value: 'accounts',
+      label: 'Accounts'
+    },
+    {
+      value: 'admission',
+      label: 'Admission'
+    },
+    {
+      value: 'management',
+      label: 'Management'
+    }
+  ];
+
+  const SCHOOL_ACCOUNTS_AGENT_TYPE_OPTIONS = [
+    {
+      value: 'print_record_update',
+      label: 'Print + Record Update'
+    },
+    {
+      value: 'verification_registration',
+      label: 'Verification & Registration'
+    },
+    {
+      value: 'paid_slip',
+      label: 'Paid Slip'
+    }
+  ];
+
+  function isDeveloperPipelineRole(role){
+    const cleanRole = normalize(role);
+
+    return (
+      cleanRole === 'agent' ||
+      cleanRole === 'sub_agent'
+    );
+  }
+
+  function getDeveloperAgentTypeOptions(dept){
+    return (
+      normalizeUserDepartmentKey(dept) ===
+      'accounts'
+    )
+      ? SCHOOL_ACCOUNTS_AGENT_TYPE_OPTIONS
+      : SCHOOL_AGENT_TYPE_OPTIONS;
+  }
+
+  function getDeveloperAccessScope(
+    role,
+    dept
+  ){
+    const cleanRole =
+      normalize(role);
+
+    const cleanDept =
+      normalizeUserDepartmentKey(
+        dept
+      );
+
+    if (cleanRole === 'super_admin') {
+      return 'all';
+    }
+
+    if (cleanDept === 'accounts') {
+      return 'school_accounts';
+    }
+
+    if (cleanRole === 'admin') {
+      return 'team';
+    }
+
+    return 'own';
+  }
+
+  function syncDeveloperAccessScope(
+    roleSelector,
+    deptSelector,
+    accessScopeSelector
+  ){
+    const roleInput =
+      qs(roleSelector);
+
+    const deptInput =
+      qs(deptSelector);
+
+    const accessScopeInput =
+      qs(accessScopeSelector);
+
+    if (
+      !roleInput ||
+      !deptInput ||
+      !accessScopeInput
+    ) {
+      return;
+    }
+
+    accessScopeInput.value =
+      getDeveloperAccessScope(
+        roleInput.value,
+        deptInput.value
+      );
+  }
+
+  function getDeveloperAssignableAdmins(
+    dept,
+    excludedUserId
+  ){
+    const cleanDept =
+      normalizeUserDepartmentKey(
+        dept
+      );
+
+    const excludedId =
+      Number(excludedUserId || 0);
+
+    return state.users
+      .filter((userRow) => {
+        if (
+          !userRow ||
+          typeof userRow !== 'object'
+        ) {
+          return false;
+        }
+
+        if (
+          normalize(userRow.role) !==
+          'admin'
+        ) {
+          return false;
+        }
+
+        if (
+          normalizeUserDepartmentKey(
+            userRow.dept
+          ) !== cleanDept
+        ) {
+          return false;
+        }
+
+        if (
+          excludedId &&
+          Number(userRow.id) ===
+          excludedId
+        ) {
+          return false;
+        }
+
+        return Number(userRow.id || 0) > 0;
+      })
+      .sort((firstAdmin, secondAdmin) =>
+        cleanText(firstAdmin.name)
+          .localeCompare(
+            cleanText(secondAdmin.name)
+          )
+      );
+  }
+
+  function syncDeveloperAssignedAdminSelect(
+    roleSelector,
+    deptSelector,
+    adminSelector,
+    preferredValue,
+    excludedUserId
+  ){
+    const roleInput =
+      qs(roleSelector);
+
+    const deptInput =
+      qs(deptSelector);
+
+    const adminInput =
+      qs(adminSelector);
+
+    if (
+      !roleInput ||
+      !deptInput ||
+      !adminInput
+    ) {
+      return;
+    }
+
+    const role =
+      normalize(roleInput.value);
+
+    const dept =
+      normalizeUserDepartmentKey(
+        deptInput.value
+      );
+
+    const currentValue =
+      String(
+        typeof preferredValue ===
+          'undefined'
+          ? adminInput.value || ''
+          : preferredValue || ''
+      );
+
+    const admins =
+      getDeveloperAssignableAdmins(
+        dept,
+        excludedUserId
+      );
+
+    adminInput.innerHTML =
+      '<option value="">' +
+      'Select assigned admin' +
+      '</option>';
+
+    admins.forEach((admin) => {
+      const option =
+        document.createElement('option');
+
+      option.value =
+        String(admin.id);
+
+      option.textContent =
+        cleanText(admin.name) +
+        (
+          cleanText(admin.email)
+            ? ' (' +
+              cleanText(admin.email) +
+              ')'
+            : ''
+        );
+
+      adminInput.appendChild(option);
+    });
+
+    if (!isDeveloperPipelineRole(role)) {
+      adminInput.value = '';
+      adminInput.disabled = true;
+      adminInput.required = false;
+      return;
+    }
+
+    adminInput.disabled = false;
+    adminInput.required = true;
+
+    adminInput.value =
+      admins.some(
+        (admin) =>
+          String(admin.id) ===
+          currentValue
+      )
+        ? currentValue
+        : '';
+
+    if (!admins.length) {
+      const noAdminOption =
+        document.createElement('option');
+
+      noAdminOption.value = '';
+      noAdminOption.textContent =
+        'No Admin found for this department';
+
+      adminInput.innerHTML = '';
+      adminInput.appendChild(
+        noAdminOption
+      );
+    }
+  }
+
+  function getValidatedDeveloperAssignedAdminId(
+    role,
+    dept,
+    value,
+    excludedUserId
+  ){
+    if (!isDeveloperPipelineRole(role)) {
+      return 0;
+    }
+
+    const selectedAdminId =
+      Number(value || 0);
+
+    if (!selectedAdminId) {
+      return null;
+    }
+
+    const isValidAdmin =
+      getDeveloperAssignableAdmins(
+        dept,
+        excludedUserId
+      ).some(
+        (admin) =>
+          Number(admin.id) ===
+          selectedAdminId
+      );
+
+    return isValidAdmin
+      ? selectedAdminId
+      : null;
+  }
+
+  function syncDeveloperAgentTypeSelect(
+    roleSelector,
+    deptSelector,
+    agentTypeSelector,
+    preferredValue
+  ){
+    const roleInput = qs(roleSelector);
+    const deptInput = qs(deptSelector);
+    const agentTypeInput =
+      qs(agentTypeSelector);
+
+    if (
+      !roleInput ||
+      !deptInput ||
+      !agentTypeInput
+    ) {
+      return;
+    }
+
+    const role = normalize(
+      roleInput.value
+    );
+
+    const dept =
+      normalizeUserDepartmentKey(
+        deptInput.value
+      );
+
+    const currentValue =
+      cleanText(
+        typeof preferredValue ===
+          'undefined'
+          ? agentTypeInput.value
+          : preferredValue
+      );
+
+    const options =
+      getDeveloperAgentTypeOptions(
+        dept
+      );
+
+    agentTypeInput.innerHTML =
+      '<option value="">' +
+      'Select pipeline / agent type' +
+      '</option>';
+
+    options.forEach((item) => {
+      const option =
+        document.createElement('option');
+
+      option.value = item.value;
+      option.textContent = item.label;
+
+      agentTypeInput.appendChild(option);
+    });
+
+    if (!isDeveloperPipelineRole(role)) {
+      agentTypeInput.value = '';
+      agentTypeInput.disabled = true;
+      agentTypeInput.required = false;
+      return;
+    }
+
+    agentTypeInput.disabled = false;
+    agentTypeInput.required = true;
+
+    agentTypeInput.value =
+      options.some(
+        (item) =>
+          item.value === currentValue
+      )
+        ? currentValue
+        : '';
+  }
+
+  function getValidatedDeveloperAgentType(
+    role,
+    dept,
+    value
+  ){
+    if (!isDeveloperPipelineRole(role)) {
+      return '';
+    }
+
+    const cleanValue =
+      cleanText(value);
+
+    const allowedValues =
+      getDeveloperAgentTypeOptions(dept)
+        .map((item) => item.value);
+
+    return allowedValues.includes(
+      cleanValue
+    )
+      ? cleanValue
+      : null;
   }
 
   function getDeptData(dept){
@@ -3565,7 +4156,39 @@ const PERMISSION_LABELS = {
       ]);
 
       state.stats = statsRes.stats || {};
-      state.users = usersRes.users || [];
+      state.users =
+        Array.isArray(usersRes.users)
+          ? usersRes.users
+              .filter(function(userRow) {
+                return (
+                  userRow &&
+                  typeof userRow === 'object' &&
+                  !Array.isArray(userRow)
+                );
+              })
+              .map(function(userRow) {
+                const safeUser = {
+                  ...userRow
+                };
+
+                /*
+                 * Passwords, password hashes aur reset
+                 * tokens browser state, table aur normal
+                 * dashboard exports mein kabhi nahi rakhne.
+                 */
+                delete safeUser.password;
+                delete safeUser.passwordHash;
+                delete safeUser.password_hash;
+
+                delete safeUser.resetToken;
+                delete safeUser.reset_token;
+
+                delete safeUser.passwordResetToken;
+                delete safeUser.password_reset_token;
+
+                return safeUser;
+              })
+          : [];
       state.apiSettings = normalizeApiSettings(
   apiRes.settings ??
   apiRes.values ??
@@ -3831,13 +4454,36 @@ const PERMISSION_LABELS = {
   }
 
   function renderUsers(){
-    const deptFilter = normalize(qs('#userDeptFilter')?.value || 'all');
-    const roleFilter = normalize(qs('#userRoleFilter')?.value || 'all');
-    const q = normalize(qs('#globalSearch')?.value || '');
+    const rawDeptFilter =
+      qs('#userDeptFilter')?.value || 'all';
+
+    const deptFilter =
+      rawDeptFilter === 'all'
+        ? 'all'
+        : normalizeUserDepartmentKey(
+            rawDeptFilter
+          );
+
+    const roleFilter =
+      normalize(
+        qs('#userRoleFilter')?.value ||
+        'all'
+      );
+
+    const q =
+      normalize(
+        qs('#globalSearch')?.value ||
+        ''
+      );
 
     state.filteredUsers = state.users.filter((u) => {
-      const dept = normalize(u.dept);
-      const role = normalize(u.role);
+      const dept =
+        normalizeUserDepartmentKey(
+          u.dept
+        );
+
+      const role =
+        normalize(u.role);
 
       if (deptFilter !== 'all' && dept !== deptFilter) return false;
       if (roleFilter !== 'all' && role !== roleFilter) return false;
@@ -3868,7 +4514,7 @@ const PERMISSION_LABELS = {
     if (!body) return;
 
     if (!state.filteredUsers.length) {
-      body.innerHTML = `<tr><td colspan="10">No users found.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="9">No users found.</td></tr>`;
       return;
     }
 
@@ -3877,7 +4523,6 @@ const PERMISSION_LABELS = {
         <td>${escapeHtml(u.id)}</td>
         <td>${escapeHtml(u.name || '-')}</td>
         <td>${escapeHtml(u.email || '-')}</td>
-        <td><span class="pill warn">${escapeHtml(u.password || 'Protected')}</span></td>
         <td><span class="pill">${escapeHtml(formatRole(u.role))}</span></td>
         <td>${escapeHtml(formatDept(u.dept))}</td>
         <td>${escapeHtml(u.agentType || '-')}</td>
@@ -4948,10 +5593,42 @@ async function uploadCroppedDeveloperProfileImage(){
     qs('#editUserId').value = user.id || '';
     qs('#editName').value = user.name || '';
     qs('#editEmail').value = user.email || '';
-    qs('#editRole').value = user.role || 'agent';
-    qs('#editDept').value = user.dept || 'school';
-    qs('#editAgentType').value = user.agentType || '';
-    qs('#editAccessScope').value = user.access_scope || 'own';
+    qs('#editRole').value =
+      user.role || 'agent';
+
+    qs('#editDept').value =
+      normalizeUserDepartmentKey(
+        user.dept
+      ) || 'school';
+
+    syncDeveloperAgentTypeSelect(
+      '#editRole',
+      '#editDept',
+      '#editAgentType',
+      user.agentType || ''
+    );
+
+        syncDeveloperAccessScope(
+      '#editRole',
+      '#editDept',
+      '#editAccessScope'
+    );
+
+    const currentAssignedAdminId =
+      user.assigned_admin_id ??
+      user.assignedAdminId ??
+      user.managerId ??
+      user.manager_id ??
+      '';
+
+    syncDeveloperAssignedAdminSelect(
+      '#editRole',
+      '#editDept',
+      '#editAssignedAdmin',
+      currentAssignedAdminId,
+      user.id
+    );
+
     qs('#resetPasswordInput').value = '';
     qs('#resetResultPassword').value = '';
     qs('#resetResultBox').classList.add('d-none');
@@ -4961,23 +5638,103 @@ async function uploadCroppedDeveloperProfileImage(){
   }
 
   async function saveActiveUser(){
-    const id = Number(qs('#editUserId').value || 0);
-    if (!id) return;
+    const id = Number(
+      qs('#editUserId').value || 0
+    );
+
+    if (!id) {
+      return;
+    }
+
+    const role =
+      normalize(
+        qs('#editRole').value
+      );
+
+    const dept =
+      normalizeUserDepartmentKey(
+        qs('#editDept').value
+      );
+
+    const agentType =
+      getValidatedDeveloperAgentType(
+        role,
+        dept,
+        qs('#editAgentType').value
+      );
+
+    const accessScope =
+      getDeveloperAccessScope(
+        role,
+        dept
+      );
+
+    const assignedAdminId =
+      getValidatedDeveloperAssignedAdminId(
+        role,
+        dept,
+        qs('#editAssignedAdmin').value,
+        id
+      );
+
+    if (agentType === null) {
+      toast(
+        'Please select a valid Pipeline / Agent Type for this Agent or Sub Agent.',
+        'danger'
+      );
+
+      return;
+    }
+
+    if (assignedAdminId === null) {
+      toast(
+        'Please select a valid Assigned Admin from the same department for this Agent or Sub Agent.',
+        'danger'
+      );
+
+      return;
+    }
 
     try {
-      await apiPost('/api/developer/users/' + id + '/update', {
-        name: qs('#editName').value,
-        email: qs('#editEmail').value,
-        role: qs('#editRole').value,
-        dept: qs('#editDept').value,
-        agentType: qs('#editAgentType').value,
-        access_scope: qs('#editAccessScope').value
-      });
+      await apiPost(
+        '/api/developer/users/' +
+        id +
+        '/update',
+        {
+          name:
+            qs('#editName').value,
 
-      toast('User updated successfully.');
+          email:
+            qs('#editEmail').value,
+
+          role,
+
+          dept,
+
+          agentType,
+
+          access_scope:
+            accessScope,
+
+          assigned_admin_id:
+            assignedAdminId || null,
+
+          managerId:
+            assignedAdminId || null
+        }
+      );
+
+      toast(
+        'User updated successfully.'
+      );
+
       await loadAll();
     } catch (err) {
-      toast(err.message || 'User update failed.', 'danger');
+      toast(
+        err.message ||
+        'User update failed.',
+        'danger'
+      );
     }
   }
 
@@ -5046,81 +5803,406 @@ async function uploadCroppedDeveloperProfileImage(){
   }
 
   function permissionLabel(key){
-  return PERMISSION_LABELS[key] || String(key || '')
-    .replace(/([A-Z])/g, ' $1')
-    .replaceAll('_', ' ')
-    .replace(/^./, function (x) { return x.toUpperCase(); });
-}
+    return PERMISSION_LABELS[key] || String(key || '')
+      .replace(/([A-Z])/g, ' $1')
+      .replaceAll('_', ' ')
+      .replace(/^./, function (x) {
+        return x.toUpperCase();
+      });
+  }
 
-function getPermissionKeysFromUsers(){
-  const keys = new Set(ALL_PERMISSION_KEYS);
+  function permissionEnabled(value){
+    if (value === true || value === 1) {
+      return true;
+    }
 
-  state.users.forEach((u) => {
-    Object.keys(u.permissions || {}).forEach((key) => {
-      if (HIDDEN_PERMISSION_KEYS.has(key)) return;
-      keys.add(key);
+    if (
+      value === false ||
+      value === 0 ||
+      value === null ||
+      typeof value === 'undefined'
+    ) {
+      return false;
+    }
+
+    return [
+      '1',
+      'true',
+      'on',
+      'yes'
+    ].includes(
+      String(value)
+        .trim()
+        .toLowerCase()
+    );
+  }
+
+  function normalizePermissionObject(rawPermissions){
+    let source = rawPermissions;
+
+    try {
+      if (typeof source === 'string') {
+        source = JSON.parse(source);
+      }
+    } catch (err) {
+      source = {};
+    }
+
+    if (Array.isArray(source)) {
+      return source.reduce((map, key) => {
+        const cleanKey =
+          String(key || '').trim();
+
+        if (
+          cleanKey &&
+          ALL_PERMISSION_KEYS.includes(cleanKey)
+        ) {
+          map[cleanKey] = true;
+        }
+
+        return map;
+      }, {});
+    }
+
+    if (
+      !source ||
+      typeof source !== 'object'
+    ) {
+      return {};
+    }
+
+    return source;
+  }
+
+  function hasExplicitEditPermissionSchema(permissions){
+    return EDIT_PERMISSION_KEYS.some((key) =>
+      Object.prototype.hasOwnProperty.call(
+        permissions || {},
+        key
+      )
+    );
+  }
+
+  function getPermissionKeysFromUsers(){
+    return [...ALL_PERMISSION_KEYS];
+  }
+
+  function syncPermissionDependencies(containerSelector){
+    const box = qs(containerSelector);
+    if (!box) return;
+
+    qsa(
+      containerSelector +
+      ' .permission-view-checkbox'
+    ).forEach((viewInput) => {
+      const editKey =
+        viewInput.dataset.editKey || '';
+
+      if (!editKey) {
+        return;
+      }
+
+      const editInput = box.querySelector(
+        '.permission-edit-checkbox' +
+        '[data-permission-key="' +
+        editKey +
+        '"]'
+      );
+
+      if (!editInput) {
+        return;
+      }
+
+      if (!viewInput.checked) {
+        editInput.checked = false;
+        editInput.disabled = true;
+      } else {
+        editInput.disabled = false;
+      }
     });
-  });
 
-  return Array.from(keys).filter((key) => !HIDDEN_PERMISSION_KEYS.has(key));
-}
+    qsa(
+      containerSelector +
+      ' .permission-edit-checkbox'
+    ).forEach((editInput) => {
+      if (!editInput.checked) {
+        return;
+      }
 
-function renderPermissionCheckboxes(containerSelector, permissions){
-  const box = qs(containerSelector);
-  if (!box) return;
+      const viewKey =
+        editInput.dataset.viewKey || '';
 
-  const finalPermissions = permissions || {};
-  const keys = getPermissionKeysFromUsers();
+      const viewInput = box.querySelector(
+        '.permission-view-checkbox' +
+        '[data-permission-key="' +
+        viewKey +
+        '"]'
+      );
 
-  box.innerHTML = keys.map((key) => {
-    const checked = finalPermissions[key] ? 'checked' : '';
+      if (viewInput) {
+        viewInput.checked = true;
+        editInput.disabled = false;
+      }
+    });
+  }
 
-    return `
-      <label class="perm-item" title="${escapeHtml(key)}">
-        <input type="checkbox" class="permission-checkbox" data-permission-key="${escapeHtml(key)}" ${checked}>
-        <span>${escapeHtml(permissionLabel(key))}</span>
-      </label>
-    `;
-  }).join('');
-}
+  function renderPermissionCheckboxes(containerSelector, permissions){
+    const box = qs(containerSelector);
+    if (!box) return;
 
-function readPermissionCheckboxes(containerSelector){
-  const permissions = {};
+    const finalPermissions =
+      normalizePermissionObject(permissions);
 
-  qsa(containerSelector + ' .permission-checkbox').forEach((input) => {
-    const key = input.dataset.permissionKey;
-    if (!key) return;
-    permissions[key] = !!input.checked;
-  });
+    const hasExplicitEditSchema =
+      hasExplicitEditPermissionSchema(
+        finalPermissions
+      );
 
-  return permissions;
-}
+    const keys = getPermissionKeysFromUsers();
 
-function setAllPermissionCheckboxes(containerSelector, checked){
-  qsa(containerSelector + ' .permission-checkbox').forEach((input) => {
-    input.checked = !!checked;
-  });
-}
+    box.innerHTML = keys.map((key) => {
+      const isView =
+        VIEW_PERMISSION_KEYS.includes(key);
 
-function applyCreateRolePermissionDefaults(){
-  const role = normalize(
-    qs('#createRole')?.value || ''
-  );
+      const isEdit =
+        EDIT_PERMISSION_KEYS.includes(key);
 
-  setAllPermissionCheckboxes(
-    '#createPermissionsGrid',
-    role === 'super_admin'
-  );
-}
+      const viewKey =
+        isEdit
+          ? VIEW_PERMISSION_BY_EDIT[key]
+          : '';
+
+      const editKey =
+        isView
+          ? EDIT_PERMISSION_BY_VIEW[key] || ''
+          : '';
+
+      let checked =
+        permissionEnabled(
+          finalPermissions[key]
+        );
+
+      /*
+       * Legacy user:
+       * Edit keys save nahi hue to existing View permission
+       * matching Edit access ko preserve karegi.
+       */
+      if (
+        isEdit &&
+        !hasExplicitEditSchema &&
+        viewKey
+      ) {
+        checked =
+          permissionEnabled(
+            finalPermissions[viewKey]
+          );
+      }
+
+      if (
+        isEdit &&
+        viewKey &&
+        !permissionEnabled(
+          finalPermissions[viewKey]
+        ) &&
+        hasExplicitEditSchema
+      ) {
+        checked = false;
+      }
+
+      const typeClass =
+        isView
+          ? 'permission-view-checkbox'
+          : (
+              isEdit
+                ? 'permission-edit-checkbox'
+                : 'permission-action-checkbox'
+            );
+
+      return `
+        <label
+          class="perm-item"
+          title="${escapeHtml(key)}">
+          <input
+            type="checkbox"
+            class="permission-checkbox ${typeClass}"
+            data-permission-key="${escapeHtml(key)}"
+            data-edit-key="${escapeHtml(editKey)}"
+            data-view-key="${escapeHtml(viewKey)}"
+            ${checked ? 'checked' : ''}>
+
+          <span>
+            ${escapeHtml(permissionLabel(key))}
+          </span>
+        </label>
+      `;
+    }).join('');
+
+    box.onchange = (event) => {
+      const input = event.target.closest(
+        '.permission-checkbox'
+      );
+
+      if (!input) {
+        return;
+      }
+
+      if (
+        input.classList.contains(
+          'permission-view-checkbox'
+        ) &&
+        !input.checked
+      ) {
+        const editKey =
+          input.dataset.editKey || '';
+
+        const editInput = editKey
+          ? box.querySelector(
+              '.permission-edit-checkbox' +
+              '[data-permission-key="' +
+              editKey +
+              '"]'
+            )
+          : null;
+
+        if (editInput) {
+          editInput.checked = false;
+        }
+      }
+
+      if (
+        input.classList.contains(
+          'permission-edit-checkbox'
+        ) &&
+        input.checked
+      ) {
+        const viewKey =
+          input.dataset.viewKey || '';
+
+        const viewInput = viewKey
+          ? box.querySelector(
+              '.permission-view-checkbox' +
+              '[data-permission-key="' +
+              viewKey +
+              '"]'
+            )
+          : null;
+
+        if (viewInput) {
+          viewInput.checked = true;
+        }
+      }
+
+      syncPermissionDependencies(
+        containerSelector
+      );
+    };
+
+    syncPermissionDependencies(
+      containerSelector
+    );
+  }
+
+  function readPermissionCheckboxes(containerSelector){
+    const permissions =
+      Object.fromEntries(
+        ALL_PERMISSION_KEYS.map((key) => [
+          key,
+          false
+        ])
+      );
+
+    qsa(
+      containerSelector +
+      ' .permission-checkbox'
+    ).forEach((input) => {
+      const key =
+        input.dataset.permissionKey;
+
+      if (
+        !key ||
+        !ALL_PERMISSION_KEYS.includes(key)
+      ) {
+        return;
+      }
+
+      permissions[key] =
+        !!input.checked;
+    });
+
+    EDIT_PERMISSION_KEYS.forEach((editKey) => {
+      const viewKey =
+        VIEW_PERMISSION_BY_EDIT[editKey];
+
+      if (!permissions[viewKey]) {
+        permissions[editKey] = false;
+      }
+    });
+
+    return permissions;
+  }
+
+  function setAllPermissionCheckboxes(containerSelector, checked){
+    qsa(
+      containerSelector +
+      ' .permission-checkbox'
+    ).forEach((input) => {
+      input.checked = !!checked;
+    });
+
+    syncPermissionDependencies(
+      containerSelector
+    );
+  }
+
+  function applyCreateRolePermissionDefaults(){
+    const containerSelector =
+      '#createPermissionsGrid';
+
+    qsa(
+      containerSelector +
+      ' .permission-checkbox'
+    ).forEach((input) => {
+      const key =
+        input.dataset.permissionKey || '';
+
+      input.checked =
+        VIEW_PERMISSION_KEYS.includes(key) ||
+        ACTION_PERMISSION_KEYS.includes(key);
+    });
+
+    syncPermissionDependencies(
+      containerSelector
+    );
+  }
 
 function openCreateUserModal(){
   qs('#createName').value = '';
   qs('#createEmail').value = '';
   qs('#createPassword').value = '';
+
   qs('#createRole').value = 'agent';
   qs('#createDept').value = 'school';
-  qs('#createAgentType').value = '';
-  qs('#createAccessScope').value = 'own';
+
+  syncDeveloperAgentTypeSelect(
+    '#createRole',
+    '#createDept',
+    '#createAgentType',
+    ''
+  );
+
+    syncDeveloperAccessScope(
+    '#createRole',
+    '#createDept',
+    '#createAccessScope'
+  );
+
+  syncDeveloperAssignedAdminSelect(
+    '#createRole',
+    '#createDept',
+    '#createAssignedAdmin',
+    ''
+  );
+
   qs('#createdUserEmail').value = '';
   qs('#createdUserPassword').value = '';
   qs('#createResultBox').classList.add('d-none');
@@ -5133,34 +6215,127 @@ function openCreateUserModal(){
 }
 
 async function createDeveloperUser(){
-  const name = cleanText(qs('#createName').value);
-  const email = cleanText(qs('#createEmail').value).toLowerCase();
+  const name =
+    cleanText(
+      qs('#createName').value
+    );
+
+  const email =
+    cleanText(
+      qs('#createEmail').value
+    ).toLowerCase();
+
+  const role =
+    normalize(
+      qs('#createRole').value
+    );
+
+  const dept =
+    normalizeUserDepartmentKey(
+      qs('#createDept').value
+    );
+
+  const agentType =
+    getValidatedDeveloperAgentType(
+      role,
+      dept,
+      qs('#createAgentType').value
+    );
+
+  const accessScope =
+    getDeveloperAccessScope(
+      role,
+      dept
+    );
+
+  const assignedAdminId =
+    getValidatedDeveloperAssignedAdminId(
+      role,
+      dept,
+      qs('#createAssignedAdmin').value
+    );
 
   if (!name || !email) {
-    toast('Name and email are required.', 'danger');
+    toast(
+      'Name and email are required.',
+      'danger'
+    );
+
+    return;
+  }
+
+  if (agentType === null) {
+    toast(
+      'Please select a valid Pipeline / Agent Type for this Agent or Sub Agent.',
+      'danger'
+    );
+
+    return;
+  }
+
+  if (assignedAdminId === null) {
+    toast(
+      'Please select a valid Assigned Admin from the same department for this Agent or Sub Agent.',
+      'danger'
+    );
+
     return;
   }
 
   try {
-    const result = await apiPost('/api/developer/users/create', {
-      name,
-      email,
-      password: qs('#createPassword').value,
-      role: qs('#createRole').value,
-      dept: qs('#createDept').value,
-      agentType: qs('#createAgentType').value,
-      access_scope: qs('#createAccessScope').value,
-      permissions: readPermissionCheckboxes('#createPermissionsGrid')
-    });
+    const result = await apiPost(
+      '/api/developer/users/create',
+      {
+        name,
 
-    qs('#createdUserEmail').value = result.email || email;
-    qs('#createdUserPassword').value = result.temporaryPassword || '';
-    qs('#createResultBox').classList.remove('d-none');
+        email,
 
-    toast(result.message || 'User created successfully.');
+        password:
+          qs('#createPassword').value,
+
+        role,
+
+        dept,
+
+        agentType,
+
+        access_scope:
+          accessScope,
+
+        assigned_admin_id:
+          assignedAdminId || null,
+
+        managerId:
+          assignedAdminId || null,
+
+        permissions:
+          readPermissionCheckboxes(
+            '#createPermissionsGrid'
+          )
+      }
+    );
+
+    qs('#createdUserEmail').value =
+      result.email || email;
+
+    qs('#createdUserPassword').value =
+      result.temporaryPassword || '';
+
+    qs('#createResultBox')
+      .classList.remove('d-none');
+
+    toast(
+      result.message ||
+      'User created successfully.'
+    );
+
     await loadAll();
   } catch (err) {
-    toast(err.message || 'User create failed.', 'danger');
+    toast(
+      err.message ||
+      'User create failed.',
+      'danger'
+    );
   }
 }
 
@@ -5231,7 +6406,14 @@ function downloadFullDatabase(){
     downloadJSON('developer-' + dept + '-data.json', {
       dept,
       stats: getDeptData(dept),
-      users: state.users.filter((u) => normalize(u.dept) === dept)
+      users: state.users.filter((u) =>
+        normalizeUserDepartmentKey(
+          u.dept
+        ) ===
+        normalizeUserDepartmentKey(
+          dept
+        )
+      )
     });
   }
 
@@ -5408,17 +6590,117 @@ qs('#developerCropModal')?.addEventListener(
   }
 );
 
+qs('#editRole')?.addEventListener(
+  'change',
+  () => {
+    syncDeveloperAgentTypeSelect(
+      '#editRole',
+      '#editDept',
+      '#editAgentType'
+    );
+
+    syncDeveloperAccessScope(
+      '#editRole',
+      '#editDept',
+      '#editAccessScope'
+    );
+
+    syncDeveloperAssignedAdminSelect(
+      '#editRole',
+      '#editDept',
+      '#editAssignedAdmin',
+      undefined,
+      Number(
+        qs('#editUserId')?.value || 0
+      )
+    );
+  }
+);
+
+qs('#editDept')?.addEventListener(
+  'change',
+  () => {
+    syncDeveloperAgentTypeSelect(
+      '#editRole',
+      '#editDept',
+      '#editAgentType'
+    );
+
+    syncDeveloperAccessScope(
+      '#editRole',
+      '#editDept',
+      '#editAccessScope'
+    );
+
+    syncDeveloperAssignedAdminSelect(
+      '#editRole',
+      '#editDept',
+      '#editAssignedAdmin',
+      undefined,
+      Number(
+        qs('#editUserId')?.value || 0
+      )
+    );
+  }
+);
+
+qs('#createRole')?.addEventListener(
+  'change',
+  () => {
+    syncDeveloperAgentTypeSelect(
+      '#createRole',
+      '#createDept',
+      '#createAgentType'
+    );
+
+    syncDeveloperAccessScope(
+      '#createRole',
+      '#createDept',
+      '#createAccessScope'
+    );
+
+    syncDeveloperAssignedAdminSelect(
+      '#createRole',
+      '#createDept',
+      '#createAssignedAdmin'
+    );
+  }
+);
+
+qs('#createDept')?.addEventListener(
+  'change',
+  () => {
+    syncDeveloperAgentTypeSelect(
+      '#createRole',
+      '#createDept',
+      '#createAgentType'
+    );
+
+    syncDeveloperAccessScope(
+      '#createRole',
+      '#createDept',
+      '#createAccessScope'
+    );
+
+    syncDeveloperAssignedAdminSelect(
+      '#createRole',
+      '#createDept',
+      '#createAssignedAdmin'
+    );
+  }
+);
+
 qs('#saveUserBtn')?.addEventListener(
   'click',
   saveActiveUser
 );
-  qs('#resetPasswordBtn')?.addEventListener('click', resetActiveUserPassword);
+
+qs('#resetPasswordBtn')?.addEventListener(
+  'click',
+  resetActiveUserPassword
+);
   qs('#createUserBtn')?.addEventListener('click', createDeveloperUser);
 
-  qs('#createRole')?.addEventListener(
-    'change',
-    applyCreateRolePermissionDefaults
-  );
 
   qs('#savePermissionsBtn')?.addEventListener('click', saveUserPermissions);
     qsa('.developer-profile-input').forEach((input) => {

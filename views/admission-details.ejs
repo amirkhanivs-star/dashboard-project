@@ -612,6 +612,7 @@ hasAny
           user?.permissions ||
           user?.perms ||
           user?.permission ||
+          user?.permissionMap ||
           {}
         );
 
@@ -623,20 +624,352 @@ hasAny
     detailsPerms = {};
   }
 
-  const canEditAdmission =
-    role === 'super_admin' ||
-    role === 'superadmin' ||
-    detailsPerms === true ||
-    (Array.isArray(detailsPerms) && (
-      detailsPerms.includes('*') ||
-      detailsPerms.includes('all') ||
-      detailsPerms.includes('btnEditRow')
-    )) ||
-    (
+  function getNestedPerm(obj, path) {
+    try {
+      const parts = String(path || '')
+        .split('.')
+        .filter(Boolean);
+
+      let current = obj;
+
+      for (const part of parts) {
+        if (
+          !current ||
+          typeof current !== 'object' ||
+          !(part in current)
+        ) {
+          return undefined;
+        }
+
+        current = current[part];
+      }
+
+      return current;
+    } catch (e) {
+      return undefined;
+    }
+  }
+
+  function permissionEnabled(value) {
+    if (value === true || value === 1) {
+      return true;
+    }
+
+    if (
+      value === false ||
+      value === 0 ||
+      value === null ||
+      typeof value === 'undefined'
+    ) {
+      return false;
+    }
+
+    return [
+      '1',
+      'true',
+      'on',
+      'yes'
+    ].includes(
+      String(value)
+        .trim()
+        .toLowerCase()
+    );
+  }
+
+  function hasOwnPermission(key) {
+    return !!(
       detailsPerms &&
       typeof detailsPerms === 'object' &&
-      detailsPerms.btnEditRow === true
+      !Array.isArray(detailsPerms) &&
+      Object.prototype.hasOwnProperty.call(
+        detailsPerms,
+        key
+      )
     );
+  }
+
+  function hasKey(key) {
+    const cleanKey = String(key || '').trim();
+
+    if (!cleanKey || !detailsPerms) {
+      return false;
+    }
+
+    if (detailsPerms === true) {
+      return true;
+    }
+
+    if (Array.isArray(detailsPerms)) {
+      return (
+        detailsPerms.includes(cleanKey) ||
+        detailsPerms.includes('*') ||
+        detailsPerms.includes('all')
+      );
+    }
+
+    if (typeof detailsPerms === 'object') {
+      if (hasOwnPermission(cleanKey)) {
+        return permissionEnabled(
+          detailsPerms[cleanKey]
+        );
+      }
+
+      const nested =
+        getNestedPerm(detailsPerms, cleanKey);
+
+      if (typeof nested !== 'undefined') {
+        return permissionEnabled(nested);
+      }
+
+      const alt =
+        cleanKey.replace(/\./g, '_');
+
+      if (hasOwnPermission(alt)) {
+        return permissionEnabled(
+          detailsPerms[alt]
+        );
+      }
+    }
+
+    return false;
+  }
+
+  function canAny(keys) {
+    return (keys || [])
+      .filter(Boolean)
+      .some(key => hasKey(key));
+  }
+
+  const COLUMN_VIEW_KEY_MAP = Object.freeze({
+    status: 'colStatus',
+    feeStatus: 'colFeeStatus',
+    dept: 'colDept',
+    student: 'colStudentName',
+    father: 'colFatherName',
+    fatherEmail: 'colFatherEmail',
+    grade: 'colGrade',
+    tuitionGrade: 'colTuitionGrade',
+    phone: 'colPhone',
+    processedBy: 'colProcessedBy',
+    paymentStatus: 'colPaymentStatus',
+    paidUpto: 'colPaidUpto',
+    verificationNumber: 'colVerificationNumber',
+    registrationNumber: 'colRegistrationNumber',
+    familyNumber: 'colFamilyNumber',
+    registrationFee: 'colRegistrationFee',
+    fees: 'colFees',
+    currency: 'colCurrency',
+    bank: 'colBank',
+    month: 'colMonth',
+    totalFees: 'colTotalFees',
+    pendingDues: 'colPendingDues',
+    receivedPayment: 'colReceivedPayment',
+    comment: 'colComment',
+    invoiceStatus: 'colInvoiceStatus',
+    invoiceStatusTimestamp: 'colInvoiceStatusTimestamp',
+    paidInvoiceStatus: 'colPaidInvoiceStatus',
+    paidInvoiceStatusTimestamp: 'colPaidInvoiceStatusTimestamp',
+    actionButtons: 'colActionButtons'
+  });
+
+  const COLUMN_VIEW_LEGACY_KEY_MAP = Object.freeze({
+    phone: ['showPhone'],
+    paymentStatus: ['showPaymentStatus'],
+    paidUpto: ['showPaidUpto'],
+    verificationNumber: ['showVerificationNumber'],
+    registrationNumber: ['showRegistrationNumber']
+  });
+
+  function canCol(name) {
+    const key = String(name || '').trim();
+    const permissionKey = COLUMN_VIEW_KEY_MAP[key];
+
+    if (!permissionKey) {
+      return false;
+    }
+
+    const legacyKeys =
+      COLUMN_VIEW_LEGACY_KEY_MAP[key] || [];
+
+    const pascalKey =
+      key.charAt(0).toUpperCase() +
+      key.slice(1);
+
+    return canAny([
+      permissionKey,
+      ...legacyKeys,
+
+      `col.${key}`,
+      `show_${key}`,
+      `show${pascalKey}`,
+
+      `super.col.${key}`,
+      `super.column.${key}`,
+
+      `admin.col.${key}`,
+      `admin.column.${key}`,
+
+      `agent.col.${key}`,
+      `agent.column.${key}`,
+
+      `subagent.col.${key}`,
+      `subagent.column.${key}`,
+
+      `sub_agent.col.${key}`,
+      `sub_agent.column.${key}`,
+
+      `dashboard_super.col.${key}`,
+      `dashboard-super.col.${key}`,
+
+      `dashboard_admin.col.${key}`,
+      `dashboard-admin.col.${key}`,
+
+      `dashboard_agent.col.${key}`,
+      `dashboard-agent.col.${key}`,
+
+      `dashboard_sub_agent.col.${key}`,
+      `dashboard-sub-agent.col.${key}`,
+
+      `perm.super.col.${key}`,
+      `perm.admin.col.${key}`,
+      `perm.agent.col.${key}`,
+      `perm.sub_agent.col.${key}`,
+
+      key
+    ]);
+  }
+
+  const BUTTON_PERMISSION_KEY_MAP = Object.freeze({
+    edit: 'btnEditRow',
+    billing: 'btnBilling',
+    pdf: 'btnPdf',
+    details: 'btnDetails'
+  });
+
+  function canBtn(name) {
+    const key = String(name || '').trim();
+    const permissionKey =
+      BUTTON_PERMISSION_KEY_MAP[key];
+
+    if (!permissionKey) {
+      return false;
+    }
+
+    const pascalKey =
+      key.charAt(0).toUpperCase() +
+      key.slice(1);
+
+    return canAny([
+      permissionKey,
+
+      `super.btn.${key}`,
+      `super.button.${key}`,
+
+      `admin.btn.${key}`,
+      `admin.button.${key}`,
+
+      `agent.btn.${key}`,
+      `agent.button.${key}`,
+
+      `subagent.btn.${key}`,
+      `subagent.button.${key}`,
+
+      `sub_agent.btn.${key}`,
+      `sub_agent.button.${key}`,
+
+      `dashboard_super.btn.${key}`,
+      `dashboard-super.btn.${key}`,
+
+      `dashboard_admin.btn.${key}`,
+      `dashboard-admin.btn.${key}`,
+
+      `dashboard_agent.btn.${key}`,
+      `dashboard-agent.btn.${key}`,
+
+      `dashboard_sub_agent.btn.${key}`,
+      `dashboard-sub-agent.btn.${key}`,
+
+      `perm.super.btn.${key}`,
+      `perm.admin.btn.${key}`,
+      `perm.agent.btn.${key}`,
+      `perm.sub_agent.btn.${key}`,
+
+      `btn_${key}`,
+      `btn${pascalKey}`,
+      key
+    ]);
+  }
+
+  const P = {
+    col: {
+      status: canCol('status'),
+      feeStatus: canCol('feeStatus'),
+      dept: canCol('dept'),
+      student: canCol('student'),
+      father: canCol('father'),
+      fatherEmail: canCol('fatherEmail'),
+      grade: canCol('grade'),
+      tuitionGrade: canCol('tuitionGrade'),
+      phone: canCol('phone'),
+      processedBy: canCol('processedBy'),
+      paymentStatus: canCol('paymentStatus'),
+      paidUpto: canCol('paidUpto'),
+      verif: canCol('verificationNumber'),
+      reg: canCol('registrationNumber'),
+      family: canCol('familyNumber'),
+      registrationFee: canCol('registrationFee'),
+      fees: canCol('fees'),
+      currency: canCol('currency'),
+      bank: canCol('bank'),
+      month: canCol('month'),
+      totalFees: canCol('totalFees'),
+      pendingDues: canCol('pendingDues'),
+      receivedPayment: canCol('receivedPayment'),
+      comment: canCol('comment'),
+      invoiceStatus: canCol('invoiceStatus'),
+      invoiceStatusTimestamp: canCol('invoiceStatusTimestamp'),
+      paidInvoiceStatus: canCol('paidInvoiceStatus'),
+      paidInvoiceStatusTimestamp: canCol('paidInvoiceStatusTimestamp'),
+      actionButtons: canCol('actionButtons')
+    },
+
+    btn: {
+      edit: canBtn('edit'),
+      billing: canBtn('billing'),
+      pdf: canBtn('pdf'),
+      details: canBtn('details')
+    }
+  };
+
+  const canEditAdmission =
+    P.col.actionButtons &&
+    P.btn.edit;
+
+  const canOpenFeeCollection =
+    P.col.actionButtons &&
+    P.btn.billing;
+
+  const canPrintChallans =
+    P.col.actionButtons &&
+    P.btn.pdf &&
+    P.col.month;
+
+  const canShowFamilySummary =
+    P.col.currency ||
+    P.col.totalFees ||
+    P.col.receivedPayment ||
+    P.col.pendingDues;
+
+  const canShowBillingDetails =
+    P.col.registrationFee ||
+    P.col.fees ||
+    P.col.month ||
+    P.col.paymentStatus ||
+    P.col.verif ||
+    P.col.bank ||
+    P.col.receivedPayment ||
+    P.col.pendingDues ||
+    canPrintChallans;
 
  let backUrl = '/dashboard';
 
@@ -749,6 +1082,16 @@ if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; f
     familyNumber ||
     (isAutoFamilyMatch ? 'auto' : '');
 
+  const clientFamilyRouteNumber =
+    P.col.family
+      ? familyRouteNumber
+      : '';
+
+  const clientFamilyCount =
+    P.col.family
+      ? familyList.length
+      : 1;
+
   const familyRouteAdmissionId =
     A?.id ||
     (familyList[0]?.id || '');
@@ -762,20 +1105,59 @@ if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; f
       ? accountsNumberNote
       : {
           enabled: false,
+          highestNumbers: null,
+          sidebarHighest: null,
+          latestNumbers: null,
+          notepadLatest: null,
           latestHighest: null,
           records: [],
           total: 0
         };
 
+  const detailsUserDeptKey =
+    String(
+      (
+        user &&
+        (
+          user.dept ||
+          user.department ||
+          user.userDept ||
+          user.user_department
+        )
+      ) ||
+      ''
+    ).trim().toLowerCase();
+
+  const isSuperDetailsUser =
+    !!(
+      role === 'super_admin' ||
+      role === 'superadmin' ||
+      agentType === 'super_admin' ||
+      agentType === 'superadmin' ||
+      user?.isSuperAdmin === true ||
+      user?.is_super_admin === true
+    );
+
+  const isAccountsDetailsPageUser =
+    detailsUserDeptKey === 'accounts' ||
+    detailsUserDeptKey === 'school accounts' ||
+    detailsUserDeptKey === 'school_accounts';
+
+  /*
+   * Latest Numbers global Accounts summary hai.
+   * Is mein student/admission details nahi hotin,
+   * is liye column View permissions required nahi.
+   */
   const shouldRenderAccountsNumberNote =
     !!(
+      (isSuperDetailsUser || isAccountsDetailsPageUser) &&
       accountsNumberNoteData &&
       accountsNumberNoteData.enabled
     );
 %>
 
 <div class="container-fluid py-2 admission-details-page"
-     data-family-number="<%= familyRouteNumber %>"
+     data-family-number="<%= clientFamilyRouteNumber %>"
      data-primary-admission-id="<%= A?.id || '' %>"
      data-user-role="<%= String(user?.role || user?.agentType || '').toLowerCase() %>"
      data-billing-year="<%= CURRENT_YEAR %>"
@@ -790,14 +1172,10 @@ if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; f
       <div class="accounts-number-note-head">
         <div>
           <div class="accounts-number-note-title">
-            Latest Fam + Verif + Reg Updates
+            Latest Fam + Verif + Reg Numbers
           </div>
           <div class="accounts-number-note-subtitle">
-            Recent updates first
-            <span id="accountsNumberNoteTotal">
-              <%= Number(accountsNumberNoteData.total || 0) %>
-            </span>
-            records
+            Latest update from each field
           </div>
         </div>
 
@@ -839,11 +1217,17 @@ if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; f
         Admission ID: <b><%= A.id %></b>
         <span class="mx-2">|</span>
         Billing Year: <b><%= CURRENT_YEAR %></b>
-        <% if (familyNumber || isAutoFamilyMatch) { %>
-  <span class="mx-2">|</span> Family #:
-  <b><%= familyNumber || 'Auto Matched' %></b>
-  <span class="mx-2">|</span> Students: <b><%= familyList.length %></b>
-<% } %>
+        <% if (
+          P.col.family &&
+          (familyNumber || isAutoFamilyMatch)
+        ) { %>
+          <span class="mx-2">|</span>
+          Family #:
+          <b><%= familyNumber || 'Auto Matched' %></b>
+          <span class="mx-2">|</span>
+          Students:
+          <b><%= familyList.length %></b>
+        <% } %>
       </div>
     </div>
 
@@ -854,46 +1238,84 @@ if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; f
 </div>
   </div>
 
-  <div class="card border-0 inner-card mb-3">
-    <div class="card-body p-3">
-      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-        <div class="sec-title">Family Billing Summary</div>
-        <div class="text-muted small">
-          Currency: <b><%= (famCurrency && famCurrency !== '-' ? famCurrency : '-') %></b>
-        </div>
-      </div>
+  <% if (canShowFamilySummary) { %>
+    <div class="card border-0 inner-card mb-3">
+      <div class="card-body p-3">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div class="sec-title">Family Billing Summary</div>
 
-      <div class="dues-summary mt-2">
-        <div class="sum-item">
-          <div class="label">Total Fee (All Billing)</div>
-          <div class="val">
-            <%= (famHasFee ? money(famFeeTotal) : '-') %>
-            <% if (famCurrency && famCurrency !== '-' && famHasFee) { %>
-              <span class="text-muted small ms-1">( <%= famCurrency %> )</span>
-            <% } %>
-          </div>
+          <% if (P.col.currency) { %>
+            <div class="text-muted small">
+              Currency:
+              <b><%= (famCurrency && famCurrency !== '-' ? famCurrency : '-') %></b>
+            </div>
+          <% } %>
         </div>
-        <div class="sum-item">
-          <div class="label">Total Received (All Billing)</div>
-          <div class="val">
-            <%= (famHasRecv ? money(famRecvTotal) : '-') %>
-            <% if (famCurrency && famCurrency !== '-' && famHasRecv) { %>
-              <span class="text-muted small ms-1">( <%= famCurrency %> )</span>
-            <% } %>
-          </div>
-        </div>
-        <div class="sum-item">
-          <div class="label">Total Pending</div>
-          <div class="val">
-            <%= (famHasPending ? money(famPendingTotal) : '-') %>
-            <% if (famCurrency && famCurrency !== '-' && famHasPending) { %>
-              <span class="text-muted small ms-1">( <%= famCurrency %> )</span>
-            <% } %>
-          </div>
+
+        <div class="dues-summary mt-2">
+          <% if (P.col.totalFees) { %>
+            <div class="sum-item">
+              <div class="label">Total Fee (All Billing)</div>
+              <div class="val">
+                <%= (famHasFee ? money(famFeeTotal) : '-') %>
+
+                <% if (
+                  P.col.currency &&
+                  famCurrency &&
+                  famCurrency !== '-' &&
+                  famHasFee
+                ) { %>
+                  <span class="text-muted small ms-1">
+                    ( <%= famCurrency %> )
+                  </span>
+                <% } %>
+              </div>
+            </div>
+          <% } %>
+
+          <% if (P.col.receivedPayment) { %>
+            <div class="sum-item">
+              <div class="label">Total Received (All Billing)</div>
+              <div class="val">
+                <%= (famHasRecv ? money(famRecvTotal) : '-') %>
+
+                <% if (
+                  P.col.currency &&
+                  famCurrency &&
+                  famCurrency !== '-' &&
+                  famHasRecv
+                ) { %>
+                  <span class="text-muted small ms-1">
+                    ( <%= famCurrency %> )
+                  </span>
+                <% } %>
+              </div>
+            </div>
+          <% } %>
+
+          <% if (P.col.pendingDues) { %>
+            <div class="sum-item">
+              <div class="label">Total Pending</div>
+              <div class="val">
+                <%= (famHasPending ? money(famPendingTotal) : '-') %>
+
+                <% if (
+                  P.col.currency &&
+                  famCurrency &&
+                  famCurrency !== '-' &&
+                  famHasPending
+                ) { %>
+                  <span class="text-muted small ms-1">
+                    ( <%= famCurrency %> )
+                  </span>
+                <% } %>
+              </div>
+            </div>
+          <% } %>
         </div>
       </div>
     </div>
-  </div>
+  <% } %>
 
   <% if (!familyList || familyList.length === 0) { %>
     <div class="text-muted small">No admission data found.</div>
@@ -911,7 +1333,35 @@ if (duesRows && duesRows.length && Number.isFinite(p)) { famPendingTotal += p; f
          const initials = initialsFromName(studentName);
          const dept = String(X.dept || '-').trim();
          const grade = String(X.grade || '-').trim();
-         const curCode = String(getCurrency(X) || '').trim();
+
+         const displayStudentName =
+           P.col.student
+             ? studentName
+             : `Admission #${X.id || '-'}`;
+
+         const displayInitials =
+           P.col.student
+             ? initials
+             : '#';
+
+         const profileMetaParts = [
+           P.col.grade && grade && grade !== '-'
+             ? grade
+             : '',
+
+           P.col.dept && dept && dept !== '-'
+             ? (
+                 dept.charAt(0).toUpperCase() +
+                 dept.slice(1)
+               )
+             : ''
+         ].filter(Boolean);
+
+         const curCode =
+           P.col.currency
+             ? String(getCurrency(X) || '').trim()
+             : '-';
+
          const admissionBank = getAdmissionBank(X);
 
          const mm = buildMonthMatrix(X, admissionInfo);
@@ -981,6 +1431,78 @@ if (regInfo.enabled) {
          ).trim();
 
          const pendingTotal = hasNumericTotal ? totalDues : NaN;
+
+         const showFeeTypeColumn =
+           P.col.registrationFee ||
+           P.col.fees;
+
+         const showMonthColumns =
+           P.col.month;
+
+         const showFeeAmountColumn =
+           P.col.registrationFee ||
+           P.col.fees;
+
+         const duesVisibleColumnCount = [
+           showFeeTypeColumn,
+           showMonthColumns,
+           showMonthColumns,
+           P.col.verif,
+           P.col.bank,
+           showFeeAmountColumn,
+           P.col.receivedPayment,
+           P.col.pendingDues
+         ].filter(Boolean).length || 1;
+
+         const showRegistrationDuesRow =
+           regInfo.enabled &&
+           regInfo.pending > 0 &&
+           (
+             P.col.registrationFee ||
+             P.col.month ||
+             P.col.verif ||
+             P.col.bank ||
+             P.col.receivedPayment ||
+             P.col.pendingDues
+           );
+
+         const showMonthlyDuesRows =
+           Array.isArray(duesRows) &&
+           duesRows.length > 0 &&
+           (
+             P.col.fees ||
+             P.col.month ||
+             P.col.verif ||
+             P.col.bank ||
+             P.col.receivedPayment ||
+             P.col.pendingDues
+           );
+
+         const showRegistrationHistory =
+           regInfo.enabled &&
+           (
+             P.col.registrationFee ||
+             P.col.paymentStatus ||
+             P.col.month ||
+             P.col.verif ||
+             P.col.bank ||
+             P.col.receivedPayment ||
+             P.col.pendingDues
+           );
+
+         const showMonthlyHistory =
+           Array.isArray(historyRows) &&
+           historyRows.length > 0 &&
+           (
+             P.col.paymentStatus ||
+             P.col.month ||
+             P.col.verif ||
+             P.col.bank ||
+             P.col.fees ||
+             P.col.receivedPayment ||
+             P.col.pendingDues ||
+             canPrintChallans
+           );
     %>
 
       <div class="student-block <%= idx > 0 ? 'mt-3' : '' %>">
@@ -988,18 +1510,45 @@ if (regInfo.enabled) {
           <div class="d-flex flex-wrap align-items-center gap-2">
             <div class="fw-bold">
               <span class="me-1">Student <%= idx + 1 %></span>
+
               <% if (isCurrent) { %>
-                <span class="badge rounded-pill ms-1 current-pill">Current</span>
+                <span class="badge rounded-pill ms-1 current-pill">
+                  Current
+                </span>
               <% } %>
             </div>
 
-            <span class="text-muted small">Admission ID: <b><%= X.id %></b></span>
-            <span class="dot-sep"></span>
-            <span class="text-muted small">Student: <b><%= studentName %></b></span>
-            <span class="dot-sep"></span>
-            <span class="text-muted small text-capitalize">Dept: <b><%= dept %></b></span>
-            <span class="dot-sep"></span>
-            <span class="text-muted small">Grade: <b><%= grade %></b></span>
+            <span class="text-muted small">
+              Admission ID:
+              <b><%= X.id %></b>
+            </span>
+
+            <% if (P.col.student) { %>
+              <span class="dot-sep"></span>
+
+              <span class="text-muted small">
+                Student:
+                <b><%= studentName %></b>
+              </span>
+            <% } %>
+
+            <% if (P.col.dept) { %>
+              <span class="dot-sep"></span>
+
+              <span class="text-muted small text-capitalize">
+                Dept:
+                <b><%= dept %></b>
+              </span>
+            <% } %>
+
+            <% if (P.col.grade) { %>
+              <span class="dot-sep"></span>
+
+              <span class="text-muted small">
+                Grade:
+                <b><%= grade %></b>
+              </span>
+            <% } %>
           </div>
         </div>
 
@@ -1009,11 +1558,20 @@ if (regInfo.enabled) {
               <div class="card-body p-3">
                 <div class="d-flex flex-column align-items-center text-center pt-2">
                   <div class="avatar-wrap">
-                    <div class="avatar-circle"><%= initials %></div>
+                    <div class="avatar-circle">
+                      <%= displayInitials %>
+                    </div>
                   </div>
 
-                  <div class="mt-2 fw-bold fs-6"><%= studentName %></div>
-                  <div class="text-muted small"><%= grade %> - <%= dept ? (dept.charAt(0).toUpperCase() + dept.slice(1)) : '-' %></div>
+                  <div class="mt-2 fw-bold fs-6">
+                    <%= displayStudentName %>
+                  </div>
+
+                  <% if (profileMetaParts.length) { %>
+                    <div class="text-muted small">
+                      <%= profileMetaParts.join(' - ') %>
+                    </div>
+                  <% } %>
 
                   <div class="profile-divider my-3"></div>
                 </div>
@@ -1021,112 +1579,253 @@ if (regInfo.enabled) {
                 <div class="text-uppercase tiny-title mb-2">Details</div>
 
                 <div class="details-list">
-                  <div class="drow"><span class="k">Name:</span> <span class="v"><%= studentName %></span></div>
+                  <% if (P.col.student) { %>
+                    <div class="drow">
+                      <span class="k">Name:</span>
+                      <span class="v"><%= studentName %></span>
+                    </div>
+                  <% } %>
+
+                  <% if (P.col.status) { %>
+                    <div class="drow">
+                      <span class="k">Status:</span>
+                      <span class="v">
+                        <span class="chip chip-ok">
+                          <%= (curStatus || '-') %>
+                        </span>
+                      </span>
+                    </div>
+                  <% } %>
+
+                  <% if (P.col.month) { %>
+                    <div class="drow">
+                      <span class="k">Admission Date:</span>
+                      <span class="v">
+                        <%= (admissionInfo.month || '-') %>
+                      </span>
+                    </div>
+                  <% } %>
 
                   <div class="drow">
-                    <span class="k">Status:</span>
-                    <span class="v">
-                      <span class="chip chip-ok"><%= (curStatus || '-') %></span>
-                    </span>
+                    <span class="k">Role:</span>
+                    <span class="v">Student</span>
                   </div>
 
-                  <div class="drow"><span class="k">Admission Date:</span> <span class="v"><%= (admissionInfo.month || '-') %></span></div>
-                  <div class="drow"><span class="k">Role:</span> <span class="v">Student</span></div>
+                  <% if (P.col.phone) { %>
+                    <div class="drow">
+                      <span class="k">Contact:</span>
+                      <span class="v">
+                        <%= (X.phone || X.contactNumber || '-') %>
+                      </span>
+                    </div>
+                  <% } %>
 
-                  <div class="drow"><span class="k">Contact:</span> <span class="v"><%= (X.phone || X.contactNumber || '-') %></span></div>
+                  <% if (P.col.feeStatus) { %>
+                    <div class="drow mt-2">
+                      <span class="k">Fee Status:</span>
+                      <span class="v">
+                        <span class="chip">
+                          <%= (feeStatus || '-') %>
+                        </span>
+                      </span>
+                    </div>
+                  <% } %>
 
-                  <div class="drow mt-2">
-                    <span class="k">Fee Status:</span>
-                    <span class="v">
-                      <span class="chip"><%= (feeStatus || '-') %></span>
-                    </span>
-                  </div>
+                  <% if (P.col.registrationFee) { %>
+                    <div class="drow">
+                      <span class="k">Registration Fee:</span>
+                      <span class="v">
+                        <b><%= money(registrationFee) %></b>
 
-                  <div class="drow">
-                    <span class="k">Registration Fee:</span>
-                    <span class="v">
-                      <b><%= money(registrationFee) %></b>
-                      <span class="text-muted small ms-1">
-                     (<%= (curCode && curCode !== '-' ? curCode : '-') %>)
-                    </span>
-                   </span>
-                  </div>
+                        <% if (
+                          P.col.currency &&
+                          curCode &&
+                          curCode !== '-'
+                        ) { %>
+                          <span class="text-muted small ms-1">
+                            ( <%= curCode %> )
+                          </span>
+                        <% } %>
+                      </span>
+                    </div>
+                  <% } %>
 
-                  <% if (regInfo.enabled) { %>
-  <div class="drow">
-    <span class="k">Reg Fee Received:</span>
-    <span class="v">
-      <b><%= money(regInfo.received) %></b>
-      <span class="text-muted small ms-1">(<%= (curCode && curCode !== '-' ? curCode : '-') %>)</span>
-    </span>
-  </div>
+                  <% if (
+                    regInfo.enabled &&
+                    P.col.receivedPayment
+                  ) { %>
+                    <div class="drow">
+                      <span class="k">Reg Fee Received:</span>
+                      <span class="v">
+                        <b><%= money(regInfo.received) %></b>
 
-  <div class="drow">
-    <span class="k">Reg Fee Pending:</span>
-    <span class="v">
-      <b><%= money(regInfo.pending) %></b>
-      <span class="text-muted small ms-1">(<%= (curCode && curCode !== '-' ? curCode : '-') %>)</span>
-    </span>
-  </div>
-<% } %>
+                        <% if (
+                          P.col.currency &&
+                          curCode &&
+                          curCode !== '-'
+                        ) { %>
+                          <span class="text-muted small ms-1">
+                            ( <%= curCode %> )
+                          </span>
+                        <% } %>
+                      </span>
+                    </div>
+                  <% } %>
 
-                  <div class="drow">
-                    <span class="k">Current Fee:</span>
-                    <span class="v">
-                      <b><%= money(currentMonthlyFee) %></b>
-                      <span class="text-muted small ms-1">(<%= (curCode && curCode !== '-' ? curCode : '-') %>)</span>
-                    </span>
-                  </div>
+                  <% if (
+                    regInfo.enabled &&
+                    P.col.pendingDues
+                  ) { %>
+                    <div class="drow">
+                      <span class="k">Reg Fee Pending:</span>
+                      <span class="v">
+                        <b><%= money(regInfo.pending) %></b>
 
-                  <div class="drow">
-                    <span class="k">Bank:</span>
-                    <span class="v"><%= admissionBank || '-' %></span>
-                  </div>
+                        <% if (
+                          P.col.currency &&
+                          curCode &&
+                          curCode !== '-'
+                        ) { %>
+                          <span class="text-muted small ms-1">
+                            ( <%= curCode %> )
+                          </span>
+                        <% } %>
+                      </span>
+                    </div>
+                  <% } %>
 
-                   <div class="drow">
-                    <span class="k">Verification #:</span>
-                    <span class="v">
-                      <%= (accounts.verificationNumber || X?.accounts_verification_number || '-') %>
-                    </span>
-                  </div>
+                  <% if (P.col.fees) { %>
+                    <div class="drow">
+                      <span class="k">Current Fee:</span>
+                      <span class="v">
+                        <b><%= money(currentMonthlyFee) %></b>
 
-                  <div class="drow">
-                    <span class="k">Reg #:</span>
-                    <span class="v"><%= (regNoAccount || '-') %></span>
-                  </div>
+                        <% if (
+                          P.col.currency &&
+                          curCode &&
+                          curCode !== '-'
+                        ) { %>
+                          <span class="text-muted small ms-1">
+                            ( <%= curCode %> )
+                          </span>
+                        <% } %>
+                      </span>
+                    </div>
+                  <% } %>
 
-                  <div class="drow">
-                    <span class="k">Family #:</span>
-                    <span class="v">
-                     <%= (accounts.familyNumber || getFamilyNo(X) || (isAutoFamilyMatch ? 'Auto Matched' : '-')) %>
-                    </span>
-                  </div>
+                  <% if (P.col.bank) { %>
+                    <div class="drow">
+                      <span class="k">Bank:</span>
+                      <span class="v">
+                        <%= admissionBank || '-' %>
+                      </span>
+                    </div>
+                  <% } %>
 
-                  <div class="drow">
-                    <span class="k">Total Received:</span>
-                    <span class="v">
-                      <b><%= (billTotals.hasRecv ? money(billTotals.recvTotal) : '-') %></b>
-                      <% if (curCode && curCode !== '-' && billTotals.hasRecv) { %>
-                        <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                      <% } %>
-                    </span>
-                  </div>
-                  <div class="drow">
-                    <span class="k">Pending Due:</span>
-                    <span class="v">
-                      <b><%= (Number.isFinite(pendingTotal) ? money(pendingTotal) : '-') %></b>
-                      <% if (curCode && curCode !== '-' && Number.isFinite(pendingTotal)) { %>
-                        <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                      <% } %>
-                    </span>
-                  </div>
+                  <% if (P.col.verif) { %>
+                    <div class="drow">
+                      <span class="k">Verification #:</span>
+                      <span class="v">
+                        <%= (
+                          accounts.verificationNumber ||
+                          X?.accounts_verification_number ||
+                          '-'
+                        ) %>
+                      </span>
+                    </div>
+                  <% } %>
 
-                  <% if (admissionComment) { %>
+                  <% if (P.col.reg) { %>
+                    <div class="drow">
+                      <span class="k">Reg #:</span>
+                      <span class="v">
+                        <%= (regNoAccount || '-') %>
+                      </span>
+                    </div>
+                  <% } %>
+
+                  <% if (P.col.family) { %>
+                    <div class="drow">
+                      <span class="k">Family #:</span>
+                      <span class="v">
+                        <%= (
+                          accounts.familyNumber ||
+                          getFamilyNo(X) ||
+                          (
+                            isAutoFamilyMatch
+                              ? 'Auto Matched'
+                              : '-'
+                          )
+                        ) %>
+                      </span>
+                    </div>
+                  <% } %>
+
+                  <% if (P.col.receivedPayment) { %>
+                    <div class="drow">
+                      <span class="k">Total Received:</span>
+                      <span class="v">
+                        <b>
+                          <%= (
+                            billTotals.hasRecv
+                              ? money(billTotals.recvTotal)
+                              : '-'
+                          ) %>
+                        </b>
+
+                        <% if (
+                          P.col.currency &&
+                          curCode &&
+                          curCode !== '-' &&
+                          billTotals.hasRecv
+                        ) { %>
+                          <span class="text-muted small ms-1">
+                            ( <%= curCode %> )
+                          </span>
+                        <% } %>
+                      </span>
+                    </div>
+                  <% } %>
+
+                  <% if (P.col.pendingDues) { %>
+                    <div class="drow">
+                      <span class="k">Pending Due:</span>
+                      <span class="v">
+                        <b>
+                          <%= (
+                            Number.isFinite(pendingTotal)
+                              ? money(pendingTotal)
+                              : '-'
+                          ) %>
+                        </b>
+
+                        <% if (
+                          P.col.currency &&
+                          curCode &&
+                          curCode !== '-' &&
+                          Number.isFinite(pendingTotal)
+                        ) { %>
+                          <span class="text-muted small ms-1">
+                            ( <%= curCode %> )
+                          </span>
+                        <% } %>
+                      </span>
+                    </div>
+                  <% } %>
+
+                  <% if (
+                    P.col.comment &&
+                    admissionComment
+                  ) { %>
                     <div class="admission-comment-box">
                       <div class="admission-comment-label">
-                        <i class="bi bi-chat-left-text me-1"></i> Comment
+                        <i class="bi bi-chat-left-text me-1"></i>
+                        Comment
                       </div>
-                      <div class="admission-comment-text"><%= admissionComment %></div>
+
+                      <div class="admission-comment-text">
+                        <%= admissionComment %>
+                      </div>
                     </div>
                   <% } %>
 
@@ -1135,7 +1834,8 @@ if (regInfo.enabled) {
                       <a
                         href="/dashboard/admission/<%= encodeURIComponent(X.id) %>/edit?year=<%= encodeURIComponent(CURRENT_YEAR) %>"
                         class="btn btn-sm btn-premium-edit px-4 rounded-3">
-                        <i class="bi bi-pencil-square me-1"></i> Edit
+                        <i class="bi bi-pencil-square me-1"></i>
+                        Edit
                       </a>
                     </div>
                   <% } %>
@@ -1149,355 +1849,788 @@ if (regInfo.enabled) {
             <div class="card border-0 right-panel h-100">
               <div class="card-body p-3">
 
-                <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
-  <a
-   href="<%= feeCollectionBaseUrl %>?admissionId=<%= encodeURIComponent(X.id) %>&familyNumber=<%= encodeURIComponent(familyRouteNumber || '') %>&year=<%= encodeURIComponent(CURRENT_YEAR) %>"
-    class="btn btn-fee-collection btn-sm rounded-3"
-    title="Open Fee Collection"
-  >
-    <i class="bi bi-cash-coin me-1"></i> Fee Collection
-  </a>
+                <% if (
+                  canOpenFeeCollection ||
+                  canPrintChallans
+                ) { %>
+                  <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
+                    <% if (canOpenFeeCollection) { %>
+                      <a
+                        href="<%= feeCollectionBaseUrl %>?admissionId=<%= encodeURIComponent(X.id) %>&familyNumber=<%= encodeURIComponent(clientFamilyRouteNumber || '') %>&year=<%= encodeURIComponent(CURRENT_YEAR) %>"
+                        class="btn btn-fee-collection btn-sm rounded-3"
+                        title="Open Fee Collection">
+                        <i class="bi bi-cash-coin me-1"></i>
+                        Fee Collection
+                      </a>
+                    <% } %>
 
-  <button
-  type="button"
-  class="btn btn-outline-secondary btn-sm rounded-3 js-open-pending-challan"
-  data-admission-id="<%= X.id %>"
-  data-family-number="<%= familyRouteNumber %>"
-  data-family-count="<%= familyList.length %>"
-  title="Pending months list + challan"
->
-  <i class="bi bi-printer me-1"></i> Print Challan
-</button>
-</div>
-
-                <div class="card border-0 inner-card mb-3">
-                  <div class="card-body p-3">
-                    <div class="table-responsive">
-                      <table class="table table-sm align-middle dues-table mb-2">
-                        <thead>
-                          <tr>
-                            <th style="width:18%">Fee Type</th>
-                            <th style="width:14%">Month</th>
-                            <th style="width:6%">M#</th>
-                            <th style="width:18%">Verification #</th>
-                            <th style="width:14%">Bank</th>
-                            <th style="width:12%">Month Fee</th>
-                            <th style="width:9%">Received</th>
-                            <th style="width:9%">Balance</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <% if ((!duesRows || duesRows.length === 0) && (!regInfo.enabled || regInfo.pending <= 0)) { %>
-                            <tr>
-                              <td colspan="8" class="text-muted small">No dues found.</td>
-                            </tr>
-                          <% } else { %>
-                            <% if (regInfo.enabled && regInfo.pending > 0) { %>
-                              <tr class="registration-fee-row">
-                                <td>
-                                  <div class="d-flex align-items-center gap-2">
-                                    <span class="tiny-dot reg-dot"></span>
-                                    <span>Registration Fee</span>
-                                  </div>
-                                </td>
-                                <td>
-                                  <span class="pill-light text-capitalize"><%= regInfo.monthLabel || '-' %></span>
-                                </td>
-                                <td>
-                                  <span class="pill-mini">-</span>
-                                </td>
-                                <td>
-                                  <span class="pill-mini mono"><%= regInfo.verification || '-' %></span>
-                                </td>
-                                <td>
-                                  <span class="pill-mini"><%= regInfo.bank || '-' %></span>
-                                </td>
-                                <td>
-                                  <span class="pill-fee"><%= money(regInfo.total) %></span>
-                                  <% if (curCode && curCode !== '-') { %>
-                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                                  <% } %>
-                                </td>
-                                <td>
-                                  <span class="pill-recv"><%= money(regInfo.received) %></span>
-                                  <% if (curCode && curCode !== '-') { %>
-                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                                  <% } %>
-                                </td>
-                                <td>
-                                  <span class="pill-balance"><%= money(regInfo.pending) %></span>
-                                  <% if (curCode && curCode !== '-') { %>
-                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                                  <% } %>
-                                </td>
-                              </tr>
-                            <% } %>
-
-                            <% duesRows.forEach(r => { %>
-                              <tr>
-                                <td>
-                                  <div class="d-flex align-items-center gap-2">
-                                    <span class="tiny-dot"></span>
-                                    <span>Monthly Fee</span>
-                                  </div>
-                                </td>
-                                <td>
-                                  <span class="pill-light text-capitalize"><%= r.month %></span>
-                                </td>
-                                <td>
-                                  <span class="pill-mini"><%= r.monthNo %></span>
-                                </td>
-                                <td>
-                                  <span class="pill-mini mono"><%= (r.verifNo || '-') %></span>
-                                </td>
-                                <td>
-                                  <span class="pill-mini"><%= (r.bank || '-') %></span>
-                                </td>
-                                <td>
-                                  <span class="pill-fee"><%= (r.feeVal !== '-' ? money(r.feeVal) : '-') %></span>
-                                  <% if (curCode && curCode !== '-' && r.feeVal !== '-') { %>
-                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                                  <% } %>
-                                </td>
-                                <td>
-                                  <span class="pill-recv"><%= money(r.amountVal) %></span>
-                                  <% if (curCode && curCode !== '-' && r.amountVal !== '-') { %>
-                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                                  <% } %>
-                                </td>
-                                <td>
-                                  <span class="pill-balance"><%= money(r.due) %></span>
-                                  <% if (curCode && curCode !== '-') { %>
-                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                                  <% } %>
-                                </td>
-                              </tr>
-                            <% }) %>
-                          <% } %>
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-center pt-1">
-                      <div class="text-muted small">Total Dues:</div>
-                      <div class="fw-bold">
-                        <%= (hasNumericTotal ? money(totalDues) : '-') %>
-                        <% if (curCode && curCode !== '-' && hasNumericTotal) { %>
-                          <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                        <% } %>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="sec-title mb-2">Fees History (Jan–Dec, Popup Style)</div>
-
-                <div class="card border-0 inner-card">
-                  <div class="card-body p-3">
-                    <% if ((!historyRows || historyRows.length === 0) && !regInfo.enabled) { %>
-  <div class="text-muted small">No fee history found.</div>
-<% } else { %>
-
-                      <div class="dues-summary mb-2">
-                        <div class="sum-item">
-                          <div class="label">Total Fee (Billing)</div>
-                          <div class="val">
-                            <%= (billTotals.hasFee ? money(billTotals.feeTotal) : '-') %>
-                            <% if (curCode && curCode !== '-' && billTotals.hasFee) { %>
-                              <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                            <% } %>
-                          </div>
-                        </div>
-                        <div class="sum-item">
-                          <div class="label">Total Received (Billing)</div>
-                          <div class="val">
-                            <%= (billTotals.hasRecv ? money(billTotals.recvTotal) : '-') %>
-                            <% if (curCode && curCode !== '-' && billTotals.hasRecv) { %>
-                              <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                            <% } %>
-                          </div>
-                        </div>
-                        <div class="sum-item">
-                          <div class="label">Total Pending</div>
-                          <div class="val">
-                            <%= (hasNumericTotal ? money(totalDues) : '-') %>
-                            <% if (curCode && curCode !== '-' && hasNumericTotal) { %>
-                              <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                            <% } %>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div class="timeline">
-                        <% if (regInfo.enabled) { %>
-  <div class="t-item registration-fee-row">
-    <div class="t-dot reg-dot"></div>
-    <div class="t-line"></div>
-
-    <div class="t-content">
-      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-        <div class="fw-semibold">
-          <span class="me-2">Registration Fee</span>
-          <span class="text-muted">#<%= (String(X.id || '-') + '-registration') %></span>
-        </div>
-
-        <div class="text-muted small">
-          <span class="badge rounded-pill px-3 py-2 bill-pill <%= billingStatusClass(regInfo.status) %>">
-            <%= regInfo.status || '-' %>
-          </span>
-        </div>
-      </div>
-
-      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
-        <div class="text-muted">
-          Bank Name: <span class="pill-light"><%= regInfo.bank || '-' %></span>
-          <span class="ms-2 pill-mini"><%= regInfo.monthLabel || '-' %></span>
-        </div>
-        <div class="text-muted">
-          Verification #: <span class="pill-mini mono"><%= regInfo.verification || '-' %></span>
-        </div>
-      </div>
-
-      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
-        <div class="text-muted">
-          Fee: <b><%= money(regInfo.total) %></b>
-          <% if (curCode && curCode !== '-') { %>
-            <span class="text-muted small ms-1">( <%= curCode %> )</span>
-          <% } %>
-        </div>
-
-        <div class="text-muted">
-          Received: <b><%= money(regInfo.received) %></b>
-          <% if (curCode && curCode !== '-') { %>
-            <span class="text-muted small ms-1">( <%= curCode %> )</span>
-          <% } %>
-        </div>
-
-        <div class="text-muted">
-          Pending: <b><%= money(regInfo.pending) %></b>
-          <% if (curCode && curCode !== '-') { %>
-            <span class="text-muted small ms-1">( <%= curCode %> )</span>
-          <% } %>
-        </div>
-      </div>
-    </div>
-  </div>
-<% } %>
-                        <% historyRows.slice().reverse().forEach((m, i, arr) => {
-                             const st = String(m?.status || '-');
-                             const stCls = billingStatusClass(st);
-
-                             const pendingRow = (duesRows || []).find(r => sameMonth(r.monthKey, m.key));
-                             const stLower = String(m?.status || '').toLowerCase().trim();
-
-                             let pendingVal = '-';
-                             if (pendingRow && Number.isFinite(pendingRow.due)) {
-                               pendingVal = pendingRow.due;
-                             } else if (stLower === 'partial payment') {
-                               const feeN = parseFirstNumber(m?.fee);
-                               const recvN = parseFirstNumber(m?.amount);
-                               const diff = Math.max(0, (feeN || 0) - (recvN || 0));
-                               pendingVal = diff > 0 ? diff : '-';
-                             }
-const amountNum = parseFirstNumber(m?.amount);
-const stLower2 = String(m?.status || '').toLowerCase().trim();
-const isNotAdmittedMonth = stLower2 === 'not admitted';
-
-// ✅ Fee challan sirf tab show ho jab month Not admitted na ho
-const canPrintFeeChallan = stLower2 !== 'not admitted';
-
-// ✅ Paid challan sirf paid statuses me ho aur Not admitted me na ho
-const canPrintPaid =
-  stLower2 !== 'not admitted' &&
-  amountNum > 0 &&
-  (stLower2 === 'full payment' || stLower2 === 'partial payment');
-                        %>
-                          <div class="t-item">
-                            <div class="t-dot"></div>
-                            <div class="t-line <%= (i === arr.length - 1 ? 'end' : '') %>"></div>
-
-                            <div class="t-content">
-                              <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <div class="fw-semibold">
-                                  <span class="me-2">Slip</span>
-                                  <span class="text-muted">#<%= (String(X.id || '-') + '-' + String(m.key).replace(/\s+/g,'') ) %></span>
-                                </div>
-
-                                <div class="d-flex align-items-center gap-2">
-                                  <% if (canPrintFeeChallan) { %>
-                                    <button
-                                      type="button"
-                                      class="btn btn-outline-secondary btn-sm rounded-3 js-print-month-challan"
-                                      data-admission-id="<%= X.id %>"
-                                      data-month-key="<%= m.key %>"
-                                      data-year="<%= CURRENT_YEAR %>"
-                                      title="Is month ka fee challan"
-                                    >
-                                      <i class="bi bi-download me-1"></i> Fee Challan
-                                    </button>
-                                  <% } %>
-
-                                  <% if (canPrintPaid) { %>
-                                    <button
-                                      type="button"
-                                      class="btn btn-outline-secondary btn-sm rounded-3 js-print-month-paid"
-                                      data-admission-id="<%= X.id %>"
-                                      data-month-key="<%= m.key %>"
-                                      data-year="<%= CURRENT_YEAR %>"
-                                      title="Is month ka paid challan (receipt)"
-                                    >
-                                      <i class="bi bi-receipt me-1"></i> Paid Challan
-                                    </button>
-                                  <% } %>
-
-                                  <div class="text-muted small">
-                                    <span class="badge rounded-pill px-3 py-2 bill-pill <%= stCls %>"><%= (st || '-') %></span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
-                              <div class="text-muted">
-                                  Bank Name: <span class="pill-light"><%= m.bank || '-' %></span>
-                              <span class="ms-2 pill-mini"><%= CURRENT_YEAR %></span>
-                             </div>
-                                <div class="text-muted">
-                                  Verification #: <span class="pill-mini mono"><%= (m.verification || '-') %></span>
-                                </div>
-                              </div>
-
-                              <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
-                                
-
-                                <div class="text-muted">
-                                 Fee: <b><%= (!isNotAdmittedMonth && m.feeShown !== '-' ? money(m.feeShown) : '-') %></b>
-                                  <% if (!isNotAdmittedMonth && curCode && curCode !== '-' && m.feeShown !== '-') { %>
-                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                                  <% } %>
-                                </div>
-
-                                <div class="text-muted">
-                                  Received: <b><%= money(m.amount || '-') %></b>
-                                  <% if (curCode && curCode !== '-' && m.amount) { %>
-                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                                  <% } %>
-                                </div>
-
-                                <div class="text-muted">
-                                  Pending: <b><%= money(pendingVal) %></b>
-                                  <% if (curCode && curCode !== '-' && pendingVal !== '-' ) { %>
-                                    <span class="text-muted small ms-1">( <%= curCode %> )</span>
-                                  <% } %>
-                                </div>
-                              </div>
-
-                            </div>
-                          </div>
-                        <% }) %>
-                      </div>
+                    <% if (canPrintChallans) { %>
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary btn-sm rounded-3 js-open-pending-challan"
+                        data-admission-id="<%= X.id %>"
+                        data-family-number="<%= clientFamilyRouteNumber %>"
+                        data-family-count="<%= clientFamilyCount %>"
+                        title="Pending months list + challan">
+                        <i class="bi bi-printer me-1"></i>
+                        Print Challan
+                      </button>
                     <% } %>
                   </div>
-                </div>
+                <% } %>
+
+                <% if (canShowBillingDetails) { %>
+                  <div class="card border-0 inner-card mb-3">
+                    <div class="card-body p-3">
+                      <div class="table-responsive">
+                        <table class="table table-sm align-middle dues-table mb-2">
+                          <thead>
+                            <tr>
+                              <% if (showFeeTypeColumn) { %>
+                                <th style="width:18%">Fee Type</th>
+                              <% } %>
+
+                              <% if (showMonthColumns) { %>
+                                <th style="width:14%">Month</th>
+                                <th style="width:6%">M#</th>
+                              <% } %>
+
+                              <% if (P.col.verif) { %>
+                                <th style="width:18%">Verification #</th>
+                              <% } %>
+
+                              <% if (P.col.bank) { %>
+                                <th style="width:14%">Bank</th>
+                              <% } %>
+
+                              <% if (showFeeAmountColumn) { %>
+                                <th style="width:12%">Month Fee</th>
+                              <% } %>
+
+                              <% if (P.col.receivedPayment) { %>
+                                <th style="width:9%">Received</th>
+                              <% } %>
+
+                              <% if (P.col.pendingDues) { %>
+                                <th style="width:9%">Balance</th>
+                              <% } %>
+                            </tr>
+                          </thead>
+
+                          <tbody>
+                            <% if (
+                              !showRegistrationDuesRow &&
+                              !showMonthlyDuesRows
+                            ) { %>
+                              <tr>
+                                <td
+                                  colspan="<%= duesVisibleColumnCount %>"
+                                  class="text-muted small">
+                                  No dues found.
+                                </td>
+                              </tr>
+                            <% } else { %>
+                              <% if (showRegistrationDuesRow) { %>
+                                <tr class="registration-fee-row">
+                                  <% if (showFeeTypeColumn) { %>
+                                    <td>
+                                      <div class="d-flex align-items-center gap-2">
+                                        <span class="tiny-dot reg-dot"></span>
+                                        <span>Registration Fee</span>
+                                      </div>
+                                    </td>
+                                  <% } %>
+
+                                  <% if (showMonthColumns) { %>
+                                    <td>
+                                      <span class="pill-light text-capitalize">
+                                        <%= regInfo.monthLabel || '-' %>
+                                      </span>
+                                    </td>
+
+                                    <td>
+                                      <span class="pill-mini">-</span>
+                                    </td>
+                                  <% } %>
+
+                                  <% if (P.col.verif) { %>
+                                    <td>
+                                      <span class="pill-mini mono">
+                                        <%= regInfo.verification || '-' %>
+                                      </span>
+                                    </td>
+                                  <% } %>
+
+                                  <% if (P.col.bank) { %>
+                                    <td>
+                                      <span class="pill-mini">
+                                        <%= regInfo.bank || '-' %>
+                                      </span>
+                                    </td>
+                                  <% } %>
+
+                                  <% if (showFeeAmountColumn) { %>
+                                    <td>
+                                      <% if (P.col.registrationFee) { %>
+                                        <span class="pill-fee">
+                                          <%= money(regInfo.total) %>
+                                        </span>
+
+                                        <% if (
+                                          P.col.currency &&
+                                          curCode &&
+                                          curCode !== '-'
+                                        ) { %>
+                                          <span class="text-muted small ms-1">
+                                            ( <%= curCode %> )
+                                          </span>
+                                        <% } %>
+                                      <% } else { %>
+                                        <span class="text-muted">-</span>
+                                      <% } %>
+                                    </td>
+                                  <% } %>
+
+                                  <% if (P.col.receivedPayment) { %>
+                                    <td>
+                                      <span class="pill-recv">
+                                        <%= money(regInfo.received) %>
+                                      </span>
+
+                                      <% if (
+                                        P.col.currency &&
+                                        curCode &&
+                                        curCode !== '-'
+                                      ) { %>
+                                        <span class="text-muted small ms-1">
+                                          ( <%= curCode %> )
+                                        </span>
+                                      <% } %>
+                                    </td>
+                                  <% } %>
+
+                                  <% if (P.col.pendingDues) { %>
+                                    <td>
+                                      <span class="pill-balance">
+                                        <%= money(regInfo.pending) %>
+                                      </span>
+
+                                      <% if (
+                                        P.col.currency &&
+                                        curCode &&
+                                        curCode !== '-'
+                                      ) { %>
+                                        <span class="text-muted small ms-1">
+                                          ( <%= curCode %> )
+                                        </span>
+                                      <% } %>
+                                    </td>
+                                  <% } %>
+                                </tr>
+                              <% } %>
+
+                              <% if (showMonthlyDuesRows) { %>
+                                <% duesRows.forEach(r => { %>
+                                  <tr>
+                                    <% if (showFeeTypeColumn) { %>
+                                      <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                          <span class="tiny-dot"></span>
+                                          <span>Monthly Fee</span>
+                                        </div>
+                                      </td>
+                                    <% } %>
+
+                                    <% if (showMonthColumns) { %>
+                                      <td>
+                                        <span class="pill-light text-capitalize">
+                                          <%= r.month %>
+                                        </span>
+                                      </td>
+
+                                      <td>
+                                        <span class="pill-mini">
+                                          <%= r.monthNo %>
+                                        </span>
+                                      </td>
+                                    <% } %>
+
+                                    <% if (P.col.verif) { %>
+                                      <td>
+                                        <span class="pill-mini mono">
+                                          <%= (r.verifNo || '-') %>
+                                        </span>
+                                      </td>
+                                    <% } %>
+
+                                    <% if (P.col.bank) { %>
+                                      <td>
+                                        <span class="pill-mini">
+                                          <%= (r.bank || '-') %>
+                                        </span>
+                                      </td>
+                                    <% } %>
+
+                                    <% if (showFeeAmountColumn) { %>
+                                      <td>
+                                        <% if (P.col.fees) { %>
+                                          <span class="pill-fee">
+                                            <%= (
+                                              r.feeVal !== '-'
+                                                ? money(r.feeVal)
+                                                : '-'
+                                            ) %>
+                                          </span>
+
+                                          <% if (
+                                            P.col.currency &&
+                                            curCode &&
+                                            curCode !== '-' &&
+                                            r.feeVal !== '-'
+                                          ) { %>
+                                            <span class="text-muted small ms-1">
+                                              ( <%= curCode %> )
+                                            </span>
+                                          <% } %>
+                                        <% } else { %>
+                                          <span class="text-muted">-</span>
+                                        <% } %>
+                                      </td>
+                                    <% } %>
+
+                                    <% if (P.col.receivedPayment) { %>
+                                      <td>
+                                        <span class="pill-recv">
+                                          <%= money(r.amountVal) %>
+                                        </span>
+
+                                        <% if (
+                                          P.col.currency &&
+                                          curCode &&
+                                          curCode !== '-' &&
+                                          r.amountVal !== '-'
+                                        ) { %>
+                                          <span class="text-muted small ms-1">
+                                            ( <%= curCode %> )
+                                          </span>
+                                        <% } %>
+                                      </td>
+                                    <% } %>
+
+                                    <% if (P.col.pendingDues) { %>
+                                      <td>
+                                        <span class="pill-balance">
+                                          <%= money(r.due) %>
+                                        </span>
+
+                                        <% if (
+                                          P.col.currency &&
+                                          curCode &&
+                                          curCode !== '-'
+                                        ) { %>
+                                          <span class="text-muted small ms-1">
+                                            ( <%= curCode %> )
+                                          </span>
+                                        <% } %>
+                                      </td>
+                                    <% } %>
+                                  </tr>
+                                <% }) %>
+                              <% } %>
+                            <% } %>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <% if (P.col.pendingDues) { %>
+                        <div class="d-flex justify-content-between align-items-center pt-1">
+                          <div class="text-muted small">
+                            Total Dues:
+                          </div>
+
+                          <div class="fw-bold">
+                            <%= (
+                              hasNumericTotal
+                                ? money(totalDues)
+                                : '-'
+                            ) %>
+
+                            <% if (
+                              P.col.currency &&
+                              curCode &&
+                              curCode !== '-' &&
+                              hasNumericTotal
+                            ) { %>
+                              <span class="text-muted small ms-1">
+                                ( <%= curCode %> )
+                              </span>
+                            <% } %>
+                          </div>
+                        </div>
+                      <% } %>
+                    </div>
+                  </div>
+                <% } %>
+
+                <% if (canShowBillingDetails) { %>
+                  <div class="sec-title mb-2">
+                    Fees History (Jan–Dec, Popup Style)
+                  </div>
+
+                  <div class="card border-0 inner-card">
+                    <div class="card-body p-3">
+                      <% if (
+                        !showRegistrationHistory &&
+                        !showMonthlyHistory
+                      ) { %>
+                        <div class="text-muted small">
+                          No fee history found.
+                        </div>
+                      <% } else { %>
+                        <% if (
+                          P.col.totalFees ||
+                          P.col.receivedPayment ||
+                          P.col.pendingDues
+                        ) { %>
+                          <div class="dues-summary mb-2">
+                            <% if (P.col.totalFees) { %>
+                              <div class="sum-item">
+                                <div class="label">
+                                  Total Fee (Billing)
+                                </div>
+
+                                <div class="val">
+                                  <%= (
+                                    billTotals.hasFee
+                                      ? money(billTotals.feeTotal)
+                                      : '-'
+                                  ) %>
+
+                                  <% if (
+                                    P.col.currency &&
+                                    curCode &&
+                                    curCode !== '-' &&
+                                    billTotals.hasFee
+                                  ) { %>
+                                    <span class="text-muted small ms-1">
+                                      ( <%= curCode %> )
+                                    </span>
+                                  <% } %>
+                                </div>
+                              </div>
+                            <% } %>
+
+                            <% if (P.col.receivedPayment) { %>
+                              <div class="sum-item">
+                                <div class="label">
+                                  Total Received (Billing)
+                                </div>
+
+                                <div class="val">
+                                  <%= (
+                                    billTotals.hasRecv
+                                      ? money(billTotals.recvTotal)
+                                      : '-'
+                                  ) %>
+
+                                  <% if (
+                                    P.col.currency &&
+                                    curCode &&
+                                    curCode !== '-' &&
+                                    billTotals.hasRecv
+                                  ) { %>
+                                    <span class="text-muted small ms-1">
+                                      ( <%= curCode %> )
+                                    </span>
+                                  <% } %>
+                                </div>
+                              </div>
+                            <% } %>
+
+                            <% if (P.col.pendingDues) { %>
+                              <div class="sum-item">
+                                <div class="label">
+                                  Total Pending
+                                </div>
+
+                                <div class="val">
+                                  <%= (
+                                    hasNumericTotal
+                                      ? money(totalDues)
+                                      : '-'
+                                  ) %>
+
+                                  <% if (
+                                    P.col.currency &&
+                                    curCode &&
+                                    curCode !== '-' &&
+                                    hasNumericTotal
+                                  ) { %>
+                                    <span class="text-muted small ms-1">
+                                      ( <%= curCode %> )
+                                    </span>
+                                  <% } %>
+                                </div>
+                              </div>
+                            <% } %>
+                          </div>
+                        <% } %>
+
+                        <div class="timeline">
+                          <% if (showRegistrationHistory) { %>
+                            <div class="t-item registration-fee-row">
+                              <div class="t-dot reg-dot"></div>
+                              <div class="t-line"></div>
+
+                              <div class="t-content">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                  <div class="fw-semibold">
+                                    <% if (P.col.registrationFee) { %>
+                                      <span class="me-2">
+                                        Registration Fee
+                                      </span>
+                                    <% } %>
+
+                                    <span class="text-muted">
+                                      #<%= String(X.id || '-') %>
+                                    </span>
+                                  </div>
+
+                                  <% if (P.col.paymentStatus) { %>
+                                    <div class="text-muted small">
+                                      <span class="badge rounded-pill px-3 py-2 bill-pill <%= billingStatusClass(regInfo.status) %>">
+                                        <%= regInfo.status || '-' %>
+                                      </span>
+                                    </div>
+                                  <% } %>
+                                </div>
+
+                                <% if (
+                                  P.col.bank ||
+                                  P.col.month ||
+                                  P.col.verif
+                                ) { %>
+                                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
+                                    <div class="text-muted">
+                                      <% if (P.col.bank) { %>
+                                        Bank Name:
+                                        <span class="pill-light">
+                                          <%= regInfo.bank || '-' %>
+                                        </span>
+                                      <% } %>
+
+                                      <% if (P.col.month) { %>
+                                        <span class="ms-2 pill-mini">
+                                          <%= regInfo.monthLabel || '-' %>
+                                        </span>
+                                      <% } %>
+                                    </div>
+
+                                    <% if (P.col.verif) { %>
+                                      <div class="text-muted">
+                                        Verification #:
+                                        <span class="pill-mini mono">
+                                          <%= regInfo.verification || '-' %>
+                                        </span>
+                                      </div>
+                                    <% } %>
+                                  </div>
+                                <% } %>
+
+                                <% if (
+                                  P.col.registrationFee ||
+                                  P.col.receivedPayment ||
+                                  P.col.pendingDues
+                                ) { %>
+                                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
+                                    <% if (P.col.registrationFee) { %>
+                                      <div class="text-muted">
+                                        Fee:
+                                        <b><%= money(regInfo.total) %></b>
+
+                                        <% if (
+                                          P.col.currency &&
+                                          curCode &&
+                                          curCode !== '-'
+                                        ) { %>
+                                          <span class="text-muted small ms-1">
+                                            ( <%= curCode %> )
+                                          </span>
+                                        <% } %>
+                                      </div>
+                                    <% } %>
+
+                                    <% if (P.col.receivedPayment) { %>
+                                      <div class="text-muted">
+                                        Received:
+                                        <b><%= money(regInfo.received) %></b>
+
+                                        <% if (
+                                          P.col.currency &&
+                                          curCode &&
+                                          curCode !== '-'
+                                        ) { %>
+                                          <span class="text-muted small ms-1">
+                                            ( <%= curCode %> )
+                                          </span>
+                                        <% } %>
+                                      </div>
+                                    <% } %>
+
+                                    <% if (P.col.pendingDues) { %>
+                                      <div class="text-muted">
+                                        Pending:
+                                        <b><%= money(regInfo.pending) %></b>
+
+                                        <% if (
+                                          P.col.currency &&
+                                          curCode &&
+                                          curCode !== '-'
+                                        ) { %>
+                                          <span class="text-muted small ms-1">
+                                            ( <%= curCode %> )
+                                          </span>
+                                        <% } %>
+                                      </div>
+                                    <% } %>
+                                  </div>
+                                <% } %>
+                              </div>
+                            </div>
+                          <% } %>
+
+                          <% if (showMonthlyHistory) { %>
+                            <% historyRows.slice().reverse().forEach((m, i, arr) => {
+                                 const st = String(m?.status || '-');
+                                 const stCls = billingStatusClass(st);
+
+                                 const pendingRow =
+                                   (duesRows || []).find(
+                                     r => sameMonth(r.monthKey, m.key)
+                                   );
+
+                                 const stLower =
+                                   String(m?.status || '')
+                                     .toLowerCase()
+                                     .trim();
+
+                                 let pendingVal = '-';
+
+                                 if (
+                                   pendingRow &&
+                                   Number.isFinite(pendingRow.due)
+                                 ) {
+                                   pendingVal = pendingRow.due;
+                                 } else if (
+                                   stLower === 'partial payment'
+                                 ) {
+                                   const feeN =
+                                     parseFirstNumber(m?.fee);
+
+                                   const recvN =
+                                     parseFirstNumber(m?.amount);
+
+                                   const diff = Math.max(
+                                     0,
+                                     (feeN || 0) - (recvN || 0)
+                                   );
+
+                                   pendingVal =
+                                     diff > 0
+                                       ? diff
+                                       : '-';
+                                 }
+
+                                 const amountNum =
+                                   parseFirstNumber(m?.amount);
+
+                                 const stLower2 =
+                                   String(m?.status || '')
+                                     .toLowerCase()
+                                     .trim();
+
+                                 const isNotAdmittedMonth =
+                                   stLower2 === 'not admitted';
+
+                                 const canPrintFeeChallan =
+                                   canPrintChallans &&
+                                   stLower2 !== 'not admitted';
+
+                                 const canPrintPaid =
+                                   canPrintChallans &&
+                                   stLower2 !== 'not admitted' &&
+                                   amountNum > 0 &&
+                                   (
+                                     stLower2 === 'full payment' ||
+                                     stLower2 === 'partial payment'
+                                   );
+                            %>
+                              <div class="t-item">
+                                <div class="t-dot"></div>
+
+                                <div class="t-line <%= (i === arr.length - 1 ? 'end' : '') %>"></div>
+
+                                <div class="t-content">
+                                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <div class="fw-semibold">
+                                      <span class="me-2">Slip</span>
+
+                                      <span class="text-muted">
+                                        #<%= String(X.id || '-') %>
+
+                                        <% if (P.col.month) { %>
+                                          -<%= String(m.key).replace(/\s+/g, '') %>
+                                        <% } %>
+                                      </span>
+                                    </div>
+
+                                    <div class="d-flex align-items-center gap-2">
+                                      <% if (canPrintFeeChallan) { %>
+                                        <button
+                                          type="button"
+                                          class="btn btn-outline-secondary btn-sm rounded-3 js-print-month-challan"
+                                          data-admission-id="<%= X.id %>"
+                                          data-month-key="<%= m.key %>"
+                                          data-year="<%= CURRENT_YEAR %>"
+                                          title="Is month ka fee challan">
+                                          <i class="bi bi-download me-1"></i>
+                                          Fee Challan
+                                        </button>
+                                      <% } %>
+
+                                      <% if (canPrintPaid) { %>
+                                        <button
+                                          type="button"
+                                          class="btn btn-outline-secondary btn-sm rounded-3 js-print-month-paid"
+                                          data-admission-id="<%= X.id %>"
+                                          data-month-key="<%= m.key %>"
+                                          data-year="<%= CURRENT_YEAR %>"
+                                          title="Is month ka paid challan (receipt)">
+                                          <i class="bi bi-receipt me-1"></i>
+                                          Paid Challan
+                                        </button>
+                                      <% } %>
+
+                                      <% if (P.col.paymentStatus) { %>
+                                        <div class="text-muted small">
+                                          <span class="badge rounded-pill px-3 py-2 bill-pill <%= stCls %>">
+                                            <%= (st || '-') %>
+                                          </span>
+                                        </div>
+                                      <% } %>
+                                    </div>
+                                  </div>
+
+                                  <% if (
+                                    P.col.bank ||
+                                    P.col.month ||
+                                    P.col.verif
+                                  ) { %>
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
+                                      <div class="text-muted">
+                                        <% if (P.col.bank) { %>
+                                          Bank Name:
+                                          <span class="pill-light">
+                                            <%= m.bank || '-' %>
+                                          </span>
+                                        <% } %>
+
+                                        <% if (P.col.month) { %>
+                                          <span class="ms-2 pill-mini">
+                                            <%= CURRENT_YEAR %>
+                                          </span>
+                                        <% } %>
+                                      </div>
+
+                                      <% if (P.col.verif) { %>
+                                        <div class="text-muted">
+                                          Verification #:
+                                          <span class="pill-mini mono">
+                                            <%= (m.verification || '-') %>
+                                          </span>
+                                        </div>
+                                      <% } %>
+                                    </div>
+                                  <% } %>
+
+                                  <% if (
+                                    P.col.fees ||
+                                    P.col.receivedPayment ||
+                                    P.col.pendingDues
+                                  ) { %>
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
+                                      <% if (P.col.fees) { %>
+                                        <div class="text-muted">
+                                          Fee:
+                                          <b>
+                                            <%= (
+                                              !isNotAdmittedMonth &&
+                                              m.feeShown !== '-'
+                                                ? money(m.feeShown)
+                                                : '-'
+                                            ) %>
+                                          </b>
+
+                                          <% if (
+                                            P.col.currency &&
+                                            !isNotAdmittedMonth &&
+                                            curCode &&
+                                            curCode !== '-' &&
+                                            m.feeShown !== '-'
+                                          ) { %>
+                                            <span class="text-muted small ms-1">
+                                              ( <%= curCode %> )
+                                            </span>
+                                          <% } %>
+                                        </div>
+                                      <% } %>
+
+                                      <% if (P.col.receivedPayment) { %>
+                                        <div class="text-muted">
+                                          Received:
+                                          <b><%= money(m.amount || '-') %></b>
+
+                                          <% if (
+                                            P.col.currency &&
+                                            curCode &&
+                                            curCode !== '-' &&
+                                            m.amount
+                                          ) { %>
+                                            <span class="text-muted small ms-1">
+                                              ( <%= curCode %> )
+                                            </span>
+                                          <% } %>
+                                        </div>
+                                      <% } %>
+
+                                      <% if (P.col.pendingDues) { %>
+                                        <div class="text-muted">
+                                          Pending:
+                                          <b><%= money(pendingVal) %></b>
+
+                                          <% if (
+                                            P.col.currency &&
+                                            curCode &&
+                                            curCode !== '-' &&
+                                            pendingVal !== '-'
+                                          ) { %>
+                                            <span class="text-muted small ms-1">
+                                              ( <%= curCode %> )
+                                            </span>
+                                          <% } %>
+                                        </div>
+                                      <% } %>
+                                    </div>
+                                  <% } %>
+                                </div>
+                              </div>
+                            <% }) %>
+                          <% } %>
+                        </div>
+                      <% } %>
+                    </div>
+                  </div>
+                <% } %>
 
               </div>
             </div>
@@ -2296,55 +3429,110 @@ const canPrintPaid =
     .dues-table td, .dues-table th{ white-space: nowrap; }
   }
 </style>
-<!-- ✅ Pending Challan Modal (UPDATED) -->
-<div class="modal fade" id="pendingChallanModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header align-items-start">
-        <div>
-          <h5 class="modal-title mb-0">Pending Challans</h5>
-          <div class="text-muted small" id="pcmSub">Loading...</div>
+<% if (canPrintChallans) { %>
+  <!-- ✅ Pending Challan Modal -->
+  <div
+    class="modal fade"
+    id="pendingChallanModal"
+    tabindex="-1"
+    aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header align-items-start">
+          <div>
+            <h5 class="modal-title mb-0">Pending Challans</h5>
+
+            <div class="text-muted small" id="pcmSub">
+              Loading...
+            </div>
+          </div>
+
+          <div class="ms-auto d-flex gap-2">
+            <button
+              type="button"
+              class="btn btn-outline-primary btn-sm"
+              id="btnAllFeeChallans">
+              All Fee Challans
+            </button>
+
+            <button
+              type="button"
+              class="btn btn-outline-success btn-sm"
+              id="btnAllPaidChallans">
+              All Paid Challans
+            </button>
+
+            <button
+              type="button"
+              class="btn-close ms-1"
+              data-bs-dismiss="modal"
+              aria-label="Close">
+            </button>
+          </div>
         </div>
 
-        <!-- ✅ NEW: Bulk buttons -->
-        <div class="ms-auto d-flex gap-2">
-          <button type="button" class="btn btn-outline-primary btn-sm" id="btnAllFeeChallans">
-            All Fee Challans
-          </button>
-
-          <button type="button" class="btn btn-outline-success btn-sm" id="btnAllPaidChallans">
-            All Paid Challans
-          </button>
-
-          <button type="button" class="btn-close ms-1" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-body">
+          <div
+            id="pcmBody"
+            class="text-muted small">
+            Loading...
+          </div>
         </div>
-      </div>
-
-      <div class="modal-body">
-        <div id="pcmBody" class="text-muted small">Loading...</div>
       </div>
     </div>
   </div>
-</div>
-<script>
-  window.__ADMISSION_ID__ = <%- JSON.stringify(familyRouteAdmissionId || "") %>;
-  window.__FAMILY_NUMBER__ = <%- JSON.stringify(familyRouteNumber || "") %>;
-  window.__USER_ROLE__ = <%- JSON.stringify(String(user?.role || user?.agentType || '').toLowerCase()) %>;
-  window.__BILLING_YEAR__ = <%- JSON.stringify(String(CURRENT_YEAR)) %>;
-  window.__DETAILS_PAGE_URL__ = <%- JSON.stringify(sharedDetailsUrl) %>;
- window.__ROUTES__ = {
-  pendingAdmission: "/api/pending/admission/",
-  pendingFamily: "/api/pending/family/",
-  monthChallan: "/dashboard/super/admission/",
-  monthPaid: "/dashboard/super/admission/",
-  admissionPaidBulk: "/dashboard/super/admission/",
-  familyChallan: "/dashboard/super/family/",
-  familyPaidBulk: "/dashboard/super/family/",
-  feeCollectionPage: <%- JSON.stringify(feeCollectionBaseUrl) %>
-};
-</script>
-<!-- ✅ NEW: challan download click handlers -->
-<script src="/js/admission-challan.js"></script>
+
+  <script>
+    window.__ADMISSION_ID__ =
+      <%- JSON.stringify(familyRouteAdmissionId || "") %>;
+
+    window.__FAMILY_NUMBER__ =
+      <%- JSON.stringify(clientFamilyRouteNumber || "") %>;
+
+    window.__USER_ROLE__ =
+      <%- JSON.stringify(
+        String(
+          user?.role ||
+          user?.agentType ||
+          ''
+        ).toLowerCase()
+      ) %>;
+
+    window.__BILLING_YEAR__ =
+      <%- JSON.stringify(String(CURRENT_YEAR)) %>;
+
+    window.__DETAILS_PAGE_URL__ =
+      <%- JSON.stringify(sharedDetailsUrl) %>;
+
+    window.__ROUTES__ = {
+      pendingAdmission:
+        "/api/pending/admission/",
+
+      pendingFamily:
+        "/api/pending/family/",
+
+      monthChallan:
+        "/dashboard/super/admission/",
+
+      monthPaid:
+        "/dashboard/super/admission/",
+
+      admissionPaidBulk:
+        "/dashboard/super/admission/",
+
+      familyChallan:
+        "/dashboard/super/family/",
+
+      familyPaidBulk:
+        "/dashboard/super/family/",
+
+      feeCollectionPage:
+        <%- JSON.stringify(feeCollectionBaseUrl) %>
+    };
+  </script>
+
+  <script src="/js/admission-challan.js"></script>
+<% } %>
 
 <script>
 (function () {
@@ -2355,7 +3543,6 @@ const canPrintPaid =
 
   const listEl = document.getElementById("accountsNumberNoteList");
   const emptyEl = document.getElementById("accountsNumberNoteEmpty");
-  const totalEl = document.getElementById("accountsNumberNoteTotal");
   const hideBtn = document.getElementById("accountsNumberNoteHideBtn");
 
   const storageKey =
@@ -2363,10 +3550,23 @@ const canPrintPaid =
     "ivs_accounts_number_note_hidden_details";
 
   const positionStorageKey = `${storageKey}_position_v2`;
-  let currentRecords = [];
+  let currentNote = null;
   let openBtnDragMoved = false;
 
-  window.ACCOUNTS_NUMBER_NOTE = <%- JSON.stringify(accountsNumberNoteData || {}) %>;
+  window.ACCOUNTS_NUMBER_NOTE = <%- JSON.stringify(
+    shouldRenderAccountsNumberNote
+      ? accountsNumberNoteData
+      : {
+          enabled: false,
+          highestNumbers: null,
+          sidebarHighest: null,
+          latestNumbers: null,
+          notepadLatest: null,
+          latestHighest: null,
+          records: [],
+          total: 0
+        }
+  ) %>;
 
   function isAccountsNumberNoteMobile() {
     return window.matchMedia("(max-width: 767.98px)").matches;
@@ -2570,72 +3770,104 @@ const canPrintPaid =
       .replace(/'/g, "&#039;");
   }
 
-  function normalizeRecord(record = {}) {
-    const verificationNumber =
-      String(record.verificationNumber || record.rawVerificationNumber || "").trim() || "?";
-
-    const registrationNumber =
-      String(record.registrationNumber || record.rawRegistrationNumber || "").trim() || "?";
+   function normalizeLatestNumbers(data = {}) {
+    const latest =
+      (
+        data &&
+        (
+          data.latestNumbers ||
+          data.notepadLatest
+        )
+      ) ||
+      null;
 
     const familyNumber =
       String(
-        record.familyNumber ||
-        record.rawFamilyNumber ||
-        record.accountsFamilyNumber ||
-        record.accounts_family_number ||
-        ""
-      ).trim() || "?";
+        latest?.familyNumber || ""
+      ).trim();
 
-    const missingVerificationNumber =
-      record.missingVerificationNumber === true ||
-      verificationNumber === "?";
+    const verificationNumber =
+      String(
+        latest?.verificationNumber || ""
+      ).trim();
 
-    const missingRegistrationNumber =
-      record.missingRegistrationNumber === true ||
-      registrationNumber === "?";
+    const registrationNumber =
+      String(
+        latest?.registrationNumber || ""
+      ).trim();
 
-    const missingFamilyNumber =
-      record.missingFamilyNumber === true ||
-      familyNumber === "?";
+    const hasFamilyNumber =
+      !!familyNumber;
+
+    const hasVerificationNumber =
+      !!verificationNumber;
+
+    const hasRegistrationNumber =
+      !!registrationNumber;
+
+    const hasRecord =
+      hasFamilyNumber ||
+      hasVerificationNumber ||
+      hasRegistrationNumber;
+
+    const fallbackCopyText = [
+      hasFamilyNumber
+        ? `FAM: ${familyNumber}`
+        : "",
+
+      hasVerificationNumber
+        ? `VERIF: ${verificationNumber}`
+        : "",
+
+      hasRegistrationNumber
+        ? `REG: ${registrationNumber}`
+        : ""
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    const copyText =
+      String(
+        latest?.copyText ||
+        fallbackCopyText
+      ).trim();
 
     return {
-      admissionId: record.admissionId || record.id || "",
-      entryNumber: record.entryNumber || record.entry_number || record.admissionId || record.id || "-",
-      studentName: record.studentName || record.student_name || "No Name",
-      fatherName: record.fatherName || record.father_name || "",
-      grade: record.grade || "",
+      hasRecord,
       familyNumber,
       verificationNumber,
       registrationNumber,
-      missingFamilyNumber,
-      missingVerificationNumber,
-      missingRegistrationNumber,
-      updatedAt: record.updatedAt || record.updated_at || "",
-      updatedByName: record.updatedByName || record.updated_by_name || "",
-      copyText:
-        record.copyText ||
-        [
-          `Entry: ${record.entryNumber || record.admissionId || record.id || "-"}`,
-          `Student: ${record.studentName || record.student_name || "No Name"}`,
-          `FAM: ${familyNumber}`,
-          `VERIF: ${verificationNumber}`,
-          `REG: ${registrationNumber}`
-        ].join(" | ")
+      hasFamilyNumber,
+      hasVerificationNumber,
+      hasRegistrationNumber,
+      copyText
     };
   }
 
+  function makeAccountsNumberChip(label, value) {
+    return `
+      <span
+        class="accounts-number-note-chip"
+        title="${escapeHtml(value)}">
+
+        <span class="accounts-number-note-chip-label">
+          ${escapeHtml(label)}
+        </span>
+
+        <span class="accounts-number-note-chip-value">
+          ${escapeHtml(value)}
+        </span>
+      </span>
+    `;
+  }
+
   function renderAccountsNumberNote(data = {}) {
-    const records = Array.isArray(data.records)
-      ? data.records.map(normalizeRecord)
-      : [];
+    const note =
+      normalizeLatestNumbers(data);
 
-    currentRecords = records;
+    currentNote = note;
 
-    if (totalEl) {
-      totalEl.textContent = String(data.total || records.length || 0);
-    }
-
-    if (!records.length) {
+    if (!note.hasRecord) {
       listEl.innerHTML = "";
 
       if (emptyEl) {
@@ -2649,57 +3881,49 @@ const canPrintPaid =
       emptyEl.classList.add("d-none");
     }
 
-    listEl.innerHTML = records.map((record, index) => {
-      const metaParts = [
-        record.fatherName ? `Father: ${record.fatherName}` : "",
-        record.grade ? `Grade: ${record.grade}` : "",
-        record.updatedByName ? `By: ${record.updatedByName}` : ""
-      ].filter(Boolean);
+    const numberChips = [
+      note.hasFamilyNumber
+        ? makeAccountsNumberChip(
+            "FAM",
+            note.familyNumber
+          )
+        : "",
 
-      return `
-        <div class="accounts-number-note-row">
-          <div class="accounts-number-note-row-head">
-            <div class="accounts-number-note-student">
-              ${escapeHtml(record.studentName)}
-            </div>
+      note.hasVerificationNumber
+        ? makeAccountsNumberChip(
+            "VERIF",
+            note.verificationNumber
+          )
+        : "",
 
-            <div class="accounts-number-note-entry">
-              #${escapeHtml(record.entryNumber)}
-            </div>
-          </div>
+      note.hasRegistrationNumber
+        ? makeAccountsNumberChip(
+            "REG",
+            note.registrationNumber
+          )
+        : ""
+    ]
+      .filter(Boolean)
+      .join("");
 
-          <div class="accounts-number-note-meta">
-            ${escapeHtml(metaParts.join(" | ") || "Admission number update")}
-          </div>
-
-          <div class="accounts-number-note-numbers">
-            <span class="accounts-number-note-chip ${record.missingFamilyNumber ? "missing" : ""}">
-              <span class="accounts-number-note-chip-label">FAM</span>
-              <span class="accounts-number-note-chip-value">${escapeHtml(record.familyNumber)}</span>
-            </span>
-
-            <span class="accounts-number-note-chip ${record.missingVerificationNumber ? "missing" : ""}">
-              <span class="accounts-number-note-chip-label">VERIF</span>
-              <span class="accounts-number-note-chip-value">${escapeHtml(record.verificationNumber)}</span>
-            </span>
-
-            <span class="accounts-number-note-chip ${record.missingRegistrationNumber ? "missing" : ""}">
-              <span class="accounts-number-note-chip-label">REG</span>
-              <span class="accounts-number-note-chip-value">${escapeHtml(record.registrationNumber)}</span>
-            </span>
-          </div>
-
-          <button
-            type="button"
-            class="accounts-number-note-copy"
-            data-copy-index="${index}">
-            <i class="bi bi-copy me-1"></i>
-            Copy
-          </button>
+    listEl.innerHTML = `
+      <div class="accounts-number-note-row">
+        <div class="accounts-number-note-numbers">
+          ${numberChips}
         </div>
-      `;
-    }).join("");
+
+        <button
+          type="button"
+          class="accounts-number-note-copy"
+          data-copy-note="1">
+
+          <i class="bi bi-copy me-1"></i>
+          Copy
+        </button>
+      </div>
+    `;
   }
+
 
   function setNoteHidden(hidden) {
     const shouldHide = !!hidden;
@@ -2725,11 +3949,29 @@ const canPrintPaid =
 
       const data = await response.json();
 
-      if (!response.ok || data.success === false || !data.note) {
+      const noteData =
+        data.accountsNumberNote ||
+        data.note ||
+        {
+          enabled: false,
+          highestNumbers: null,
+          sidebarHighest: null,
+          latestNumbers: null,
+          notepadLatest: null,
+          latestHighest: null,
+          records: [],
+          total: 0
+        };
+
+      if (
+        !response.ok ||
+        data.success === false
+      ) {
         return;
       }
 
-      renderAccountsNumberNote(data.note);
+      window.ACCOUNTS_NUMBER_NOTE = noteData;
+      renderAccountsNumberNote(noteData);
     } catch (err) {
       console.warn("accounts number note refresh failed", err);
     }
@@ -2753,26 +3995,31 @@ const canPrintPaid =
   }
 
   widget.addEventListener("click", async function (event) {
-    const copyBtn = event.target.closest(".accounts-number-note-copy");
+    const copyBtn =
+      event.target.closest("[data-copy-note]");
 
-    if (!copyBtn) return;
-
-    const index = Number(copyBtn.getAttribute("data-copy-index") || -1);
-    const record = currentRecords[index];
-
-    if (!record) return;
+    if (
+      !copyBtn ||
+      !currentNote ||
+      !currentNote.hasRecord
+    ) {
+      return;
+    }
 
     try {
-      await navigator.clipboard.writeText(record.copyText || "");
+      await navigator.clipboard.writeText(
+        currentNote.copyText || ""
+      );
 
       const oldHtml = copyBtn.innerHTML;
-      copyBtn.innerHTML = '<i class="bi bi-check2 me-1"></i> Copied';
+      copyBtn.innerHTML =
+        '<i class="bi bi-check2 me-1"></i> Copied';
 
       if (typeof window.showUploadFlash === "function") {
         window.showUploadFlash(
           "success",
           "Copied",
-          "Family, verification and registration numbers copied."
+          "Latest family, verification and registration numbers copied."
         );
       }
 
@@ -2790,6 +4037,11 @@ const canPrintPaid =
 
   const hidden = localStorage.getItem(storageKey) === "1";
   setNoteHidden(hidden);
+
+  setInterval(
+    refreshAccountsNumberNote,
+    60000
+  );
 
   if (typeof io === "function") {
     try {

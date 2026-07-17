@@ -58,13 +58,7 @@ const familyLabel = cleanFamilyNumber
     ''
   ).trim();
 
-  const isSuperUser =
-    role === 'super_admin' ||
-    role === 'superadmin' ||
-    U?.isSuperAdmin === true ||
-    U?.is_super_admin === true;
-
-  let rawPerms =
+    let rawPerms =
     (typeof perms !== 'undefined' && perms)
       ? perms
       : (
@@ -83,45 +77,704 @@ const familyLabel = cleanFamilyNumber
     rawPerms = {};
   }
 
+  function getNestedPerm(obj, path) {
+    try {
+      const parts = String(path || '')
+        .split('.')
+        .filter(Boolean);
+
+      let current = obj;
+
+      for (const part of parts) {
+        if (
+          !current ||
+          typeof current !== 'object' ||
+          !(part in current)
+        ) {
+          return undefined;
+        }
+
+        current = current[part];
+      }
+
+      return current;
+    } catch (e) {
+      return undefined;
+    }
+  }
+
+  function permissionEnabled(value) {
+    if (value === true || value === 1) {
+      return true;
+    }
+
+    if (
+      value === false ||
+      value === 0 ||
+      value === null ||
+      typeof value === 'undefined'
+    ) {
+      return false;
+    }
+
+    return [
+      '1',
+      'true',
+      'on',
+      'yes'
+    ].includes(
+      String(value)
+        .trim()
+        .toLowerCase()
+    );
+  }
+
+  function hasOwnPermission(key) {
+    return !!(
+      rawPerms &&
+      typeof rawPerms === 'object' &&
+      !Array.isArray(rawPerms) &&
+      Object.prototype.hasOwnProperty.call(
+        rawPerms,
+        key
+      )
+    );
+  }
+
+  function hasPermissionEntry(key) {
+    const cleanKey =
+      String(key || '').trim();
+
+    if (!cleanKey || !rawPerms) {
+      return false;
+    }
+
+    if (Array.isArray(rawPerms)) {
+      return rawPerms.includes(cleanKey);
+    }
+
+    if (typeof rawPerms !== 'object') {
+      return false;
+    }
+
+    if (hasOwnPermission(cleanKey)) {
+      return true;
+    }
+
+    if (
+      typeof getNestedPerm(
+        rawPerms,
+        cleanKey
+      ) !== 'undefined'
+    ) {
+      return true;
+    }
+
+    const alt =
+      cleanKey.replace(/\./g, '_');
+
+    return hasOwnPermission(alt);
+  }
+
+  function hasKey(key) {
+    const cleanKey =
+      String(key || '').trim();
+
+    if (!cleanKey || !rawPerms) {
+      return false;
+    }
+
+    if (rawPerms === true) {
+      return true;
+    }
+
+    if (Array.isArray(rawPerms)) {
+      return (
+        rawPerms.includes(cleanKey) ||
+        rawPerms.includes('*') ||
+        rawPerms.includes('all')
+      );
+    }
+
+    if (typeof rawPerms === 'object') {
+      if (hasOwnPermission(cleanKey)) {
+        return permissionEnabled(
+          rawPerms[cleanKey]
+        );
+      }
+
+      const nested =
+        getNestedPerm(
+          rawPerms,
+          cleanKey
+        );
+
+      if (typeof nested !== 'undefined') {
+        return permissionEnabled(nested);
+      }
+
+      const alt =
+        cleanKey.replace(/\./g, '_');
+
+      if (hasOwnPermission(alt)) {
+        return permissionEnabled(
+          rawPerms[alt]
+        );
+      }
+    }
+
+    return false;
+  }
+
+  function canAny(keys) {
+    return (keys || [])
+      .filter(Boolean)
+      .some(key => hasKey(key));
+  }
+
+  const COLUMN_VIEW_KEY_MAP =
+    Object.freeze({
+      status: 'colStatus',
+      feeStatus: 'colFeeStatus',
+      dept: 'colDept',
+      student: 'colStudentName',
+      father: 'colFatherName',
+      fatherEmail: 'colFatherEmail',
+      grade: 'colGrade',
+      tuitionGrade: 'colTuitionGrade',
+      phone: 'colPhone',
+      processedBy: 'colProcessedBy',
+      paymentStatus: 'colPaymentStatus',
+      paidUpto: 'colPaidUpto',
+      verificationNumber:
+        'colVerificationNumber',
+      registrationNumber:
+        'colRegistrationNumber',
+      familyNumber:
+        'colFamilyNumber',
+      registrationFee:
+        'colRegistrationFee',
+      fees: 'colFees',
+      currency: 'colCurrency',
+      bank: 'colBank',
+      month: 'colMonth',
+      totalFees: 'colTotalFees',
+      pendingDues: 'colPendingDues',
+      receivedPayment:
+        'colReceivedPayment',
+      comment: 'colComment',
+      invoiceStatus:
+        'colInvoiceStatus',
+      invoiceStatusTimestamp:
+        'colInvoiceStatusTimestamp',
+      paidInvoiceStatus:
+        'colPaidInvoiceStatus',
+      paidInvoiceStatusTimestamp:
+        'colPaidInvoiceStatusTimestamp',
+      actionButtons:
+        'colActionButtons'
+    });
+
+  const COLUMN_EDIT_KEY_MAP =
+    Object.freeze({
+      status: 'editStatus',
+      feeStatus: 'editFeeStatus',
+      dept: 'editDept',
+      student: 'editStudentName',
+      father: 'editFatherName',
+      fatherEmail: 'editFatherEmail',
+      grade: 'editGrade',
+      tuitionGrade:
+        'editTuitionGrade',
+      phone: 'editPhone',
+      paymentStatus:
+        'editPaymentStatus',
+      verificationNumber:
+        'editVerificationNumber',
+      registrationNumber:
+        'editRegistrationNumber',
+      familyNumber:
+        'editFamilyNumber',
+      registrationFee:
+        'editRegistrationFee',
+      fees: 'editFees',
+      currency: 'editCurrency',
+      bank: 'editBank',
+      month: 'editMonth',
+      comment: 'editComment'
+    });
+
+  const COLUMN_VIEW_LEGACY_KEY_MAP =
+    Object.freeze({
+      phone: [
+        'showPhone'
+      ],
+
+      paymentStatus: [
+        'showPaymentStatus'
+      ],
+
+      paidUpto: [
+        'showPaidUpto'
+      ],
+
+      verificationNumber: [
+        'showVerificationNumber'
+      ],
+
+      registrationNumber: [
+        'showRegistrationNumber'
+      ]
+    });
+
+  const hasExplicitEditSchema =
+    Object.values(
+      COLUMN_EDIT_KEY_MAP
+    ).some(key =>
+      hasPermissionEntry(key)
+    );
+
+  function canCol(name) {
+    const key =
+      String(name || '').trim();
+
+    const permissionKey =
+      COLUMN_VIEW_KEY_MAP[key];
+
+    if (!permissionKey) {
+      return false;
+    }
+
+    const legacyKeys =
+      COLUMN_VIEW_LEGACY_KEY_MAP[key] ||
+      [];
+
+    const pascalKey =
+      key.charAt(0).toUpperCase() +
+      key.slice(1);
+
+    return canAny([
+      permissionKey,
+      ...legacyKeys,
+
+      `col.${key}`,
+      `show_${key}`,
+      `show${pascalKey}`,
+
+      `super.col.${key}`,
+      `super.column.${key}`,
+
+      `admin.col.${key}`,
+      `admin.column.${key}`,
+
+      `agent.col.${key}`,
+      `agent.column.${key}`,
+
+      `subagent.col.${key}`,
+      `subagent.column.${key}`,
+
+      `sub_agent.col.${key}`,
+      `sub_agent.column.${key}`,
+
+      `dashboard_super.col.${key}`,
+      `dashboard-super.col.${key}`,
+
+      `dashboard_admin.col.${key}`,
+      `dashboard-admin.col.${key}`,
+
+      `dashboard_agent.col.${key}`,
+      `dashboard-agent.col.${key}`,
+
+      `dashboard_sub_agent.col.${key}`,
+      `dashboard-sub-agent.col.${key}`,
+
+      `perm.super.col.${key}`,
+      `perm.admin.col.${key}`,
+      `perm.agent.col.${key}`,
+      `perm.sub_agent.col.${key}`,
+
+      key
+    ]);
+  }
+
+  function canEditCol(name) {
+    const key =
+      String(name || '').trim();
+
+    const editPermissionKey =
+      COLUMN_EDIT_KEY_MAP[key];
+
+    if (
+      !editPermissionKey ||
+      !canCol(key)
+    ) {
+      return false;
+    }
+
+    /*
+     * Legacy users:
+     * Existing View permission old Edit access ko
+     * preserve karegi jab tak user new Edit schema
+     * ke saath re-save na ho.
+     */
+    if (!hasExplicitEditSchema) {
+      return true;
+    }
+
+    return hasKey(
+      editPermissionKey
+    );
+  }
+
+  const BUTTON_PERMISSION_KEY_MAP =
+    Object.freeze({
+      billing: 'btnBilling',
+      details: 'btnDetails'
+    });
+
+  function canBtn(name) {
+    const key =
+      String(name || '').trim();
+
+    const permissionKey =
+      BUTTON_PERMISSION_KEY_MAP[key];
+
+    if (!permissionKey) {
+      return false;
+    }
+
+    const pascalKey =
+      key.charAt(0).toUpperCase() +
+      key.slice(1);
+
+    return canAny([
+      permissionKey,
+
+      `super.btn.${key}`,
+      `super.button.${key}`,
+
+      `admin.btn.${key}`,
+      `admin.button.${key}`,
+
+      `agent.btn.${key}`,
+      `agent.button.${key}`,
+
+      `subagent.btn.${key}`,
+      `subagent.button.${key}`,
+
+      `sub_agent.btn.${key}`,
+      `sub_agent.button.${key}`,
+
+      `dashboard_super.btn.${key}`,
+      `dashboard-super.btn.${key}`,
+
+      `dashboard_admin.btn.${key}`,
+      `dashboard-admin.btn.${key}`,
+
+      `dashboard_agent.btn.${key}`,
+      `dashboard-agent.btn.${key}`,
+
+      `dashboard_sub_agent.btn.${key}`,
+      `dashboard-sub-agent.btn.${key}`,
+
+      `perm.super.btn.${key}`,
+      `perm.admin.btn.${key}`,
+      `perm.agent.btn.${key}`,
+      `perm.sub_agent.btn.${key}`,
+
+      `btn_${key}`,
+      `btn${pascalKey}`,
+      key
+    ]);
+  }
+
+  const P = {
+    col: {
+      status:
+        canCol('status'),
+
+      feeStatus:
+        canCol('feeStatus'),
+
+      dept:
+        canCol('dept'),
+
+      student:
+        canCol('student'),
+
+      father:
+        canCol('father'),
+
+      fatherEmail:
+        canCol('fatherEmail'),
+
+      grade:
+        canCol('grade'),
+
+      tuitionGrade:
+        canCol('tuitionGrade'),
+
+      phone:
+        canCol('phone'),
+
+      processedBy:
+        canCol('processedBy'),
+
+      paymentStatus:
+        canCol('paymentStatus'),
+
+      paidUpto:
+        canCol('paidUpto'),
+
+      verif:
+        canCol('verificationNumber'),
+
+      reg:
+        canCol('registrationNumber'),
+
+      family:
+        canCol('familyNumber'),
+
+      registrationFee:
+        canCol('registrationFee'),
+
+      fees:
+        canCol('fees'),
+
+      currency:
+        canCol('currency'),
+
+      bank:
+        canCol('bank'),
+
+      month:
+        canCol('month'),
+
+      totalFees:
+        canCol('totalFees'),
+
+      pendingDues:
+        canCol('pendingDues'),
+
+      receivedPayment:
+        canCol('receivedPayment'),
+
+      comment:
+        canCol('comment'),
+
+      invoiceStatus:
+        canCol('invoiceStatus'),
+
+      invoiceStatusTimestamp:
+        canCol(
+          'invoiceStatusTimestamp'
+        ),
+
+      paidInvoiceStatus:
+        canCol('paidInvoiceStatus'),
+
+      paidInvoiceStatusTimestamp:
+        canCol(
+          'paidInvoiceStatusTimestamp'
+        ),
+
+      actionButtons:
+        canCol('actionButtons')
+    },
+
+    edit: {
+      paymentStatus:
+        canEditCol(
+          'paymentStatus'
+        ),
+
+      verificationNumber:
+        canEditCol(
+          'verificationNumber'
+        ),
+
+      bank:
+        canEditCol('bank')
+    },
+
+    btn: {
+      billing:
+        canBtn('billing'),
+
+      details:
+        canBtn('details')
+    }
+  };
+
+  const canUseFeeCollectionActions =
+    P.col.actionButtons &&
+    P.btn.billing;
+
   const canEditVerificationNumber =
-    isSuperUser ||
-    rawPerms === true ||
-    (Array.isArray(rawPerms) && (
-      rawPerms.includes('*') ||
-      rawPerms.includes('all') ||
-      rawPerms.includes('colVerificationNumber')
-    )) ||
-    (rawPerms && typeof rawPerms === 'object' && rawPerms.colVerificationNumber === true);
+    canUseFeeCollectionActions &&
+    P.edit.verificationNumber;
 
   const canEditBank =
-    isSuperUser ||
-    rawPerms === true ||
-    (Array.isArray(rawPerms) && (
-      rawPerms.includes('*') ||
-      rawPerms.includes('all') ||
-      rawPerms.includes('colBank')
-    )) ||
-    (rawPerms && typeof rawPerms === 'object' && rawPerms.colBank === true);
+    canUseFeeCollectionActions &&
+    P.edit.bank;
+
+  const canMarkNotAdmitted =
+    canUseFeeCollectionActions &&
+    P.col.month &&
+    P.edit.paymentStatus;
 
   // Paid Slip tick/cross approval workflow is limited to Accounts Agent/Sub-Agent.
   // Super Admin and Admin keep the existing correction/edit behavior.
   const isPaidSlipWorkflowUserSafe =
-    typeof isPaidSlipWorkflowUser !== 'undefined'
+    typeof isPaidSlipWorkflowUser !==
+    'undefined'
       ? !!isPaidSlipWorkflowUser
       : false;
 
+  const canReviewVerificationNumber =
+    canUseFeeCollectionActions &&
+    P.col.verif;
+
+  const canReviewBank =
+    canUseFeeCollectionActions &&
+    P.col.bank;
+
+  const canCompletePaidSlipReview =
+    !isPaidSlipWorkflowUserSafe ||
+    (
+      canReviewVerificationNumber &&
+      canReviewBank
+    );
+
+  const canReceivePayment =
+    canUseFeeCollectionActions &&
+    canCompletePaidSlipReview;
+
+  const clientFamilyNumber =
+    P.col.family
+      ? cleanFamilyNumber
+      : '';
+
+  const clientFamilyLabel =
+    P.col.family
+      ? familyLabel
+      : '';
+
+  const clientMasterVerificationNumberSafe =
+    P.col.verif
+      ? masterVerificationNumberSafe
+      : '';
+
+  const clientMasterBankNameSafe =
+    P.col.bank
+      ? masterBankNameSafe
+      : '';
+
+  const clientBankOptionsSafe =
+    P.col.bank
+      ? bankOptionsSafe
+      : [];
+
+  const showFeeTypeColumn =
+    P.col.registrationFee ||
+    P.col.fees;
+
+  const showStudentIdentityColumn =
+    P.col.student ||
+    P.col.reg;
+
+  const pendingVisibleColumnCount = [
+    true,
+    canMarkNotAdmitted,
+    showFeeTypeColumn,
+    showStudentIdentityColumn,
+    P.col.dept,
+    P.col.grade,
+    P.col.month,
+    P.col.paymentStatus,
+    showFeeTypeColumn,
+    P.col.receivedPayment,
+    P.col.pendingDues
+  ].filter(Boolean).length;
+
+  const excludedVisibleColumnCount = [
+    true,
+    showStudentIdentityColumn,
+    P.col.dept,
+    P.col.grade,
+    P.col.month,
+    P.col.paymentStatus,
+    P.col.fees,
+    P.col.pendingDues
+  ].filter(Boolean).length;
+
+  const paidVisibleColumnCount = [
+    true,
+    showFeeTypeColumn,
+    showStudentIdentityColumn,
+    P.col.month,
+    P.col.paymentStatus,
+    showFeeTypeColumn,
+    P.col.receivedPayment,
+    P.col.verif
+  ].filter(Boolean).length;
+
   const accountsNumberNoteData =
-    (typeof accountsNumberNote !== 'undefined' && accountsNumberNote)
+    (
+      typeof accountsNumberNote !==
+      'undefined' &&
+      accountsNumberNote
+    )
       ? accountsNumberNote
       : {
           enabled: false,
+          highestNumbers: null,
+          sidebarHighest: null,
+          latestNumbers: null,
+          notepadLatest: null,
           latestHighest: null,
           records: [],
           total: 0
         };
 
+  const feeCollectionUserDeptKey =
+    String(
+      (
+        U &&
+        (
+          U.dept ||
+          U.department ||
+          U.userDept ||
+          U.user_department
+        )
+      ) ||
+      ''
+    ).trim().toLowerCase();
+
+  const isSuperFeeCollectionUser =
+    !!(
+      role === 'super_admin' ||
+      role === 'superadmin' ||
+      U?.isSuperAdmin === true ||
+      U?.is_super_admin === true
+    );
+
+  const isAccountsFeeCollectionUser =
+    feeCollectionUserDeptKey === 'accounts' ||
+    feeCollectionUserDeptKey === 'school accounts' ||
+    feeCollectionUserDeptKey === 'school_accounts';
+
+  /*
+   * Latest Numbers global Accounts summary hai.
+   * Is mein student/admission details nahi hotin,
+   * is liye column View permissions required nahi.
+   */
   const shouldRenderAccountsNumberNote =
     !!(
+      (
+        isSuperFeeCollectionUser ||
+        isAccountsFeeCollectionUser
+      ) &&
       accountsNumberNoteData &&
       accountsNumberNoteData.enabled
     );
@@ -138,14 +791,10 @@ const familyLabel = cleanFamilyNumber
       <div class="accounts-number-note-head">
         <div>
           <div class="accounts-number-note-title">
-            Latest Fam + Verif + Reg Updates
+            Latest Fam + Verif + Reg Numbers
           </div>
           <div class="accounts-number-note-subtitle">
-            Recent updates first
-            <span id="accountsNumberNoteTotal">
-              <%= Number(accountsNumberNoteData.total || 0) %>
-            </span>
-            records
+            Latest update from each field
           </div>
         </div>
 
@@ -187,8 +836,11 @@ const familyLabel = cleanFamilyNumber
         Mode: <b class="text-capitalize"><%= mode || 'single' %></b>
         <span class="mx-2">|</span>
         Billing Year: <b><%= currentYear %></b>
-        <span class="mx-2">|</span>
-        Family #: <b><%= familyLabel %></b>
+        <% if (P.col.family) { %>
+          <span class="mx-2">|</span>
+          Family #:
+          <b><%= clientFamilyLabel || '-' %></b>
+        <% } %>
       </div>
     </div>
 
@@ -209,100 +861,246 @@ const familyLabel = cleanFamilyNumber
             </div>
           </div>
 
-          <div class="summary-grid mb-3">
-  <div class="sum-item">
-    <div class="label">Total Fee for the Session</div>
-    <div class="val" id="fcSummaryTotalFee"><%= fmt(summarySafe.totalFee) %></div>
-  </div>
+          <% if (
+            P.col.totalFees ||
+            P.col.receivedPayment ||
+            P.col.pendingDues
+          ) { %>
+            <div class="summary-grid mb-3">
 
-  <div class="sum-item">
-    <div class="label">Total Received</div>
-    <div class="val" id="fcSummaryTotalReceived"><%= fmt(summarySafe.totalReceived) %></div>
-  </div>
+              <% if (P.col.totalFees) { %>
+                <div class="sum-item">
+                  <div class="label">
+                    Total Fee for the Session
+                  </div>
 
-  <div class="sum-item">
-    <div class="label">Total Pending Dues</div>
-    <div class="val" id="fcSummaryTotalDues"><%= fmt(summarySafe.totalFullPendingDues) %></div>
-  </div>
-</div>
+                  <div
+                    class="val"
+                    id="fcSummaryTotalFee">
+                    <%= fmt(summarySafe.totalFee) %>
+                  </div>
+                </div>
+              <% } %>
+
+              <% if (P.col.receivedPayment) { %>
+                <div class="sum-item">
+                  <div class="label">
+                    Total Received
+                  </div>
+
+                  <div
+                    class="val"
+                    id="fcSummaryTotalReceived">
+                    <%= fmt(summarySafe.totalReceived) %>
+                  </div>
+                </div>
+              <% } %>
+
+              <% if (P.col.pendingDues) { %>
+                <div class="sum-item">
+                  <div class="label">
+                    Total Pending Dues
+                  </div>
+
+                  <div
+                    class="val"
+                    id="fcSummaryTotalDues">
+                    <%= fmt(summarySafe.totalFullPendingDues) %>
+                  </div>
+                </div>
+              <% } %>
+
+            </div>
+          <% } %>
 
           <div class="card border-0 inner-card">
             <div class="card-body p-3">
-              <div class="table-responsive">
-                <table class="table table-sm align-middle due-table mb-0" id="fcDueTable">
+                          <div class="table-responsive">
+                <table
+                  class="table table-sm align-middle due-table mb-0"
+                  id="fcDueTable">
                   <thead>
-            <tr>
-  <th style="width:6%">#</th>
-  <th style="width:8%">Select</th>
-  <th style="width:14%">Fee Type</th>
-  <th style="width:16%">Student</th>
-  <th style="width:10%">Dept</th>
-  <th style="width:10%">Grade</th>
-  <th style="width:10%">Month</th>
-  <th style="width:12%">Status</th>
-  <th style="width:8%">Fee</th>
-  <th style="width:8%">Received</th>
-  <th style="width:8%">Due</th>
-</tr>
+                    <tr>
+                      <th style="width:6%">#</th>
+
+                      <% if (canMarkNotAdmitted) { %>
+                        <th style="width:8%">Select</th>
+                      <% } %>
+
+                      <% if (showFeeTypeColumn) { %>
+                        <th style="width:14%">Fee Type</th>
+                      <% } %>
+
+                      <% if (showStudentIdentityColumn) { %>
+                        <th style="width:16%">
+                          <%= P.col.student
+                            ? 'Student'
+                            : 'Registration #' %>
+                        </th>
+                      <% } %>
+
+                      <% if (P.col.dept) { %>
+                        <th style="width:10%">Dept</th>
+                      <% } %>
+
+                      <% if (P.col.grade) { %>
+                        <th style="width:10%">Grade</th>
+                      <% } %>
+
+                      <% if (P.col.month) { %>
+                        <th style="width:10%">Month</th>
+                      <% } %>
+
+                      <% if (P.col.paymentStatus) { %>
+                        <th style="width:12%">Status</th>
+                      <% } %>
+
+                      <% if (showFeeTypeColumn) { %>
+                        <th style="width:8%">Fee</th>
+                      <% } %>
+
+                      <% if (P.col.receivedPayment) { %>
+                        <th style="width:8%">Received</th>
+                      <% } %>
+
+                      <% if (P.col.pendingDues) { %>
+                        <th style="width:8%">Due</th>
+                      <% } %>
+                    </tr>
                   </thead>
+
                   <tbody id="fcDueTableBody">
                     <% if (!feeRowsSafe.length) { %>
                       <tr>
-                        <td colspan="11" class="text-muted small">No pending dues found.</td>
+                        <td
+                          colspan="<%= pendingVisibleColumnCount %>"
+                          class="text-muted small">
+                          No pending dues found.
+                        </td>
                       </tr>
                     <% } else { %>
                       <% feeRowsSafe.forEach((r, idx) => { %>
-                       <tr class="<%= r.isRegistrationFee ? 'registration-fee-row' : '' %>">
-  <td>
-    <span class="pill-mini"><%= idx + 1 %></span>
-  </td>
+                        <tr class="<%= r.isRegistrationFee ? 'registration-fee-row' : '' %>">
+                          <td>
+                            <span class="pill-mini">
+                              <%= idx + 1 %>
+                            </span>
+                          </td>
 
-  <td>
-    <% if (r.isRegistrationFee) { %>
-      <span class="text-muted tiny">N/A</span>
-    <% } else { %>
-      <div class="form-check m-0 d-flex justify-content-center">
-        <input
-          class="form-check-input fc-not-admitted-check"
-          type="checkbox"
-          value="<%= `${r.admissionId}:${r.monthKey}` %>"
-          data-admission-id="<%= r.admissionId %>"
-          data-month-key="<%= r.monthKey %>"
-          title="Mark this month as Not admitted"
-        >
-      </div>
-    <% } %>
-  </td>
+                          <% if (canMarkNotAdmitted) { %>
+                            <td>
+                              <% if (r.isRegistrationFee) { %>
+                                <span class="text-muted tiny">
+                                  N/A
+                                </span>
+                              <% } else { %>
+                                <div class="form-check m-0 d-flex justify-content-center">
+                                  <input
+                                    class="form-check-input fc-not-admitted-check"
+                                    type="checkbox"
+                                    value="<%= `${r.admissionId}:${r.monthKey}` %>"
+                                    data-admission-id="<%= r.admissionId %>"
+                                    data-month-key="<%= r.monthKey %>"
+                                    title="Mark this month as Not admitted">
+                                </div>
+                              <% } %>
+                            </td>
+                          <% } %>
 
-  <td>
-    <span class="<%= r.isRegistrationFee ? 'fee-type-chip reg-chip' : 'fee-type-chip monthly-chip' %>">
-      <%= r.feeType || (r.isRegistrationFee ? 'Registration Fee' : 'Monthly Fee') %>
-    </span>
-  </td>
+                          <% if (showFeeTypeColumn) { %>
+                            <td>
+                              <% if (
+                                (r.isRegistrationFee && P.col.registrationFee) ||
+                                (!r.isRegistrationFee && P.col.fees)
+                              ) { %>
+                                <span class="<%= r.isRegistrationFee ? 'fee-type-chip reg-chip' : 'fee-type-chip monthly-chip' %>">
+                                  <%= r.feeType || (
+                                    r.isRegistrationFee
+                                      ? 'Registration Fee'
+                                      : 'Monthly Fee'
+                                  ) %>
+                                </span>
+                              <% } else { %>
+                                <span class="text-muted">-</span>
+                              <% } %>
+                            </td>
+                          <% } %>
 
-  <td>
-    <div class="fw-semibold"><%= r.studentName || '-' %></div>
-    <div class="text-muted tiny"><%= r.registrationNumber || '-' %></div>
-  </td>
+                          <% if (showStudentIdentityColumn) { %>
+                            <td>
+                              <% if (P.col.student) { %>
+                                <div class="fw-semibold">
+                                  <%= r.studentName || '-' %>
+                                </div>
+                              <% } %>
 
-  <td>
-    <span class="pill-light text-capitalize"><%= r.dept || '-' %></span>
-  </td>
+                              <% if (P.col.reg) { %>
+                                <div class="text-muted tiny">
+                                  <%= r.registrationNumber || '-' %>
+                                </div>
+                              <% } %>
+                            </td>
+                          <% } %>
 
-  <td><%= r.grade || '-' %></td>
+                          <% if (P.col.dept) { %>
+                            <td>
+                              <span class="pill-light text-capitalize">
+                                <%= r.dept || '-' %>
+                              </span>
+                            </td>
+                          <% } %>
 
-  <td>
-    <span class="pill-month"><%= r.monthLabel || r.monthKey || '-' %></span>
-  </td>
+                          <% if (P.col.grade) { %>
+                            <td><%= r.grade || '-' %></td>
+                          <% } %>
 
-  <td>
-    <span class="status-chip"><%= r.status || '-' %></span>
-  </td>
+                          <% if (P.col.month) { %>
+                            <td>
+                              <span class="pill-month">
+                                <%= r.monthLabel || r.monthKey || '-' %>
+                              </span>
+                            </td>
+                          <% } %>
 
-  <td><span class="num fee-num"><%= fmt(r.fee) %></span></td>
-  <td><span class="num recv-num"><%= fmt(r.received) %></span></td>
-  <td><span class="num due-num"><%= fmt(r.due) %></span></td>
-</tr>
+                          <% if (P.col.paymentStatus) { %>
+                            <td>
+                              <span class="status-chip">
+                                <%= r.status || '-' %>
+                              </span>
+                            </td>
+                          <% } %>
+
+                          <% if (showFeeTypeColumn) { %>
+                            <td>
+                              <% if (
+                                (r.isRegistrationFee && P.col.registrationFee) ||
+                                (!r.isRegistrationFee && P.col.fees)
+                              ) { %>
+                                <span class="num fee-num">
+                                  <%= fmt(r.fee) %>
+                                </span>
+                              <% } else { %>
+                                <span class="text-muted">-</span>
+                              <% } %>
+                            </td>
+                          <% } %>
+
+                          <% if (P.col.receivedPayment) { %>
+                            <td>
+                              <span class="num recv-num">
+                                <%= fmt(r.received) %>
+                              </span>
+                            </td>
+                          <% } %>
+
+                          <% if (P.col.pendingDues) { %>
+                            <td>
+                              <span class="num due-num">
+                                <%= fmt(r.due) %>
+                              </span>
+                            </td>
+                          <% } %>
+                        </tr>
                       <% }) %>
                     <% } %>
                   </tbody>
@@ -314,12 +1112,22 @@ const familyLabel = cleanFamilyNumber
           <% if (rowsSafe.length) { %>
             <div class="card border-0 inner-card mt-3">
               <div class="card-body p-3">
-                <div class="sec-title mb-2">Admissions in This Collection</div>
+                <div class="sec-title mb-2">
+                  Admissions in This Collection
+                </div>
+
                 <div class="d-flex flex-wrap gap-2">
                   <% rowsSafe.forEach((r) => { %>
                     <span class="admission-pill">
-                      <b><%= r.student_name || '-' %></b>
-                      <span class="text-muted">(#<%= r.id %>)</span>
+                      <% if (P.col.student) { %>
+                        <b><%= r.student_name || '-' %></b>
+                      <% } else { %>
+                        <b>Admission</b>
+                      <% } %>
+
+                      <span class="text-muted">
+                        (#<%= r.id %>)
+                      </span>
                     </span>
                   <% }) %>
                 </div>
@@ -328,63 +1136,158 @@ const familyLabel = cleanFamilyNumber
           <% } %>
            
           <div class="card border-0 inner-card mt-3">
-  <div class="card-body p-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-      <div class="sec-title">Excluded / Not Admitted Months</div>
-      <div class="text-muted small">
-        Excluded Rows: <b id="fcExcludedRowsCount"><%= excludedRowsSafe.length %></b>
-      </div>
-    </div>
-
-    <div class="table-responsive">
-      <table class="table table-sm align-middle excluded-table mb-0">
-        <thead>
-          <tr>
-            <th style="width:6%">#</th>
-            <th style="width:18%">Student</th>
-            <th style="width:12%">Dept</th>
-            <th style="width:12%">Grade</th>
-            <th style="width:12%">Month</th>
-            <th style="width:14%">Status</th>
-            <th style="width:12%">Fee</th>
-            <th style="width:14%">Due</th>
-          </tr>
-        </thead>
-
-        <tbody id="fcExcludedTableBody">
-          <% if (!excludedRowsSafe.length) { %>
-            <tr>
-              <td colspan="8" class="text-muted small">No excluded / not admitted months found.</td>
-            </tr>
-          <% } else { %>
-            <% excludedRowsSafe.forEach((r, idx) => { %>
-              <tr class="excluded-month-row">
-                <td><span class="pill-mini"><%= idx + 1 %></span></td>
-                <td>
-                  <div class="fw-semibold"><%= r.studentName || '-' %></div>
-                  <div class="text-muted tiny"><%= r.registrationNumber || '-' %></div>
-                </td>
-                <td><span class="pill-light text-capitalize"><%= r.dept || '-' %></span></td>
-                <td><%= r.grade || '-' %></td>
-                <td><span class="pill-month excluded-month-chip"><%= r.monthLabel || r.monthKey || '-' %></span></td>
-                <td><span class="excluded-status-chip"><%= r.status || 'Not admitted' %></span></td>
-                <td><span class="num text-muted"><%= fmt(r.fee) %></span></td>
-                <td><span class="num text-muted"><%= fmt(r.due) %></span></td>
-              </tr>
-            <% }) %>
-          <% } %>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-                    <div class="card border-0 inner-card mt-3">
             <div class="card-body p-3">
               <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                <div class="sec-title">Paid Months & Registration Fee</div>
+                <div class="sec-title">
+                  Excluded / Not Admitted Months
+                </div>
+
                 <div class="text-muted small">
-                  Paid Rows: <b id="fcPaidRowsCount"><%= paidRowsSafe.length %></b>
+                  Excluded Rows:
+                  <b id="fcExcludedRowsCount">
+                    <%= excludedRowsSafe.length %>
+                  </b>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-sm align-middle excluded-table mb-0">
+                  <thead>
+                    <tr>
+                      <th style="width:6%">#</th>
+
+                      <% if (showStudentIdentityColumn) { %>
+                        <th style="width:18%">
+                          <%= P.col.student
+                            ? 'Student'
+                            : 'Registration #' %>
+                        </th>
+                      <% } %>
+
+                      <% if (P.col.dept) { %>
+                        <th style="width:12%">Dept</th>
+                      <% } %>
+
+                      <% if (P.col.grade) { %>
+                        <th style="width:12%">Grade</th>
+                      <% } %>
+
+                      <% if (P.col.month) { %>
+                        <th style="width:12%">Month</th>
+                      <% } %>
+
+                      <% if (P.col.paymentStatus) { %>
+                        <th style="width:14%">Status</th>
+                      <% } %>
+
+                      <% if (P.col.fees) { %>
+                        <th style="width:12%">Fee</th>
+                      <% } %>
+
+                      <% if (P.col.pendingDues) { %>
+                        <th style="width:14%">Due</th>
+                      <% } %>
+                    </tr>
+                  </thead>
+
+                  <tbody id="fcExcludedTableBody">
+                    <% if (!excludedRowsSafe.length) { %>
+                      <tr>
+                        <td
+                          colspan="<%= excludedVisibleColumnCount %>"
+                          class="text-muted small">
+                          No excluded / not admitted months found.
+                        </td>
+                      </tr>
+                    <% } else { %>
+                      <% excludedRowsSafe.forEach((r, idx) => { %>
+                        <tr class="excluded-month-row">
+                          <td>
+                            <span class="pill-mini">
+                              <%= idx + 1 %>
+                            </span>
+                          </td>
+
+                          <% if (showStudentIdentityColumn) { %>
+                            <td>
+                              <% if (P.col.student) { %>
+                                <div class="fw-semibold">
+                                  <%= r.studentName || '-' %>
+                                </div>
+                              <% } %>
+
+                              <% if (P.col.reg) { %>
+                                <div class="text-muted tiny">
+                                  <%= r.registrationNumber || '-' %>
+                                </div>
+                              <% } %>
+                            </td>
+                          <% } %>
+
+                          <% if (P.col.dept) { %>
+                            <td>
+                              <span class="pill-light text-capitalize">
+                                <%= r.dept || '-' %>
+                              </span>
+                            </td>
+                          <% } %>
+
+                          <% if (P.col.grade) { %>
+                            <td><%= r.grade || '-' %></td>
+                          <% } %>
+
+                          <% if (P.col.month) { %>
+                            <td>
+                              <span class="pill-month excluded-month-chip">
+                                <%= r.monthLabel || r.monthKey || '-' %>
+                              </span>
+                            </td>
+                          <% } %>
+
+                          <% if (P.col.paymentStatus) { %>
+                            <td>
+                              <span class="excluded-status-chip">
+                                <%= r.status || 'Not admitted' %>
+                              </span>
+                            </td>
+                          <% } %>
+
+                          <% if (P.col.fees) { %>
+                            <td>
+                              <span class="num text-muted">
+                                <%= fmt(r.fee) %>
+                              </span>
+                            </td>
+                          <% } %>
+
+                          <% if (P.col.pendingDues) { %>
+                            <td>
+                              <span class="num text-muted">
+                                <%= fmt(r.due) %>
+                              </span>
+                            </td>
+                          <% } %>
+                        </tr>
+                      <% }) %>
+                    <% } %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="card border-0 inner-card mt-3">
+            <div class="card-body p-3">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="sec-title">
+                  Paid Months & Registration Fee
+                </div>
+
+                <div class="text-muted small">
+                  Paid Rows:
+                  <b id="fcPaidRowsCount">
+                    <%= paidRowsSafe.length %>
+                  </b>
                 </div>
               </div>
 
@@ -393,50 +1296,148 @@ const familyLabel = cleanFamilyNumber
                   <thead>
                     <tr>
                       <th style="width:6%">#</th>
-                      <th style="width:18%">Fee Type</th>
-                      <th style="width:20%">Student</th>
-                      <th style="width:12%">Month</th>
-                      <th style="width:12%">Status</th>
-                      <th style="width:10%">Fee</th>
-                      <th style="width:10%">Received</th>
-                      <th style="width:12%">Verification #</th>
+
+                      <% if (showFeeTypeColumn) { %>
+                        <th style="width:18%">Fee Type</th>
+                      <% } %>
+
+                      <% if (showStudentIdentityColumn) { %>
+                        <th style="width:20%">
+                          <%= P.col.student
+                            ? 'Student'
+                            : 'Registration #' %>
+                        </th>
+                      <% } %>
+
+                      <% if (P.col.month) { %>
+                        <th style="width:12%">Month</th>
+                      <% } %>
+
+                      <% if (P.col.paymentStatus) { %>
+                        <th style="width:12%">Status</th>
+                      <% } %>
+
+                      <% if (showFeeTypeColumn) { %>
+                        <th style="width:10%">Fee</th>
+                      <% } %>
+
+                      <% if (P.col.receivedPayment) { %>
+                        <th style="width:10%">Received</th>
+                      <% } %>
+
+                      <% if (P.col.verif) { %>
+                        <th style="width:12%">Verification #</th>
+                      <% } %>
                     </tr>
                   </thead>
 
                   <tbody id="fcPaidTableBody">
                     <% if (!paidRowsSafe.length) { %>
                       <tr>
-                        <td colspan="8" class="text-muted small">No paid months or registration fee found.</td>
+                        <td
+                          colspan="<%= paidVisibleColumnCount %>"
+                          class="text-muted small">
+                          No paid months or registration fee found.
+                        </td>
                       </tr>
                     <% } else { %>
                       <% paidRowsSafe.forEach((r, idx) => { %>
                         <tr class="<%= r.isRegistrationFee ? 'registration-fee-row' : '' %>">
                           <td>
-                            <span class="pill-mini"><%= idx + 1 %></span>
-                          </td>
-
-                          <td>
-                            <span class="<%= r.isRegistrationFee ? 'fee-type-chip reg-chip' : 'fee-type-chip paid-chip' %>">
-                              <%= r.feeType || (r.isRegistrationFee ? 'Registration Fee' : 'Monthly Fee') %>
+                            <span class="pill-mini">
+                              <%= idx + 1 %>
                             </span>
                           </td>
 
-                          <td>
-                            <div class="fw-semibold"><%= r.studentName || r.student_name || '-' %></div>
-                            <div class="text-muted tiny"><%= r.registrationNumber || r.registration_number || '-' %></div>
-                          </td>
+                          <% if (showFeeTypeColumn) { %>
+                            <td>
+                              <% if (
+                                (r.isRegistrationFee && P.col.registrationFee) ||
+                                (!r.isRegistrationFee && P.col.fees)
+                              ) { %>
+                                <span class="<%= r.isRegistrationFee ? 'fee-type-chip reg-chip' : 'fee-type-chip paid-chip' %>">
+                                  <%= r.feeType || (
+                                    r.isRegistrationFee
+                                      ? 'Registration Fee'
+                                      : 'Monthly Fee'
+                                  ) %>
+                                </span>
+                              <% } else { %>
+                                <span class="text-muted">-</span>
+                              <% } %>
+                            </td>
+                          <% } %>
 
-                          <td>
-                            <span class="pill-month"><%= r.monthLabel || r.monthKey || r.month || '-' %></span>
-                          </td>
+                          <% if (showStudentIdentityColumn) { %>
+                            <td>
+                              <% if (P.col.student) { %>
+                                <div class="fw-semibold">
+                                  <%= r.studentName || r.student_name || '-' %>
+                                </div>
+                              <% } %>
 
-                          <td>
-                            <span class="paid-status-chip"><%= r.status || 'Paid' %></span>
-                          </td>
+                              <% if (P.col.reg) { %>
+                                <div class="text-muted tiny">
+                                  <%= r.registrationNumber || r.registration_number || '-' %>
+                                </div>
+                              <% } %>
+                            </td>
+                          <% } %>
 
-                          <td><span class="num fee-num"><%= fmt(r.fee) %></span></td>
-                          <td><span class="num recv-num"><%= fmt(r.received || r.receivedAmount || r.amount) %></span></td>
-                          <td><span class="text-muted small"><%= r.verificationNumber || r.verification_number || '-' %></span></td>
+                          <% if (P.col.month) { %>
+                            <td>
+                              <span class="pill-month">
+                                <%= r.monthLabel || r.monthKey || r.month || '-' %>
+                              </span>
+                            </td>
+                          <% } %>
+
+                          <% if (P.col.paymentStatus) { %>
+                            <td>
+                              <span class="paid-status-chip">
+                                <%= r.status || 'Paid' %>
+                              </span>
+                            </td>
+                          <% } %>
+
+                          <% if (showFeeTypeColumn) { %>
+                            <td>
+                              <% if (
+                                (r.isRegistrationFee && P.col.registrationFee) ||
+                                (!r.isRegistrationFee && P.col.fees)
+                              ) { %>
+                                <span class="num fee-num">
+                                  <%= fmt(r.fee) %>
+                                </span>
+                              <% } else { %>
+                                <span class="text-muted">-</span>
+                              <% } %>
+                            </td>
+                          <% } %>
+
+                          <% if (P.col.receivedPayment) { %>
+                            <td>
+                              <span class="num recv-num">
+                                <%= fmt(
+                                  r.received ||
+                                  r.receivedAmount ||
+                                  r.amount
+                                ) %>
+                              </span>
+                            </td>
+                          <% } %>
+
+                          <% if (P.col.verif) { %>
+                            <td>
+                              <span class="text-muted small">
+                                <%= (
+                                  r.verificationNumber ||
+                                  r.verification_number ||
+                                  '-'
+                                ) %>
+                              </span>
+                            </td>
+                          <% } %>
                         </tr>
                       <% }) %>
                     <% } %>
@@ -457,162 +1458,265 @@ const familyLabel = cleanFamilyNumber
           <div class="sec-title mb-3">Receive Payment</div>
 
           <form id="feeCollectionForm">
-            <input type="hidden" name="admissionId" value="<%= admissionId || '' %>">
-            <input type="hidden" name="familyNumber" value="<%= familyNumber || '' %>">
-            <input type="hidden" name="year" value="<%= currentYear %>">
+            <input
+              type="hidden"
+              name="admissionId"
+              value="<%= admissionId || '' %>">
+
+            <input
+              type="hidden"
+              name="familyNumber"
+              value="<%= clientFamilyNumber %>">
+
+            <input
+              type="hidden"
+              name="year"
+              value="<%= currentYear %>">
+
+            <input
+              type="hidden"
+              id="useMasterVerification"
+              name="useMasterVerification"
+              value="true">
+
+            <input
+              type="hidden"
+              id="verificationApproved"
+              name="verificationApproved"
+              value="<%= isPaidSlipWorkflowUserSafe ? 'false' : 'true' %>">
+
+            <input
+              type="hidden"
+              id="useMasterBank"
+              name="useMasterBank"
+              value="true">
+
+            <input
+              type="hidden"
+              id="collectionAccount"
+              name="collectionAccount"
+              value="<%= clientMasterBankNameSafe %>">
+
+            <input
+              type="hidden"
+              id="collectionAccountApproved"
+              name="collectionAccountApproved"
+              value="<%= isPaidSlipWorkflowUserSafe ? 'false' : 'true' %>">
+
+            <% if (P.col.pendingDues) { %>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">
+                  Total Dues
+                </label>
+
+                <div
+                  class="read-box"
+                  id="fcTotalDuesBox">
+                  <%= fmt(summarySafe.totalDues) %>
+                </div>
+              </div>
+            <% } %>
+
+            <% if (P.col.registrationFee) { %>
+              <div class="mb-3">
+                <label
+                  for="registrationReceivingAmount"
+                  class="form-label fw-semibold">
+                  Registration Fee Receiving Amount
+                </label>
+
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control premium-input"
+                  id="registrationReceivingAmount"
+                  name="registrationReceivingAmount"
+                  placeholder="<%= hasRegistrationFeeDue ? 'Enter registration fee amount' : 'Registration fee already fully received' %>"
+                  <%= (
+                    canReceivePayment &&
+                    hasRegistrationFeeDue
+                  ) ? '' : 'disabled' %>>
+
+                <div class="tiny text-muted mt-1">
+                  Registration fee will only be received in the admission month
+                </div>
+              </div>
+            <% } %>
+
+            <% if (P.col.fees) { %>
+              <div class="mb-3">
+                <label
+                  for="receivingAmount"
+                  class="form-label fw-semibold">
+                  Monthly Fee Receiving Amount
+                </label>
+
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control premium-input"
+                  id="receivingAmount"
+                  name="receivingAmount"
+                  placeholder="Enter received amount"
+                  <%= canReceivePayment ? '' : 'disabled' %>>
+              </div>
+            <% } %>
+
+            <% if (P.col.pendingDues) { %>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">
+                  Remaining Balance After This Receive
+                </label>
+
+                <div
+                  class="read-box"
+                  id="fcRemainingBalance">
+                  <%= fmt(summarySafe.totalDues) %>
+                </div>
+              </div>
+            <% } %>
+
+            <% if (P.col.verif) { %>
+              <div class="mb-3">
+                <label
+                  for="verificationNumber"
+                  class="form-label fw-semibold">
+                  Verification Number
+                </label>
+
+                <div class="input-group verification-group">
+                  <input
+                    type="text"
+                    class="form-control premium-input"
+                    id="verificationNumber"
+                    name="verificationNumber"
+                    value="<%= clientMasterVerificationNumberSafe %>"
+                    placeholder="No verification number saved"
+                    readonly>
+
+                  <button
+                    type="button"
+                    class="btn btn-verify-choice verify-yes <%= isPaidSlipWorkflowUserSafe ? '' : 'active' %>"
+                    id="verificationUseSavedBtn"
+                    title="<%= isPaidSlipWorkflowUserSafe ? 'Approve saved verification number' : 'Use saved verification number' %>"
+                    <%= canReviewVerificationNumber ? '' : 'disabled' %>>
+                    ✓
+                  </button>
+
+                  <button
+                    type="button"
+                    class="btn btn-verify-choice verify-no"
+                    id="verificationEditBtn"
+                    title="<%= isPaidSlipWorkflowUserSafe
+                      ? 'Mark verification number incorrect'
+                      : (
+                          canEditVerificationNumber
+                            ? 'Enter correct verification number'
+                            : 'No permission to edit verification number'
+                        ) %>"
+                    <%= (
+                      isPaidSlipWorkflowUserSafe
+                        ? !canReviewVerificationNumber
+                        : !canEditVerificationNumber
+                    ) ? 'disabled' : '' %>>
+                    ✕
+                  </button>
+                </div>
+
+                <div
+                  class="tiny text-muted mt-1"
+                  id="verificationHelpText">
+                  <% if (isPaidSlipWorkflowUserSafe) { %>
+                    Check the saved verification number. Tick ✓ approves it; cross ✕ sends it for correction.
+                  <% } else if (canEditVerificationNumber) { %>
+                    Tick ✓ will use saved verification number. Cross ✕ will allow correction.
+                  <% } else { %>
+                    Saved verification number will be used. You do not have permission to change it.
+                  <% } %>
+                </div>
+              </div>
+            <% } %>
+
+            <% if (P.col.bank) { %>
+              <div class="mb-3">
+                <label
+                  for="collectionAccountSelect"
+                  class="form-label fw-semibold">
+                  Collection Account
+                </label>
+
+                <div class="input-group bank-group">
+                  <select
+                    class="form-select premium-input bank-locked"
+                    id="collectionAccountSelect"
+                    name="collectionAccountSelect"
+                    aria-disabled="true">
+                    <option value="">Select account</option>
+
+                    <% clientBankOptionsSafe.forEach((b) => { %>
+                      <option
+                        value="<%= b.label %>"
+                        <%= (
+                          String(clientMasterBankNameSafe).trim() ===
+                          String(b.label).trim()
+                        ) ? 'selected' : '' %>>
+                        <%= b.label %>
+                      </option>
+                    <% }) %>
+                  </select>
+
+                  <button
+                    type="button"
+                    class="btn btn-verify-choice verify-yes <%= isPaidSlipWorkflowUserSafe ? '' : 'active' %>"
+                    id="bankUseSavedBtn"
+                    title="<%= isPaidSlipWorkflowUserSafe ? 'Approve saved collection account' : 'Use saved bank' %>"
+                    <%= canReviewBank ? '' : 'disabled' %>>
+                    ✓
+                  </button>
+
+                  <button
+                    type="button"
+                    class="btn btn-verify-choice verify-no"
+                    id="bankEditBtn"
+                    title="<%= isPaidSlipWorkflowUserSafe
+                      ? 'Mark collection account incorrect'
+                      : (
+                          canEditBank
+                            ? 'Select correct bank'
+                            : 'No permission to edit bank'
+                        ) %>"
+                    <%= (
+                      isPaidSlipWorkflowUserSafe
+                        ? !canReviewBank
+                        : !canEditBank
+                    ) ? 'disabled' : '' %>>
+                    ✕
+                  </button>
+                </div>
+
+                <div
+                  class="tiny text-muted mt-1"
+                  id="bankHelpText">
+                  <% if (isPaidSlipWorkflowUserSafe) { %>
+                    Check the saved collection account. Tick ✓ approves it; cross ✕ sends it for correction.
+                  <% } else if (canEditBank) { %>
+                    Tick ✓ will use saved bank. Cross ✕ will allow bank correction.
+                  <% } else { %>
+                    Saved bank will be used. You do not have permission to change it.
+                  <% } %>
+                </div>
+              </div>
+            <% } %>
 
             <div class="mb-3">
-              <label class="form-label fw-semibold">Total Dues</label>
-              <div class="read-box" id="fcTotalDuesBox"><%= fmt(summarySafe.totalDues) %></div>
-            </div>
+              <label
+                for="receivingDate"
+                class="form-label fw-semibold">
+                Receiving Date
+              </label>
 
-            <div class="mb-3">
-  <label for="registrationReceivingAmount" class="form-label fw-semibold">
-    Registration Fee Receiving Amount
-  </label>
-  <input
-  type="number"
-  step="0.01"
-  min="0"
-  class="form-control premium-input"
-  id="registrationReceivingAmount"
-  name="registrationReceivingAmount"
-  placeholder="<%= hasRegistrationFeeDue ? 'Enter registration fee amount' : 'Registration fee already fully received' %>"
-  <%= hasRegistrationFeeDue ? '' : 'disabled' %>
->
-  <div class="tiny text-muted mt-1">
-    Registration fee will only be received in the admission month
-  </div>
-</div>
-
-            <div class="mb-3">
-             <label for="receivingAmount" class="form-label fw-semibold">Monthly Fee Receiving Amount</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                class="form-control premium-input"
-               id="receivingAmount"
-name="receivingAmount"
-placeholder="Enter received amount"
-              >
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label fw-semibold">Remaining Balance After This Receive</label>
-              <div class="read-box" id="fcRemainingBalance"><%= fmt(summarySafe.totalDues) %></div>
-            </div>
-
-            
-<div class="mb-3">
-  <label for="verificationNumber" class="form-label fw-semibold">Verification Number</label>
-
-  <input type="hidden" id="useMasterVerification" name="useMasterVerification" value="true">
-  <input
-    type="hidden"
-    id="verificationApproved"
-    name="verificationApproved"
-    value="<%= isPaidSlipWorkflowUserSafe ? 'false' : 'true' %>"
-  >
-
-  <div class="input-group verification-group">
-    <input
-      type="text"
-      class="form-control premium-input"
-      id="verificationNumber"
-      name="verificationNumber"
-      value="<%= masterVerificationNumberSafe %>"
-      placeholder="No verification number saved"
-      readonly
-    >
-
-    <button
-      type="button"
-      class="btn btn-verify-choice verify-yes <%= isPaidSlipWorkflowUserSafe ? '' : 'active' %>"
-      id="verificationUseSavedBtn"
-      title="<%= isPaidSlipWorkflowUserSafe ? 'Approve saved verification number' : 'Use saved verification number' %>"
-    >✓</button>
-
-    <button
-      type="button"
-      class="btn btn-verify-choice verify-no"
-      id="verificationEditBtn"
-      title="<%= isPaidSlipWorkflowUserSafe
-        ? 'Mark verification number incorrect'
-        : (canEditVerificationNumber ? 'Enter correct verification number' : 'No permission to edit verification number') %>"
-      <%= (!isPaidSlipWorkflowUserSafe && !canEditVerificationNumber) ? 'disabled' : '' %>
-    >✕</button>
-  </div>
-
-  <div class="tiny text-muted mt-1" id="verificationHelpText">
-    <% if (isPaidSlipWorkflowUserSafe) { %>
-      Check the saved verification number. Tick ✓ approves it; cross ✕ sends it for correction.
-    <% } else if (canEditVerificationNumber) { %>
-      Tick ✓ will use saved verification number. Cross ✕ will allow correction.
-    <% } else { %>
-      Saved verification number will be used. You do not have permission to change it.
-    <% } %>
-  </div>
-</div>
-
-<div class="mb-3">
-  <label for="collectionAccountSelect" class="form-label fw-semibold">Collection Account</label>
-
-  <input type="hidden" id="useMasterBank" name="useMasterBank" value="true">
-  <input type="hidden" id="collectionAccount" name="collectionAccount" value="<%= masterBankNameSafe %>">
-  <input
-    type="hidden"
-    id="collectionAccountApproved"
-    name="collectionAccountApproved"
-    value="<%= isPaidSlipWorkflowUserSafe ? 'false' : 'true' %>"
-  >
-
-  <div class="input-group bank-group">
-    <select
-      class="form-select premium-input bank-locked"
-      id="collectionAccountSelect"
-      name="collectionAccountSelect"
-      aria-disabled="true"
-    >
-      <option value="">Select account</option>
-      <% bankOptionsSafe.forEach((b) => { %>
-        <option value="<%= b.label %>" <%= String(masterBankNameSafe).trim() === String(b.label).trim() ? 'selected' : '' %>>
-          <%= b.label %>
-        </option>
-      <% }) %>
-    </select>
-
-    <button
-      type="button"
-      class="btn btn-verify-choice verify-yes <%= isPaidSlipWorkflowUserSafe ? '' : 'active' %>"
-      id="bankUseSavedBtn"
-      title="<%= isPaidSlipWorkflowUserSafe ? 'Approve saved collection account' : 'Use saved bank' %>"
-    >✓</button>
-
-    <button
-      type="button"
-      class="btn btn-verify-choice verify-no"
-      id="bankEditBtn"
-      title="<%= isPaidSlipWorkflowUserSafe
-        ? 'Mark collection account incorrect'
-        : (canEditBank ? 'Select correct bank' : 'No permission to edit bank') %>"
-      <%= (!isPaidSlipWorkflowUserSafe && !canEditBank) ? 'disabled' : '' %>
-    >✕</button>
-  </div>
-
-  <div class="tiny text-muted mt-1" id="bankHelpText">
-    <% if (isPaidSlipWorkflowUserSafe) { %>
-      Check the saved collection account. Tick ✓ approves it; cross ✕ sends it for correction.
-    <% } else if (canEditBank) { %>
-      Tick ✓ will use saved bank. Cross ✕ will allow bank correction.
-    <% } else { %>
-      Saved bank will be used. You do not have permission to change it.
-    <% } %>
-  </div>
-</div>
-
-            <div class="mb-3">
-              <label for="receivingDate" class="form-label fw-semibold">Receiving Date</label>
               <input
                 type="date"
                 class="form-control premium-input"
@@ -620,40 +1724,68 @@ placeholder="Enter received amount"
                 name="receivingDate"
                 value="<%= new Date().toISOString().slice(0, 10) %>"
                 required
-              >
+                <%= canReceivePayment ? '' : 'disabled' %>>
             </div>
 
             <div class="mb-3">
-              <label for="note" class="form-label fw-semibold">Note</label>
+              <label
+                for="note"
+                class="form-label fw-semibold">
+                Note
+              </label>
+
               <textarea
                 class="form-control premium-input"
                 id="note"
                 name="note"
                 rows="4"
                 placeholder="Optional note"
+                <%= canReceivePayment ? '' : 'disabled' %>
               ></textarea>
             </div>
 
             <% if (isPaidSlipWorkflowUserSafe) { %>
-              <div class="paid-slip-approval-panel mb-3" id="paidSlipApprovalPanel">
+              <div
+                class="paid-slip-approval-panel mb-3"
+                id="paidSlipApprovalPanel">
                 <div class="paid-slip-approval-title">
                   <i class="bi bi-shield-check"></i>
                   Paid Slip approvals
                 </div>
 
                 <div class="paid-slip-approval-items">
-                  <span class="paid-slip-approval-chip pending" id="verificationApprovalChip">
-                    Verification Number: Pending
-                  </span>
+                  <% if (P.col.verif) { %>
+                    <span
+                      class="paid-slip-approval-chip pending"
+                      id="verificationApprovalChip">
+                      Verification Number: Pending
+                    </span>
+                  <% } %>
 
-                  <span class="paid-slip-approval-chip pending" id="bankApprovalChip">
-                    Collection Account: Pending
-                  </span>
+                  <% if (P.col.bank) { %>
+                    <span
+                      class="paid-slip-approval-chip pending"
+                      id="bankApprovalChip">
+                      Collection Account: Pending
+                    </span>
+                  <% } %>
                 </div>
 
-                <div class="tiny text-muted mt-2" id="paidSlipApprovalHelp">
-                  For a payment amount, approve both fields before Receive becomes available.
+                <div
+                  class="tiny text-muted mt-2"
+                  id="paidSlipApprovalHelp">
+                  <% if (canCompletePaidSlipReview) { %>
+                    For a payment amount, approve both fields before Receive becomes available.
+                  <% } else { %>
+                    Verification Number and Collection Account View permissions are required for Paid Slip approval.
+                  <% } %>
                 </div>
+              </div>
+            <% } %>
+
+            <% if (!canUseFeeCollectionActions) { %>
+              <div class="alert alert-warning py-2 px-3">
+                You do not have permission to receive or update billing data.
               </div>
             <% } %>
 
@@ -662,8 +1794,12 @@ placeholder="Enter received amount"
                 type="submit"
                 class="btn btn-receive rounded-3"
                 id="receiveBtn"
-                <%= isPaidSlipWorkflowUserSafe ? 'disabled' : '' %>>
-                <i class="bi bi-cash-coin me-1"></i> Receive
+                <%= (
+                  !canReceivePayment ||
+                  isPaidSlipWorkflowUserSafe
+                ) ? 'disabled' : '' %>>
+                <i class="bi bi-cash-coin me-1"></i>
+                Receive
               </button>
             </div>
           </form>
@@ -1512,54 +2648,145 @@ const useMasterVerificationInput = document.getElementById('useMasterVerificatio
 const verificationUseSavedBtn = document.getElementById('verificationUseSavedBtn');
 const verificationEditBtn = document.getElementById('verificationEditBtn');
 const verificationHelpText = document.getElementById('verificationHelpText');
-let savedMasterVerificationNumber = <%- JSON.stringify(masterVerificationNumberSafe) %>;
-const canEditVerificationNumber = <%- JSON.stringify(!!canEditVerificationNumber) %>;
+let savedMasterVerificationNumber =
+  <%- JSON.stringify(clientMasterVerificationNumberSafe) %>;
 
-const bankSelect = document.getElementById('collectionAccountSelect');
-const collectionAccountInput = document.getElementById('collectionAccount');
-const useMasterBankInput = document.getElementById('useMasterBank');
-const bankUseSavedBtn = document.getElementById('bankUseSavedBtn');
-const bankEditBtn = document.getElementById('bankEditBtn');
-const bankHelpText = document.getElementById('bankHelpText');
-let savedMasterBankName = <%- JSON.stringify(masterBankNameSafe) %>;
-const canEditBank = <%- JSON.stringify(!!canEditBank) %>;
-const isPaidSlipWorkflowUser = <%- JSON.stringify(!!isPaidSlipWorkflowUserSafe) %>;
-const feeCollectionBackUrl = <%- JSON.stringify(backUrl) %>;
+const canEditVerificationNumber =
+  <%- JSON.stringify(!!canEditVerificationNumber) %>;
+
+const bankSelect =
+  document.getElementById('collectionAccountSelect');
+
+const collectionAccountInput =
+  document.getElementById('collectionAccount');
+
+const useMasterBankInput =
+  document.getElementById('useMasterBank');
+
+const bankUseSavedBtn =
+  document.getElementById('bankUseSavedBtn');
+
+const bankEditBtn =
+  document.getElementById('bankEditBtn');
+
+const bankHelpText =
+  document.getElementById('bankHelpText');
+
+let savedMasterBankName =
+  <%- JSON.stringify(clientMasterBankNameSafe) %>;
+
+const canEditBank =
+  <%- JSON.stringify(!!canEditBank) %>;
+
+const canUseFeeCollectionActions =
+  <%- JSON.stringify(!!canUseFeeCollectionActions) %>;
+
+const canReceivePayment =
+  <%- JSON.stringify(!!canReceivePayment) %>;
+
+const canMarkNotAdmitted =
+  <%- JSON.stringify(!!canMarkNotAdmitted) %>;
+
+const clientPermissions = Object.freeze({
+  student: <%- JSON.stringify(!!P.col.student) %>,
+  dept: <%- JSON.stringify(!!P.col.dept) %>,
+  grade: <%- JSON.stringify(!!P.col.grade) %>,
+  paymentStatus: <%- JSON.stringify(!!P.col.paymentStatus) %>,
+  registrationNumber: <%- JSON.stringify(!!P.col.reg) %>,
+  registrationFee: <%- JSON.stringify(!!P.col.registrationFee) %>,
+  fees: <%- JSON.stringify(!!P.col.fees) %>,
+  month: <%- JSON.stringify(!!P.col.month) %>,
+  pendingDues: <%- JSON.stringify(!!P.col.pendingDues) %>,
+  receivedPayment: <%- JSON.stringify(!!P.col.receivedPayment) %>,
+  verificationNumber: <%- JSON.stringify(!!P.col.verif) %>,
+  paidUpto: <%- JSON.stringify(!!P.col.paidUpto) %>
+});
+
+const showFeeTypeColumnClient =
+  clientPermissions.registrationFee ||
+  clientPermissions.fees;
+
+const showStudentIdentityColumnClient =
+  clientPermissions.student ||
+  clientPermissions.registrationNumber;
+
+const pendingVisibleColumnCountClient =
+  <%- JSON.stringify(pendingVisibleColumnCount) %>;
+
+const excludedVisibleColumnCountClient =
+  <%- JSON.stringify(excludedVisibleColumnCount) %>;
+
+const paidVisibleColumnCountClient =
+  <%- JSON.stringify(paidVisibleColumnCount) %>;
+
+const isPaidSlipWorkflowUser =
+  <%- JSON.stringify(!!isPaidSlipWorkflowUserSafe) %>;
+
+const feeCollectionBackUrl =
+  <%- JSON.stringify(backUrl) %>;
+
 const feeWorkflowDashboardUrl = '/dashboard';
 const feeWorkflowDeptName = 'School Accounts Dept';
+
 const feeWorkflowFromUserName = <%- JSON.stringify(
-  String(U?.name || U?.username || U?.email || 'Current User').trim()
+  String(
+    U?.name ||
+    U?.username ||
+    U?.email ||
+    'Current User'
+  ).trim()
 ) %>;
 
 const feeWorkflowAdmissionNamesById = <%- JSON.stringify(
   rowsSafe.reduce((acc, item) => {
-    const id = Number(item?.id || item?.admissionId || 0);
-    const name = String(
+    const id =
+      Number(item?.id || item?.admissionId || 0);
+
+    if (!id) {
+      return acc;
+    }
+
+    const realName = String(
       item?.student_name ||
       item?.studentName ||
       item?.name ||
       ''
     ).trim();
 
-    if (id && name) {
-      acc[id] = name;
-    }
+    acc[id] =
+      P.col.student && realName
+        ? realName
+        : `Admission #${id}`;
 
     return acc;
   }, {})
 ) %>;
 
 const feeWorkflowDefaultStudentNames = <%- JSON.stringify(
-  [...new Set(
-    rowsSafe
-      .map((item) => String(
+  rowsSafe
+    .map((item) => {
+      const id =
+        Number(item?.id || item?.admissionId || 0);
+
+      const realName = String(
         item?.student_name ||
         item?.studentName ||
         item?.name ||
         ''
-      ).trim())
-      .filter(Boolean)
-  )]
+      ).trim();
+
+      if (P.col.student && realName) {
+        return realName;
+      }
+
+      return id
+        ? `Admission #${id}`
+        : '';
+    })
+    .filter(Boolean)
+    .filter((value, index, array) =>
+      array.indexOf(value) === index
+    )
 ) %>;
 
 const verificationApprovedInput = document.getElementById('verificationApproved');
@@ -1739,6 +2966,11 @@ let awaitingRecordUpdateForward = false;
 
     function updateReceiveAvailability() {
       if (!receiveBtn) return;
+
+      if (!canReceivePayment) {
+        receiveBtn.disabled = true;
+        return;
+      }
 
       if (!isPaidSlipWorkflowUser) {
         receiveBtn.disabled = receiveInProgress;
@@ -2437,20 +3669,34 @@ let awaitingRecordUpdateForward = false;
       setBankMode(true);
     }
 
-function syncRegistrationFeeInput(rows = []) {
+function syncRegistrationFeeInput(rowsOrFlag = []) {
   if (!registrationAmountInput) return;
 
-  const hasRegDue = Array.isArray(rows) && rows.some((r) => {
-    return r && r.isRegistrationFee && Number(r.due || 0) > 0;
-  });
+  const hasRegDue =
+    typeof rowsOrFlag === 'boolean'
+      ? rowsOrFlag
+      : (
+          Array.isArray(rowsOrFlag) &&
+          rowsOrFlag.some((r) => {
+            return (
+              r &&
+              r.isRegistrationFee &&
+              Number(r.due || 0) > 0
+            );
+          })
+        );
 
-  registrationAmountInput.disabled = !hasRegDue;
+  registrationAmountInput.disabled =
+    !canReceivePayment ||
+    !hasRegDue;
 
   if (!hasRegDue) {
     registrationAmountInput.value = '';
-    registrationAmountInput.placeholder = 'Registration fee already fully received';
+    registrationAmountInput.placeholder =
+      'Registration fee already fully received';
   } else {
-    registrationAmountInput.placeholder = 'Enter registration fee amount';
+    registrationAmountInput.placeholder =
+      'Enter registration fee amount';
   }
 
   updateRemainingPreview();
@@ -2479,104 +3725,287 @@ function syncRegistrationFeeInput(rows = []) {
       }
     });
 
-    syncRegistrationFeeInput(<%- JSON.stringify(feeRowsSafe) %>);
+    syncRegistrationFeeInput(
+      <%- JSON.stringify(
+        P.col.registrationFee &&
+        hasRegistrationFeeDue
+      ) %>
+    );
     updateRemainingPreview();
 
     function renderRows(rows = []) {
       if (!tableBody) return;
 
       if (!rows.length) {
-tableBody.innerHTML = `
-  <tr>
-    <td colspan="11" class="text-muted small">No pending dues found.</td>
-  </tr>
-`;
-        if (totalRowsEl) totalRowsEl.textContent = '0';
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="${pendingVisibleColumnCountClient}" class="text-muted small">
+              No pending dues found.
+            </td>
+          </tr>
+        `;
+
+        if (totalRowsEl) {
+          totalRowsEl.textContent = '0';
+        }
+
         return;
       }
 
-     tableBody.innerHTML = rows.map((r, idx) => {
-  const isReg = !!r.isRegistrationFee;
+      tableBody.innerHTML = rows.map((r, idx) => {
+        const isReg = !!r.isRegistrationFee;
 
-  return `
-    <tr class="${isReg ? 'registration-fee-row' : ''}">
-      <td><span class="pill-mini">${idx + 1}</span></td>
-
-      <td>
-        ${
+        const canShowCurrentFee =
           isReg
-            ? '<span class="text-muted tiny">N/A</span>'
-            : `
-              <div class="form-check m-0 d-flex justify-content-center">
-                <input
-                  class="form-check-input fc-not-admitted-check"
-                  type="checkbox"
-                  value="${r.admissionId}:${r.monthKey}"
-                  data-admission-id="${r.admissionId}"
-                  data-month-key="${r.monthKey}"
-                  title="Mark this month as Not admitted"
-                >
-              </div>
-            `
-        }
-      </td>
+            ? clientPermissions.registrationFee
+            : clientPermissions.fees;
 
-      <td>
-        <span class="${isReg ? 'fee-type-chip reg-chip' : 'fee-type-chip monthly-chip'}">
-          ${r.feeType || (isReg ? 'Registration Fee' : 'Monthly Fee')}
-        </span>
-      </td>
+        const admissionId =
+          escapeHtml(r.admissionId || '');
 
-      <td>
-        <div class="fw-semibold">${r.studentName || '-'}</div>
-        <div class="text-muted tiny">${r.registrationNumber || '-'}</div>
-      </td>
+        const monthKey =
+          escapeHtml(r.monthKey || '');
 
-      <td><span class="pill-light text-capitalize">${r.dept || '-'}</span></td>
-      <td>${r.grade || '-'}</td>
-      <td><span class="pill-month">${r.monthLabel || r.monthKey || '-'}</span></td>
-      <td><span class="status-chip">${r.status || '-'}</span></td>
-      <td><span class="num fee-num">${fmt(r.fee)}</span></td>
-      <td><span class="num recv-num">${fmt(r.received)}</span></td>
-      <td><span class="num due-num">${fmt(r.due)}</span></td>
-    </tr>
-  `;
-}).join('');
+        return `
+          <tr class="${isReg ? 'registration-fee-row' : ''}">
+            <td>
+              <span class="pill-mini">${idx + 1}</span>
+            </td>
 
-      if (totalRowsEl) totalRowsEl.textContent = String(rows.length);
+            ${canMarkNotAdmitted ? `
+              <td>
+                ${
+                  isReg
+                    ? '<span class="text-muted tiny">N/A</span>'
+                    : `
+                      <div class="form-check m-0 d-flex justify-content-center">
+                        <input
+                          class="form-check-input fc-not-admitted-check"
+                          type="checkbox"
+                          value="${admissionId}:${monthKey}"
+                          data-admission-id="${admissionId}"
+                          data-month-key="${monthKey}"
+                          title="Mark this month as Not admitted">
+                      </div>
+                    `
+                }
+              </td>
+            ` : ''}
+
+            ${showFeeTypeColumnClient ? `
+              <td>
+                ${
+                  canShowCurrentFee
+                    ? `
+                      <span class="${isReg ? 'fee-type-chip reg-chip' : 'fee-type-chip monthly-chip'}">
+                        ${escapeHtml(
+                          r.feeType ||
+                          (
+                            isReg
+                              ? 'Registration Fee'
+                              : 'Monthly Fee'
+                          )
+                        )}
+                      </span>
+                    `
+                    : '<span class="text-muted">-</span>'
+                }
+              </td>
+            ` : ''}
+
+            ${showStudentIdentityColumnClient ? `
+              <td>
+                ${clientPermissions.student ? `
+                  <div class="fw-semibold">
+                    ${escapeHtml(r.studentName || '-')}
+                  </div>
+                ` : ''}
+
+                ${clientPermissions.registrationNumber ? `
+                  <div class="text-muted tiny">
+                    ${escapeHtml(r.registrationNumber || '-')}
+                  </div>
+                ` : ''}
+              </td>
+            ` : ''}
+
+            ${clientPermissions.dept ? `
+              <td>
+                <span class="pill-light text-capitalize">
+                  ${escapeHtml(r.dept || '-')}
+                </span>
+              </td>
+            ` : ''}
+
+            ${clientPermissions.grade ? `
+              <td>
+                ${escapeHtml(r.grade || '-')}
+              </td>
+            ` : ''}
+
+            ${clientPermissions.month ? `
+              <td>
+                <span class="pill-month">
+                  ${escapeHtml(
+                    r.monthLabel ||
+                    r.monthKey ||
+                    '-'
+                  )}
+                </span>
+              </td>
+            ` : ''}
+
+            ${clientPermissions.paymentStatus ? `
+              <td>
+                <span class="status-chip">
+                  ${escapeHtml(r.status || '-')}
+                </span>
+              </td>
+            ` : ''}
+
+            ${showFeeTypeColumnClient ? `
+              <td>
+                ${
+                  canShowCurrentFee
+                    ? `
+                      <span class="num fee-num">
+                        ${escapeHtml(fmt(r.fee))}
+                      </span>
+                    `
+                    : '<span class="text-muted">-</span>'
+                }
+              </td>
+            ` : ''}
+
+            ${clientPermissions.receivedPayment ? `
+              <td>
+                <span class="num recv-num">
+                  ${escapeHtml(fmt(r.received))}
+                </span>
+              </td>
+            ` : ''}
+
+            ${clientPermissions.pendingDues ? `
+              <td>
+                <span class="num due-num">
+                  ${escapeHtml(fmt(r.due))}
+                </span>
+              </td>
+            ` : ''}
+          </tr>
+        `;
+      }).join('');
+
+      if (totalRowsEl) {
+        totalRowsEl.textContent =
+          String(rows.length);
+      }
     }
-    
+
     function renderExcludedRows(rows = []) {
-  if (!excludedTableBody) return;
+      if (!excludedTableBody) return;
 
-  if (!rows.length) {
-    excludedTableBody.innerHTML = `
-      <tr>
-        <td colspan="8" class="text-muted small">No excluded / not admitted months found.</td>
-      </tr>
-    `;
-    if (excludedRowsCountEl) excludedRowsCountEl.textContent = '0';
-    return;
-  }
+      if (!rows.length) {
+        excludedTableBody.innerHTML = `
+          <tr>
+            <td colspan="${excludedVisibleColumnCountClient}" class="text-muted small">
+              No excluded / not admitted months found.
+            </td>
+          </tr>
+        `;
 
-  excludedTableBody.innerHTML = rows.map((r, idx) => `
-    <tr class="excluded-month-row">
-      <td><span class="pill-mini">${idx + 1}</span></td>
-      <td>
-        <div class="fw-semibold">${r.studentName || '-'}</div>
-        <div class="text-muted tiny">${r.registrationNumber || '-'}</div>
-      </td>
-      <td><span class="pill-light text-capitalize">${r.dept || '-'}</span></td>
-      <td>${r.grade || '-'}</td>
-      <td><span class="pill-month excluded-month-chip">${r.monthLabel || r.monthKey || '-'}</span></td>
-      <td><span class="excluded-status-chip">${r.status || 'Not admitted'}</span></td>
-      <td><span class="num text-muted">${fmt(r.fee)}</span></td>
-      <td><span class="num text-muted">${fmt(r.due)}</span></td>
-    </tr>
-  `).join('');
+        if (excludedRowsCountEl) {
+          excludedRowsCountEl.textContent = '0';
+        }
 
-  if (excludedRowsCountEl) excludedRowsCountEl.textContent = String(rows.length);
-}
+        return;
+      }
+
+      excludedTableBody.innerHTML =
+        rows.map((r, idx) => `
+          <tr class="excluded-month-row">
+            <td>
+              <span class="pill-mini">
+                ${idx + 1}
+              </span>
+            </td>
+
+            ${showStudentIdentityColumnClient ? `
+              <td>
+                ${clientPermissions.student ? `
+                  <div class="fw-semibold">
+                    ${escapeHtml(r.studentName || '-')}
+                  </div>
+                ` : ''}
+
+                ${clientPermissions.registrationNumber ? `
+                  <div class="text-muted tiny">
+                    ${escapeHtml(r.registrationNumber || '-')}
+                  </div>
+                ` : ''}
+              </td>
+            ` : ''}
+
+            ${clientPermissions.dept ? `
+              <td>
+                <span class="pill-light text-capitalize">
+                  ${escapeHtml(r.dept || '-')}
+                </span>
+              </td>
+            ` : ''}
+
+            ${clientPermissions.grade ? `
+              <td>
+                ${escapeHtml(r.grade || '-')}
+              </td>
+            ` : ''}
+
+            ${clientPermissions.month ? `
+              <td>
+                <span class="pill-month excluded-month-chip">
+                  ${escapeHtml(
+                    r.monthLabel ||
+                    r.monthKey ||
+                    '-'
+                  )}
+                </span>
+              </td>
+            ` : ''}
+
+            ${clientPermissions.paymentStatus ? `
+              <td>
+                <span class="excluded-status-chip">
+                  ${escapeHtml(
+                    r.status ||
+                    'Not admitted'
+                  )}
+                </span>
+              </td>
+            ` : ''}
+
+            ${clientPermissions.fees ? `
+              <td>
+                <span class="num text-muted">
+                  ${escapeHtml(fmt(r.fee))}
+                </span>
+              </td>
+            ` : ''}
+
+            ${clientPermissions.pendingDues ? `
+              <td>
+                <span class="num text-muted">
+                  ${escapeHtml(fmt(r.due))}
+                </span>
+              </td>
+            ` : ''}
+          </tr>
+        `).join('');
+
+      if (excludedRowsCountEl) {
+        excludedRowsCountEl.textContent =
+          String(rows.length);
+      }
+    }
 
     function renderPaidRows(rows = []) {
       if (!paidTableBody) return;
@@ -2584,41 +4013,153 @@ tableBody.innerHTML = `
       if (!rows.length) {
         paidTableBody.innerHTML = `
           <tr>
-            <td colspan="8" class="text-muted small">No paid months or registration fee found.</td>
+            <td colspan="${paidVisibleColumnCountClient}" class="text-muted small">
+              No paid months or registration fee found.
+            </td>
           </tr>
         `;
-        if (paidRowsCountEl) paidRowsCountEl.textContent = '0';
+
+        if (paidRowsCountEl) {
+          paidRowsCountEl.textContent = '0';
+        }
+
         return;
       }
 
-      paidTableBody.innerHTML = rows.map((r, idx) => {
-        const isReg = !!r.isRegistrationFee;
+      paidTableBody.innerHTML =
+        rows.map((r, idx) => {
+          const isReg =
+            !!r.isRegistrationFee;
 
-        return `
-          <tr class="${isReg ? 'registration-fee-row' : ''}">
-            <td><span class="pill-mini">${idx + 1}</span></td>
+          const canShowCurrentFee =
+            isReg
+              ? clientPermissions.registrationFee
+              : clientPermissions.fees;
 
-            <td>
-              <span class="${isReg ? 'fee-type-chip reg-chip' : 'fee-type-chip paid-chip'}">
-                ${r.feeType || (isReg ? 'Registration Fee' : 'Monthly Fee')}
-              </span>
-            </td>
+          return `
+            <tr class="${isReg ? 'registration-fee-row' : ''}">
+              <td>
+                <span class="pill-mini">
+                  ${idx + 1}
+                </span>
+              </td>
 
-            <td>
-              <div class="fw-semibold">${r.studentName || r.student_name || '-'}</div>
-              <div class="text-muted tiny">${r.registrationNumber || r.registration_number || '-'}</div>
-            </td>
+              ${showFeeTypeColumnClient ? `
+                <td>
+                  ${
+                    canShowCurrentFee
+                      ? `
+                        <span class="${isReg ? 'fee-type-chip reg-chip' : 'fee-type-chip paid-chip'}">
+                          ${escapeHtml(
+                            r.feeType ||
+                            (
+                              isReg
+                                ? 'Registration Fee'
+                                : 'Monthly Fee'
+                            )
+                          )}
+                        </span>
+                      `
+                      : '<span class="text-muted">-</span>'
+                  }
+                </td>
+              ` : ''}
 
-            <td><span class="pill-month">${r.monthLabel || r.monthKey || r.month || '-'}</span></td>
-            <td><span class="paid-status-chip">${r.status || 'Paid'}</span></td>
-            <td><span class="num fee-num">${fmt(r.fee)}</span></td>
-            <td><span class="num recv-num">${fmt(r.received || r.receivedAmount || r.amount)}</span></td>
-            <td><span class="text-muted small">${r.verificationNumber || r.verification_number || '-'}</span></td>
-          </tr>
-        `;
-      }).join('');
+              ${showStudentIdentityColumnClient ? `
+                <td>
+                  ${clientPermissions.student ? `
+                    <div class="fw-semibold">
+                      ${escapeHtml(
+                        r.studentName ||
+                        r.student_name ||
+                        '-'
+                      )}
+                    </div>
+                  ` : ''}
 
-      if (paidRowsCountEl) paidRowsCountEl.textContent = String(rows.length);
+                  ${clientPermissions.registrationNumber ? `
+                    <div class="text-muted tiny">
+                      ${escapeHtml(
+                        r.registrationNumber ||
+                        r.registration_number ||
+                        '-'
+                      )}
+                    </div>
+                  ` : ''}
+                </td>
+              ` : ''}
+
+              ${clientPermissions.month ? `
+                <td>
+                  <span class="pill-month">
+                    ${escapeHtml(
+                      r.monthLabel ||
+                      r.monthKey ||
+                      r.month ||
+                      '-'
+                    )}
+                  </span>
+                </td>
+              ` : ''}
+
+              ${clientPermissions.paymentStatus ? `
+                <td>
+                  <span class="paid-status-chip">
+                    ${escapeHtml(
+                      r.status ||
+                      'Paid'
+                    )}
+                  </span>
+                </td>
+              ` : ''}
+
+              ${showFeeTypeColumnClient ? `
+                <td>
+                  ${
+                    canShowCurrentFee
+                      ? `
+                        <span class="num fee-num">
+                          ${escapeHtml(fmt(r.fee))}
+                        </span>
+                      `
+                      : '<span class="text-muted">-</span>'
+                  }
+                </td>
+              ` : ''}
+
+              ${clientPermissions.receivedPayment ? `
+                <td>
+                  <span class="num recv-num">
+                    ${escapeHtml(
+                      fmt(
+                        r.received ||
+                        r.receivedAmount ||
+                        r.amount
+                      )
+                    )}
+                  </span>
+                </td>
+              ` : ''}
+
+              ${clientPermissions.verificationNumber ? `
+                <td>
+                  <span class="text-muted small">
+                    ${escapeHtml(
+                      r.verificationNumber ||
+                      r.verification_number ||
+                      '-'
+                    )}
+                  </span>
+                </td>
+              ` : ''}
+            </tr>
+          `;
+        }).join('');
+
+      if (paidRowsCountEl) {
+        paidRowsCountEl.textContent =
+          String(rows.length);
+      }
     }
 
     function setSummary(summary = {}) {
@@ -2642,6 +4183,14 @@ tableBody.innerHTML = `
 
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
+
+      if (!canReceivePayment) {
+        showMsg(
+          'error',
+          'You do not have permission to receive or update billing data.'
+        );
+        return;
+      }
 
       if (msgBox) msgBox.innerHTML = '';
 
@@ -2790,14 +4339,57 @@ tableBody.innerHTML = `
 
         if (resultCard && resultBody) {
           resultBody.innerHTML = applied.length
-            ? applied.map((item) => `
-                <div class="mb-2">
-                  <div><b>${escapeHtml(item.studentName || '-')}</b> (#${escapeHtml(item.admissionId || '-')})</div>
-                  <div>Used Amount: <b>${fmt(item.usedAmount)}</b></div>
-                  <div>Paid Upto: <b>${escapeHtml(item.paidUpto || '-')}</b></div>
-                  <div>Updated Months: <b>${escapeHtml((item.touchedMonths || []).map((month) => month.monthKey).join(', ') || '-')}</b></div>
-                </div>
-              `).join('')
+            ? applied.map((item) => {
+                const lines = [
+                  `
+                    <div>
+                      ${
+                        clientPermissions.student
+                          ? `<b>${escapeHtml(item.studentName || '-')}</b> `
+                          : ''
+                      }
+                      (#${escapeHtml(item.admissionId || '-')})
+                    </div>
+                  `
+                ];
+
+                if (clientPermissions.receivedPayment) {
+                  lines.push(`
+                    <div>
+                      Used Amount:
+                      <b>${escapeHtml(fmt(item.usedAmount))}</b>
+                    </div>
+                  `);
+                }
+
+                if (clientPermissions.paidUpto) {
+                  lines.push(`
+                    <div>
+                      Paid Upto:
+                      <b>${escapeHtml(item.paidUpto || '-')}</b>
+                    </div>
+                  `);
+                }
+
+                if (clientPermissions.month) {
+                  lines.push(`
+                    <div>
+                      Updated Months:
+                      <b>${escapeHtml(
+                        (item.touchedMonths || [])
+                          .map((month) => month.monthKey)
+                          .join(', ') || '-'
+                      )}</b>
+                    </div>
+                  `);
+                }
+
+                return `
+                  <div class="mb-2">
+                    ${lines.join('')}
+                  </div>
+                `;
+              }).join('')
             : '<div>No rows updated.</div>';
 
           resultCard.classList.remove('d-none');
@@ -2879,7 +4471,6 @@ tableBody.innerHTML = `
 
   const listEl = document.getElementById("accountsNumberNoteList");
   const emptyEl = document.getElementById("accountsNumberNoteEmpty");
-  const totalEl = document.getElementById("accountsNumberNoteTotal");
   const hideBtn = document.getElementById("accountsNumberNoteHideBtn");
 
   const storageKey =
@@ -2887,10 +4478,23 @@ tableBody.innerHTML = `
     "ivs_accounts_number_note_hidden_fee_collection";
 
   const positionStorageKey = `${storageKey}_position_v2`;
-  let currentRecords = [];
+  let currentNote = null;
   let openBtnDragMoved = false;
 
-  window.ACCOUNTS_NUMBER_NOTE = <%- JSON.stringify(accountsNumberNoteData || {}) %>;
+  window.ACCOUNTS_NUMBER_NOTE = <%- JSON.stringify(
+    shouldRenderAccountsNumberNote
+      ? accountsNumberNoteData
+      : {
+          enabled: false,
+          highestNumbers: null,
+          sidebarHighest: null,
+          latestNumbers: null,
+          notepadLatest: null,
+          latestHighest: null,
+          records: [],
+          total: 0
+        }
+  ) %>;
 
   function isAccountsNumberNoteMobile() {
     return window.matchMedia("(max-width: 767.98px)").matches;
@@ -3094,72 +4698,104 @@ tableBody.innerHTML = `
       .replace(/'/g, "&#039;");
   }
 
-  function normalizeRecord(record = {}) {
-    const verificationNumber =
-      String(record.verificationNumber || record.rawVerificationNumber || "").trim() || "?";
-
-    const registrationNumber =
-      String(record.registrationNumber || record.rawRegistrationNumber || "").trim() || "?";
+   function normalizeLatestNumbers(data = {}) {
+    const latest =
+      (
+        data &&
+        (
+          data.latestNumbers ||
+          data.notepadLatest
+        )
+      ) ||
+      null;
 
     const familyNumber =
       String(
-        record.familyNumber ||
-        record.rawFamilyNumber ||
-        record.accountsFamilyNumber ||
-        record.accounts_family_number ||
-        ""
-      ).trim() || "?";
+        latest?.familyNumber || ""
+      ).trim();
 
-    const missingVerificationNumber =
-      record.missingVerificationNumber === true ||
-      verificationNumber === "?";
+    const verificationNumber =
+      String(
+        latest?.verificationNumber || ""
+      ).trim();
 
-    const missingRegistrationNumber =
-      record.missingRegistrationNumber === true ||
-      registrationNumber === "?";
+    const registrationNumber =
+      String(
+        latest?.registrationNumber || ""
+      ).trim();
 
-    const missingFamilyNumber =
-      record.missingFamilyNumber === true ||
-      familyNumber === "?";
+    const hasFamilyNumber =
+      !!familyNumber;
+
+    const hasVerificationNumber =
+      !!verificationNumber;
+
+    const hasRegistrationNumber =
+      !!registrationNumber;
+
+    const hasRecord =
+      hasFamilyNumber ||
+      hasVerificationNumber ||
+      hasRegistrationNumber;
+
+    const fallbackCopyText = [
+      hasFamilyNumber
+        ? `FAM: ${familyNumber}`
+        : "",
+
+      hasVerificationNumber
+        ? `VERIF: ${verificationNumber}`
+        : "",
+
+      hasRegistrationNumber
+        ? `REG: ${registrationNumber}`
+        : ""
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    const copyText =
+      String(
+        latest?.copyText ||
+        fallbackCopyText
+      ).trim();
 
     return {
-      admissionId: record.admissionId || record.id || "",
-      entryNumber: record.entryNumber || record.entry_number || record.admissionId || record.id || "-",
-      studentName: record.studentName || record.student_name || "No Name",
-      fatherName: record.fatherName || record.father_name || "",
-      grade: record.grade || "",
+      hasRecord,
       familyNumber,
       verificationNumber,
       registrationNumber,
-      missingFamilyNumber,
-      missingVerificationNumber,
-      missingRegistrationNumber,
-      updatedAt: record.updatedAt || record.updated_at || "",
-      updatedByName: record.updatedByName || record.updated_by_name || "",
-      copyText:
-        record.copyText ||
-        [
-          `Entry: ${record.entryNumber || record.admissionId || record.id || "-"}`,
-          `Student: ${record.studentName || record.student_name || "No Name"}`,
-          `FAM: ${familyNumber}`,
-          `VERIF: ${verificationNumber}`,
-          `REG: ${registrationNumber}`
-        ].join(" | ")
+      hasFamilyNumber,
+      hasVerificationNumber,
+      hasRegistrationNumber,
+      copyText
     };
   }
 
+  function makeAccountsNumberChip(label, value) {
+    return `
+      <span
+        class="accounts-number-note-chip"
+        title="${escapeHtml(value)}">
+
+        <span class="accounts-number-note-chip-label">
+          ${escapeHtml(label)}
+        </span>
+
+        <span class="accounts-number-note-chip-value">
+          ${escapeHtml(value)}
+        </span>
+      </span>
+    `;
+  }
+
   function renderAccountsNumberNote(data = {}) {
-    const records = Array.isArray(data.records)
-      ? data.records.map(normalizeRecord)
-      : [];
+    const note =
+      normalizeLatestNumbers(data);
 
-    currentRecords = records;
+    currentNote = note;
 
-    if (totalEl) {
-      totalEl.textContent = String(data.total || records.length || 0);
-    }
-
-    if (!records.length) {
+    if (!note.hasRecord) {
       listEl.innerHTML = "";
 
       if (emptyEl) {
@@ -3173,57 +4809,49 @@ tableBody.innerHTML = `
       emptyEl.classList.add("d-none");
     }
 
-    listEl.innerHTML = records.map((record, index) => {
-      const metaParts = [
-        record.fatherName ? `Father: ${record.fatherName}` : "",
-        record.grade ? `Grade: ${record.grade}` : "",
-        record.updatedByName ? `By: ${record.updatedByName}` : ""
-      ].filter(Boolean);
+    const numberChips = [
+      note.hasFamilyNumber
+        ? makeAccountsNumberChip(
+            "FAM",
+            note.familyNumber
+          )
+        : "",
 
-      return `
-        <div class="accounts-number-note-row">
-          <div class="accounts-number-note-row-head">
-            <div class="accounts-number-note-student">
-              ${escapeHtml(record.studentName)}
-            </div>
+      note.hasVerificationNumber
+        ? makeAccountsNumberChip(
+            "VERIF",
+            note.verificationNumber
+          )
+        : "",
 
-            <div class="accounts-number-note-entry">
-              #${escapeHtml(record.entryNumber)}
-            </div>
-          </div>
+      note.hasRegistrationNumber
+        ? makeAccountsNumberChip(
+            "REG",
+            note.registrationNumber
+          )
+        : ""
+    ]
+      .filter(Boolean)
+      .join("");
 
-          <div class="accounts-number-note-meta">
-            ${escapeHtml(metaParts.join(" | ") || "Admission number update")}
-          </div>
-
-          <div class="accounts-number-note-numbers">
-            <span class="accounts-number-note-chip ${record.missingFamilyNumber ? "missing" : ""}">
-              <span class="accounts-number-note-chip-label">FAM</span>
-              <span class="accounts-number-note-chip-value">${escapeHtml(record.familyNumber)}</span>
-            </span>
-
-            <span class="accounts-number-note-chip ${record.missingVerificationNumber ? "missing" : ""}">
-              <span class="accounts-number-note-chip-label">VERIF</span>
-              <span class="accounts-number-note-chip-value">${escapeHtml(record.verificationNumber)}</span>
-            </span>
-
-            <span class="accounts-number-note-chip ${record.missingRegistrationNumber ? "missing" : ""}">
-              <span class="accounts-number-note-chip-label">REG</span>
-              <span class="accounts-number-note-chip-value">${escapeHtml(record.registrationNumber)}</span>
-            </span>
-          </div>
-
-          <button
-            type="button"
-            class="accounts-number-note-copy"
-            data-copy-index="${index}">
-            <i class="bi bi-copy me-1"></i>
-            Copy
-          </button>
+    listEl.innerHTML = `
+      <div class="accounts-number-note-row">
+        <div class="accounts-number-note-numbers">
+          ${numberChips}
         </div>
-      `;
-    }).join("");
+
+        <button
+          type="button"
+          class="accounts-number-note-copy"
+          data-copy-note="1">
+
+          <i class="bi bi-copy me-1"></i>
+          Copy
+        </button>
+      </div>
+    `;
   }
+
 
   function setNoteHidden(hidden) {
     const shouldHide = !!hidden;
@@ -3249,11 +4877,29 @@ tableBody.innerHTML = `
 
       const data = await response.json();
 
-      if (!response.ok || data.success === false || !data.note) {
+      const noteData =
+        data.accountsNumberNote ||
+        data.note ||
+        {
+          enabled: false,
+          highestNumbers: null,
+          sidebarHighest: null,
+          latestNumbers: null,
+          notepadLatest: null,
+          latestHighest: null,
+          records: [],
+          total: 0
+        };
+
+      if (
+        !response.ok ||
+        data.success === false
+      ) {
         return;
       }
 
-      renderAccountsNumberNote(data.note);
+      window.ACCOUNTS_NUMBER_NOTE = noteData;
+      renderAccountsNumberNote(noteData);
     } catch (err) {
       console.warn("accounts number note refresh failed", err);
     }
@@ -3277,26 +4923,31 @@ tableBody.innerHTML = `
   }
 
   widget.addEventListener("click", async function (event) {
-    const copyBtn = event.target.closest(".accounts-number-note-copy");
+    const copyBtn =
+      event.target.closest("[data-copy-note]");
 
-    if (!copyBtn) return;
-
-    const index = Number(copyBtn.getAttribute("data-copy-index") || -1);
-    const record = currentRecords[index];
-
-    if (!record) return;
+    if (
+      !copyBtn ||
+      !currentNote ||
+      !currentNote.hasRecord
+    ) {
+      return;
+    }
 
     try {
-      await navigator.clipboard.writeText(record.copyText || "");
+      await navigator.clipboard.writeText(
+        currentNote.copyText || ""
+      );
 
       const oldHtml = copyBtn.innerHTML;
-      copyBtn.innerHTML = '<i class="bi bi-check2 me-1"></i> Copied';
+      copyBtn.innerHTML =
+        '<i class="bi bi-check2 me-1"></i> Copied';
 
       if (typeof window.showUploadFlash === "function") {
         window.showUploadFlash(
           "success",
           "Copied",
-          "Family, verification and registration numbers copied."
+          "Latest family, verification and registration numbers copied."
         );
       }
 
@@ -3314,6 +4965,11 @@ tableBody.innerHTML = `
 
   const hidden = localStorage.getItem(storageKey) === "1";
   setNoteHidden(hidden);
+
+  setInterval(
+    refreshAccountsNumberNote,
+    60000
+  );
 
   if (typeof io === "function") {
     try {

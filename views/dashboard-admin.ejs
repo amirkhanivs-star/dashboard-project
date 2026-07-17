@@ -209,71 +209,245 @@ const isAccountsAdmin =
     }
   }
 
-  function _hasKey(key) {
-    if (_isSuper) return true;
-    if (!_perms) return false;
-
-    // wildcard
-    if (_perms === true) return true;
-
-    // Array format
-    if (Array.isArray(_perms)) {
-      return _perms.includes(key) || _perms.includes('*') || _perms.includes('all');
+   function _permissionEnabled(value) {
+    if (value === true || value === 1) {
+      return true;
     }
 
-    // Object format (flat or nested)
-    if (typeof _perms === 'object') {
-      if (key in _perms) return !!_perms[key];
-
-      const nested = _getNested(_perms, key);
-      if (typeof nested !== 'undefined') return !!nested;
-
-      const alt = key.replace(/\./g, '_');
-      if (alt in _perms) return !!_perms[alt];
-
+    if (
+      value === false ||
+      value === 0 ||
+      value === null ||
+      typeof value === 'undefined'
+    ) {
       return false;
+    }
+
+    return [
+      '1',
+      'true',
+      'on',
+      'yes'
+    ].includes(
+      String(value)
+        .trim()
+        .toLowerCase()
+    );
+  }
+
+  function _hasOwnPermission(key) {
+    return !!(
+      _perms &&
+      typeof _perms === 'object' &&
+      !Array.isArray(_perms) &&
+      Object.prototype.hasOwnProperty.call(
+        _perms,
+        key
+      )
+    );
+  }
+
+  function _hasKey(key) {
+    const cleanKey = String(key || '').trim();
+
+    if (!cleanKey || !_perms) {
+      return false;
+    }
+
+    if (_perms === true) {
+      return true;
+    }
+
+    if (Array.isArray(_perms)) {
+      return (
+        _perms.includes(cleanKey) ||
+        _perms.includes('*') ||
+        _perms.includes('all')
+      );
+    }
+
+    if (typeof _perms === 'object') {
+      if (_hasOwnPermission(cleanKey)) {
+        return _permissionEnabled(
+          _perms[cleanKey]
+        );
+      }
+
+      const nested = _getNested(
+        _perms,
+        cleanKey
+      );
+
+      if (typeof nested !== 'undefined') {
+        return _permissionEnabled(nested);
+      }
+
+      const alt = cleanKey.replace(/\./g, '_');
+
+      if (_hasOwnPermission(alt)) {
+        return _permissionEnabled(
+          _perms[alt]
+        );
+      }
     }
 
     return false;
   }
 
   function canAny(keys) {
-    return (keys || []).some(k => _hasKey(k));
+    return (keys || [])
+      .filter(Boolean)
+      .some(key => _hasKey(key));
   }
 
-  // ✅ NEW: map EJS checkbox keys (saved by super admin UI) to dashboard checks
- const COL_MAP = {
-  status: 'colStatus',
-  feeStatus: 'colFeeStatus',
-  dept: 'colDept',
-  student: 'colStudentName',
-  father: 'colFatherName',
-  fatherEmail: 'colFatherEmail',
-  grade: 'colGrade',
-  tuitionGrade: 'colTuitionGrade',
-  phone: 'colPhone',
-  processedBy: 'colProcessedBy',
-  paymentStatus: 'colPaymentStatus',
-  paidUpto: 'colPaidUpto',
-  verificationNumber: 'colVerificationNumber',
-  registrationNumber: 'colRegistrationNumber',
-  familyNumber: 'colFamilyNumber',
-  registrationFee: 'colRegistrationFee',
-  fees: 'colFees',
-  currency: 'colCurrency',
-  bank: 'colBank',
-  month: 'colMonth',
-  totalFees: 'colTotalFees',
-  pendingDues: 'colPendingDues',
-  receivedPayment: 'colReceivedPayment',
-  invoiceStatus: 'colInvoiceStatus',
-  invoiceStatusTimestamp: 'colInvoiceStatusTimestamp',
-  paidInvoiceStatus: 'colPaidInvoiceStatus',
-  paidInvoiceStatusTimestamp: 'colPaidInvoiceStatusTimestamp',
-  actionButtons: 'colActionButtons'
-};
+  const COLUMN_VIEW_KEY_MAP = Object.freeze({
+    status: 'colStatus',
+    feeStatus: 'colFeeStatus',
+    dept: 'colDept',
+    student: 'colStudentName',
+    father: 'colFatherName',
+    fatherEmail: 'colFatherEmail',
+    grade: 'colGrade',
+    tuitionGrade: 'colTuitionGrade',
+    phone: 'colPhone',
+    processedBy: 'colProcessedBy',
+    paymentStatus: 'colPaymentStatus',
+    paidUpto: 'colPaidUpto',
+    verificationNumber: 'colVerificationNumber',
+    registrationNumber: 'colRegistrationNumber',
+    familyNumber: 'colFamilyNumber',
+    registrationFee: 'colRegistrationFee',
+    fees: 'colFees',
+    currency: 'colCurrency',
+    bank: 'colBank',
+    month: 'colMonth',
+    totalFees: 'colTotalFees',
+    pendingDues: 'colPendingDues',
+    receivedPayment: 'colReceivedPayment',
+    comment: 'colComment',
+    invoiceStatus: 'colInvoiceStatus',
+    invoiceStatusTimestamp: 'colInvoiceStatusTimestamp',
+    paidInvoiceStatus: 'colPaidInvoiceStatus',
+    paidInvoiceStatusTimestamp: 'colPaidInvoiceStatusTimestamp',
+    actionButtons: 'colActionButtons'
+  });
 
-  const BTN_MAP = {
+  const COLUMN_EDIT_KEY_MAP = Object.freeze({
+    status: 'editStatus',
+    feeStatus: 'editFeeStatus',
+    dept: 'editDept',
+    student: 'editStudentName',
+    father: 'editFatherName',
+    fatherEmail: 'editFatherEmail',
+    grade: 'editGrade',
+    tuitionGrade: 'editTuitionGrade',
+    phone: 'editPhone',
+    paymentStatus: 'editPaymentStatus',
+    verificationNumber: 'editVerificationNumber',
+    registrationNumber: 'editRegistrationNumber',
+    familyNumber: 'editFamilyNumber',
+    registrationFee: 'editRegistrationFee',
+    fees: 'editFees',
+    currency: 'editCurrency',
+    bank: 'editBank',
+    month: 'editMonth',
+    comment: 'editComment'
+  });
+
+  const COLUMN_VIEW_LEGACY_KEY_MAP = Object.freeze({
+    phone: [
+      'showPhone'
+    ],
+
+    paymentStatus: [
+      'showPaymentStatus'
+    ],
+
+    paidUpto: [
+      'showPaidUpto'
+    ],
+
+    verificationNumber: [
+      'showVerificationNumber'
+    ],
+
+    registrationNumber: [
+      'showRegistrationNumber'
+    ]
+  });
+
+  const columnEditPermissionKeys =
+    Object.values(COLUMN_EDIT_KEY_MAP);
+
+  const hasExplicitEditSchema =
+    Array.isArray(_perms)
+      ? columnEditPermissionKeys.some(
+          key => _perms.includes(key)
+        )
+      : columnEditPermissionKeys.some(
+          key => _hasOwnPermission(key)
+        );
+
+  function canCol(name) {
+    const key = String(name || '').trim();
+
+    const permissionKey =
+      COLUMN_VIEW_KEY_MAP[key];
+
+    if (!permissionKey) {
+      return false;
+    }
+
+    const legacyKeys =
+      COLUMN_VIEW_LEGACY_KEY_MAP[key] || [];
+
+    return canAny([
+      permissionKey,
+      ...legacyKeys,
+
+      `col.${key}`,
+      `show_${key}`,
+      `show${key.charAt(0).toUpperCase() + key.slice(1)}`,
+
+      `admin.col.${key}`,
+      `admin.column.${key}`,
+
+      `super.col.${key}`,
+      `super.column.${key}`,
+
+      `dashboard_admin.col.${key}`,
+      `dashboard-admin.col.${key}`,
+      `perm.admin.col.${key}`,
+
+      key
+    ]);
+  }
+
+  function canEditCol(name) {
+    const key = String(name || '').trim();
+
+    const editPermissionKey =
+      COLUMN_EDIT_KEY_MAP[key];
+
+    if (
+      !editPermissionKey ||
+      !canCol(key)
+    ) {
+      return false;
+    }
+
+    /*
+     * Legacy users:
+     * View permission old Edit access ko preserve karegi.
+     */
+    if (!hasExplicitEditSchema) {
+      return true;
+    }
+
+    return _hasKey(editPermissionKey);
+  }
+
+  const BTN_MAP = Object.freeze({
     details: 'btnDetails',
     pdf: 'btnPdf',
     update: 'btnUpdateRow',
@@ -282,173 +456,144 @@ const isAccountsAdmin =
     upload: 'btnUpload',
     files: 'btnFiles',
     edit: 'btnEditRow'
-  };
-
-  // Column + button permission helpers
-  function canCol(name) {
-    if (_isSuper) return true;
-    const k = String(name || '').trim();
-
-    const mapped = COL_MAP[k];
-
-    return canAny([
-      // ✅ direct keys saved in DB by super user UI
-      mapped,
-
-      // legacy keys used in old DB (your super-users.ejs supports these)
-      k === 'phone' ? 'showPhone' : null,
-      k === 'paymentStatus' ? 'showPaymentStatus' : null,
-      k === 'paidUpto' ? 'showPaidUpto' : null,
-      k === 'verificationNumber' ? 'showVerificationNumber' : null,
-      k === 'registrationNumber' ? 'showRegistrationNumber' : null,
-
-      // old styles (if you ever used)
-      `col.${k}`,
-      `show_${k}`,
-      `show${k.charAt(0).toUpperCase() + k.slice(1)}`,
-
-      // future schema (admin.col.*, super.col.*)
-      `admin.col.${k}`,
-      `admin.column.${k}`,
-      `super.col.${k}`,
-      `super.column.${k}`,
-
-      // keep raw key as fallback
-      k
-    ].filter(Boolean));
-  }
+  });
 
   function canBtn(name) {
-    if (_isSuper) return true;
-    const k = String(name || '').trim();
+    const key = String(name || '').trim();
 
-    const mapped = BTN_MAP[k];
+    const permissionKey =
+      BTN_MAP[key];
 
     return canAny([
-      // ✅ direct keys saved in DB
-      mapped,
+      permissionKey,
 
-      // legacy / future schema
-      `admin.btn.${k}`,
-      `admin.button.${k}`,
-      `super.btn.${k}`,
-      `super.button.${k}`,
+      `admin.btn.${key}`,
+      `admin.button.${key}`,
 
-      `btn_${k}`,
-      `btn${k.charAt(0).toUpperCase() + k.slice(1)}`,
+      `super.btn.${key}`,
+      `super.button.${key}`,
 
-      k
-    ].filter(Boolean));
-  }
+      `dashboard_admin.btn.${key}`,
+      `dashboard-admin.btn.${key}`,
+      `perm.admin.btn.${key}`,
 
-  // Editing:
-  function _cap(s){ return String(s||'').charAt(0).toUpperCase() + String(s||'').slice(1); }
+      `btn_${key}`,
+      `btn${key.charAt(0).toUpperCase() + key.slice(1)}`,
 
-  const _allowEditAll = canAny([
-    'super.edit.all','admin.edit.all','edit.all',
-    'super.editAll','admin.editAll','editAll'
-  ]);
-
-  function canEditField(field) {
-    if (_isSuper) return true;
-
-    // ✅ update button (btnUpdateRow) required
-    if (!canBtn('update')) return false;
-
-    if (_allowEditAll) return true;
-
-    const k = String(field || '').trim();
-
-    const specificTrue = canAny([
-      `super.edit.${k}`, `admin.edit.${k}`, `edit.${k}`,
-      `super.edit_${k}`, `admin.edit_${k}`, `edit_${k}`,
-      `edit${_cap(k)}`, `canEdit${_cap(k)}`, `can_edit_${k}`,
+      key
     ]);
-
-    const anyEditKeyPresent = canAny([
-      'super.edit', 'admin.edit', 'edit',
-      'super.edit.student','admin.edit.student','edit.student',
-      'super.edit.father','admin.edit.father','edit.father',
-      'super.edit.grade','admin.edit.grade','edit.grade',
-      'super.edit.phone','admin.edit.phone','edit.phone',
-    ]);
-
-    if (anyEditKeyPresent) return specificTrue;
-
-    // ✅ default allow when update allowed
-    return true;
   }
 
   const P = {
-   col: {
-  status: canCol('status'),
-  feeStatus: canCol('feeStatus'),
-  dept: canCol('dept'),
-  student: canCol('student'),
-  father: canCol('father'),
-  fatherEmail: canCol('fatherEmail'),
-  grade: canCol('grade'),
-  tuitionGrade: canCol('tuitionGrade'),
-  phone: canCol('phone'),
-  processedBy: canCol('processedBy'),
-  paymentStatus: canCol('paymentStatus'),
-  paidUpto: canCol('paidUpto'),
-  verif: canCol('verificationNumber'),
-  reg: canCol('registrationNumber'),
-  family: canCol('familyNumber'),
-  registrationFee: canCol('registrationFee'),
-  fees: canCol('fees'),
-  currency: canCol('currency'),
-  bank: canCol('bank'),
-  month: canCol('month'),
-  totalFees: canCol('totalFees'),
-  pendingDues: canCol('pendingDues'),
-  receivedPayment: canCol('receivedPayment'),
-  invoiceStatus: canCol('invoiceStatus'),
-  invoiceStatusTimestamp: canCol('invoiceStatusTimestamp'),
-  paidInvoiceStatus: canCol('paidInvoiceStatus'),
-  paidInvoiceStatusTimestamp: canCol('paidInvoiceStatusTimestamp'),
-  actionButtons: canCol('actionButtons')
-},
+    col: {
+      status: canCol('status'),
+      feeStatus: canCol('feeStatus'),
+      dept: canCol('dept'),
+      student: canCol('student'),
+      father: canCol('father'),
+      fatherEmail: canCol('fatherEmail'),
+      grade: canCol('grade'),
+      tuitionGrade: canCol('tuitionGrade'),
+      phone: canCol('phone'),
+      processedBy: canCol('processedBy'),
+      paymentStatus: canCol('paymentStatus'),
+      paidUpto: canCol('paidUpto'),
+      verif: canCol('verificationNumber'),
+      reg: canCol('registrationNumber'),
+      family: canCol('familyNumber'),
+      registrationFee: canCol('registrationFee'),
+      fees: canCol('fees'),
+      currency: canCol('currency'),
+      bank: canCol('bank'),
+      month: canCol('month'),
+      totalFees: canCol('totalFees'),
+      pendingDues: canCol('pendingDues'),
+      receivedPayment: canCol('receivedPayment'),
+      comment: canCol('comment'),
 
-              btn: {
+      invoiceStatus:
+        canCol('invoiceStatus'),
+
+      invoiceStatusTimestamp:
+        canCol('invoiceStatusTimestamp'),
+
+      paidInvoiceStatus:
+        canCol('paidInvoiceStatus'),
+
+      paidInvoiceStatusTimestamp:
+        canCol('paidInvoiceStatusTimestamp'),
+
+      actionButtons:
+        canCol('actionButtons')
+    },
+
+    btn: {
       details: canBtn('details'),
-      edit: canBtn('edit') || _hasKey('btnEditRow'),
+      edit: canBtn('edit'),
       pdf: canBtn('pdf'),
       update: canBtn('update'),
       whatsapp: canBtn('whatsapp'),
       billing: canBtn('billing'),
       upload: canBtn('upload'),
       files: canBtn('files'),
-      deleteAdmission: _hasKey('canDeleteAdmissions'),
+
+      deleteAdmission:
+        _hasKey('canDeleteAdmissions')
     },
-   edit: {
-  dept: false,
-  status: canEditField('status'),
-  feeStatus: canEditField('feeStatus'),
-  student: canEditField('student'),
-  father: canEditField('father'),
-  fatherEmail: canEditField('fatherEmail'),
-  grade: canEditField('grade'),
-  tuitionGrade: canEditField('tuitionGrade'),
-  phone: canEditField('phone'),
-  paymentStatus: canEditField('paymentStatus'),
-  paidUpto: canEditField('paidUpto'),
-  verif: canEditField('verificationNumber'),
-  reg: canEditField('registrationNumber'),
-  family: canEditField('familyNumber'),
-  registrationFee: canEditField('registrationFee'),
-  fees: canEditField('fees'),
-  currency: canEditField('currency'),
-  bank: canEditField('bank'),
-  month: canEditField('month'),
+
+    edit: {
+      status: canEditCol('status'),
+      feeStatus: canEditCol('feeStatus'),
+      dept: canEditCol('dept'),
+      student: canEditCol('student'),
+      father: canEditCol('father'),
+      fatherEmail: canEditCol('fatherEmail'),
+      grade: canEditCol('grade'),
+
+      tuitionGrade:
+        canEditCol('tuitionGrade'),
+
+      phone:
+        canEditCol('phone'),
+
+      paymentStatus:
+        canEditCol('paymentStatus'),
+
+      verificationNumber:
+        canEditCol('verificationNumber'),
+
+      registrationNumber:
+        canEditCol('registrationNumber'),
+
+      familyNumber:
+        canEditCol('familyNumber'),
+
+      registrationFee:
+        canEditCol('registrationFee'),
+
+      fees:
+        canEditCol('fees'),
+
+      currency:
+        canEditCol('currency'),
+
+      bank:
+        canEditCol('bank'),
+
+      month:
+        canEditCol('month'),
+
+      comment:
+        canEditCol('comment')
     }
   };
 
   // ✅ Action column shows only if column permission is ON and at least one button allowed
  const canDeleteAdmissions = !!P.btn.deleteAdmission;
 
-const showBulkDeleteBar = canDeleteAdmissions;
+const showBulkDeleteBar =
+  P.col.actionButtons &&
+  canDeleteAdmissions;
 
 const currentUserDept = String(
   (user && (user.dept || user.department || user.userDept || user.user_department)) || ''
@@ -484,6 +629,10 @@ const accountsNumberNoteData =
     ? accountsNumberNote
     : {
         enabled: false,
+        highestNumbers: null,
+        sidebarHighest: null,
+        latestNumbers: null,
+        notepadLatest: null,
         latestHighest: null,
         records: [],
         total: 0
@@ -1024,15 +1173,11 @@ function getDashboardForwardTimerDurationLabel(timer) {
       <div class="accounts-number-note-head">
         <div>
           <div class="accounts-number-note-title">
-            Latest Fam + Verif + Reg Updates
-          </div>
-          <div class="accounts-number-note-subtitle">
-            Recent updates first
-            <span id="accountsNumberNoteTotal">
-              <%= Number(accountsNumberNoteData.total || 0) %>
-            </span>
-            records
-          </div>
+  Latest Fam + Verif + Reg Numbers
+</div>
+<div class="accounts-number-note-subtitle">
+  Latest update from each field
+</div>
         </div>
 
         <button
@@ -1057,13 +1202,13 @@ function getDashboardForwardTimerDurationLabel(timer) {
     </div>
 
     <button
-      type="button"
-      class="accounts-number-note-open d-none"
-      id="accountsNumberNoteOpenBtn"
-      title="Show latest numbers">
-      <i class="bi bi-stickies"></i>
-      Latest Numbers
-    </button>
+  type="button"
+  class="accounts-number-note-open d-none"
+  id="accountsNumberNoteOpenBtn"
+  title="Show latest numbers">
+  <i class="bi bi-stickies"></i>
+  Latest Numbers
+</button>
   <% } %>
 
   <!-- STATS -->
@@ -1988,7 +2133,13 @@ const teamUserHint = teamUser.isSelf
       const monthVal = (a.admission && a.admission.month) || '';
       const totalFeesVal = (a.admission && a.admission.totalFees) || '';
       const pendingDuesVal = (a.admission && a.admission.pendingDues) || '';
-      const receivedPaymentVal = (a.admission && a.admission.receivedPayment) || '0';
+            const receivedPaymentVal =
+        (a.admission && a.admission.receivedPayment) ||
+        '0';
+
+      const commentVal =
+        (a.admission && a.admission.comment) ||
+        '';
 
       const invoiceStatusVal = (a.admission && a.admission.invoiceStatus) || '';
       const invoiceStatusTimestampVal = (a.admission && a.admission.invoiceStatusTimestamp) || '';
@@ -2011,36 +2162,215 @@ const teamUserHint = teamUser.isSelf
       ];
 
       const currentYearOnly = new Date().getFullYear();
-      const cardFields = [
- { key: 'no', show: true, label: 'No.', value: a.entryNumber || a.entry_number || a.id || '-' },
-{ key: 'registrationNumber', show: P.col.reg, label: 'Reg #', value: regVal || '-' },
-{ key: 'familyNumber', show: P.col.family, label: 'Family #', value: familyVal || '-' },
-{ key: 'verificationNumber', show: P.col.verif, label: 'Verif #', value: verifVal || '-' },
-{ key: 'status', show: P.col.status, label: 'Current Status', value: currentStatusVal || '-' },
-{ key: 'feeStatus', show: P.col.feeStatus, label: 'Fee Status', value: feeStatusVal || '-' },
-  { key: 'dept', show: P.col.dept, label: 'Dept', value: deptVal || '-' },
-  { key: 'student', show: P.col.student, label: 'Student', value: studentVal || '-' },
-  { key: 'father', show: P.col.father, label: 'Father', value: fatherVal || '-' },
-  { key: 'grade', show: P.col.grade, label: 'Grade', value: gradeVal || '-' },
-  { key: 'tuitionGrade', show: P.col.tuitionGrade, label: 'Grade Section', value: tuitionVal || '-' },
-  { key: 'fatherEmail', show: P.col.fatherEmail, label: 'Email Address', value: fatherEmailVal || '-' },
-  { key: 'phone', show: P.col.phone, label: 'Phone Number', value: phoneVal || '-' },
-  { key: 'processedBy', show: P.col.processedBy, label: 'Processed By', value: processedByVal || '-' },
-  { key: 'paymentStatus', show: P.col.paymentStatus, label: 'Payment Status', value: payVal || '-' },
-  { key: 'paidUpto', show: P.col.paidUpto, label: 'Paid Upto', value: paidUptoVal || '-' },
-  { key: 'registrationFee', show: P.col.registrationFee, label: 'Registration Fee', value: registrationFeeVal || '-' },
-  { key: 'fees', show: P.col.fees, label: 'Monthly Fees', value: feesVal || '-' },
-  { key: 'currency', show: P.col.currency, label: 'Currency', value: currencyVal || '-' },
-  { key: 'bank', show: P.col.bank, label: 'Bank', value: bankVal || '-' },
-  { key: 'month', show: P.col.month, label: 'Month/Year', value: monthVal || '-' },
-  { key: 'totalFees', show: P.col.totalFees, label: 'Total Fees', value: totalFeesVal || '-' },
-  { key: 'pendingDues', show: P.col.pendingDues, label: 'Pending Dues', value: pendingDuesVal || '-' },
-  { key: 'receivedPayment', show: P.col.receivedPayment, label: 'Received Payment', value: receivedPaymentVal || '0' },
-  { key: 'invoiceStatus', show: P.col.invoiceStatus, label: 'Invoice Status', value: invoiceStatusVal || '-' },
-  { key: 'invoiceStatusTimestamp', show: P.col.invoiceStatusTimestamp, label: 'Invoice Status Timestamp', value: invoiceStatusTimestampVal || '-' },
-  { key: 'paidInvoiceStatus', show: P.col.paidInvoiceStatus, label: 'Paid Invoice Status', value: paidInvoiceStatusVal || '-' },
-  { key: 'paidInvoiceStatusTimestamp', show: P.col.paidInvoiceStatusTimestamp, label: 'Paid Invoice Status Timestamp', value: paidInvoiceStatusTimestampVal || '-' }
-];
+            const cardFields = [
+        {
+          key: 'no',
+          show: true,
+          canEdit: false,
+          label: 'No.',
+          value:
+            a.entryNumber ||
+            a.entry_number ||
+            a.id ||
+            '-'
+        },
+        {
+          key: 'registrationNumber',
+          show: P.col.reg,
+          canEdit: P.edit.registrationNumber,
+          label: 'Reg #',
+          value: regVal || '-'
+        },
+        {
+          key: 'familyNumber',
+          show: P.col.family,
+          canEdit: P.edit.familyNumber,
+          label: 'Family #',
+          value: familyVal || '-'
+        },
+        {
+          key: 'verificationNumber',
+          show: P.col.verif,
+          canEdit: P.edit.verificationNumber,
+          label: 'Verif #',
+          value: verifVal || '-'
+        },
+        {
+          key: 'status',
+          show: P.col.status,
+          canEdit: P.edit.status,
+          label: 'Current Status',
+          value: currentStatusVal || '-'
+        },
+        {
+          key: 'feeStatus',
+          show: P.col.feeStatus,
+          canEdit: P.edit.feeStatus,
+          label: 'Fee Status',
+          value: feeStatusVal || '-'
+        },
+        {
+          key: 'dept',
+          show: P.col.dept,
+          canEdit: P.edit.dept,
+          label: 'Dept',
+          value: deptVal || '-'
+        },
+        {
+          key: 'student',
+          show: P.col.student,
+          canEdit: P.edit.student,
+          label: 'Student',
+          value: studentVal || '-'
+        },
+        {
+          key: 'father',
+          show: P.col.father,
+          canEdit: P.edit.father,
+          label: 'Father',
+          value: fatherVal || '-'
+        },
+        {
+          key: 'grade',
+          show: P.col.grade,
+          canEdit: P.edit.grade,
+          label: 'Grade',
+          value: gradeVal || '-'
+        },
+        {
+          key: 'tuitionGrade',
+          show: P.col.tuitionGrade,
+          canEdit: P.edit.tuitionGrade,
+          label: 'Grade Section',
+          value: tuitionVal || '-'
+        },
+        {
+          key: 'fatherEmail',
+          show: P.col.fatherEmail,
+          canEdit: P.edit.fatherEmail,
+          label: 'Email Address',
+          value: fatherEmailVal || '-'
+        },
+        {
+          key: 'phone',
+          show: P.col.phone,
+          canEdit: P.edit.phone,
+          label: 'Phone Number',
+          value: phoneVal || '-'
+        },
+        {
+          key: 'processedBy',
+          show: P.col.processedBy,
+          canEdit: false,
+          label: 'Processed By',
+          value: processedByVal || '-'
+        },
+        {
+          key: 'paymentStatus',
+          show: P.col.paymentStatus,
+          canEdit: P.edit.paymentStatus,
+          label: 'Payment Status',
+          value: payVal || '-'
+        },
+        {
+          key: 'paidUpto',
+          show: P.col.paidUpto,
+          canEdit: false,
+          label: 'Paid Upto',
+          value: paidUptoVal || '-'
+        },
+        {
+          key: 'registrationFee',
+          show: P.col.registrationFee,
+          canEdit: P.edit.registrationFee,
+          label: 'Registration Fee',
+          value: registrationFeeVal || '-'
+        },
+        {
+          key: 'fees',
+          show: P.col.fees,
+          canEdit: P.edit.fees,
+          label: 'Monthly Fees',
+          value: feesVal || '-'
+        },
+        {
+          key: 'currency',
+          show: P.col.currency,
+          canEdit: P.edit.currency,
+          label: 'Currency',
+          value: currencyVal || '-'
+        },
+        {
+          key: 'bank',
+          show: P.col.bank,
+          canEdit: P.edit.bank,
+          label: 'Bank',
+          value: bankVal || '-'
+        },
+        {
+          key: 'month',
+          show: P.col.month,
+          canEdit: P.edit.month,
+          label: 'Month/Year',
+          value: monthVal || '-'
+        },
+        {
+          key: 'totalFees',
+          show: P.col.totalFees,
+          canEdit: false,
+          label: 'Total Fees',
+          value: totalFeesVal || '-'
+        },
+        {
+          key: 'pendingDues',
+          show: P.col.pendingDues,
+          canEdit: false,
+          label: 'Pending Dues',
+          value: pendingDuesVal || '-'
+        },
+        {
+          key: 'receivedPayment',
+          show: P.col.receivedPayment,
+          canEdit: false,
+          label: 'Received Payment',
+          value: receivedPaymentVal || '0'
+        },
+        {
+          key: 'comment',
+          show: P.col.comment,
+          canEdit: P.edit.comment,
+          label: 'Comment',
+          value: commentVal || '-'
+        },
+        {
+          key: 'invoiceStatus',
+          show: P.col.invoiceStatus,
+          canEdit: false,
+          label: 'Invoice Status',
+          value: invoiceStatusVal || '-'
+        },
+        {
+          key: 'invoiceStatusTimestamp',
+          show: P.col.invoiceStatusTimestamp,
+          canEdit: false,
+          label: 'Invoice Status Timestamp',
+          value: invoiceStatusTimestampVal || '-'
+        },
+        {
+          key: 'paidInvoiceStatus',
+          show: P.col.paidInvoiceStatus,
+          canEdit: false,
+          label: 'Paid Invoice Status',
+          value: paidInvoiceStatusVal || '-'
+        },
+        {
+          key: 'paidInvoiceStatusTimestamp',
+          show: P.col.paidInvoiceStatusTimestamp,
+          canEdit: false,
+          label: 'Paid Invoice Status Timestamp',
+          value: paidInvoiceStatusTimestampVal || '-'
+        }
+      ];
     %>
 
       <form id="<%= fid %>" action="/admin/update/<%= a.id %>" method="POST" class="d-none"></form>
@@ -2083,25 +2413,50 @@ const teamUserHint = teamUser.isSelf
 
         <div class="admission-card-top">
           <div class="d-flex align-items-center gap-2">
-            <% if (canDeleteAdmissions) { %>
-              <input
+            <% if (showBulkDeleteBar) { %>
+            <input
                 type="checkbox"
                 class="form-check-input admission-row-checkbox"
                 value="<%= a.id %>"
                 data-student-name="<%= studentVal %>">
             <% } %>
 
+            <%
+              const cardDisplayNumber =
+                a.entryNumber ||
+                a.entry_number ||
+                a.id ||
+                '-';
+
+              const cardStudentName =
+                studentVal ||
+                'No Name';
+
+              const cardFatherName =
+                fatherVal ||
+                '-';
+            %>
+
             <div class="admission-avatar admin-admission-avatar">
-              <%= String(studentVal || 'A').charAt(0).toUpperCase() %>
+              <%= P.col.student
+                ? String(cardStudentName)
+                    .charAt(0)
+                    .toUpperCase()
+                : '#' %>
             </div>
 
             <div>
               <div class="admission-title">
-                <%= studentVal || 'No Name' %>
+                <%= P.col.student
+                  ? cardStudentName
+                  : `Admission #${cardDisplayNumber}` %>
               </div>
-              <div class="admission-subtitle">
-                <%= fatherVal || '-' %>
-              </div>
+
+              <% if (P.col.father) { %>
+                <div class="admission-subtitle">
+                  <%= cardFatherName %>
+                </div>
+              <% } %>
             </div>
           </div>
 
@@ -2208,9 +2563,11 @@ const teamUserHint = teamUser.isSelf
     <%= workflowTag %>
   </span>
 
-  <span class="admission-role-pill admin-role-pill">
-    <%= deptVal || 'Dept' %>
-  </span>
+  <% if (P.col.dept) { %>
+    <span class="admission-role-pill admin-role-pill">
+      <%= deptVal || 'Dept' %>
+    </span>
+  <% } %>
 
 </div>
         </div>
@@ -2219,7 +2576,7 @@ const teamUserHint = teamUser.isSelf
   <% cardFields.forEach(field => { %>
     <% if (field.show) { %>
 
-      <% if (P.btn.edit) { %>
+      <% if (P.btn.edit && field.canEdit) { %>
         <a
           href="/admin/admission/<%= a.id %>/edit?focus=<%= encodeURIComponent(field.key || '') %>"
           class="admission-field-link <%= getCardFieldClass(field) %> js-dashboard-edit-return-link"
@@ -6244,36 +6601,195 @@ const teamUserHint = teamUser.isSelf
         <div class="admin-search-criteria-wrap">
           <div class="admin-search-criteria-title">Choose Search Criteria</div>
 
-          <div class="admin-search-criteria-group">
-            <div class="admin-search-criteria-group-title">General</div>
+                    <div class="admin-search-criteria-group">
+            <div class="admin-search-criteria-group-title">
+              General
+            </div>
 
-            <button type="button" class="admin-search-option" data-search-key="registrationNumber" data-search-label="Reg #">Reg #</button>
-            <button type="button" class="admin-search-option" data-search-key="student" data-search-label="Student">Name</button>
-            <button type="button" class="admin-search-option" data-search-key="father" data-search-label="Father">Father Name</button>
-            <button type="button" class="admin-search-option" data-search-key="familyNumber" data-search-label="Family #">Family Code</button>
-            <button type="button" class="admin-search-option" data-search-key="phone" data-search-label="Phone">Contact</button>
-            <button type="button" class="admin-search-option" data-search-key="fatherEmail" data-search-label="Email">Email</button>
-            <button type="button" class="admin-search-option" data-search-key="grade" data-search-label="Grade">Grade</button>
-            <button type="button" class="admin-search-option" data-search-key="tuitionGrade" data-search-label="Grade Section">Section</button>
-            <button type="button" class="admin-search-option" data-search-key="dept" data-search-label="Dept">Department</button>
-            <button type="button" class="admin-search-option" data-search-key="status" data-search-label="Current Status">Current Status</button>
-            <button type="button" class="admin-search-option" data-search-key="feeStatus" data-search-label="Fee Status">Fee Status</button>
-            <button type="button" class="admin-search-option" data-search-key="processedBy" data-search-label="Processed By">Processed By</button>
-            <button type="button" class="admin-search-option" data-search-key="paymentStatus" data-search-label="Payment Status">Payment Status</button>
-            <button type="button" class="admin-search-option" data-search-key="paidUpto" data-search-label="Paid Upto">Paid Upto</button>
-            <button type="button" class="admin-search-option" data-search-key="verificationNumber" data-search-label="Verif #">Verif #</button>
-            <button type="button" class="admin-search-option" data-search-key="registrationFee" data-search-label="Registration Fee">Registration Fee</button>
-            <button type="button" class="admin-search-option" data-search-key="fees" data-search-label="Monthly Fees">Monthly Fees</button>
-            <button type="button" class="admin-search-option" data-search-key="currency" data-search-label="Currency">Currency</button>
-            <button type="button" class="admin-search-option" data-search-key="bank" data-search-label="Bank">Bank</button>
-            <button type="button" class="admin-search-option" data-search-key="month" data-search-label="Month/Year">Month/Year</button>
-            <button type="button" class="admin-search-option" data-search-key="totalFees" data-search-label="Total Fees">Total Fees</button>
-            <button type="button" class="admin-search-option" data-search-key="pendingDues" data-search-label="Pending Dues">Pending Dues</button>
-            <button type="button" class="admin-search-option" data-search-key="receivedPayment" data-search-label="Received Payment">Received Payment</button>
-            <button type="button" class="admin-search-option" data-search-key="invoiceStatus" data-search-label="Invoice Status">Invoice Status</button>
-            <button type="button" class="admin-search-option" data-search-key="invoiceStatusTimestamp" data-search-label="Invoice Status Timestamp">Invoice Status Timestamp</button>
-            <button type="button" class="admin-search-option" data-search-key="paidInvoiceStatus" data-search-label="Paid Invoice Status">Paid Invoice Status</button>
-            <button type="button" class="admin-search-option" data-search-key="paidInvoiceStatusTimestamp" data-search-label="Paid Invoice Status Timestamp">Paid Invoice Status Timestamp</button>
+            <%
+              const adminSearchPermissionOptions = [
+                {
+                  show: P.col.reg,
+                  key: 'registrationNumber',
+                  label: 'Reg #',
+                  text: 'Reg #'
+                },
+                {
+                  show: P.col.student,
+                  key: 'student',
+                  label: 'Student',
+                  text: 'Name'
+                },
+                {
+                  show: P.col.father,
+                  key: 'father',
+                  label: 'Father',
+                  text: 'Father Name'
+                },
+                {
+                  show: P.col.family,
+                  key: 'familyNumber',
+                  label: 'Family #',
+                  text: 'Family Code'
+                },
+                {
+                  show: P.col.phone,
+                  key: 'phone',
+                  label: 'Phone',
+                  text: 'Contact'
+                },
+                {
+                  show: P.col.fatherEmail,
+                  key: 'fatherEmail',
+                  label: 'Email',
+                  text: 'Email'
+                },
+                {
+                  show: P.col.grade,
+                  key: 'grade',
+                  label: 'Grade',
+                  text: 'Grade'
+                },
+                {
+                  show: P.col.tuitionGrade,
+                  key: 'tuitionGrade',
+                  label: 'Grade Section',
+                  text: 'Section'
+                },
+                {
+                  show: P.col.dept,
+                  key: 'dept',
+                  label: 'Dept',
+                  text: 'Department'
+                },
+                {
+                  show: P.col.status,
+                  key: 'status',
+                  label: 'Current Status',
+                  text: 'Current Status'
+                },
+                {
+                  show: P.col.feeStatus,
+                  key: 'feeStatus',
+                  label: 'Fee Status',
+                  text: 'Fee Status'
+                },
+                {
+                  show: P.col.processedBy,
+                  key: 'processedBy',
+                  label: 'Processed By',
+                  text: 'Processed By'
+                },
+                {
+                  show: P.col.paymentStatus,
+                  key: 'paymentStatus',
+                  label: 'Payment Status',
+                  text: 'Payment Status'
+                },
+                {
+                  show: P.col.paidUpto,
+                  key: 'paidUpto',
+                  label: 'Paid Upto',
+                  text: 'Paid Upto'
+                },
+                {
+                  show: P.col.verif,
+                  key: 'verificationNumber',
+                  label: 'Verif #',
+                  text: 'Verif #'
+                },
+                {
+                  show: P.col.registrationFee,
+                  key: 'registrationFee',
+                  label: 'Registration Fee',
+                  text: 'Registration Fee'
+                },
+                {
+                  show: P.col.fees,
+                  key: 'fees',
+                  label: 'Monthly Fees',
+                  text: 'Monthly Fees'
+                },
+                {
+                  show: P.col.currency,
+                  key: 'currency',
+                  label: 'Currency',
+                  text: 'Currency'
+                },
+                {
+                  show: P.col.bank,
+                  key: 'bank',
+                  label: 'Bank',
+                  text: 'Bank'
+                },
+                {
+                  show: P.col.month,
+                  key: 'month',
+                  label: 'Month/Year',
+                  text: 'Month/Year'
+                },
+                {
+                  show: P.col.totalFees,
+                  key: 'totalFees',
+                  label: 'Total Fees',
+                  text: 'Total Fees'
+                },
+                {
+                  show: P.col.pendingDues,
+                  key: 'pendingDues',
+                  label: 'Pending Dues',
+                  text: 'Pending Dues'
+                },
+                {
+                  show: P.col.receivedPayment,
+                  key: 'receivedPayment',
+                  label: 'Received Payment',
+                  text: 'Received Payment'
+                },
+                {
+                  show: P.col.comment,
+                  key: 'comment',
+                  label: 'Comment',
+                  text: 'Comment'
+                },
+                {
+                  show: P.col.invoiceStatus,
+                  key: 'invoiceStatus',
+                  label: 'Invoice Status',
+                  text: 'Invoice Status'
+                },
+                {
+                  show: P.col.invoiceStatusTimestamp,
+                  key: 'invoiceStatusTimestamp',
+                  label: 'Invoice Status Timestamp',
+                  text: 'Invoice Status Timestamp'
+                },
+                {
+                  show: P.col.paidInvoiceStatus,
+                  key: 'paidInvoiceStatus',
+                  label: 'Paid Invoice Status',
+                  text: 'Paid Invoice Status'
+                },
+                {
+                  show: P.col.paidInvoiceStatusTimestamp,
+                  key: 'paidInvoiceStatusTimestamp',
+                  label: 'Paid Invoice Status Timestamp',
+                  text: 'Paid Invoice Status Timestamp'
+                }
+              ];
+            %>
+
+            <% adminSearchPermissionOptions.forEach(option => { %>
+              <% if (option.show) { %>
+                <button
+                  type="button"
+                  class="admin-search-option"
+                  data-search-key="<%= option.key %>"
+                  data-search-label="<%= option.label %>">
+                  <%= option.text %>
+                </button>
+              <% } %>
+            <% }) %>
           </div>
         </div>
       </div>
@@ -8805,6 +9321,7 @@ if (editBillingStatusSaveBtn) {
           totalFees: 'Total Fees',
           pendingDues: 'Pending Dues',
           receivedPayment: 'Received Payment',
+          comment: 'Comment',
           invoiceStatus: 'Invoice Status',
           invoiceStatusTimestamp: 'Invoice Status Timestamp',
           paidInvoiceStatus: 'Paid Invoice Status',
@@ -12310,12 +12827,16 @@ if (editBillingStatusSaveBtn) {
       : ((user && (user.permissions || user.perms || user.permission || user.permissionMap)) || null)
   ) %>;
   window.IS_SUPER     = <%- JSON.stringify(!!_isSuper) %>;
-  window.ACCOUNTS_NUMBER_NOTE = <%- JSON.stringify(accountsNumberNoteData || {
-    enabled: false,
-    latestHighest: null,
-    records: [],
-    total: 0
-  }) %>;
+ window.ACCOUNTS_NUMBER_NOTE = <%- JSON.stringify(accountsNumberNoteData || {
+  enabled: false,
+  highestNumbers: null,
+  sidebarHighest: null,
+  latestNumbers: null,
+  notepadLatest: null,
+  latestHighest: null,
+  records: [],
+  total: 0
+}) %>;
   window.SHOW_ACCOUNTS_NUMBER_NOTE = <%- JSON.stringify(!!shouldRenderAccountsNumberNote) %>;
 </script>
 
@@ -12330,7 +12851,6 @@ if (editBillingStatusSaveBtn) {
     const hideBtn = document.getElementById("accountsNumberNoteHideBtn");
     const listEl = document.getElementById("accountsNumberNoteList");
     const emptyEl = document.getElementById("accountsNumberNoteEmpty");
-    const totalEl = document.getElementById("accountsNumberNoteTotal");
 
     if (!canShowNote || !widget || !listEl) {
       return;
@@ -12340,7 +12860,7 @@ if (editBillingStatusSaveBtn) {
       widget.getAttribute("data-hidden-storage-key") ||
       "ivs_accounts_number_note_hidden_admin";
 
-    let currentRecords = [];
+    let currentNote = null;
 
     const positionStorageKey = `${storageKey}_position_v2`;
     let openBtnDragMoved = false;
@@ -12547,153 +13067,159 @@ if (editBillingStatusSaveBtn) {
         .replace(/'/g, "&#039;");
     }
 
-    function normalizeRecord(record = {}) {
-      const verificationNumber =
-        String(record.verificationNumber || record.rawVerificationNumber || "").trim() || "?";
+      function normalizeLatestNumbers(data = {}) {
+  const latest =
+    (
+      data &&
+      (
+        data.latestNumbers ||
+        data.notepadLatest
+      )
+    ) ||
+    null;
 
-      const registrationNumber =
-        String(record.registrationNumber || record.rawRegistrationNumber || "").trim() || "?";
+  const familyNumber =
+    String(
+      latest?.familyNumber || ""
+    ).trim();
 
-      const familyNumber =
-        String(
-          record.familyNumber ||
-          record.rawFamilyNumber ||
-          record.accountsFamilyNumber ||
-          record.accounts_family_number ||
-          ""
-        ).trim() || "?";
+  const verificationNumber =
+    String(
+      latest?.verificationNumber || ""
+    ).trim();
 
-      const missingVerificationNumber =
-        record.missingVerificationNumber === true ||
-        verificationNumber === "?";
+  const registrationNumber =
+    String(
+      latest?.registrationNumber || ""
+    ).trim();
 
-      const missingRegistrationNumber =
-        record.missingRegistrationNumber === true ||
-        registrationNumber === "?";
+  const hasFamilyNumber =
+    !!familyNumber;
 
-      const missingFamilyNumber =
-        record.missingFamilyNumber === true ||
-        familyNumber === "?";
+  const hasVerificationNumber =
+    !!verificationNumber;
 
-      return {
-        admissionId: record.admissionId || record.id || "",
-        entryNumber: record.entryNumber || record.entry_number || record.admissionId || record.id || "-",
-        studentName: record.studentName || record.student_name || "No Name",
-        fatherName: record.fatherName || record.father_name || "",
-        grade: record.grade || "",
-        familyNumber,
-        verificationNumber,
-        registrationNumber,
-        missingFamilyNumber,
-        missingVerificationNumber,
-        missingRegistrationNumber,
-        updatedAt: record.updatedAt || record.updated_at || "",
-        updatedByName: record.updatedByName || record.updated_by_name || "",
-        copyText:
-          record.copyText ||
-          [
-            `Entry: ${record.entryNumber || record.admissionId || record.id || "-"}`,
-            `Student: ${record.studentName || record.student_name || "No Name"}`,
-            `FAM: ${familyNumber}`,
-            `VERIF: ${verificationNumber}`,
-            `REG: ${registrationNumber}`
-          ].join(" | ")
-      };
+  const hasRegistrationNumber =
+    !!registrationNumber;
+
+  const hasRecord =
+    hasFamilyNumber ||
+    hasVerificationNumber ||
+    hasRegistrationNumber;
+
+  const fallbackCopyText = [
+    hasFamilyNumber
+      ? `FAM: ${familyNumber}`
+      : "",
+
+    hasVerificationNumber
+      ? `VERIF: ${verificationNumber}`
+      : "",
+
+    hasRegistrationNumber
+      ? `REG: ${registrationNumber}`
+      : ""
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
+  const copyText =
+    String(
+      latest?.copyText ||
+      fallbackCopyText
+    ).trim();
+
+  return {
+    hasRecord,
+    familyNumber,
+    verificationNumber,
+    registrationNumber,
+    hasFamilyNumber,
+    hasVerificationNumber,
+    hasRegistrationNumber,
+    copyText
+  };
+}
+
+function makeChip(label, value) {
+  return `
+    <span
+      class="accounts-number-note-chip"
+      title="${escapeHtml(value)}">
+
+      <span class="accounts-number-note-chip-label">
+        ${escapeHtml(label)}
+      </span>
+
+      <span class="accounts-number-note-chip-value">
+        ${escapeHtml(value)}
+      </span>
+    </span>
+  `;
+}
+
+function renderAccountsNumberNote(data = {}) {
+  const note =
+    normalizeLatestNumbers(data);
+
+  currentNote = note;
+
+  if (!note.hasRecord) {
+    listEl.innerHTML = "";
+
+    if (emptyEl) {
+      emptyEl.classList.remove("d-none");
     }
 
-    function formatDate(value) {
-      const raw = String(value || "").trim();
+    return;
+  }
 
-      if (!raw) return "";
+  if (emptyEl) {
+    emptyEl.classList.add("d-none");
+  }
 
-      const parsed = new Date(raw);
+  const numberChips = [
+    note.hasFamilyNumber
+      ? makeChip(
+          "FAM",
+          note.familyNumber
+        )
+      : "",
 
-      if (Number.isNaN(parsed.getTime())) {
-        return raw;
-      }
+    note.hasVerificationNumber
+      ? makeChip(
+          "VERIF",
+          note.verificationNumber
+        )
+      : "",
 
-      const dd = String(parsed.getDate()).padStart(2, "0");
-      const mm = String(parsed.getMonth() + 1).padStart(2, "0");
-      const yyyy = parsed.getFullYear();
+    note.hasRegistrationNumber
+      ? makeChip(
+          "REG",
+          note.registrationNumber
+        )
+      : ""
+  ]
+    .filter(Boolean)
+    .join("");
 
-      return `${dd}-${mm}-${yyyy}`;
-    }
+  listEl.innerHTML = `
+    <div class="accounts-number-note-row">
+      <div class="accounts-number-note-numbers">
+        ${numberChips}
+      </div>
 
-    function makeChip(label, value, missing) {
-      return `
-        <span class="accounts-number-note-chip ${missing ? "missing" : ""}" title="${escapeHtml(value)}">
-          <span class="accounts-number-note-chip-label">${escapeHtml(label)}</span>
-          <span class="accounts-number-note-chip-value">${escapeHtml(value)}</span>
-        </span>
-      `;
-    }
+      <button
+        type="button"
+        class="accounts-number-note-copy"
+        data-copy-note="1">
 
-    function renderAccountsNumberNote(data = {}) {
-      const records = Array.isArray(data.records)
-        ? data.records.map(normalizeRecord)
-        : [];
-
-      currentRecords = records;
-
-      if (totalEl) {
-        totalEl.textContent = String(data.total || records.length || 0);
-      }
-
-      if (!records.length) {
-        listEl.innerHTML = "";
-
-        if (emptyEl) {
-          emptyEl.classList.remove("d-none");
-        }
-
-        return;
-      }
-
-      if (emptyEl) {
-        emptyEl.classList.add("d-none");
-      }
-
-      listEl.innerHTML = records.map((record, index) => {
-        const metaParts = [
-          record.fatherName ? `Father: ${record.fatherName}` : "",
-          record.grade ? `Grade: ${record.grade}` : "",
-          record.updatedAt ? `Updated: ${formatDate(record.updatedAt)}` : "",
-          record.updatedByName ? `By: ${record.updatedByName}` : ""
-        ].filter(Boolean);
-
-        return `
-          <div class="accounts-number-note-row">
-            <div class="accounts-number-note-row-head">
-              <div class="accounts-number-note-student">
-                ${escapeHtml(record.studentName)}
-              </div>
-
-              <div class="accounts-number-note-entry">
-                #${escapeHtml(record.entryNumber)}
-              </div>
-            </div>
-
-            <div class="accounts-number-note-meta">
-              ${escapeHtml(metaParts.join(" | ") || "Admission number update")}
-            </div>
-
-            <div class="accounts-number-note-numbers">
-              ${makeChip("FAM", record.familyNumber, record.missingFamilyNumber)}
-              ${makeChip("VERIF", record.verificationNumber, record.missingVerificationNumber)}
-              ${makeChip("REG", record.registrationNumber, record.missingRegistrationNumber)}
-            </div>
-
-            <button
-              type="button"
-              class="accounts-number-note-copy"
-              data-copy-index="${index}">
-              <i class="bi bi-copy me-1"></i>
-              Copy
-            </button>
-          </div>
-        `;
-      }).join("");
-    }
+        <i class="bi bi-copy me-1"></i>
+        Copy
+      </button>
+    </div>
+  `;
+}
 
     async function copyText(text) {
       const finalText = String(text || "").trim();
@@ -12716,7 +13242,11 @@ if (editBillingStatusSaveBtn) {
         }
 
         if (typeof window.showUploadFlash === "function") {
-          window.showUploadFlash("success", "Copied", "Family, verification and registration numbers copied.");
+          window.showUploadFlash(
+            "success",
+            "Copied",
+            "Latest number details copied."
+          );
         }
       } catch (err) {
         console.error("Copy failed:", err);
@@ -12757,12 +13287,16 @@ if (editBillingStatusSaveBtn) {
           return;
         }
 
-        const noteData = data.accountsNumberNote || {
-          enabled: false,
-          latestHighest: null,
-          records: [],
-          total: 0
-        };
+       const noteData = data.accountsNumberNote || {
+  enabled: false,
+  highestNumbers: null,
+  sidebarHighest: null,
+  latestNumbers: null,
+  notepadLatest: null,
+  latestHighest: null,
+  records: [],
+  total: 0
+};
 
         window.ACCOUNTS_NUMBER_NOTE = noteData;
 
@@ -12774,18 +13308,16 @@ if (editBillingStatusSaveBtn) {
       }
     }
 
-    listEl.addEventListener("click", function (event) {
-      const btn = event.target.closest("[data-copy-index]");
-      if (!btn) return;
+   listEl.addEventListener("click", function (event) {
+  const btn =
+    event.target.closest("[data-copy-note]");
 
-      const index = Number(btn.getAttribute("data-copy-index") || -1);
-      const record = currentRecords[index];
+  if (!btn || !currentNote) {
+    return;
+  }
 
-      if (!record) return;
-
-      copyText(record.copyText);
-    });
-
+  copyText(currentNote.copyText);
+});
     if (hideBtn) {
       hideBtn.addEventListener("click", function () {
         setNoteHidden(true);
@@ -13846,6 +14378,7 @@ function applyAdmissionPipelineFileFilter(filter) {
         totalFees: a.admission?.totalFees || "-",
         pendingDues: a.admission?.pendingDues || "-",
         receivedPayment: a.admission?.receivedPayment || "0",
+        comment: a.admission?.comment || "-",
         invoiceStatus: a.admission?.invoiceStatus || "-",
         invoiceStatusTimestamp: a.admission?.invoiceStatusTimestamp || "-",
         paidInvoiceStatus: a.admission?.paidInvoiceStatus || "-",
@@ -13906,20 +14439,78 @@ function applyAdmissionPipelineFileFilter(filter) {
       }
     }
 
+        const adminCanViewStudentHeader =
+      <%- JSON.stringify(!!P.col.student) %>;
+
+    const adminCanViewFatherHeader =
+      <%- JSON.stringify(!!P.col.father) %>;
+
+    const adminCanViewDeptHeader =
+      <%- JSON.stringify(!!P.col.dept) %>;
+
     function updateCardHeader(card, admission) {
-      const student = admission?.student || admission?.studentName || "No Name";
-      const father = admission?.father || admission?.fatherName || "-";
-      const dept = admission?.dept || "Dept";
+      const entryNumber =
+        admission?.entryNumber ||
+        admission?.entry_number ||
+        admission?.id ||
+        card.getAttribute("data-admission-id") ||
+        "-";
 
-      const title = card.querySelector(".admission-title");
-      const subtitle = card.querySelector(".admission-subtitle");
-      const avatar = card.querySelector(".admission-avatar");
-      const deptPill = card.querySelector(".admission-role-pill");
+      const student =
+        admission?.student ||
+        admission?.studentName ||
+        "No Name";
 
-      if (title) title.textContent = student;
-      if (subtitle) subtitle.textContent = father;
-      if (avatar) avatar.textContent = String(student || "A").charAt(0).toUpperCase();
-      if (deptPill) deptPill.textContent = dept;
+      const father =
+        admission?.father ||
+        admission?.fatherName ||
+        "-";
+
+      const dept =
+        admission?.dept ||
+        "Dept";
+
+      const title =
+        card.querySelector(".admission-title");
+
+      const subtitle =
+        card.querySelector(".admission-subtitle");
+
+      const avatar =
+        card.querySelector(".admission-avatar");
+
+      const deptPill =
+        card.querySelector(".admission-role-pill");
+
+      if (title) {
+        title.textContent =
+          adminCanViewStudentHeader
+            ? student
+            : `Admission #${entryNumber}`;
+      }
+
+      if (
+        subtitle &&
+        adminCanViewFatherHeader
+      ) {
+        subtitle.textContent = father;
+      }
+
+      if (avatar) {
+        avatar.textContent =
+          adminCanViewStudentHeader
+            ? String(student || "A")
+                .charAt(0)
+                .toUpperCase()
+            : "#";
+      }
+
+      if (
+        deptPill &&
+        adminCanViewDeptHeader
+      ) {
+        deptPill.textContent = dept;
+      }
     }
 
     async function refreshAdmissionCard(admissionId) {
@@ -13975,6 +14566,7 @@ function applyAdmissionPipelineFileFilter(filter) {
         "totalFees",
         "pendingDues",
         "receivedPayment",
+        "comment",
         "invoiceStatus",
         "invoiceStatusTimestamp",
         "paidInvoiceStatus",
@@ -14204,7 +14796,7 @@ function applyAdmissionPipelineFileFilter(filter) {
 </script>
 <script>
   (function () {
-    const canDeleteAdmissions = <%- JSON.stringify(!!canDeleteAdmissions) %>;
+    const canDeleteAdmissions = <%- JSON.stringify(!!showBulkDeleteBar) %>;
     if (!canDeleteAdmissions) return;
 
     const selectAllEl = document.getElementById('selectAllAdmissions');

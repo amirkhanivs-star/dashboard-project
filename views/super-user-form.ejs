@@ -72,6 +72,185 @@
     cursor: not-allowed;
     transform: none;
   }
+    /* ================== CAN VIEW / CAN EDIT MATRIX ================== */
+  .permission-quickbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: #f8fafc;
+  }
+
+  .permission-quickbar-label {
+    font-size: .70rem;
+    font-weight: 800;
+    color: #475569;
+    margin-right: 2px;
+  }
+
+  .permission-quickbar .btn {
+    font-size: .68rem;
+    font-weight: 700;
+    padding: 4px 10px;
+  }
+
+  .permission-default-note {
+    margin-left: auto;
+    font-size: .66rem;
+    font-weight: 700;
+    color: #64748b;
+  }
+
+  .permission-groups-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .permission-group-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: #ffffff;
+  }
+
+  .permission-group-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 10px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f8fafc;
+    color: #1f2937;
+    font-size: .74rem;
+    font-weight: 800;
+  }
+
+  .permission-group-title i {
+    color: #dc3545;
+    font-size: .78rem;
+  }
+
+  .permission-matrix-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 43px 43px;
+    align-items: stretch;
+    min-height: 34px;
+    border-top: 1px solid #f1f5f9;
+  }
+
+  .permission-matrix-row:first-of-type {
+    border-top: 0;
+  }
+
+  .permission-matrix-head {
+    min-height: 29px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: .59rem;
+    font-weight: 800;
+    letter-spacing: .035em;
+    text-transform: uppercase;
+  }
+
+  .permission-field-label {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    margin: 0;
+    padding: 6px 9px;
+    color: #334155;
+    font-size: .69rem;
+    font-weight: 700;
+    line-height: 1.15;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+
+  .permission-matrix-head > span:first-child {
+    display: flex;
+    align-items: center;
+    padding: 5px 9px;
+  }
+
+  .permission-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-left: 1px solid #eef2f7;
+  }
+
+  .permission-cell .form-check-input {
+    float: none;
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .permission-cell .form-check-input:disabled {
+    cursor: not-allowed;
+    opacity: .42;
+  }
+
+  .permission-lock {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    background: #f1f5f9;
+    color: #94a3b8;
+    font-size: .65rem;
+  }
+
+  .permission-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-bottom: 9px;
+    font-size: .67rem;
+    color: #64748b;
+  }
+
+  .permission-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    background: #ffffff;
+    font-weight: 700;
+  }
+
+  .permission-legend-item i {
+    font-size: .68rem;
+  }
+
+  @media (max-width: 1199.98px) {
+    .permission-groups-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    .permission-groups-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .permission-default-note {
+      width: 100%;
+      margin-left: 0;
+      margin-top: 3px;
+    }
+  }
 </style>
 <div class="container-fluid py-4">
   <a href="/dashboard/super/users" class="small text-danger text-decoration-none mb-3 d-inline-flex align-items-center fw-semibold">
@@ -99,7 +278,7 @@
         </div>
         <div class="d-flex align-items-center gap-2">
 <span class="d-inline-flex align-items-center justify-content-center rounded-circle"
-      style="width:22px;height:22px;font-size:.75rem; background:rgba(124,58,237,.14); color:#5b21b6; border:1px solid rgba(124,58,237,.30);">3</span>          <span>Columns</span>
+      style="width:22px;height:22px;font-size:.75rem; background:rgba(124,58,237,.14); color:#5b21b6; border:1px solid rgba(124,58,237,.30);">3</span>          <span>View &amp; Edit</span>
         </div>
         <div class="d-flex align-items-center gap-2">
          <span class="d-inline-flex align-items-center justify-content-center rounded-circle"
@@ -126,13 +305,13 @@
           <ol class="ps-3 mb-0">
             <li class="mb-1">Set the basic information.</li>
             <li class="mb-1">Choose the role, department, assigned admin & pipeline type for Agents/Sub Agents.</li>
-            <li class="mb-1">Choose the allowed columns.</li>
-            <li class="mb-1">Turn columns & buttons permissions on or off.</li>
+            <li class="mb-1">Choose which columns the user can view or edit.</li>
+            <li class="mb-1">Configure buttons and special permissions.</li>
           </ol>
 
           <hr>
           <p class="text-muted mb-0">
-            Configure column and button access from here. The user will only see the allowed items.
+            Can View controls visibility. Can Edit controls whether the user can update that column.
           </p>
         </div>
       </div>
@@ -323,18 +502,63 @@
                   </div>
                 </div>
               </div>
-              <!-- QUICK TOGGLES -->
+              <!-- QUICK PERMISSION CONTROLS -->
               <div class="col-12 mt-3">
-                <div class="d-flex flex-wrap gap-2 align-items-center">
-                  <span class="small text-muted">Quick:</span>
-                  <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btnSelectAll">
-                    Select all
+                <div class="permission-quickbar">
+                  <span class="permission-quickbar-label">
+                    <i class="bi bi-eye me-1"></i>
+                    Columns:
+                  </span>
+
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm rounded-pill"
+                    id="btnViewAll">
+                    View all
                   </button>
-                  <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btnSelectNone">
-                    Select none
+
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm rounded-pill"
+                    id="btnViewNone">
+                    View none
                   </button>
-                  <span class="small text-muted ms-2">
-                    (Applies only to permission and column checkboxes)
+
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm rounded-pill"
+                    id="btnEditAll">
+                    Edit all
+                  </button>
+
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm rounded-pill"
+                    id="btnEditNone">
+                    Edit none
+                  </button>
+
+                  <span class="permission-quickbar-label ms-md-2">
+                    <i class="bi bi-hand-index-thumb me-1"></i>
+                    Buttons:
+                  </span>
+
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm rounded-pill"
+                    id="btnButtonsAll">
+                    All on
+                  </button>
+
+                  <button
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm rounded-pill"
+                    id="btnButtonsNone">
+                    All off
+                  </button>
+
+                  <span class="permission-default-note">
+                    Default: all columns visible, editing disabled
                   </span>
                 </div>
               </div>
@@ -348,225 +572,165 @@
 
                 <div class="accordion" id="permAccordion">
 
-                  <!-- ALL COLUMNS -->
+                                  <!-- CAN VIEW / CAN EDIT COLUMNS -->
                   <div class="accordion-item border-0 shadow-sm rounded-4 mb-2">
                     <h2 class="accordion-header" id="headingAllCols">
-                      <button class="accordion-button rounded-4" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAllCols" aria-expanded="true" aria-controls="collapseAllCols">
+                      <button
+                        class="accordion-button rounded-4"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#collapseAllCols"
+                        aria-expanded="true"
+                        aria-controls="collapseAllCols">
                         <i class="bi bi-table me-2 text-danger"></i>
                         Admissions pipeline columns
                       </button>
                     </h2>
-                    <div id="collapseAllCols" class="accordion-collapse collapse show" aria-labelledby="headingAllCols" data-bs-parent="#permAccordion">
+
+                    <div
+                      id="collapseAllCols"
+                      class="accordion-collapse collapse show"
+                      aria-labelledby="headingAllCols"
+                      data-bs-parent="#permAccordion">
+
                       <div class="accordion-body">
-                        <div id="allColsWrap" class="row g-2">
+                        <div class="permission-legend">
+                          <span class="permission-legend-item">
+                            <i class="bi bi-eye text-success"></i>
+                            Can View
+                          </span>
 
-                          <!-- ✅ NEW: Current Status column permission -->
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colStatus" name="colStatus" checked>
-                              <label class="form-check-label" for="colStatus">Current Status</label>
-                            </div>
-                          </div>
+                          <span class="permission-legend-item">
+                            <i class="bi bi-pencil-square text-primary"></i>
+                            Can Edit
+                          </span>
 
-                          <!-- ✅ NEW: Fee Status column permission -->
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colFeeStatus" name="colFeeStatus" checked>
-                              <label class="form-check-label" for="colFeeStatus">Fee Status</label>
-                            </div>
-                          </div>
+                          <span class="permission-legend-item">
+                            <i class="bi bi-lock-fill text-secondary"></i>
+                            System controlled
+                          </span>
+                        </div>
 
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colDept" name="colDept" checked>
-                              <label class="form-check-label" for="colDept">Dept</label>
-                            </div>
-                          </div>
+                        <%
+                          const columnPermissionGroups = [
+                            {
+                              title: "Admission Details",
+                              icon: "bi-person-vcard",
+                              items: [
+                                { view: "colStatus", edit: "editStatus", label: "Current Status" },
+                                { view: "colFeeStatus", edit: "editFeeStatus", label: "Fee Status" },
+                                { view: "colDept", edit: "editDept", label: "Department" },
+                                { view: "colStudentName", edit: "editStudentName", label: "Student" },
+                                { view: "colFatherName", edit: "editFatherName", label: "Father" },
+                                { view: "colFatherEmail", edit: "editFatherEmail", label: "Father Email" },
+                                { view: "colGrade", edit: "editGrade", label: "Grade" },
+                                { view: "colTuitionGrade", edit: "editTuitionGrade", label: "Grade Section" },
+                                { view: "colPhone", edit: "editPhone", label: "Phone Number" },
+                                { view: "colProcessedBy", edit: "", label: "Processed By" }
+                              ]
+                            },
+                            {
+                              title: "Accounts & Fees",
+                              icon: "bi-cash-stack",
+                              items: [
+                                { view: "colPaymentStatus", edit: "editPaymentStatus", label: "Payment Status" },
+                                { view: "colPaidUpto", edit: "", label: "Paid Upto" },
+                                { view: "colVerificationNumber", edit: "editVerificationNumber", label: "Verification #" },
+                                { view: "colRegistrationNumber", edit: "editRegistrationNumber", label: "Registration #" },
+                                { view: "colFamilyNumber", edit: "editFamilyNumber", label: "Family #" },
+                                { view: "colRegistrationFee", edit: "editRegistrationFee", label: "Registration Fee" },
+                                { view: "colFees", edit: "editFees", label: "Fees" },
+                                { view: "colCurrency", edit: "editCurrency", label: "Currency" },
+                                { view: "colBank", edit: "editBank", label: "Bank" },
+                                { view: "colMonth", edit: "editMonth", label: "Month" }
+                              ]
+                            },
+                            {
+                              title: "Totals & Invoice",
+                              icon: "bi-receipt",
+                              items: [
+                                { view: "colTotalFees", edit: "", label: "Total Fees" },
+                                { view: "colPendingDues", edit: "", label: "Pending Dues" },
+                                { view: "colReceivedPayment", edit: "", label: "Received Payment" },
+                                { view: "colComment", edit: "editComment", label: "Comment" },
+                                { view: "colInvoiceStatus", edit: "", label: "Invoice Status" },
+                                { view: "colInvoiceStatusTimestamp", edit: "", label: "Invoice Status Time" },
+                                { view: "colPaidInvoiceStatus", edit: "", label: "Paid Invoice Status" },
+                                { view: "colPaidInvoiceStatusTimestamp", edit: "", label: "Paid Invoice Time" },
+                                { view: "colActionButtons", edit: "", label: "Action Buttons" }
+                              ]
+                            }
+                          ];
+                        %>
 
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colStudentName" name="colStudentName" checked>
-                              <label class="form-check-label" for="colStudentName">Student</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colFatherName" name="colFatherName" checked>
-                              <label class="form-check-label" for="colFatherName">Father</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colFatherEmail" name="colFatherEmail" checked>
-                              <label class="form-check-label" for="colFatherEmail">Father Email</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colGrade" name="colGrade" checked>
-                              <label class="form-check-label" for="colGrade">Grade</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colTuitionGrade" name="colTuitionGrade" checked>
-                              <label class="form-check-label" for="colTuitionGrade">Grade Section</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colPhone" name="colPhone" checked>
-                              <label class="form-check-label" for="colPhone">Phone Number</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                             <input class="form-check-input col-toggle" type="checkbox" id="colProcessedBy" name="colProcessedBy" checked>
-                             <label class="form-check-label" for="colProcessedBy">Processed By</label>
-                            </div>
-                         </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colPaymentStatus" name="colPaymentStatus" checked>
-                              <label class="form-check-label" for="colPaymentStatus">Payment Status</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colPaidUpto" name="colPaidUpto" checked>
-                              <label class="form-check-label" for="colPaidUpto">Paid Upto</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colVerificationNumber" name="colVerificationNumber" checked>
-                              <label class="form-check-label" for="colVerificationNumber">Verif #</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colRegistrationNumber" name="colRegistrationNumber" checked>
-                              <label class="form-check-label" for="colRegistrationNumber">Reg #</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colFamilyNumber" name="colFamilyNumber" checked>
-                              <label class="form-check-label" for="colFamilyNumber">Family Num #</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colRegistrationFee" name="colRegistrationFee" checked>
-                              <label class="form-check-label" for="colRegistrationFee">Registration Fee</label>
+                        <div class="permission-groups-grid">
+                          <% columnPermissionGroups.forEach(function(group) { %>
+                            <div class="permission-group-card">
+                              <div class="permission-group-title">
+                                <i class="bi <%= group.icon %>"></i>
+                                <span><%= group.title %></span>
                               </div>
-                         </div>
 
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colFees" name="colFees" checked>
-                              <label class="form-check-label" for="colFees">Fees</label>
+                              <div class="permission-matrix-row permission-matrix-head">
+                                <span>Column</span>
+                                <span class="permission-cell">View</span>
+                                <span class="permission-cell">Edit</span>
+                              </div>
+
+                              <% group.items.forEach(function(item) { %>
+                                <div class="permission-matrix-row">
+                                  <label
+                                    class="permission-field-label"
+                                    for="<%= item.view %>">
+                                    <%= item.label %>
+                                  </label>
+
+                                  <div class="permission-cell">
+                                    <!-- Hidden input makes View None submit correctly -->
+                                    <input
+                                      type="hidden"
+                                      name="<%= item.view %>"
+                                      value="">
+
+                                    <input
+                                      class="form-check-input col-toggle view-toggle"
+                                      type="checkbox"
+                                      id="<%= item.view %>"
+                                      name="<%= item.view %>"
+                                      data-edit-target="<%= item.edit || '' %>"
+                                      title="Can View: <%= item.label %>"
+                                      aria-label="Can View <%= item.label %>"
+                                      checked>
+                                  </div>
+
+                                  <div class="permission-cell">
+                                    <% if (item.edit) { %>
+                                      <!-- Hidden input explicitly submits Edit OFF -->
+                                      <input
+                                        type="hidden"
+                                        name="<%= item.edit %>"
+                                        value="">
+
+                                      <input
+                                        class="form-check-input edit-toggle"
+                                        type="checkbox"
+                                        id="<%= item.edit %>"
+                                        name="<%= item.edit %>"
+                                        data-view-target="<%= item.view %>"
+                                        title="Can Edit: <%= item.label %>"
+                                        aria-label="Can Edit <%= item.label %>">
+                                    <% } else { %>
+                                      <span
+                                        class="permission-lock"
+                                        title="This value is calculated or system controlled">
+                                        <i class="bi bi-lock-fill"></i>
+                                      </span>
+                                    <% } %>
+                                  </div>
+                                </div>
+                              <% }) %>
                             </div>
-                          </div>
-
-                          <!-- ✅ ADDED: Currency column permission -->
-<div class="col-md-4">
-  <div class="form-check small">
-    <input class="form-check-input col-toggle" type="checkbox" id="colCurrency" name="colCurrency" checked>
-    <label class="form-check-label" for="colCurrency">Currency</label>
-  </div>
-</div>
-
-<!-- ✅ ADDED: Bank column permission -->
-<div class="col-md-4">
-  <div class="form-check small">
-    <input class="form-check-input col-toggle" type="checkbox" id="colBank" name="colBank" checked>
-    <label class="form-check-label" for="colBank">Bank</label>
-  </div>
-</div>
-
-<div class="col-md-4">
-  <div class="form-check small">
-    <input class="form-check-input col-toggle" type="checkbox" id="colMonth" name="colMonth" checked>
-    <label class="form-check-label" for="colMonth">Month</label>
-  </div>
-</div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colTotalFees" name="colTotalFees" checked>
-                              <label class="form-check-label" for="colTotalFees">Total Fees</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colPendingDues" name="colPendingDues" checked>
-                              <label class="form-check-label" for="colPendingDues">Pending Dues</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colReceivedPayment" name="colReceivedPayment" checked>
-                              <label class="form-check-label" for="colReceivedPayment">Received Payment</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colComment" name="colComment" checked>
-                              <label class="form-check-label" for="colComment">Comment</label>
-                            </div>
-                          </div>
-
-                          <div class="col-md-4">
-  <div class="form-check small">
-    <input class="form-check-input col-toggle" type="checkbox" id="colInvoiceStatus" name="colInvoiceStatus" checked>
-    <label class="form-check-label" for="colInvoiceStatus">Invoice Status</label>
-  </div>
-</div>
-
-<div class="col-md-4">
-  <div class="form-check small">
-    <input class="form-check-input col-toggle" type="checkbox" id="colInvoiceStatusTimestamp" name="colInvoiceStatusTimestamp" checked>
-    <label class="form-check-label" for="colInvoiceStatusTimestamp">Invoice Status Timestamp</label>
-  </div>
-</div>
-
-<div class="col-md-4">
-  <div class="form-check small">
-    <input class="form-check-input col-toggle" type="checkbox" id="colPaidInvoiceStatus" name="colPaidInvoiceStatus" checked>
-    <label class="form-check-label" for="colPaidInvoiceStatus">Paid Invoice Status</label>
-  </div>
-</div>
-
-<div class="col-md-4">
-  <div class="form-check small">
-    <input class="form-check-input col-toggle" type="checkbox" id="colPaidInvoiceStatusTimestamp" name="colPaidInvoiceStatusTimestamp" checked>
-    <label class="form-check-label" for="colPaidInvoiceStatusTimestamp">Paid Invoice Status Timestamp</label>
-  </div>
-</div>
-
-                          <div class="col-md-4">
-                            <div class="form-check small">
-                              <input class="form-check-input col-toggle" type="checkbox" id="colActionButtons" name="colActionButtons" checked>
-                              <label class="form-check-label" for="colActionButtons">Action Buttons</label>
-                            </div>
-                          </div>
-
+                          <% }) %>
                         </div>
                       </div>
                     </div>
@@ -686,15 +850,30 @@
     const createUserAdmissionLinkPreview = document.getElementById("createUserAdmissionLinkPreview");
     const copyCreateUserAdmissionLinkBtn = document.getElementById("copyCreateUserAdmissionLinkBtn");
 
-    const admissionFormBaseUrl = "<%= typeof admissionFormBaseUrl !== 'undefined' ? admissionFormBaseUrl : 'https://ivs-admission-form.onrender.com/' %>";
+    const admissionFormBaseUrl =
+      <%- JSON.stringify(
+        typeof admissionFormBaseUrl !== "undefined" &&
+        admissionFormBaseUrl
+          ? String(admissionFormBaseUrl)
+          : "https://ivs-admission-form.onrender.com/"
+      )
+        .replace(/</g, "\\u003C")
+        .replace(/>/g, "\\u003E")
+        .replace(/&/g, "\\u0026")
+        .replace(/\u2028/g, "\\u2028")
+        .replace(/\u2029/g, "\\u2029") %>;
 
     const assignmentSection = document.getElementById("assignmentSection");
     const assignedAdminSelect = document.getElementById("assignedAdminSelect");
     const assignedAdminHelp = document.getElementById("assignedAdminHelp");
     const accessScopePreview = document.getElementById("accessScopePreview");
 
-    const btnSelectAll = document.getElementById("btnSelectAll");
-    const btnSelectNone = document.getElementById("btnSelectNone");
+    const btnViewAll = document.getElementById("btnViewAll");
+    const btnViewNone = document.getElementById("btnViewNone");
+    const btnEditAll = document.getElementById("btnEditAll");
+    const btnEditNone = document.getElementById("btnEditNone");
+    const btnButtonsAll = document.getElementById("btnButtonsAll");
+    const btnButtonsNone = document.getElementById("btnButtonsNone");
     function buildAdmissionLinkFromName(name) {
       const cleanName = String(name || "").trim();
       const baseUrl = String(admissionFormBaseUrl || "https://ivs-admission-form.onrender.com/")
@@ -763,65 +942,163 @@ const schoolAccountsAgentTypeOptions = [
   { value: "paid_slip", label: "Paid slip" },
 ];
 
+function normalizeUserDepartmentKey(value) {
+  const cleanValue = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+
+  if (
+    [
+      "accounts",
+      "account",
+      "school account",
+      "school accounts",
+      "accounts department",
+      "school accounts department"
+    ].includes(cleanValue)
+  ) {
+    return "accounts";
+  }
+
+  if (
+    [
+      "school",
+      "school dept",
+      "school department"
+    ].includes(cleanValue)
+  ) {
+    return "school";
+  }
+
+  if (
+    [
+      "quran",
+      "quran dept",
+      "quran department"
+    ].includes(cleanValue)
+  ) {
+    return "quran";
+  }
+
+  if (
+    [
+      "tuition",
+      "tuition dept",
+      "tuition department"
+    ].includes(cleanValue)
+  ) {
+    return "tuition";
+  }
+
+  return cleanValue;
+}
+
 function isSchoolAccountsDept(dept) {
-  const d = String(dept || "").trim().toLowerCase();
-  return d === "accounts" || d === "school accounts" || d === "school_accounts";
+  return (
+    normalizeUserDepartmentKey(dept) ===
+    "accounts"
+  );
 }
 
 function syncAgentTypeOptions() {
   if (!agentTypeSelect) return;
 
-  const dept = deptSelect ? deptSelect.value : "";
-  const currentValue = agentTypeSelect.value;
+  const dept =
+    deptSelect
+      ? deptSelect.value
+      : "";
 
-  const options = isSchoolAccountsDept(dept)
-    ? schoolAccountsAgentTypeOptions
-    : schoolAgentTypeOptions;
+  const currentValue =
+    agentTypeSelect.value;
 
-  agentTypeSelect.innerHTML = '<option value="">Select type</option>';
+  const options =
+    isSchoolAccountsDept(dept)
+      ? schoolAccountsAgentTypeOptions
+      : schoolAgentTypeOptions;
+
+  agentTypeSelect.innerHTML =
+    '<option value="">Select type</option>';
 
   options.forEach((item) => {
-    const opt = document.createElement("option");
+    const opt =
+      document.createElement("option");
+
     opt.value = item.value;
     opt.textContent = item.label;
+
     agentTypeSelect.appendChild(opt);
   });
 
-  const exists = options.some((item) => item.value === currentValue);
-  agentTypeSelect.value = exists ? currentValue : "";
+  const exists =
+    options.some((item) =>
+      item.value === currentValue
+    );
+
+  agentTypeSelect.value =
+    exists
+      ? currentValue
+      : "";
 }
-    function filterAssignedAdmins() {
-      if (!assignedAdminSelect) return;
 
-      const selectedDept = (deptSelect && deptSelect.value) ? deptSelect.value.toLowerCase() : "";
-      let visibleCount = 0;
+function filterAssignedAdmins() {
+  if (!assignedAdminSelect) return;
 
-      Array.from(assignedAdminSelect.options).forEach((opt) => {
-        if (!opt.value) {
-          opt.hidden = false;
-          return;
-        }
+  const selectedDept =
+    normalizeUserDepartmentKey(
+      deptSelect
+        ? deptSelect.value
+        : ""
+    );
 
-        const adminDept = String(opt.getAttribute("data-dept") || "").toLowerCase();
-        const shouldShow = !selectedDept || adminDept === selectedDept;
+  let visibleCount = 0;
 
-        opt.hidden = !shouldShow;
-        opt.disabled = !shouldShow;
-
-        if (shouldShow) visibleCount += 1;
-      });
-
-      const selectedOption = assignedAdminSelect.options[assignedAdminSelect.selectedIndex];
-      if (selectedOption && selectedOption.disabled) {
-        assignedAdminSelect.value = "";
-      }
-
-      if (assignedAdminHelp) {
-        assignedAdminHelp.textContent = visibleCount
-          ? "Only admins from the selected department are shown."
-          : "No admin found for this department. Please create an Admin first.";
-      }
+  Array.from(
+    assignedAdminSelect.options
+  ).forEach((opt) => {
+    if (!opt.value) {
+      opt.hidden = false;
+      opt.disabled = false;
+      return;
     }
+
+    const adminDept =
+      normalizeUserDepartmentKey(
+        opt.getAttribute("data-dept") || ""
+      );
+
+    const shouldShow =
+      !selectedDept ||
+      adminDept === selectedDept;
+
+    opt.hidden = !shouldShow;
+    opt.disabled = !shouldShow;
+
+    if (shouldShow) {
+      visibleCount += 1;
+    }
+  });
+
+  const selectedOption =
+    assignedAdminSelect.options[
+      assignedAdminSelect.selectedIndex
+    ];
+
+  if (
+    selectedOption &&
+    selectedOption.disabled
+  ) {
+    assignedAdminSelect.value = "";
+  }
+
+  if (assignedAdminHelp) {
+    assignedAdminHelp.textContent =
+      visibleCount
+        ? "Only admins from the selected department are shown."
+        : "No admin found for this department. Please create an Admin first.";
+  }
+}
 
     function syncRoleUI() {
       const role = (roleSelect && roleSelect.value) ? roleSelect.value : "";
@@ -829,12 +1106,18 @@ function syncAgentTypeOptions() {
       syncAgentTypeOptions();
 
       if (agentTypeSelect) {
-        if (role === "admin") {
+        const isPipelineRole =
+          role === "agent" ||
+          role === "sub_agent";
+
+        if (!isPipelineRole) {
           agentTypeSelect.value = "";
           agentTypeSelect.disabled = true;
+          agentTypeSelect.required = false;
           agentTypeSelect.classList.add("bg-light");
         } else {
           agentTypeSelect.disabled = false;
+          agentTypeSelect.required = true;
           agentTypeSelect.classList.remove("bg-light");
         }
       }
@@ -867,10 +1150,93 @@ function syncAgentTypeOptions() {
       filterAssignedAdmins();
     }
 
-    function toggleAll(on) {
-      document.querySelectorAll(".perm-toggle, .col-toggle").forEach((cb) => {
-        if (cb.disabled) return;
-        cb.checked = !!on;
+    function syncViewEditPair(viewCheckbox) {
+      if (!viewCheckbox) return;
+
+      const editTargetId = String(
+        viewCheckbox.getAttribute("data-edit-target") || ""
+      ).trim();
+
+      if (!editTargetId) return;
+
+      const editCheckbox = document.getElementById(editTargetId);
+      if (!editCheckbox) return;
+
+      if (!viewCheckbox.checked) {
+        editCheckbox.checked = false;
+        editCheckbox.disabled = true;
+      } else {
+        editCheckbox.disabled = false;
+      }
+    }
+
+    function setAllViews(enabled) {
+      document.querySelectorAll(".view-toggle").forEach((viewCheckbox) => {
+        viewCheckbox.checked = !!enabled;
+        syncViewEditPair(viewCheckbox);
+      });
+    }
+
+    function setAllEdits(enabled) {
+      document.querySelectorAll(".edit-toggle").forEach((editCheckbox) => {
+        const viewTargetId = String(
+          editCheckbox.getAttribute("data-view-target") || ""
+        ).trim();
+
+        const viewCheckbox = viewTargetId
+          ? document.getElementById(viewTargetId)
+          : null;
+
+        if (enabled) {
+          if (viewCheckbox) {
+            viewCheckbox.checked = true;
+          }
+
+          editCheckbox.disabled = false;
+          editCheckbox.checked = true;
+        } else {
+          editCheckbox.checked = false;
+
+          if (viewCheckbox) {
+            syncViewEditPair(viewCheckbox);
+          }
+        }
+      });
+    }
+
+    function setAllButtons(enabled) {
+      document.querySelectorAll(".perm-toggle").forEach((checkbox) => {
+        if (checkbox.disabled) return;
+        checkbox.checked = !!enabled;
+      });
+    }
+
+    function bindViewEditPermissionRules() {
+      document.querySelectorAll(".view-toggle").forEach((viewCheckbox) => {
+        viewCheckbox.addEventListener("change", function () {
+          syncViewEditPair(this);
+        });
+
+        syncViewEditPair(viewCheckbox);
+      });
+
+      document.querySelectorAll(".edit-toggle").forEach((editCheckbox) => {
+        editCheckbox.addEventListener("change", function () {
+          if (!this.checked) return;
+
+          const viewTargetId = String(
+            this.getAttribute("data-view-target") || ""
+          ).trim();
+
+          const viewCheckbox = viewTargetId
+            ? document.getElementById(viewTargetId)
+            : null;
+
+          if (viewCheckbox) {
+            viewCheckbox.checked = true;
+            syncViewEditPair(viewCheckbox);
+          }
+        });
       });
     }
         if (createUserNameInput) {
@@ -914,9 +1280,43 @@ function syncAgentTypeOptions() {
   });
 }
 
-    if (btnSelectAll) btnSelectAll.addEventListener("click", () => toggleAll(true));
-    if (btnSelectNone) btnSelectNone.addEventListener("click", () => toggleAll(false));
+    if (btnViewAll) {
+      btnViewAll.addEventListener("click", function () {
+        setAllViews(true);
+      });
+    }
 
+    if (btnViewNone) {
+      btnViewNone.addEventListener("click", function () {
+        setAllViews(false);
+      });
+    }
+
+    if (btnEditAll) {
+      btnEditAll.addEventListener("click", function () {
+        setAllEdits(true);
+      });
+    }
+
+    if (btnEditNone) {
+      btnEditNone.addEventListener("click", function () {
+        setAllEdits(false);
+      });
+    }
+
+    if (btnButtonsAll) {
+      btnButtonsAll.addEventListener("click", function () {
+        setAllButtons(true);
+      });
+    }
+
+    if (btnButtonsNone) {
+      btnButtonsNone.addEventListener("click", function () {
+        setAllButtons(false);
+      });
+    }
+
+    bindViewEditPermissionRules();
     syncRoleUI();
     syncCreateUserAdmissionLinkPreview();
   })();

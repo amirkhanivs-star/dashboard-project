@@ -1,10 +1,77 @@
 <%- include('partials/bootstrap-header', { user, pageTitle: 'System Activity History' }) %>
 
 <%
-  const f = (typeof filters !== 'undefined' && filters) ? filters : {};
-  const meta = (typeof filterMeta !== 'undefined' && filterMeta) ? filterMeta : { depts: [], roles: [], events: [] };
+  const filtersRaw =
+    typeof filters !== 'undefined'
+      ? filters
+      : null;
 
-  const logsSafe = Array.isArray(logs) ? logs : [];
+  const f =
+    filtersRaw &&
+    typeof filtersRaw === 'object' &&
+    !Array.isArray(filtersRaw)
+      ? filtersRaw
+      : {};
+
+  const filterMetaRaw =
+    typeof filterMeta !== 'undefined'
+      ? filterMeta
+      : null;
+
+  const metaSource =
+    filterMetaRaw &&
+    typeof filterMetaRaw === 'object' &&
+    !Array.isArray(filterMetaRaw)
+      ? filterMetaRaw
+      : {};
+
+  const normalizeMetaValues = function(values) {
+    if (!Array.isArray(values)) {
+      return [];
+    }
+
+    return values
+      .filter(function(value) {
+        return (
+          value !== null &&
+          typeof value !== 'undefined' &&
+          String(value).trim() !== ''
+        );
+      })
+      .map(function(value) {
+        return String(value).trim();
+      });
+  };
+
+  const meta = {
+    depts: normalizeMetaValues(
+      metaSource.depts
+    ),
+
+    roles: normalizeMetaValues(
+      metaSource.roles
+    ),
+
+    events: normalizeMetaValues(
+      metaSource.events
+    )
+  };
+
+  const logsRaw =
+    typeof logs !== 'undefined'
+      ? logs
+      : null;
+
+  const logsSafe =
+    Array.isArray(logsRaw)
+      ? logsRaw.filter(function(log) {
+          return (
+            log &&
+            typeof log === 'object' &&
+            !Array.isArray(log)
+          );
+        })
+      : [];
 
   // Quick stats
   const totalCount = logsSafe.length;
@@ -13,18 +80,38 @@
   const deleteCount = logsSafe.filter(l => String(l.eventType || '').toLowerCase().includes('delete') || String(l.eventType || '').toLowerCase().includes('deleted')).length;
   const forwardCount = logsSafe.filter(l => String(l.eventType || '').toLowerCase().includes('forward')).length;
 
-  function niceDate(rawDate) {
-    if (!rawDate) return '-';
+    function niceDate(rawDate) {
+    if (
+      rawDate === null ||
+      typeof rawDate === 'undefined' ||
+      String(rawDate).trim() === ''
+    ) {
+      return '-';
+    }
+
     try {
-      return new Date(rawDate).toLocaleString('en-GB', {
-        year: 'numeric',
-        month: 'short',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+      const parsedDate = new Date(rawDate);
+
+      if (
+        Number.isNaN(
+          parsedDate.getTime()
+        )
+      ) {
+        return String(rawDate);
+      }
+
+      return parsedDate.toLocaleString(
+        'en-GB',
+        {
+          year: 'numeric',
+          month: 'short',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        }
+      );
     } catch (e) {
-      return rawDate;
+      return String(rawDate);
     }
   }
 
@@ -98,22 +185,54 @@
       .replace(/^permissions\./, '')
       .trim();
 
-    if (cleanKey.indexOf('col') === 0) {
-      return humanizeHistoryKey(cleanKey.slice(3)) + ' Column';
+    if (
+      cleanKey.indexOf('edit') === 0 &&
+      cleanKey.length > 4
+    ) {
+      return (
+        humanizeHistoryKey(
+          cleanKey.slice(4)
+        ) + ' - Can Edit'
+      );
     }
 
-    if (cleanKey.indexOf('btn') === 0) {
-      return humanizeHistoryKey(cleanKey.slice(3)) + ' Button';
+    if (
+      cleanKey.indexOf('col') === 0 &&
+      cleanKey.length > 3
+    ) {
+      return (
+        humanizeHistoryKey(
+          cleanKey.slice(3)
+        ) + ' - Can View'
+      );
     }
 
-    if (cleanKey.indexOf('can') === 0) {
-      return humanizeHistoryKey(cleanKey.slice(3)) + ' Button';
+    if (
+      cleanKey.indexOf('btn') === 0 &&
+      cleanKey.length > 3
+    ) {
+      return (
+        humanizeHistoryKey(
+          cleanKey.slice(3)
+        ) + ' Button'
+      );
+    }
+
+    if (
+      cleanKey.indexOf('can') === 0 &&
+      cleanKey.length > 3
+    ) {
+      return (
+        humanizeHistoryKey(
+          cleanKey.slice(3)
+        ) + ' Button'
+      );
     }
 
     return humanizeHistoryKey(cleanKey);
   }
 
-    function historyPathLabel(pathValue) {
+  function historyPathLabel(pathValue) {
     const path = String(pathValue || '').trim();
 
     if (
@@ -132,11 +251,33 @@
       return 'Database Admission ID';
     }
 
-    if (path.indexOf('permissions.') === 0) {
-      return historyPermissionLabel(path);
+    /*
+     * New logs mein key direct ho sakti hai:
+     * editStatus, colStatus, btnBilling
+     *
+     * Old logs mein key is tarah ho sakti hai:
+     * permissions.editStatus
+     */
+    const permissionKey = path
+      .replace(/^permissions\./, '')
+      .trim();
+
+    const looksLikePermissionKey =
+      /^(?:col|edit|btn|can)(?:[A-Z0-9_])/.test(
+        permissionKey
+      );
+
+    if (
+      path.indexOf('permissions.') === 0 ||
+      looksLikePermissionKey
+    ) {
+      return historyPermissionLabel(
+        permissionKey
+      );
     }
 
     const parts = path.split('.').filter(Boolean);
+
     const lastPart = parts.length
       ? parts[parts.length - 1]
       : path;
@@ -255,11 +396,38 @@
     );
 
     const ignoredKeys = new Set([
+      /*
+       * Internal database identifiers ko
+       * history change summary mein display
+       * nahi karna.
+       */
       'id',
+      'admissionId',
+      'admission_id',
+      'databaseAdmissionId',
+      'database_admission_id',
+
+      /*
+       * Permanent Admission Number ko heading
+       * aur reference area mein separately
+       * display kiya jata hai, is liye isko
+       * changed-fields list mein repeat nahi karna.
+       */
       'entryNumber',
       'entry_number',
+      'admissionNumber',
+      'admission_number',
+
+      /*
+       * Internal ordering/activity metadata.
+       */
       'lastActivityAt',
       'last_activity_at',
+
+      /*
+       * Status presentation metadata actual
+       * admission field changes nahi hain.
+       */
       'statusMeta.key',
       'statusMeta.label',
       'statusMeta.color',
@@ -289,14 +457,13 @@
   }
 
   function buildDetailRows(root) {
-    if (!root || typeof root !== 'object') return [];
-
-    const hasPermanentAdmissionNumber = !!(
-      root.entryNumber ||
-      root.entry_number ||
-      root.admissionNumber ||
-      root.admission_number
-    );
+    if (
+      !root ||
+      typeof root !== 'object' ||
+      Array.isArray(root)
+    ) {
+      return [];
+    }
 
     const hiddenKeys = new Set([
       'changes',
@@ -308,7 +475,13 @@
       'pipeline',
       'admission',
 
-      // Internal database ID Super Admin ko display nahi karni.
+      /*
+       * Internal admission database identifiers
+       * Super Admin history page par display
+       * nahi karni.
+       */
+      'admissionId',
+      'admission_id',
       'databaseAdmissionId',
       'database_admission_id'
     ]);
@@ -316,7 +489,7 @@
     const priorityKeys = [
       'action',
 
-      // Permanent card number sab se pehle show hoga.
+      // Permanent dashboard Admission Number.
       'entryNumber',
       'entry_number',
       'admissionNumber',
@@ -340,32 +513,12 @@
       'receiveAmount',
       'appliedAmount',
       'remainingAmount',
-      'note',
-
-      // Sirf old records ke fallback ke liye.
-      'admissionId',
-      'admission_id'
+      'note'
     ];
 
     const keys = Object.keys(root)
       .filter(function(key) {
-        if (hiddenKeys.has(key)) {
-          return false;
-        }
-
-        // New record mein permanent number available ho to
-        // old/internal admissionId display nahi karni.
-        if (
-          hasPermanentAdmissionNumber &&
-          (
-            key === 'admissionId' ||
-            key === 'admission_id'
-          )
-        ) {
-          return false;
-        }
-
-        return true;
+        return !hiddenKeys.has(key);
       })
       .sort(function(a, b) {
         const ai = priorityKeys.indexOf(a);
@@ -414,25 +567,113 @@
       ? root.changes
       : [];
 
+    const hiddenChangeKeys = new Set([
+      /*
+       * Internal database identifiers history
+       * summary ya details modal mein display
+       * nahi karni.
+       */
+      'id',
+      'admissionId',
+      'admission_id',
+      'databaseAdmissionId',
+      'database_admission_id',
+
+      /*
+       * Permanent Admission Number page par
+       * separately reference ke taur par show
+       * hoti hai, is liye changed-fields list
+       * mein duplicate nahi karni.
+       */
+      'entryNumber',
+      'entry_number',
+      'admissionNumber',
+      'admission_number',
+
+      /*
+       * Internal ordering/activity metadata.
+       */
+      'lastActivityAt',
+      'last_activity_at'
+    ]);
+
     const changes = (
       directChanges.length
         ? directChanges
         : buildLegacyChanges(before, after)
-    ).map(function(change) {
-      return {
-        key: change.key || '',
+    )
+      .filter(function(change) {
+        if (
+          !change ||
+          typeof change !== 'object' ||
+          Array.isArray(change)
+        ) {
+          return false;
+        }
 
-        label:
-          change.label ||
-          historyPathLabel(
-            change.key || 'Changed field'
-          ),
+        const changeKey =
+          String(change.key || '').trim();
 
-        category: change.category || 'data',
-        before: historyValue(change.before),
-        after: historyValue(change.after)
-      };
-    });
+        if (!changeKey) {
+          return false;
+        }
+
+        const keyParts =
+          changeKey
+            .replace(/^details\./, '')
+            .split('.')
+            .filter(Boolean);
+
+        const finalKey =
+          keyParts.length
+            ? keyParts[keyParts.length - 1]
+            : changeKey;
+
+        return !(
+          hiddenChangeKeys.has(changeKey) ||
+          hiddenChangeKeys.has(finalKey)
+        );
+      })
+      .map(function(change) {
+        const changeKey =
+          String(change.key || '').trim();
+
+        const permissionKey =
+          changeKey
+            .replace(/^permissions\./, '')
+            .trim();
+
+        const isPermissionChange =
+          changeKey.indexOf('permissions.') === 0 ||
+          /^(?:col|edit|btn|can)(?:[A-Z0-9_])/.test(
+            permissionKey
+          );
+
+        return {
+          key: changeKey,
+
+          label:
+            isPermissionChange
+              ? historyPermissionLabel(
+                  permissionKey
+                )
+              : (
+                  change.label ||
+                  historyPathLabel(
+                    changeKey
+                  )
+                ),
+
+          category:
+            change.category || 'data',
+
+          before:
+            historyValue(change.before),
+
+          after:
+            historyValue(change.after)
+        };
+      });
 
     // Dashboard card wala permanent NO.
     const admissionNumber =
@@ -1119,8 +1360,11 @@
                 const actorRoleRaw = log.actorRole || '-';
                 const dept = log.dept || log.actorDept || '-';
                 const eventRaw = log.eventType || '';
-                const targetName = log.targetUserName || log.targetAdmissionName || log.target || '-';
-                const targetId = log.targetUserId || log.targetAdmissionId || log.targetId || '';
+                const targetName =
+                  log.targetUserName ||
+                  log.targetAdmissionName ||
+                  log.target ||
+                  '-';
 
                 const parsed = log.details
                   ? parseDetails(log.details)
@@ -1144,11 +1388,39 @@
                 const previewDetails =
                   (sum.detailRows || []).slice(0, 4);
 
-                // Admission update mein permanent card NO use hoga.
-                // User update mein normal user ID use hogi.
+                /*
+                 * Admission activity mein sirf permanent
+                 * dashboard Admission NO display hogi.
+                 *
+                 * Internal admission database ID ko
+                 * Super Admin history page par display
+                 * nahi karna.
+                 *
+                 * User activity mein normal user ID
+                 * display ho sakti hai.
+                 */
+                const hasAdmissionTarget = !!(
+                  sum.admissionNumber ||
+                  sum.databaseAdmissionId ||
+                  log.targetAdmissionId
+                );
+
+                const userTargetId =
+                  log.targetUserId || '';
+
+                const genericTargetId =
+                  log.targetId || '';
+
                 const targetDisplayId =
                   sum.admissionNumber ||
-                  targetId;
+                  (
+                    hasAdmissionTarget
+                      ? ''
+                      : (
+                          userTargetId ||
+                          genericTargetId
+                        )
+                  );
 
                 const targetIdLabel =
                   sum.admissionNumber
@@ -1304,9 +1576,9 @@
                       data-bs-toggle="modal"
                       data-bs-target="#<%= modalId %>"
                       data-logid="<%= log.id %>"
-                      data-actor="<%= String(actorName).replace(/"/g,'&quot;') %>"
-                      data-event="<%= String(eventLabel(eventRaw)).replace(/"/g,'&quot;') %>"
-                      data-date="<%= String(dt).replace(/"/g,'&quot;') %>"
+                      data-actor="<%= String(actorName || '') %>"
+                      data-event="<%= String(eventLabel(eventRaw) || '') %>"
+                      data-date="<%= String(dt || '') %>"
                       data-details="<%= modalPayload %>"
                     >
                       <i class="bi bi-eye me-1"></i> View

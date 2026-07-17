@@ -81,76 +81,537 @@ async function loadMe() {
 }
 
 /**
- * ✅ NEW: strict permission check
- * - super_admin => always true
- * - if perms missing => fallback (default false)
+ * ✅ Can View / Can Edit permission helpers
+ * - No automatic role permission bypass
+ * - Boolean, numeric and string values supported
+ * - Legacy View → Edit fallback supported
  */
 function getNested(obj, path) {
   try {
-    const parts = String(path || "").split(".");
-    let cur = obj;
-    for (const p of parts) {
-      if (!cur || typeof cur !== "object" || !(p in cur)) return undefined;
-      cur = cur[p];
+    const parts = String(path || "")
+      .split(".")
+      .filter(Boolean);
+
+    let current = obj;
+
+    for (const part of parts) {
+      if (
+        !current ||
+        typeof current !== "object" ||
+        !(part in current)
+      ) {
+        return undefined;
+      }
+
+      current = current[part];
     }
-    return cur;
+
+    return current;
   } catch {
     return undefined;
   }
 }
 
+/*
+ * Keep this function.
+ * It is still required by existing workflow and
+ * WhatsApp custom-option role logic.
+ */
 function isSuperUser() {
-  if (window.IS_SUPER === true) return true;
-  const u = CURRENT_USER || {};
+  if (window.IS_SUPER === true) {
+    return true;
+  }
+
+  const user = CURRENT_USER || {};
+
   return !!(
-    u.role === "superadmin" ||
-    u.role === "super_admin" ||
-    u.agentType === "superadmin" ||
-    u.agentType === "super_admin" ||
-    u.isSuperAdmin === true ||
-    u.is_super_admin === true
+    user.role === "superadmin" ||
+    user.role === "super_admin" ||
+    user.agentType === "superadmin" ||
+    user.agentType === "super_admin" ||
+    user.isSuperAdmin === true ||
+    user.is_super_admin === true
+  );
+}
+
+function permissionEnabled(value) {
+  if (value === true || value === 1) {
+    return true;
+  }
+
+  if (
+    value === false ||
+    value === 0 ||
+    value === null ||
+    typeof value === "undefined"
+  ) {
+    return false;
+  }
+
+  return [
+    "1",
+    "true",
+    "on",
+    "yes"
+  ].includes(
+    String(value)
+      .trim()
+      .toLowerCase()
+  );
+}
+
+function getPermissionSource() {
+  let perms =
+    window.USER_PERMS ??
+    USER_PERMS ??
+    null;
+
+  try {
+    if (typeof perms === "string") {
+      perms = JSON.parse(perms);
+    }
+  } catch {
+    perms = null;
+  }
+
+  return perms;
+}
+
+function hasOwnPermission(perms, key) {
+  return !!(
+    perms &&
+    typeof perms === "object" &&
+    !Array.isArray(perms) &&
+    Object.prototype.hasOwnProperty.call(
+      perms,
+      key
+    )
+  );
+}
+
+function hasPermissionEntry(key) {
+  const cleanKey =
+    String(key || "").trim();
+
+  if (!cleanKey) {
+    return false;
+  }
+
+  const perms =
+    getPermissionSource();
+
+  if (!perms) {
+    return false;
+  }
+
+  if (Array.isArray(perms)) {
+    return perms.includes(cleanKey);
+  }
+
+  if (typeof perms !== "object") {
+    return false;
+  }
+
+  if (hasOwnPermission(perms, cleanKey)) {
+    return true;
+  }
+
+  if (
+    typeof getNested(perms, cleanKey) !==
+    "undefined"
+  ) {
+    return true;
+  }
+
+  const alternateKey =
+    cleanKey.replace(/\./g, "_");
+
+  return hasOwnPermission(
+    perms,
+    alternateKey
   );
 }
 
 function pFlag(key, fallback = false) {
-  if (isSuperUser()) return true;
+  const cleanKey =
+    String(key || "").trim();
 
-  let perms = USER_PERMS;
-  if (!perms) return fallback;
-
-  // if perms stored as JSON string
-  try {
-    if (typeof perms === "string") perms = JSON.parse(perms);
-  } catch {}
-
-  // wildcard
-  if (perms === true) return true;
-
-  // array format
-  if (Array.isArray(perms)) {
-    return perms.includes(key) || perms.includes("*") || perms.includes("all");
+  if (!cleanKey) {
+    return fallback;
   }
 
-  // object format
-  if (typeof perms === "object") {
-    if (key in perms) return !!perms[key];
+  const perms =
+    getPermissionSource();
 
-    const nested = getNested(perms, key);
-    if (typeof nested !== "undefined") return !!nested;
-
-    const alt = key.replace(/\./g, "_");
-    if (alt in perms) return !!perms[alt];
-
+  if (!perms) {
     return fallback;
+  }
+
+  if (perms === true) {
+    return true;
+  }
+
+  if (Array.isArray(perms)) {
+    return (
+      perms.includes(cleanKey) ||
+      perms.includes("*") ||
+      perms.includes("all")
+    );
+  }
+
+  if (typeof perms === "object") {
+    if (hasOwnPermission(perms, cleanKey)) {
+      return permissionEnabled(
+        perms[cleanKey]
+      );
+    }
+
+    const nested =
+      getNested(perms, cleanKey);
+
+    if (typeof nested !== "undefined") {
+      return permissionEnabled(nested);
+    }
+
+    const alternateKey =
+      cleanKey.replace(/\./g, "_");
+
+    if (
+      hasOwnPermission(
+        perms,
+        alternateKey
+      )
+    ) {
+      return permissionEnabled(
+        perms[alternateKey]
+      );
+    }
   }
 
   return fallback;
 }
+
 function pAny(keys = [], fallback = false) {
-  for (const k of keys) {
-    if (pFlag(k, false)) return true;
+  for (const key of keys || []) {
+    if (pFlag(key, false)) {
+      return true;
+    }
   }
+
   return fallback;
+}
+
+const COLUMN_VIEW_KEY_MAP = Object.freeze({
+  status: "colStatus",
+  feeStatus: "colFeeStatus",
+  dept: "colDept",
+  student: "colStudentName",
+  father: "colFatherName",
+  fatherEmail: "colFatherEmail",
+  grade: "colGrade",
+  tuitionGrade: "colTuitionGrade",
+  phone: "colPhone",
+  processedBy: "colProcessedBy",
+  paymentStatus: "colPaymentStatus",
+  paidUpto: "colPaidUpto",
+  verificationNumber: "colVerificationNumber",
+  registrationNumber: "colRegistrationNumber",
+  familyNumber: "colFamilyNumber",
+  registrationFee: "colRegistrationFee",
+  fees: "colFees",
+  currency: "colCurrency",
+  bank: "colBank",
+  month: "colMonth",
+  totalFees: "colTotalFees",
+  pendingDues: "colPendingDues",
+  receivedPayment: "colReceivedPayment",
+  comment: "colComment",
+  invoiceStatus: "colInvoiceStatus",
+  invoiceStatusTimestamp: "colInvoiceStatusTimestamp",
+  paidInvoiceStatus: "colPaidInvoiceStatus",
+  paidInvoiceStatusTimestamp: "colPaidInvoiceStatusTimestamp",
+  actionButtons: "colActionButtons"
+});
+
+const COLUMN_EDIT_KEY_MAP = Object.freeze({
+  status: "editStatus",
+  feeStatus: "editFeeStatus",
+  dept: "editDept",
+  student: "editStudentName",
+  father: "editFatherName",
+  fatherEmail: "editFatherEmail",
+  grade: "editGrade",
+  tuitionGrade: "editTuitionGrade",
+  phone: "editPhone",
+  paymentStatus: "editPaymentStatus",
+  verificationNumber: "editVerificationNumber",
+  registrationNumber: "editRegistrationNumber",
+  familyNumber: "editFamilyNumber",
+  registrationFee: "editRegistrationFee",
+  fees: "editFees",
+  currency: "editCurrency",
+  bank: "editBank",
+  month: "editMonth",
+  comment: "editComment"
+});
+
+const COLUMN_VIEW_LEGACY_KEY_MAP =
+  Object.freeze({
+    phone: [
+      "showPhone"
+    ],
+
+    paymentStatus: [
+      "showPaymentStatus"
+    ],
+
+    paidUpto: [
+      "showPaidUpto"
+    ],
+
+    verificationNumber: [
+      "showVerificationNumber"
+    ],
+
+    registrationNumber: [
+      "showRegistrationNumber"
+    ]
+  });
+
+const FIELD_NAME_TO_COLUMN_KEY =
+  Object.freeze({
+    status: "status",
+    feeStatus: "feeStatus",
+    dept: "dept",
+
+    student: "student",
+    student_name: "student",
+    studentName: "student",
+
+    father: "father",
+    father_name: "father",
+    fatherName: "father",
+
+    father_email: "fatherEmail",
+    fatherEmail: "fatherEmail",
+
+    grade: "grade",
+
+    tuitionGrade: "tuitionGrade",
+    tuition_grade: "tuitionGrade",
+
+    phone: "phone",
+
+    paymentStatus: "paymentStatus",
+    accounts_payment_status: "paymentStatus",
+    accountsPaymentStatus: "paymentStatus",
+    fee_status: "paymentStatus",
+
+    paidUpto: "paidUpto",
+    accounts_paid_upto: "paidUpto",
+    accountsPaidUpto: "paidUpto",
+
+    verificationNumber: "verificationNumber",
+    verification_number: "verificationNumber",
+    accounts_verification_number: "verificationNumber",
+    verificationNumber2: "verificationNumber",
+    secondVerificationNumber: "verificationNumber",
+    accounts_verification_number_2: "verificationNumber",
+
+    registrationNumber: "registrationNumber",
+    registration_number: "registrationNumber",
+    accounts_registration_number: "registrationNumber",
+
+    familyNumber: "familyNumber",
+    family_number: "familyNumber",
+    accounts_family_number: "familyNumber",
+
+    registrationFee: "registrationFee",
+    admission_registration_fee: "registrationFee",
+
+    fees: "fees",
+    admission_fees: "fees",
+    monthlyFee: "fees",
+    baseFee: "fees",
+
+    currency: "currency",
+    currency_code: "currency",
+    currencyCode: "currency",
+
+    bank: "bank",
+    bank_name: "bank",
+    bankName: "bank",
+
+    month: "month",
+    admission_month: "month",
+
+    totalFees: "totalFees",
+    total_fees: "totalFees",
+
+    pendingDues: "pendingDues",
+    pending_dues: "pendingDues",
+
+    receivedPayment: "receivedPayment",
+    received_payment: "receivedPayment",
+
+    comment: "comment",
+    admission_comment: "comment",
+    admissionComment: "comment",
+
+    invoiceStatus: "invoiceStatus",
+    invoiceStatusTimestamp: "invoiceStatusTimestamp",
+    paidInvoiceStatus: "paidInvoiceStatus",
+    paidInvoiceStatusTimestamp: "paidInvoiceStatusTimestamp"
+  });
+
+function hasExplicitEditSchema() {
+  return Object.values(
+    COLUMN_EDIT_KEY_MAP
+  ).some((key) =>
+    hasPermissionEntry(key)
+  );
+}
+
+function pCol(name) {
+  const key =
+    String(name || "").trim();
+
+  const permissionKey =
+    COLUMN_VIEW_KEY_MAP[key];
+
+  if (!permissionKey) {
+    return false;
+  }
+
+  const legacyKeys =
+    COLUMN_VIEW_LEGACY_KEY_MAP[key] ||
+    [];
+
+  const pascalKey =
+    key.charAt(0).toUpperCase() +
+    key.slice(1);
+
+  return pAny([
+    permissionKey,
+    ...legacyKeys,
+
+    `col.${key}`,
+    `show_${key}`,
+    `show${pascalKey}`,
+
+    `super.col.${key}`,
+    `super.column.${key}`,
+
+    `admin.col.${key}`,
+    `admin.column.${key}`,
+
+    `agent.col.${key}`,
+    `agent.column.${key}`,
+
+    `subagent.col.${key}`,
+    `subagent.column.${key}`,
+
+    `sub_agent.col.${key}`,
+    `sub_agent.column.${key}`,
+
+    `dashboard_super.col.${key}`,
+    `dashboard-super.col.${key}`,
+
+    `dashboard_admin.col.${key}`,
+    `dashboard-admin.col.${key}`,
+
+    `dashboard_agent.col.${key}`,
+    `dashboard-agent.col.${key}`,
+
+    `dashboard_sub_agent.col.${key}`,
+    `dashboard-sub-agent.col.${key}`,
+
+    `perm.super.col.${key}`,
+    `perm.admin.col.${key}`,
+    `perm.agent.col.${key}`,
+    `perm.sub_agent.col.${key}`,
+
+    key
+  ], false);
+}
+
+function pEditCol(name) {
+  const key =
+    String(name || "").trim();
+
+  const editPermissionKey =
+    COLUMN_EDIT_KEY_MAP[key];
+
+  if (
+    !editPermissionKey ||
+    !pCol(key)
+  ) {
+    return false;
+  }
+
+  /*
+   * Legacy users:
+   * Existing View permission old Edit access ko
+   * preserve karegi jab tak user new Edit schema
+   * ke saath re-save na ho.
+   */
+  if (!hasExplicitEditSchema()) {
+    return true;
+  }
+
+  return pFlag(
+    editPermissionKey,
+    false
+  );
+}
+
+function getColumnKeyForControl(control) {
+  if (!control) {
+    return "";
+  }
+
+  const directKey =
+    control.getAttribute?.("data-col") ||
+    control.getAttribute?.("data-field-key") ||
+    "";
+
+  if (
+    directKey &&
+    COLUMN_VIEW_KEY_MAP[directKey]
+  ) {
+    return directKey;
+  }
+
+  const columnContainer =
+    control.closest?.("[data-col]");
+
+  const containerKey =
+    columnContainer?.getAttribute?.(
+      "data-col"
+    ) || "";
+
+  if (
+    containerKey &&
+    COLUMN_VIEW_KEY_MAP[containerKey]
+  ) {
+    return containerKey;
+  }
+
+  const fieldName =
+    control.getAttribute?.("name") ||
+    "";
+
+  return (
+    FIELD_NAME_TO_COLUMN_KEY[fieldName] ||
+    ""
+  );
+}
+
+function canEditColumnControl(columnKey) {
+  return !!(
+    pFlag("btnEditRow", false) &&
+    pEditCol(columnKey)
+  );
 }
 
 
@@ -158,125 +619,385 @@ function pAny(keys = [], fallback = false) {
  * ✅ Button + Column visibility
  */
 function applyUiPermissions() {
-  // Buttons (classes should exist in your EJS)
-  toggleByPerm(".btn-whatsapp", "btnWhatsApp");
-  toggleByPerm(".btn-billing", "btnBilling");
-  toggleByPerm(".action-pdf, .mini-pdf", "btnPdf");
-  toggleByPerm(".action-upload", "btnUpload");
+  toggleByPerm(
+    ".btn-whatsapp",
+    "btnWhatsApp"
+  );
 
-  toggleByPerm(".btn-row-edit", "btnEditRow");
-  toggleByPerm(".action-update", "btnUpdateRow");
+  toggleByPerm(
+    ".btn-billing",
+    "btnBilling"
+  );
+
+  toggleByPerm(
+    ".action-pdf, .mini-pdf",
+    "btnPdf"
+  );
+
+  toggleByPerm(
+    ".action-upload, input[type=\"file\"][data-admission-id]",
+    "btnUpload"
+  );
+
+  toggleByPerm(
+    ".btn-row-edit, .js-dashboard-edit-return-link:not(.admission-field-link)",
+    "btnEditRow"
+  );
+
+  toggleByPerm(
+    ".action-update",
+    "btnUpdateRow"
+  );
+
   toggleBulkChallanByPerm();
-  toggleByAnyPerm(".btn-file-delete", [
-  "btnDeleteFile",
-  "btnFilesDelete",
-  "btnDeleteFiles",
-  "deleteFile",
-  "canDeleteFiles"
-]);
-  // Columns
+
+  toggleByAnyPerm(
+    ".btn-file-delete",
+    [
+      "btnDeleteFile",
+      "btnFilesDelete",
+      "btnDeleteFiles",
+      "deleteFile",
+      "canDeleteFiles"
+    ]
+  );
+
   applyColumnVisibility();
+  applyColumnEditability();
+  applyCardFieldPermissions();
 }
 
 function toggleByPerm(selector, permKey) {
-  const allowed = pFlag(permKey, false);
-  document.querySelectorAll(selector).forEach((b) => {
-    if (!allowed) {
-      b.classList.add("d-none");
-      b.setAttribute("disabled", "disabled");
-    }
-  });
-}
-function toggleByAnyPerm(selector, permKeys) {
-  const allowed = pAny(permKeys, false);
-  document.querySelectorAll(selector).forEach((b) => {
-    if (!allowed) {
-      b.classList.add("d-none");
-      b.setAttribute("disabled", "disabled");
-    }
-  });
-}
-function toggleBulkChallanByPerm() {
-  const canCreate = pFlag("btnUpdateRow", false);
-  const canSend = pFlag("btnWhatsApp", false);
-  const allowed = canCreate || canSend;
+  const allowed =
+    pFlag(permKey, false);
 
-  document.querySelectorAll(".bulk-challan-open-btn").forEach((btn) => {
-    if (!allowed) {
-      btn.classList.add("d-none");
-      btn.setAttribute("disabled", "disabled");
-    }
-  });
+  document
+    .querySelectorAll(selector)
+    .forEach((element) => {
+      if (!allowed) {
+        element.classList.add("d-none");
+
+        element.setAttribute(
+          "disabled",
+          "disabled"
+        );
+
+        element.setAttribute(
+          "aria-disabled",
+          "true"
+        );
+      }
+    });
 }
+
+function toggleByAnyPerm(
+  selector,
+  permissionKeys
+) {
+  const allowed =
+    pAny(permissionKeys, false);
+
+  document
+    .querySelectorAll(selector)
+    .forEach((element) => {
+      if (!allowed) {
+        element.classList.add("d-none");
+
+        element.setAttribute(
+          "disabled",
+          "disabled"
+        );
+
+        element.setAttribute(
+          "aria-disabled",
+          "true"
+        );
+      }
+    });
+}
+
+function toggleBulkChallanByPerm() {
+  const canCreate =
+    pFlag("btnUpdateRow", false);
+
+  const canSend =
+    pFlag("btnWhatsApp", false);
+
+  const allowed =
+    canCreate || canSend;
+
+  document
+    .querySelectorAll(
+      ".bulk-challan-open-btn"
+    )
+    .forEach((button) => {
+      if (!allowed) {
+        button.classList.add("d-none");
+
+        button.setAttribute(
+          "disabled",
+          "disabled"
+        );
+
+        button.setAttribute(
+          "aria-disabled",
+          "true"
+        );
+      }
+    });
+}
+
 /**
- * ✅ Column visibility supports 2 approaches:
- * 1) Recommended: <th data-perm="colPhone">Phone</th>
- * 2) Backward:    <th data-col="phone">Phone</th>  (mapped below)
+ * Supports:
+ * <th data-perm="colPhone">
+ * <th data-col="phone">
  */
 function applyColumnVisibility() {
   const table =
-    document.getElementById("superAdmissionsTable") ||
-    document.getElementById("adminAdmissionsTable") ||
-    document.getElementById("agentAccountsTable");
-  if (!table) return;
+    document.getElementById(
+      "superAdmissionsTable"
+    ) ||
+    document.getElementById(
+      "adminAdmissionsTable"
+    ) ||
+    document.getElementById(
+      "agentAccountsTable"
+    );
 
-  const colKeys = new Set();
-  table.querySelectorAll("thead th[data-col], tbody td[data-col]").forEach((el) => {
-    const k = el.getAttribute("data-col");
-    if (k) colKeys.add(k);
-  });
+  if (table) {
+    table
+      .querySelectorAll("[data-perm]")
+      .forEach((element) => {
+        const permissionKey =
+          element.getAttribute(
+            "data-perm"
+          );
 
-  colKeys.forEach((colKey) => {
-    const permKey = mapColToPerm(colKey);
-    const visible = permKey ? pFlag(permKey, false) : true;
+        if (!permissionKey) {
+          return;
+        }
 
-    table.querySelectorAll(`[data-col="${colKey}"]`).forEach((el) => {
-      el.style.display = visible ? "" : "none";
+        element.style.display =
+          pFlag(permissionKey, false)
+            ? ""
+            : "none";
+      });
+
+    const columnKeys = new Set();
+
+    table
+      .querySelectorAll(
+        "thead th[data-col], tbody td[data-col]"
+      )
+      .forEach((element) => {
+        const columnKey =
+          element.getAttribute(
+            "data-col"
+          );
+
+        if (columnKey) {
+          columnKeys.add(columnKey);
+        }
+      });
+
+    columnKeys.forEach((columnKey) => {
+      const normalizedKey =
+        columnKey === "actions"
+          ? "actionButtons"
+          : columnKey;
+
+      const visible =
+        COLUMN_VIEW_KEY_MAP[
+          normalizedKey
+        ]
+          ? pCol(normalizedKey)
+          : true;
+
+      table
+        .querySelectorAll(
+          `[data-col="${CSS.escape(columnKey)}"]`
+        )
+        .forEach((element) => {
+          element.style.display =
+            visible ? "" : "none";
+        });
     });
+  }
+
+  document
+    .querySelectorAll(
+      ".admission-field-link[data-field-key]"
+    )
+    .forEach((field) => {
+      const columnKey =
+        field.getAttribute(
+          "data-field-key"
+        ) || "";
+
+      if (
+        COLUMN_VIEW_KEY_MAP[columnKey] &&
+        !pCol(columnKey)
+      ) {
+        field.classList.add("d-none");
+      }
+    });
+
+  if (!pCol("actionButtons")) {
+    document
+      .querySelectorAll(
+        ".admission-card-actions"
+      )
+      .forEach((actions) => {
+        actions.classList.add("d-none");
+      });
+  }
+}
+
+function mapColToPerm(columnKey) {
+  const key =
+    String(columnKey || "").trim();
+
+  const normalizedKey =
+    key === "actions"
+      ? "actionButtons"
+      : key;
+
+  return (
+    COLUMN_VIEW_KEY_MAP[
+      normalizedKey
+    ] ||
+    null
+  );
+}
+
+function applyColumnEditability() {
+  const tables = [
+    document.getElementById(
+      "superAdmissionsTable"
+    ),
+
+    document.getElementById(
+      "adminAdmissionsTable"
+    ),
+
+    document.getElementById(
+      "agentAccountsTable"
+    )
+  ].filter(Boolean);
+
+  tables.forEach((table) => {
+    table
+      .querySelectorAll(
+        "input[form], select[form], textarea[form], tbody input[name], tbody select[name], tbody textarea[name]"
+      )
+      .forEach((control) => {
+        const columnKey =
+          getColumnKeyForControl(
+            control
+          );
+
+        if (!columnKey) {
+          return;
+        }
+
+        const allowed =
+          canEditColumnControl(
+            columnKey
+          );
+
+        if (allowed) {
+          return;
+        }
+
+        control.disabled = true;
+
+        control.setAttribute(
+          "aria-disabled",
+          "true"
+        );
+
+        control.setAttribute(
+          "tabindex",
+          "-1"
+        );
+
+        control.classList.add(
+          "permission-readonly-field"
+        );
+
+        if (
+          control.tagName === "INPUT" ||
+          control.tagName === "TEXTAREA"
+        ) {
+          control.readOnly = true;
+
+          control.setAttribute(
+            "aria-readonly",
+            "true"
+          );
+        }
+      });
   });
 }
 
+function applyCardFieldPermissions() {
+  document
+    .querySelectorAll(
+      ".admission-field-link[data-field-key]"
+    )
+    .forEach((field) => {
+      const columnKey =
+        field.getAttribute(
+          "data-field-key"
+        ) || "";
 
-function mapColToPerm(colKey) {
-  const k = String(colKey || "").trim();
+      if (
+        !COLUMN_VIEW_KEY_MAP[columnKey]
+      ) {
+        return;
+      }
 
-  const map = {
-    status: "colStatus",
-    feeStatus: "colFeeStatus",
-    dept: "colDept",
-    student: "colStudentName",
-    father: "colFatherName",
-    fatherEmail: "colFatherEmail",
-    grade: "colGrade",
-    tuitionGrade: "colTuitionGrade",
-    phone: "colPhone",
-    processedBy: "colProcessedBy",
+      if (!pCol(columnKey)) {
+        field.classList.add("d-none");
+        return;
+      }
 
-    paymentStatus: "colPaymentStatus",
-    paidUpto: "colPaidUpto",
-    verificationNumber: "colVerificationNumber",
-    registrationNumber: "colRegistrationNumber",
-    familyNumber: "colFamilyNumber",
+      if (
+        field.tagName !== "A" ||
+        canEditColumnControl(columnKey)
+      ) {
+        return;
+      }
 
-    registrationFee: "colRegistrationFee",
-    fees: "colFees",
-    currency: "colCurrency",
-    bank: "colBank",
-    month: "colMonth",
-    totalFees: "colTotalFees",
-    pendingDues: "colPendingDues",
-    receivedPayment: "colReceivedPayment",
+      if (
+        field.hasAttribute("href") &&
+        !field.dataset.permissionHref
+      ) {
+        field.dataset.permissionHref =
+          field.getAttribute("href") ||
+          "";
+      }
 
-    invoiceStatus: "colInvoiceStatus",
-    invoiceStatusTimestamp: "colInvoiceStatusTimestamp",
-    paidInvoiceStatus: "colPaidInvoiceStatus",
-    paidInvoiceStatusTimestamp: "colPaidInvoiceStatusTimestamp",
+      field.removeAttribute("href");
 
-    actions: "colActionButtons",
-    actionButtons: "colActionButtons",
-  };
+      field.setAttribute(
+        "aria-disabled",
+        "true"
+      );
 
-  return map[k] || null;
+      field.setAttribute(
+        "tabindex",
+        "-1"
+      );
+
+      field.classList.add(
+        "no-edit-field",
+        "permission-readonly-field"
+      );
+
+      field.style.pointerEvents = "none";
+      field.style.cursor = "default";
+    });
 }
 
 function getRowFormIdFromElement(el) {
@@ -362,35 +1083,146 @@ function refreshWorkflowCardFromResponse(admissionId, admission = {}) {
   }
 }
 
-async function submitRowFormAjax(form, formIdOverride = "") {
+function canSubmitRowUpdates() {
+  return !!(
+    pCol("actionButtons") &&
+    pFlag("btnUpdateRow", false)
+  );
+}
+
+function canSubmitAdmissionField(
+  fieldName
+) {
+  const columnKey =
+    FIELD_NAME_TO_COLUMN_KEY[
+      String(fieldName || "")
+    ] || "";
+
+  if (!columnKey) {
+    return true;
+  }
+
+  return canEditColumnControl(
+    columnKey
+  );
+}
+
+async function submitRowFormAjax(
+  form,
+  formIdOverride = ""
+) {
   if (!form) return;
 
-  const formId = formIdOverride || form.id || "";
-  const active = document.activeElement;
+  if (!canSubmitRowUpdates()) {
+    const message =
+      "You do not have permission to update this row.";
+
+    if (window.showUploadFlash) {
+      window.showUploadFlash(
+        "danger",
+        "Update blocked",
+        message
+      );
+    } else {
+      alert(message);
+    }
+
+    return;
+  }
+
+  const formId =
+    formIdOverride ||
+    form.id ||
+    "";
+
+  const active =
+    document.activeElement;
+
   const fieldName =
     active?.getAttribute?.("name") ||
     active?.getAttribute?.("data-field") ||
     "";
 
-  beginRowSaveFlow(formId, fieldName, "Updating row...");
+  beginRowSaveFlow(
+    formId,
+    fieldName,
+    "Updating row..."
+  );
 
   try {
-    const formData = new FormData(form);
-const body = new URLSearchParams();
+    const formData =
+      new FormData(form);
 
-for (const [key, value] of formData.entries()) {
-  body.append(key, value == null ? "" : String(value));
-}
+    const body =
+      new URLSearchParams();
 
-const res = await fetch(form.action, {
-  method: (form.method || "POST").toUpperCase(),
-  body,
-  headers: {
-    "X-Requested-With": "XMLHttpRequest",
-    "Accept": "application/json",
-    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
-  }
-});
+    let editableFieldCount = 0;
+
+    for (
+      const [key, value] of
+      formData.entries()
+    ) {
+      const columnKey =
+        FIELD_NAME_TO_COLUMN_KEY[
+          String(key || "")
+        ] || "";
+
+      if (
+        columnKey &&
+        !canSubmitAdmissionField(key)
+      ) {
+        continue;
+      }
+
+      if (columnKey) {
+        editableFieldCount += 1;
+      }
+
+      body.append(
+        key,
+        value == null
+          ? ""
+          : String(value)
+      );
+    }
+
+    if (!editableFieldCount) {
+      hideRowSavingOverlay();
+
+      const message =
+        "No permitted editable field was found.";
+
+      if (window.showUploadFlash) {
+        window.showUploadFlash(
+          "danger",
+          "Update blocked",
+          message
+        );
+      } else {
+        alert(message);
+      }
+
+      return;
+    }
+
+    const res = await fetch(form.action, {
+      method:
+        (form.method || "POST")
+          .toUpperCase(),
+
+      body,
+
+      headers: {
+        "X-Requested-With":
+          "XMLHttpRequest",
+
+        "Accept":
+          "application/json",
+
+        "Content-Type":
+          "application/x-www-form-urlencoded; charset=UTF-8"
+      }
+    });
 
     let data = {};
     let parsedJson = false;
@@ -765,34 +1597,105 @@ async function loadAdmissions() {
   }
 }
 
-function renderAdmissions(rows) {
-  const tbody = document.getElementById("admissions-tbody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-
-  const safeRows = Array.isArray(rows) ? rows : [];
-
-  safeRows.forEach((row, i) => {
-    const tr = document.createElement("tr");
-
-    // NOTE: Ye render aapke current table structure par depend karta hai.
-    // Is ko aap jab admissions.ejs bhejoge, main exact columns ke saath align kar dunga.
-    tr.innerHTML = `
-      <td>${i + 1}</td>
-      <td>${row.student_name || ""}</td>
-      <td>${row.grade || ""}</td>
-      <td>${row.father_name || ""}</td>
-      <td>${row.currency || row.currency_code || ""}</td>
-      <td>${row.bank_name || row.bankName || ""}</td>
-    `;
-
-    tbody.appendChild(tr);
-  });
-
-  // after render, apply hide columns (if data-perm/data-col exists)
-  applyColumnVisibility();
+function escapeAdmissionCell(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
+function renderAdmissions(rows) {
+  const tbody =
+    document.getElementById(
+      "admissions-tbody"
+    );
+
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  const safeRows =
+    Array.isArray(rows)
+      ? rows
+      : [];
+
+  safeRows.forEach((row, index) => {
+    const tableRow =
+      document.createElement("tr");
+
+    const cells = [
+      {
+        columnKey: "",
+        value: index + 1
+      },
+      {
+        columnKey: "student",
+        value:
+          row.student_name ||
+          row.studentName ||
+          row.student ||
+          ""
+      },
+      {
+        columnKey: "grade",
+        value:
+          row.grade ||
+          ""
+      },
+      {
+        columnKey: "father",
+        value:
+          row.father_name ||
+          row.fatherName ||
+          row.father ||
+          ""
+      },
+      {
+        columnKey: "currency",
+        value:
+          row.currency ||
+          row.currency_code ||
+          row.currencyCode ||
+          ""
+      },
+      {
+        columnKey: "bank",
+        value:
+          row.bank_name ||
+          row.bankName ||
+          row.bank ||
+          ""
+      }
+    ];
+
+    tableRow.innerHTML = cells
+      .filter((cell) => {
+        return (
+          !cell.columnKey ||
+          pCol(cell.columnKey)
+        );
+      })
+      .map((cell) => {
+        const dataColumn =
+          cell.columnKey
+            ? ` data-col="${cell.columnKey}"`
+            : "";
+
+        return (
+          `<td${dataColumn}>` +
+          `${escapeAdmissionCell(cell.value)}` +
+          `</td>`
+        );
+      })
+      .join("");
+
+    tbody.appendChild(tableRow);
+  });
+
+  applyUiPermissions();
+}
 /* =========================
    ✅ Confirm Modal helper
 ========================= */
@@ -1065,7 +1968,10 @@ function updateForwardButtonAfterUpload(admissionId) {
    * Super/Admin/Agent/Sub Agent dashboard script available
    * na ho tab bhi Forward button correctly show ho.
    */
-  if (canForwardNow) {
+  if (
+    canForwardNow &&
+    pCol("actionButtons")
+  ) {
     const actions = card.querySelector(
       ".admission-card-actions"
     );

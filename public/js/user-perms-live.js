@@ -78,19 +78,55 @@
     reloadDashboard();
   }
 
-  async function initializePermissionUpdates() {
-    if (typeof window.io !== "function") {
+  let permissionInitRetryTimer = null;
+  let permissionSocketStarted = false;
+
+  function schedulePermissionInitRetry() {
+    if (
+      permissionSocketStarted ||
+      permissionInitRetryTimer
+    ) {
       return;
+    }
+
+    permissionInitRetryTimer =
+      window.setTimeout(
+        function () {
+          permissionInitRetryTimer = null;
+          startPermissionUpdates();
+        },
+        1500
+      );
+  }
+
+  async function initializePermissionUpdates() {
+    if (permissionSocketStarted) {
+      return true;
+    }
+
+    /*
+     * Socket.IO script kabhi kabhi is file ke
+     * baad load hoti hai. Is case mein permanently
+     * stop hone ke bajaye retry karenge.
+     */
+    if (typeof window.io !== "function") {
+      return false;
     }
 
     const myUserId =
       await getCurrentUserId();
 
+    /*
+     * /api/me temporary fail ho to live updates
+     * permanently disable nahi honi chahiye.
+     */
     if (!myUserId) {
-      return;
+      return false;
     }
 
     const socket = window.io();
+
+    permissionSocketStarted = true;
 
     window.__USER_PERMS_LIVE_SOCKET__ =
       socket;
@@ -114,14 +150,26 @@
         );
       }
     );
+
+    return true;
   }
 
-  initializePermissionUpdates().catch(
-    function (error) {
-      console.error(
-        "Live permission update error:",
-        error
-      );
-    }
-  );
+  function startPermissionUpdates() {
+    initializePermissionUpdates()
+      .then(function (started) {
+        if (!started) {
+          schedulePermissionInitRetry();
+        }
+      })
+      .catch(function (error) {
+        console.error(
+          "Live permission update error:",
+          error
+        );
+
+        schedulePermissionInitRetry();
+      });
+  }
+
+  startPermissionUpdates();
 })();

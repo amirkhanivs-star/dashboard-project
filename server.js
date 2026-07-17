@@ -750,49 +750,15 @@ function getDeveloperDatabaseExportPayload() {
 }
 
 function normalizeDeveloperControlledPermissions(rawPermissions = {}, role = "agent") {
-  const source =
-    typeof rawPermissions === "string"
-      ? safeJsonParse(rawPermissions) || {}
-      : rawPermissions || {};
-
-  // ✅ Super Admin permissions must also be controlled by Developer Dashboard.
-  // Do NOT auto-give all permissions here.
-  if (role === "super_admin") {
-    const permissions = {};
-
-    for (const key of PERMISSION_KEYS) {
-      permissions[key] =
-        source[key] === true ||
-        source[key] === "true" ||
-        source[key] === "on" ||
-        source[key] === 1 ||
-        source[key] === "1";
-    }
-
-    return permissions;
-  }
-
-  return normalizePermissions(source, role);
+  return normalizeViewEditPermissions(rawPermissions, role);
 }
 
-function getDeveloperPermissionsFromBody(body = {}, role = "agent") {
-  const incoming =
-    body.permissions && typeof body.permissions === "object"
-      ? body.permissions
-      : body;
-
-  const permissions = {};
-
-  for (const key of PERMISSION_KEYS) {
-    permissions[key] =
-      incoming[key] === true ||
-      incoming[key] === "true" ||
-      incoming[key] === "on" ||
-      incoming[key] === 1 ||
-      incoming[key] === "1";
-  }
-
-  return normalizeDeveloperControlledPermissions(permissions, role);
+function getDeveloperPermissionsFromBody(
+  body = {},
+  role = "agent",
+  options = {}
+) {
+  return buildPermissionsFromBody(body, role, options);
 }
 function getDeveloperDashboardStats() {
   const usersByDept = countByDeptFromTable("users");
@@ -1948,8 +1914,17 @@ function ensureAccountsNumberNoteColumns() {
 
     // Safe fallback: old DB me family number column missing ho to add ho jaye.
     addColumn("accounts_family_number", "TEXT");
+       /*
+     * Har number field ka independent latest-update time.
+     * Sidebar in timestamps ko use nahi karega.
+     * Right Notepad inhi timestamps se latest field-wise value select karega.
+     */
+    addColumn("accounts_family_number_updated_at", "TEXT");
+    addColumn("accounts_verification_number_updated_at", "TEXT");
+    addColumn("accounts_registration_number_updated_at", "TEXT");
 
     const dateCandidates = [
+      "accounts_number_note_updated_at",
       "accounts_registration_number_assigned_at",
       "last_activity_at",
       "updated_at",
@@ -1979,6 +1954,61 @@ function ensureAccountsNumberNoteColumns() {
           OR TRIM(COALESCE(accounts_number_note_updated_at, '')) = ''
         )
     `).run();
+        /*
+     * Existing values ko one-time safe field-wise timestamp do.
+     * Old database me exact individual update time available nahi tha,
+     * is liye best existing fallback date use hogi.
+     */
+    const fieldTimestampBackfills = [
+      {
+        valueColumn: "accounts_family_number",
+        updatedAtColumn:
+          "accounts_family_number_updated_at",
+      },
+      {
+        valueColumn:
+          "accounts_verification_number",
+        updatedAtColumn:
+          "accounts_verification_number_updated_at",
+      },
+      {
+        valueColumn:
+          "accounts_registration_number",
+        updatedAtColumn:
+          "accounts_registration_number_updated_at",
+      },
+    ];
+
+    for (const item of fieldTimestampBackfills) {
+      if (
+        !existing.has(item.valueColumn) ||
+        !existing.has(item.updatedAtColumn)
+      ) {
+        continue;
+      }
+
+      const valueColumn =
+        sqlSafeColumn(item.valueColumn);
+
+      const updatedAtColumn =
+        sqlSafeColumn(item.updatedAtColumn);
+
+      db.prepare(`
+        UPDATE admissions
+        SET ${updatedAtColumn} =
+              ${fallbackDateExpression}
+        WHERE COALESCE(is_deleted, 0) = 0
+          AND TRIM(
+            COALESCE(${valueColumn}, '')
+          ) != ''
+          AND (
+            ${updatedAtColumn} IS NULL
+            OR TRIM(
+              COALESCE(${updatedAtColumn}, '')
+            ) = ''
+          )
+      `).run();
+    }
   } catch (err) {
     console.error("ensureAccountsNumberNoteColumns error:", err.message);
   }
@@ -1990,57 +2020,121 @@ function normalizeAccountsNumberNoteValue(value = "") {
   return String(value || "").trim();
 }
 
-function accountsNumberNoteValuesChanged(beforeRow = {}, afterRow = {}) {
-  const beforeVerification = normalizeAccountsNumberNoteValue(
-    beforeRow?.accounts_verification_number || ""
-  );
+const ACCOUNTS_NUMBER_FIELD_CONFIG = Object.freeze({
+  family: {
+    valueColumn: "accounts_family_number",
+    updatedAtColumn: "accounts_family_number_updated_at",
+  },
+  verification: {
+    valueColumn: "accounts_verification_number",
+    updatedAtColumn: "accounts_verification_number_updated_at",
+  },
+  registration: {
+    valueColumn: "accounts_registration_number",
+    updatedAtColumn: "accounts_registration_number_updated_at",
+  },
+});
 
-  const afterVerification = normalizeAccountsNumberNoteValue(
-    afterRow?.accounts_verification_number || ""
-  );
-
-  const beforeRegistration = normalizeAccountsNumberNoteValue(
-    beforeRow?.accounts_registration_number || ""
-  );
-
-  const afterRegistration = normalizeAccountsNumberNoteValue(
-    afterRow?.accounts_registration_number || ""
-  );
-
-  const beforeFamily = normalizeAccountsNumberNoteValue(
-    beforeRow?.accounts_family_number || ""
-  );
-
-  const afterFamily = normalizeAccountsNumberNoteValue(
-    afterRow?.accounts_family_number || ""
-  );
-
+function getAccountsNumberFieldConfig(fieldKey = "") {
   return (
-    beforeVerification !== afterVerification ||
-    beforeRegistration !== afterRegistration ||
-    beforeFamily !== afterFamily
+    ACCOUNTS_NUMBER_FIELD_CONFIG[
+      String(fieldKey || "").trim().toLowerCase()
+    ] || null
   );
 }
 
-function markAccountsNumberNoteUpdated(
-  admissionIds = [],
-  actorUser = null,
-  updatedAt = new Date().toISOString()
+function getChangedAccountsNumberFields(
+  beforeRow = {},
+  afterRow = {},
+  fields = Object.keys(ACCOUNTS_NUMBER_FIELD_CONFIG)
 ) {
+  const requestedFields = [
+    ...new Set(
+      (Array.isArray(fields) ? fields : [fields])
+        .map((fieldKey) =>
+          String(fieldKey || "").trim().toLowerCase()
+        )
+        .filter((fieldKey) =>
+          !!getAccountsNumberFieldConfig(fieldKey)
+        )
+    ),
+  ];
+
+  return requestedFields.filter((fieldKey) => {
+    const config =
+      getAccountsNumberFieldConfig(fieldKey);
+
+    const beforeValue =
+      normalizeAccountsNumberNoteValue(
+        beforeRow?.[config.valueColumn] || ""
+      );
+
+    const afterValue =
+      normalizeAccountsNumberNoteValue(
+        afterRow?.[config.valueColumn] || ""
+      );
+
+    return beforeValue !== afterValue;
+  });
+}
+
+function markAccountsNumberFieldsUpdated({
+  admissionIds = [],
+  fieldKeys = [],
+  actorUser = null,
+  updatedAt = new Date().toISOString(),
+} = {}) {
   try {
     const ids = [
       ...new Set(
-        (Array.isArray(admissionIds) ? admissionIds : [admissionIds])
+        (
+          Array.isArray(admissionIds)
+            ? admissionIds
+            : [admissionIds]
+        )
           .map((id) => Number(id || 0))
           .filter(Boolean)
       ),
     ];
 
-    if (!ids.length) return;
+    const validFieldKeys = [
+      ...new Set(
+        (
+          Array.isArray(fieldKeys)
+            ? fieldKeys
+            : [fieldKeys]
+        )
+          .map((fieldKey) =>
+            String(fieldKey || "")
+              .trim()
+              .toLowerCase()
+          )
+          .filter((fieldKey) =>
+            !!getAccountsNumberFieldConfig(fieldKey)
+          )
+      ),
+    ];
+
+    if (!ids.length || !validFieldKeys.length) {
+      return [];
+    }
+
+    const timestampAssignments =
+      validFieldKeys
+        .map((fieldKey) => {
+          const config =
+            getAccountsNumberFieldConfig(fieldKey);
+
+          return `${sqlSafeColumn(
+            config.updatedAtColumn
+          )} = @updatedAt`;
+        })
+        .join(",\n          ");
 
     const stmt = db.prepare(`
       UPDATE admissions
-      SET accounts_number_note_updated_at = @updatedAt,
+      SET ${timestampAssignments},
+          accounts_number_note_updated_at = @updatedAt,
           accounts_number_note_updated_by_id = @actorId,
           accounts_number_note_updated_by_name = @actorName,
           accounts_number_note_updated_by_role = @actorRole
@@ -2048,37 +2142,66 @@ function markAccountsNumberNoteUpdated(
         AND COALESCE(is_deleted, 0) = 0
     `);
 
-    const updateMany = db.transaction((targetIds) => {
-      for (const id of targetIds) {
-        stmt.run({
-          id,
-          updatedAt,
-          actorId: actorUser?.id || null,
-          actorName: actorUser?.name || actorUser?.email || "",
-          actorRole: actorUser?.role || "",
-        });
+    const updateMany = db.transaction(
+      (targetIds) => {
+        for (const id of targetIds) {
+          stmt.run({
+            id,
+            updatedAt,
+            actorId: actorUser?.id || null,
+            actorName:
+              actorUser?.name ||
+              actorUser?.email ||
+              "",
+            actorRole:
+              actorUser?.role || "",
+          });
+        }
       }
-    });
+    );
 
     updateMany(ids);
+
+    return validFieldKeys;
   } catch (err) {
-    console.error("markAccountsNumberNoteUpdated error:", err.message);
+    console.error(
+      "markAccountsNumberFieldsUpdated error:",
+      err.message
+    );
+
+    return [];
   }
 }
 
-function markAccountsNumberNoteIfChanged({
+function markAccountsNumberFieldsIfChanged({
   admissionId,
   beforeRow = {},
   afterRow = {},
   actorUser = null,
+  fields = Object.keys(
+    ACCOUNTS_NUMBER_FIELD_CONFIG
+  ),
+  updatedAt = new Date().toISOString(),
 } = {}) {
-  if (!admissionId) return;
+  const changedFields =
+    getChangedAccountsNumberFields(
+      beforeRow,
+      afterRow,
+      fields
+    );
 
-  if (!accountsNumberNoteValuesChanged(beforeRow, afterRow)) {
-    return;
+  if (!changedFields.length) {
+    return [];
   }
 
-  markAccountsNumberNoteUpdated([admissionId], actorUser);
+  markAccountsNumberFieldsUpdated({
+    admissionIds: [admissionId],
+    fieldKeys: changedFields,
+    actorUser,
+    updatedAt,
+  });
+
+  return changedFields;
 }
 
 function canSeeAccountsNumberNote(user = null) {
@@ -2149,7 +2272,154 @@ function getAccountsNumberNoteSelectColumn(columnsSet, columnName, aliasName = c
 
   return `'' AS ${sqlSafeColumn(aliasName)}`;
 }
+function makeAccountsNumberSummary({
+  familyNumber = "",
+  verificationNumber = "",
+  registrationNumber = "",
+} = {}) {
+  const cleanFamilyNumber =
+    normalizeAccountsNumberNoteValue(
+      familyNumber
+    );
 
+  const cleanVerificationNumber =
+    normalizeAccountsNumberNoteValue(
+      verificationNumber
+    );
+
+  const cleanRegistrationNumber =
+    normalizeAccountsNumberNoteValue(
+      registrationNumber
+    );
+
+  const copyText = [
+    cleanFamilyNumber
+      ? `FAM: ${cleanFamilyNumber}`
+      : "",
+
+    cleanVerificationNumber
+      ? `VERIF: ${cleanVerificationNumber}`
+      : "",
+
+    cleanRegistrationNumber
+      ? `REG: ${cleanRegistrationNumber}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
+  return {
+    familyNumber:
+      cleanFamilyNumber,
+
+    verificationNumber:
+      cleanVerificationNumber,
+
+    registrationNumber:
+      cleanRegistrationNumber,
+
+    hasFamilyNumber:
+      !!cleanFamilyNumber,
+
+    hasVerificationNumber:
+      !!cleanVerificationNumber,
+
+    hasRegistrationNumber:
+      !!cleanRegistrationNumber,
+
+    total: [
+      cleanFamilyNumber,
+      cleanVerificationNumber,
+      cleanRegistrationNumber,
+    ].filter(Boolean).length,
+
+    copyText,
+  };
+}
+
+function makeEmptyAccountsNumberNoteData(
+  enabled = false
+) {
+  const highestNumbers =
+    makeAccountsNumberSummary();
+
+  const latestNumbers =
+    makeAccountsNumberSummary();
+
+  return {
+    enabled: !!enabled,
+
+    highestNumbers,
+    latestNumbers,
+
+    sidebarHighest:
+      highestNumbers,
+
+    notepadLatest:
+      latestNumbers,
+
+    latestHighest: null,
+    records: [],
+    total: 0,
+  };
+}
+
+function getLatestAccountsNumberFieldValue(
+  columnsSet,
+  fieldKey
+) {
+  try {
+    const config =
+      getAccountsNumberFieldConfig(fieldKey);
+
+    if (
+      !config ||
+      !columnsSet.has(config.valueColumn) ||
+      !columnsSet.has(config.updatedAtColumn)
+    ) {
+      return "";
+    }
+
+    const valueColumn =
+      sqlSafeColumn(config.valueColumn);
+
+    const updatedAtColumn =
+      sqlSafeColumn(config.updatedAtColumn);
+
+    const row = db.prepare(`
+      SELECT
+        ${valueColumn} AS field_value
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND TRIM(
+          COALESCE(${updatedAtColumn}, '')
+        ) != ''
+      ORDER BY
+        julianday(
+          COALESCE(
+            NULLIF(
+              TRIM(${updatedAtColumn}),
+              ''
+            ),
+            '1970-01-01'
+          )
+        ) DESC,
+        id DESC
+      LIMIT 1
+    `).get();
+
+    return normalizeAccountsNumberNoteValue(
+      row?.field_value || ""
+    );
+  } catch (err) {
+    console.error(
+      `getLatestAccountsNumberFieldValue ${fieldKey} error:`,
+      err.message
+    );
+
+    return "";
+  }
+}
 function mapAccountsNumberNoteRow(row = {}) {
   const admissionId = Number(row.id || 0);
 
@@ -2190,6 +2460,7 @@ function mapAccountsNumberNoteRow(row = {}) {
     String(admissionId || "");
 
   const highestNumber = getAccountsNumberNoteHighestNumber(
+    familyNumber,
     verificationNumber,
     registrationNumber
   );
@@ -2234,8 +2505,31 @@ function mapAccountsNumberNoteRow(row = {}) {
 }
 
 function getAccountsNumberNoteData(user = null) {
+  const emptyHighestNumbers =
+    makeAccountsNumberSummary();
+
+  const emptyLatestNumbers =
+    makeAccountsNumberSummary();
+
   const empty = {
     enabled: false,
+
+    highestNumbers:
+      emptyHighestNumbers,
+
+    latestNumbers:
+      emptyLatestNumbers,
+
+    sidebarHighest:
+      emptyHighestNumbers,
+
+    notepadLatest:
+      emptyLatestNumbers,
+
+    /*
+     * Existing frontend files ke liye temporary
+     * backward-compatible properties.
+     */
     latestHighest: null,
     records: [],
     total: 0,
@@ -2291,16 +2585,280 @@ function getAccountsNumberNoteData(user = null) {
         id DESC
     `).all();
 
-    const records = rows
+    /*
+     * Pehle tamam valid admissions map honge.
+     * In records se Family, Verification aur Registration
+     * ka highest number independently select kiya jayega.
+     */
+    const allRecords = rows
       .map(mapAccountsNumberNoteRow)
       .filter((row) => row.admissionId)
       .sort((a, b) => {
-        if (b.sortTime !== a.sortTime) return b.sortTime - a.sortTime;
+        if (b.sortTime !== a.sortTime) {
+          return b.sortTime - a.sortTime;
+        }
+
         return b.admissionId - a.admissionId;
       });
 
-    const latestHighest =
-      [...records].sort((a, b) => {
+    /*
+     * Kisi ek specific field ka sab se bara numeric number
+     * rakhne wala admission select karta hai.
+     *
+     * Tie ki situation mein:
+     * 1. Latest updated record
+     * 2. Phir highest admission ID
+     * select hogi.
+     */
+    const pickHighestRecord = (rawFieldName) => {
+      const candidates = allRecords
+        .map((record) => ({
+          record,
+
+          numberValue: getAccountsNumberNoteHighestNumber(
+            record?.[rawFieldName] || ""
+          ),
+        }))
+        .filter((item) => item.numberValue > 0)
+        .sort((a, b) => {
+          if (b.numberValue !== a.numberValue) {
+            return b.numberValue - a.numberValue;
+          }
+
+          if (b.record.sortTime !== a.record.sortTime) {
+            return b.record.sortTime - a.record.sortTime;
+          }
+
+          return (
+            b.record.admissionId -
+            a.record.admissionId
+          );
+        });
+
+      return candidates[0]?.record || null;
+    };
+
+    /*
+     * Teeno numbers independently select honge.
+     *
+     * Family ka maximum apne admission se.
+     * Verification ka maximum apne admission se.
+     * Registration ka maximum apne admission se.
+     */
+    const highestFamilyRecord =
+      pickHighestRecord("rawFamilyNumber");
+
+    const highestVerificationRecord =
+      pickHighestRecord("rawVerificationNumber");
+
+    const highestRegistrationRecord =
+      pickHighestRecord("rawRegistrationNumber");
+       /*
+     * Sidebar:
+     * Har field ka current maximum independently.
+     * Koi admission/student information return nahi hogi.
+     */
+    const highestNumbers =
+      makeAccountsNumberSummary({
+        familyNumber:
+          highestFamilyRecord
+            ?.rawFamilyNumber || "",
+
+        verificationNumber:
+          highestVerificationRecord
+            ?.rawVerificationNumber || "",
+
+        registrationNumber:
+          highestRegistrationRecord
+            ?.rawRegistrationNumber || "",
+      });
+
+    /*
+     * Right Notepad:
+     * Har field ka latest current update independently.
+     */
+    const latestNumbers =
+      makeAccountsNumberSummary({
+        familyNumber:
+          getLatestAccountsNumberFieldValue(
+            columnsSet,
+            "family"
+          ),
+
+        verificationNumber:
+          getLatestAccountsNumberFieldValue(
+            columnsSet,
+            "verification"
+          ),
+
+        registrationNumber:
+          getLatestAccountsNumberFieldValue(
+            columnsSet,
+            "registration"
+          ),
+      });
+    /*
+     * Agar do ya teeno highest numbers ek hi admission
+     * ke hain to us admission ko sirf ek row mein rakha jayega.
+     */
+    const selectedByAdmissionId = new Map();
+
+    const getSelectedRecord = (sourceRecord) => {
+      const admissionId = Number(
+        sourceRecord?.admissionId || 0
+      );
+
+      if (!admissionId) {
+        return null;
+      }
+
+      if (!selectedByAdmissionId.has(admissionId)) {
+        selectedByAdmissionId.set(admissionId, {
+          ...sourceRecord,
+
+          /*
+           * Shuru mein teeno fields hidden/missing rakhein.
+           * Sirf jis field mein ye admission highest hai,
+           * wahi field neeche assign hogi.
+           */
+          familyNumber: "?",
+          verificationNumber: "?",
+          registrationNumber: "?",
+
+          rawFamilyNumber: "",
+          rawVerificationNumber: "",
+          rawRegistrationNumber: "",
+
+          missingFamilyNumber: true,
+          missingVerificationNumber: true,
+          missingRegistrationNumber: true,
+
+          highestNumber: 0,
+          copyText: "",
+        });
+      }
+
+      return selectedByAdmissionId.get(admissionId);
+    };
+
+    /*
+     * Selected admission mein sirf wohi number assign hoga
+     * jisme woh admission maximum hai.
+     *
+     * Misal:
+     * Admission A ka Family maximum hai to uska sirf FAM aaye.
+     * Admission B ka Verification maximum hai to uska sirf VERIF aaye.
+     */
+    const assignHighestField = (
+      sourceRecord,
+      fieldName
+    ) => {
+      if (!sourceRecord) {
+        return;
+      }
+
+      const selectedRecord =
+        getSelectedRecord(sourceRecord);
+
+      if (!selectedRecord) {
+        return;
+      }
+
+      if (fieldName === "family") {
+        selectedRecord.familyNumber =
+          sourceRecord.familyNumber;
+
+        selectedRecord.rawFamilyNumber =
+          sourceRecord.rawFamilyNumber;
+
+        selectedRecord.missingFamilyNumber = false;
+      }
+
+      if (fieldName === "verification") {
+        selectedRecord.verificationNumber =
+          sourceRecord.verificationNumber;
+
+        selectedRecord.rawVerificationNumber =
+          sourceRecord.rawVerificationNumber;
+
+        selectedRecord.missingVerificationNumber = false;
+      }
+
+      if (fieldName === "registration") {
+        selectedRecord.registrationNumber =
+          sourceRecord.registrationNumber;
+
+        selectedRecord.rawRegistrationNumber =
+          sourceRecord.rawRegistrationNumber;
+
+        selectedRecord.missingRegistrationNumber = false;
+      }
+    };
+
+    assignHighestField(
+      highestFamilyRecord,
+      "family"
+    );
+
+    assignHighestField(
+      highestVerificationRecord,
+      "verification"
+    );
+
+    assignHighestField(
+      highestRegistrationRecord,
+      "registration"
+    );
+
+    /*
+     * Final widget records banayein.
+     *
+     * Agar ek hi admission mein teeno maximum numbers hain
+     * to teeno values usi ek row mein show hongi.
+     *
+     * Agar numbers different admissions mein hain
+     * to har admission apni separate row mein show hoga.
+     */
+    const records = [
+      ...selectedByAdmissionId.values(),
+    ]
+      .map((record) => {
+        const highestNumber =
+          getAccountsNumberNoteHighestNumber(
+            record.rawFamilyNumber,
+            record.rawVerificationNumber,
+            record.rawRegistrationNumber
+          );
+
+        const copyText = [
+          `Entry: ${record.entryNumber}`,
+
+          record.studentName
+            ? `Student: ${record.studentName}`
+            : "",
+
+          !record.missingFamilyNumber
+            ? `FAM: ${record.familyNumber}`
+            : "",
+
+          !record.missingVerificationNumber
+            ? `VERIF: ${record.verificationNumber}`
+            : "",
+
+          !record.missingRegistrationNumber
+            ? `REG: ${record.registrationNumber}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" | ");
+
+        return {
+          ...record,
+          highestNumber,
+          copyText,
+        };
+      })
+      .sort((a, b) => {
         if (b.highestNumber !== a.highestNumber) {
           return b.highestNumber - a.highestNumber;
         }
@@ -2310,16 +2868,46 @@ function getAccountsNumberNoteData(user = null) {
         }
 
         return b.admissionId - a.admissionId;
-      })[0] || null;
+      });
+
+    /*
+     * Backward compatibility ke liye latestHighest property
+     * bhi available rahegi.
+     */
+    const latestHighest =
+      records[0] || null;
 
     return {
       enabled: true,
+
+      /*
+       * Sidebar templates ye object use karengi.
+       */
+      highestNumbers,
+
+      /*
+       * Right Notepad templates ye object use karengi.
+       */
+      latestNumbers,
+
+      sidebarHighest:
+        highestNumbers,
+
+      notepadLatest:
+        latestNumbers,
+
+      /*
+       * Temporary old-template compatibility.
+       */
       latestHighest,
       records,
       total: records.length,
     };
   } catch (err) {
-    console.error("getAccountsNumberNoteData error:", err.message);
+    console.error(
+      "getAccountsNumberNoteData error:",
+      err.message
+    );
 
     return {
       ...empty,
@@ -2954,6 +3542,14 @@ function requireLogin(req, res, next) {
     res.locals.user = req.session.user;
     res.locals.perms = req.perms;
 
+    // Can View / Can Edit permission helpers are available in every EJS view.
+    res.locals.columnViewPermissionKeys = COLUMN_VIEW_PERMISSION_KEYS;
+    res.locals.editableColumnViewKeys = EDITABLE_COLUMN_VIEW_KEYS;
+    res.locals.columnEditPermissionKeys = COLUMN_EDIT_PERMISSION_KEYS;
+    res.locals.getColumnEditPermissionKey = getColumnEditPermissionKey;
+    res.locals.canViewColumn = canViewColumn;
+    res.locals.canEditColumn = canEditColumn;
+
     // ✅ School Accounts Dept + Super Admin ke liye latest verification/registration note data
     res.locals.accountsNumberNote = getAccountsNumberNoteData(req.session.user);
   } catch {}
@@ -2962,31 +3558,394 @@ function requireLogin(req, res, next) {
 }
 
 // ================== PERMISSIONS HELPERS ==================
-const isOn = (v) => {
-  // ✅ handle duplicate inputs (hidden + checkbox)
-  if (Array.isArray(v)) {
-    // usually ["", "on"] => take last
-    v = v[v.length - 1];
+const isOn = (value) => {
+  let finalValue = value;
+
+  // Hidden input + checkbox dono aayein to last value use karo.
+  if (Array.isArray(finalValue)) {
+    finalValue = finalValue[finalValue.length - 1];
   }
-  return v === "on" || v === "true" || v === true || v === 1 || v === "1";
+
+  return (
+    finalValue === "on" ||
+    finalValue === "true" ||
+    finalValue === true ||
+    finalValue === 1 ||
+    finalValue === "1"
+  );
 };
 
+const hasOwnPermissionKey = (source, key) =>
+  Object.prototype.hasOwnProperty.call(source || {}, key);
 
-// ✅ default = all false
-const DEFAULT_PERMS = Object.fromEntries(PERMISSION_KEYS.map((k) => [k, false]));
+// Existing col* keys ab Can View permissions hain.
+const COLUMN_VIEW_PERMISSION_KEYS = PERMISSION_KEYS.filter((key) =>
+  String(key || "").startsWith("col")
+);
 
-// ✅ Always return ONLY new keys (col*/btn*) and never fall back to old "true" defaults
-function getPerm(user) {
-  const p = {
-    ...DEFAULT_PERMS,
-    ...(
-      user?.role === "super_admin"
-        ? normalizeDeveloperControlledPermissions(user?.permissions, user?.role)
-        : normalizePermissions(user?.permissions, user?.role)
-    ),
+// Ye calculated/system fields dashboard par view ho sakte hain,
+// lekin direct column editing ke liye available nahi honge.
+const NON_EDITABLE_COLUMN_VIEW_KEYS = new Set([
+  "colProcessedBy",
+  "colPaidUpto",
+  "colTotalFees",
+  "colPendingDues",
+  "colReceivedPayment",
+  "colInvoiceStatus",
+  "colInvoiceStatusTimestamp",
+  "colPaidInvoiceStatus",
+  "colPaidInvoiceStatusTimestamp",
+  "colActionButtons",
+]);
+
+const EDITABLE_COLUMN_VIEW_KEYS = COLUMN_VIEW_PERMISSION_KEYS.filter(
+  (key) => !NON_EDITABLE_COLUMN_VIEW_KEYS.has(key)
+);
+
+function getColumnEditPermissionKey(viewPermissionKey = "") {
+  const cleanKey = String(viewPermissionKey || "").trim();
+
+  if (!cleanKey.startsWith("col") || cleanKey.length <= 3) {
+    return "";
+  }
+
+  return `edit${cleanKey.slice(3)}`;
+}
+
+const COLUMN_EDIT_PERMISSION_KEYS = EDITABLE_COLUMN_VIEW_KEYS.map(
+  getColumnEditPermissionKey
+).filter(Boolean);
+
+const ALL_PERMISSION_KEYS = [
+  ...PERMISSION_KEYS,
+  ...COLUMN_EDIT_PERMISSION_KEYS,
+];
+
+const DEFAULT_PERMS = Object.fromEntries(
+  ALL_PERMISSION_KEYS.map((key) => [key, false])
+);
+
+function getRawPermissionsObject(rawPermissions = {}) {
+  if (typeof rawPermissions === "string") {
+    return safeJsonParse(rawPermissions) || {};
+  }
+
+  return rawPermissions && typeof rawPermissions === "object"
+    ? rawPermissions
+    : {};
+}
+
+function normalizeViewEditPermissions(rawPermissions = {}, role = "agent") {
+  const source = getRawPermissionsObject(rawPermissions);
+
+  const normalizedBase =
+    role === "super_admin"
+      ? Object.fromEntries(
+          PERMISSION_KEYS.map((key) => [key, isOn(source[key])])
+        )
+      : normalizePermissions(source, role);
+
+  const permissions = { ...DEFAULT_PERMS };
+
+  for (const key of PERMISSION_KEYS) {
+    permissions[key] = isOn(normalizedBase?.[key]);
+  }
+
+  // Existing users ke JSON me edit* keys nahi hongi.
+  // Unka current working edit access safely preserve rahega.
+  const hasViewEditSchema = COLUMN_EDIT_PERMISSION_KEYS.some((key) =>
+    hasOwnPermissionKey(source, key)
+  );
+
+  for (const viewKey of EDITABLE_COLUMN_VIEW_KEYS) {
+    const editKey = getColumnEditPermissionKey(viewKey);
+
+    const requestedEdit = hasViewEditSchema
+      ? isOn(source[editKey])
+      : permissions[viewKey];
+
+    // Can Edit kabhi bhi Can View ke baghair ON nahi ho sakta.
+    permissions[editKey] = !!permissions[viewKey] && requestedEdit;
+  }
+
+  return permissions;
+}
+
+function getPermissionBodyValue(incoming = {}, key = "") {
+  const aliases = {
+    colStudentName: ["colStudentName", "colStudent"],
+    colFatherName: ["colFatherName", "colFather"],
+    btnUpdateRow: [
+      "btnUpdateRow",
+      "canUpdateAdmissions",
+      "canUpdateAccounts",
+    ],
+    btnPdf: ["btnPdf", "canDownloadPdf"],
+    btnBilling: [
+      "btnBilling",
+      "canOpenBilling",
+      "canSaveBilling",
+    ],
+    btnWhatsApp: ["btnWhatsApp", "canSendWhatsApp"],
+    btnUpload: ["btnUpload", "canUploadFiles"],
   };
 
-  // ✅ Auto-derive view flags from allowed UI (so agent never gets blocked wrongly)
+  const candidateKeys = aliases[key] || [key];
+
+  for (const candidateKey of candidateKeys) {
+    if (hasOwnPermissionKey(incoming, candidateKey)) {
+      return incoming[candidateKey];
+    }
+  }
+
+  return undefined;
+}
+
+function clampChildPermissionsToParent(
+  requestedPermissions = {},
+  parentPermissions = {}
+) {
+  const requested = {
+    ...DEFAULT_PERMS,
+    ...requestedPermissions,
+  };
+
+  const parent = {
+    ...DEFAULT_PERMS,
+    ...parentPermissions,
+  };
+
+  const finalPermissions = { ...DEFAULT_PERMS };
+
+  for (const key of PERMISSION_KEYS) {
+    finalPermissions[key] = !!parent[key] && !!requested[key];
+  }
+
+  for (const viewKey of EDITABLE_COLUMN_VIEW_KEYS) {
+    const editKey = getColumnEditPermissionKey(viewKey);
+
+    finalPermissions[editKey] =
+      !!finalPermissions[viewKey] &&
+      !!parent[editKey] &&
+      !!requested[editKey];
+  }
+
+  return finalPermissions;
+}
+
+function buildPermissionsFromBody(
+  body = {},
+  role = "agent",
+  {
+    defaultViewColumns = false,
+    parentPermissions = null,
+    existingPermissions = null,
+    fullAccess = false,
+  } = {}
+) {
+  const incoming =
+    body?.permissions && typeof body.permissions === "object"
+      ? body.permissions
+      : body || {};
+
+  const prepared = {};
+
+  const hasAnySubmittedViewColumn = COLUMN_VIEW_PERMISSION_KEYS.some((key) =>
+    hasOwnPermissionKey(incoming, key)
+  );
+
+  for (const key of PERMISSION_KEYS) {
+    const isViewColumn = COLUMN_VIEW_PERMISSION_KEYS.includes(key);
+    const submittedValue = getPermissionBodyValue(incoming, key);
+
+    prepared[key] = fullAccess
+      ? true
+      : isViewColumn && defaultViewColumns && !hasAnySubmittedViewColumn
+        ? true
+        : isOn(submittedValue);
+  }
+
+  const hasAnySubmittedEditPermission = COLUMN_EDIT_PERMISSION_KEYS.some(
+    (key) => hasOwnPermissionKey(incoming, key)
+  );
+
+  const existingNormalized = existingPermissions
+    ? normalizeViewEditPermissions(existingPermissions, role)
+    : null;
+
+  for (const viewKey of EDITABLE_COLUMN_VIEW_KEYS) {
+    const editKey = getColumnEditPermissionKey(viewKey);
+
+    prepared[editKey] = fullAccess
+      ? true
+      : !hasAnySubmittedEditPermission && existingNormalized
+        ? !!existingNormalized[editKey]
+        : isOn(getPermissionBodyValue(incoming, editKey));
+  }
+
+  let permissions = normalizeViewEditPermissions(prepared, role);
+
+  if (parentPermissions) {
+    permissions = clampChildPermissionsToParent(
+      permissions,
+      parentPermissions
+    );
+  }
+
+  return permissions;
+}
+
+function canViewColumn(perms = {}, viewPermissionKey = "") {
+  return !!perms?.[viewPermissionKey];
+}
+
+function canEditColumn(perms = {}, viewPermissionKey = "") {
+  const editPermissionKey = getColumnEditPermissionKey(viewPermissionKey);
+
+  if (!editPermissionKey) return false;
+
+  return !!perms?.[viewPermissionKey] && !!perms?.[editPermissionKey];
+}
+
+function sanitizeAdmissionUpdateBodyByPermissions(
+  body = {},
+  row = {},
+  perms = {}
+) {
+  const safeBody = { ...(body || {}) };
+
+  const lockAliases = (viewKey, aliases, fallbackValue = "") => {
+    if (canEditColumn(perms, viewKey)) return;
+
+    for (const alias of aliases) {
+      safeBody[alias] = fallbackValue ?? "";
+    }
+  };
+
+  lockAliases("colStatus", ["status"], row.status || "");
+  lockAliases("colFeeStatus", ["feeStatus"], row.feeStatus || "");
+  lockAliases("colDept", ["dept"], row.dept || "");
+
+  lockAliases(
+    "colStudentName",
+    ["student", "student_name", "studentName"],
+    row.student_name || ""
+  );
+
+  lockAliases(
+    "colFatherName",
+    ["father", "father_name", "fatherName"],
+    row.father_name || ""
+  );
+
+  lockAliases(
+    "colFatherEmail",
+    ["father_email", "fatherEmail"],
+    row.father_email || ""
+  );
+
+  lockAliases("colGrade", ["grade"], row.grade || "");
+
+  lockAliases(
+    "colTuitionGrade",
+    ["tuitionGrade", "tuition_grade"],
+    row.tuition_grade || ""
+  );
+
+  lockAliases("colPhone", ["phone"], row.phone || "");
+
+  lockAliases(
+    "colPaymentStatus",
+    [
+      "paymentStatus",
+      "accounts_payment_status",
+      "accountsPaymentStatus",
+      "fee_status",
+    ],
+    row.accounts_payment_status || ""
+  );
+
+  lockAliases(
+    "colPaidUpto",
+    ["paidUpto", "accounts_paid_upto", "accountsPaidUpto"],
+    row.accounts_paid_upto || ""
+  );
+
+  lockAliases(
+    "colVerificationNumber",
+    [
+      "verificationNumber",
+      "verification_number",
+      "accounts_verification_number",
+      "verificationNumber2",
+      "secondVerificationNumber",
+      "accounts_verification_number_2",
+    ],
+    row.accounts_verification_number || ""
+  );
+
+  lockAliases(
+    "colRegistrationNumber",
+    [
+      "registrationNumber",
+      "registration_number",
+      "accounts_registration_number",
+    ],
+    row.accounts_registration_number || ""
+  );
+
+  lockAliases(
+    "colFamilyNumber",
+    ["familyNumber", "family_number", "accounts_family_number"],
+    row.accounts_family_number || ""
+  );
+
+  lockAliases(
+    "colRegistrationFee",
+    ["registrationFee", "admission_registration_fee"],
+    row.admission_registration_fee || ""
+  );
+
+  lockAliases(
+    "colFees",
+    ["fees", "admission_fees", "monthlyFee", "baseFee"],
+    row.admission_fees || ""
+  );
+
+  lockAliases(
+    "colCurrency",
+    ["currency", "currency_code", "currencyCode"],
+    row.currency_code || ""
+  );
+
+  lockAliases(
+    "colBank",
+    ["bank", "bank_name", "bankName"],
+    row.bank_name || ""
+  );
+
+  lockAliases(
+    "colMonth",
+    ["month", "admission_month"],
+    row.admission_month || ""
+  );
+
+  lockAliases(
+    "colComment",
+    ["comment", "admission_comment", "admissionComment"],
+    row.admission_comment || ""
+  );
+
+  return safeBody;
+}
+
+function getPerm(user) {
+  const p = normalizeViewEditPermissions(
+    user?.permissions,
+    user?.role || "agent"
+  );
+
+  // Auto-derive panel visibility from final Can View permissions.
   const anyAccountsUi =
     p.colPaymentStatus ||
     p.colPaidUpto ||
@@ -3026,10 +3985,9 @@ function getPerm(user) {
     p.btnWhatsApp ||
     p.btnUpdateRow;
 
-  // if these keys exist in DB fine, otherwise we still set them
   p.viewAccounts = !!(p.viewAccounts || anyAccountsUi);
   p.viewAdmissions = !!(p.viewAdmissions || anyAdmissionsUi);
-  p.viewManagement = !!(p.viewManagement || p.viewManagement);
+  p.viewManagement = !!p.viewManagement;
 
   return p;
 }
@@ -3559,8 +4517,12 @@ function humanizeAuditKey(value = "") {
 function getAuditPermissionLabel(key = "") {
   const cleanKey = String(key || "").trim();
 
+  if (cleanKey.startsWith("edit")) {
+    return `${humanizeAuditKey(cleanKey.slice(4))} - Can Edit`;
+  }
+
   if (cleanKey.startsWith("col")) {
-    return `${humanizeAuditKey(cleanKey.slice(3))} Column`;
+    return `${humanizeAuditKey(cleanKey.slice(3))} - Can View`;
   }
 
   if (cleanKey.startsWith("btn")) {
@@ -3595,7 +4557,7 @@ function getAuditPermissionState(rawPermissions = {}) {
       : rawPermissions || {};
 
   return Object.fromEntries(
-    PERMISSION_KEYS.map((key) => [
+    ALL_PERMISSION_KEYS.map((key) => [
       key,
       auditPermissionEnabled(source[key]),
     ])
@@ -3767,7 +4729,7 @@ function buildUserAuditChanges(
     afterRow?.permissions
   );
 
-  for (const key of PERMISSION_KEYS) {
+  for (const key of ALL_PERMISSION_KEYS) {
     if (
       beforePermissions[key] === afterPermissions[key]
     ) {
@@ -3777,9 +4739,11 @@ function buildUserAuditChanges(
     changes.push({
       key: `permissions.${key}`,
       label: getAuditPermissionLabel(key),
-      category: key.startsWith("col")
-        ? "column_permission"
-        : "button_permission",
+      category: key.startsWith("edit")
+        ? "column_edit_permission"
+        : key.startsWith("col")
+          ? "column_view_permission"
+          : "button_permission",
       before: beforePermissions[key] ? "On" : "Off",
       after: afterPermissions[key] ? "On" : "Off",
     });
@@ -4220,31 +5184,68 @@ function syncFamilyVerificationAndFamilyNumber({
 
     const targetIdSet = new Set(targetIds);
 
-    const accountsNumberNoteChangedTargetIds = [
+       const verificationChangedTargetIds = [
       ...new Set(
         targetRows
           .filter((familyRow) => {
-            const familyRowId = Number(familyRow?.id || 0);
+            const familyRowId =
+              Number(familyRow?.id || 0);
 
-            if (!familyRowId || !targetIdSet.has(familyRowId)) {
+            if (
+              !familyRowId ||
+              !targetIdSet.has(familyRowId)
+            ) {
               return false;
             }
 
-            const verificationChanged =
+            return (
               canSyncVerification &&
               normalizeAccountsNumberNoteValue(
-                familyRow?.accounts_verification_number || ""
-              ) !== normalizeAccountsNumberNoteValue(verificationNumber || "");
+                familyRow
+                  ?.accounts_verification_number ||
+                ""
+              ) !==
+                normalizeAccountsNumberNoteValue(
+                  verificationNumber || ""
+                )
+            );
+          })
+          .map((familyRow) =>
+            Number(familyRow.id || 0)
+          )
+          .filter(Boolean)
+      ),
+    ];
 
-            const familyChanged =
+    const familyChangedTargetIds = [
+      ...new Set(
+        targetRows
+          .filter((familyRow) => {
+            const familyRowId =
+              Number(familyRow?.id || 0);
+
+            if (
+              !familyRowId ||
+              !targetIdSet.has(familyRowId)
+            ) {
+              return false;
+            }
+
+            return (
               canSyncFamilyNumber &&
               normalizeAccountsNumberNoteValue(
-                familyRow?.accounts_family_number || ""
-              ) !== normalizeAccountsNumberNoteValue(familyNumber || "");
-
-            return verificationChanged || familyChanged;
+                familyRow
+                  ?.accounts_family_number ||
+                ""
+              ) !==
+                normalizeAccountsNumberNoteValue(
+                  familyNumber || ""
+                )
+            );
           })
-          .map((familyRow) => Number(familyRow.id || 0))
+          .map((familyRow) =>
+            Number(familyRow.id || 0)
+          )
           .filter(Boolean)
       ),
     ];
@@ -4256,11 +5257,30 @@ function syncFamilyVerificationAndFamilyNumber({
         AND COALESCE(is_deleted, 0) = 0
     `).run(params);
 
-    if (accountsNumberNoteChangedTargetIds.length) {
-      markAccountsNumberNoteUpdated(
-        accountsNumberNoteChangedTargetIds,
-        user
-      );
+    if (verificationChangedTargetIds.length) {
+      markAccountsNumberFieldsUpdated({
+        admissionIds:
+          verificationChangedTargetIds,
+
+        fieldKeys:
+          ["verification"],
+
+        actorUser:
+          user,
+      });
+    }
+
+    if (familyChangedTargetIds.length) {
+      markAccountsNumberFieldsUpdated({
+        admissionIds:
+          familyChangedTargetIds,
+
+        fieldKeys:
+          ["family"],
+
+        actorUser:
+          user,
+      });
     }
 
     return targetIds;
@@ -7188,21 +8208,360 @@ function fetchAdmissionsPage({ dept = null, page = 1, limit = 200, perms = null,
 }
 
 /* ==================== OVERVIEW HELPERS ==================== */
-function buildOverviewData(filters = {}) {
-  const safeFilters = {
-    startDate: String(filters.startDate || "").trim(),
-    endDate: String(filters.endDate || "").trim(),
-    day: String(filters.day || "").trim(),
-    month: String(filters.month || "").trim(),
-    year: String(filters.year || "").trim(),
-    department: String(filters.department || "all").trim().toLowerCase(),
-    status: String(filters.status || "all").trim(),
-    feeStatus: String(filters.feeStatus || "all").trim(),
-    billingStatus: String(filters.billingStatus || "all").trim(),
-    currency: String(filters.currency || "all").trim(),
-        q: String(filters.q || "").trim(),
-    processedBy: String(filters.processedBy || "all").trim(),
+function getOverviewPermissionState(perms = {}) {
+  const source =
+    perms && typeof perms === "object"
+      ? perms
+      : {};
+
+  const enabled = (key) =>
+    isOn(source[key]);
+
+  const state = {
+    status: enabled("colStatus"),
+    feeStatus: enabled("colFeeStatus"),
+    dept: enabled("colDept"),
+    student: enabled("colStudentName"),
+    father: enabled("colFatherName"),
+    fatherEmail: enabled("colFatherEmail"),
+    phone: enabled("colPhone"),
+    processedBy: enabled("colProcessedBy"),
+    paymentStatus: enabled("colPaymentStatus"),
+    registrationNumber: enabled("colRegistrationNumber"),
+    familyNumber: enabled("colFamilyNumber"),
+    fees: enabled("colFees"),
+    currency: enabled("colCurrency"),
+    month: enabled("colMonth"),
+    totalFees: enabled("colTotalFees"),
+    pendingDues: enabled("colPendingDues"),
+    receivedPayment: enabled("colReceivedPayment"),
+    invoiceStatus: enabled("colInvoiceStatus"),
+    invoiceStatusTimestamp:
+      enabled("colInvoiceStatusTimestamp"),
+    paidInvoiceStatus:
+      enabled("colPaidInvoiceStatus"),
+    paidInvoiceStatusTimestamp:
+      enabled("colPaidInvoiceStatusTimestamp"),
   };
+
+  state.admissionCounts =
+    !!(
+      state.student ||
+      state.dept ||
+      state.status ||
+      state.feeStatus ||
+      state.processedBy ||
+      state.registrationNumber ||
+      state.phone ||
+      state.paymentStatus ||
+      state.fees ||
+      state.currency ||
+      state.month ||
+      state.pendingDues ||
+      state.receivedPayment
+    );
+
+  state.searchText =
+    !!(
+      state.student ||
+      state.registrationNumber ||
+      state.phone ||
+      state.processedBy
+    );
+
+  state.billingStatusFilter =
+    !!(
+      state.paymentStatus ||
+      state.invoiceStatus ||
+      state.paidInvoiceStatus
+    );
+
+  return state;
+}
+
+function getOverviewRequestValue(value) {
+  if (Array.isArray(value)) {
+    return value[value.length - 1];
+  }
+
+  return value;
+}
+
+function cleanOverviewServerFilter(
+  value,
+  fallback = ""
+) {
+  const clean = String(
+    getOverviewRequestValue(value) ?? ""
+  ).trim();
+
+  if (
+    !clean ||
+    clean.toLowerCase() === "all"
+  ) {
+    return fallback;
+  }
+
+  return clean;
+}
+
+function cleanOverviewDateFilter(value) {
+  const clean =
+    cleanOverviewServerFilter(value, "");
+
+  return /^\d{4}-\d{2}-\d{2}$/.test(clean)
+    ? clean
+    : "";
+}
+
+function clampOverviewFiltersToPermissions(
+  filters = {},
+  overviewAccess = {}
+) {
+  const departmentValue =
+    cleanOverviewServerFilter(
+      filters.department,
+      "all"
+    ).toLowerCase();
+
+  const allowedDepartments =
+    new Set([
+      "all",
+      "school",
+      "tuition",
+      "quran",
+    ]);
+
+  const cleanDay =
+    cleanOverviewServerFilter(
+      filters.day,
+      ""
+    );
+
+  const cleanMonth =
+    cleanOverviewServerFilter(
+      filters.month,
+      ""
+    );
+
+  const cleanYear =
+    cleanOverviewServerFilter(
+      filters.year,
+      ""
+    );
+
+  const day =
+    /^(0?[1-9]|[12]\d|3[01])$/.test(cleanDay)
+      ? String(Number(cleanDay))
+      : "";
+
+  const month =
+    /^(0?[1-9]|1[0-2])$/.test(cleanMonth)
+      ? String(Number(cleanMonth))
+      : "";
+
+  const year =
+    /^\d{4}$/.test(cleanYear)
+      ? cleanYear
+      : "";
+
+  return {
+    startDate:
+      overviewAccess.admissionCounts
+        ? cleanOverviewDateFilter(
+            filters.startDate ||
+            filters.fromDate
+          )
+        : "",
+
+    endDate:
+      overviewAccess.admissionCounts
+        ? cleanOverviewDateFilter(
+            filters.endDate ||
+            filters.toDate
+          )
+        : "",
+
+    day:
+      overviewAccess.admissionCounts
+        ? day
+        : "",
+
+    month:
+      overviewAccess.admissionCounts
+        ? month
+        : "",
+
+    year:
+      overviewAccess.admissionCounts
+        ? year
+        : "",
+
+    department:
+      overviewAccess.dept &&
+      allowedDepartments.has(
+        departmentValue
+      )
+        ? departmentValue
+        : "all",
+
+    status:
+      overviewAccess.status
+        ? cleanOverviewServerFilter(
+            filters.status,
+            "all"
+          )
+        : "all",
+
+    feeStatus:
+      overviewAccess.feeStatus
+        ? cleanOverviewServerFilter(
+            filters.feeStatus,
+            "all"
+          )
+        : "all",
+
+    billingStatus:
+      overviewAccess.billingStatusFilter
+        ? cleanOverviewServerFilter(
+            filters.billingStatus,
+            "all"
+          )
+        : "all",
+
+    currency:
+      overviewAccess.currency
+        ? cleanOverviewServerFilter(
+            filters.currency,
+            "all"
+          )
+        : "all",
+
+    q:
+      overviewAccess.searchText
+        ? cleanOverviewServerFilter(
+            filters.q,
+            ""
+          )
+        : "",
+
+    processedBy:
+      overviewAccess.processedBy
+        ? cleanOverviewServerFilter(
+            filters.processedBy,
+            "all"
+          )
+        : "all",
+
+    page:
+      Math.max(
+        parseInt(
+          getOverviewRequestValue(
+            filters.page
+          ),
+          10
+        ) || 1,
+        1
+      ),
+  };
+}
+
+function getOverviewSearchableText(
+  row = {},
+  overviewAccess = {}
+) {
+  const values = [];
+
+  if (overviewAccess.student) {
+    values.push(row.student_name);
+  }
+
+  if (overviewAccess.father) {
+    values.push(row.father_name);
+  }
+
+  if (overviewAccess.fatherEmail) {
+    values.push(row.father_email);
+  }
+
+  if (overviewAccess.phone) {
+    values.push(
+      row.phone,
+      row.guardian_whatsapp
+    );
+  }
+
+  if (overviewAccess.registrationNumber) {
+    values.push(
+      row.accounts_registration_number
+    );
+  }
+
+  if (overviewAccess.familyNumber) {
+    values.push(
+      row.accounts_family_number
+    );
+  }
+
+  if (overviewAccess.dept) {
+    values.push(row.dept);
+  }
+
+  if (overviewAccess.status) {
+    values.push(row.status);
+  }
+
+  if (overviewAccess.feeStatus) {
+    values.push(row.feeStatus);
+  }
+
+  if (overviewAccess.processedBy) {
+    values.push(row.processed_by);
+  }
+
+  if (overviewAccess.admissionCounts) {
+    values.push(row.registration_date);
+  }
+
+  if (overviewAccess.month) {
+    values.push(row.admission_month);
+  }
+
+  if (overviewAccess.currency) {
+    values.push(row.currency_code);
+  }
+
+  if (overviewAccess.invoiceStatus) {
+    values.push(
+      row.admission_invoice_status
+    );
+  }
+
+  if (overviewAccess.paidInvoiceStatus) {
+    values.push(
+      row.admission_paid_invoice_status
+    );
+  }
+
+  return values
+    .map((value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase()
+    )
+    .filter(Boolean)
+    .join(" ");
+}
+
+function buildOverviewData(filters = {}, perms = {}) {
+  const overviewAccess =
+    getOverviewPermissionState(perms);
+
+  const safeFilters =
+    clampOverviewFiltersToPermissions(
+      filters,
+      overviewAccess
+    );
 
   const rows = db.prepare(`
   SELECT *
@@ -7210,8 +8569,6 @@ function buildOverviewData(filters = {}) {
   WHERE COALESCE(is_deleted, 0) = 0
   ORDER BY id DESC
 `).all();
-  console.log("OVERVIEW raw admissions:", rows.length);
-console.log("OVERVIEW filters:", safeFilters);
 
   const statusOptions = getOptions("status_options");
   const feeOptions = getOptions("payment_status_options");
@@ -7342,37 +8699,47 @@ console.log("OVERVIEW filters:", safeFilters);
         if (safeFilters.processedBy !== "all" && processedBy !== safeFilters.processedBy) return false;
 
     if (q) {
-      const searchableText = [
-        row.id,
-        row.student_name,
-        row.father_name,
-        row.father_email,
-        row.phone,
-        row.guardian_whatsapp,
-        row.accounts_registration_number,
-        row.accounts_family_number,
-        row.dept,
-        row.status,
-        row.feeStatus,
-        row.processed_by,
-        row.registration_date,
-        row.admission_month,
-        row.currency_code,
-        row.admission_invoice_status,
-        row.admission_paid_invoice_status,
-      ].map((x) => String(x || "").toLowerCase()).join(" ");
+      const searchableText =
+        getOverviewSearchableText(
+          row,
+          overviewAccess
+        );
 
-      if (!searchableText.includes(q)) return false;
+      if (!searchableText.includes(q)) {
+        return false;
+      }
     }
     if (safeFilters.billingStatus !== "all") {
-      const wanted = safeFilters.billingStatus;
-      const { billingArr } = getBillingSnapshot(row);
-      const hasMatch =
-        invoiceStatus === wanted ||
-        paidInvoiceStatus === wanted ||
-        billingArr.some((x) => normalizeText(x.status) === wanted);
+      const wanted =
+        safeFilters.billingStatus;
 
-      if (!hasMatch) return false;
+      const { billingArr } =
+        getBillingSnapshot(row);
+
+      const hasInvoiceStatusMatch =
+        overviewAccess.invoiceStatus &&
+        invoiceStatus === wanted;
+
+      const hasPaidInvoiceStatusMatch =
+        overviewAccess.paidInvoiceStatus &&
+        paidInvoiceStatus === wanted;
+
+      const hasMonthlyBillingStatusMatch =
+        overviewAccess.paymentStatus &&
+        billingArr.some(
+          (item) =>
+            normalizeText(item.status) ===
+            wanted
+        );
+
+      const hasMatch =
+        hasInvoiceStatusMatch ||
+        hasPaidInvoiceStatusMatch ||
+        hasMonthlyBillingStatusMatch;
+
+      if (!hasMatch) {
+        return false;
+      }
     }
 
     if (!matchesDateFilters(row)) return false;
@@ -7380,7 +8747,6 @@ console.log("OVERVIEW filters:", safeFilters);
     return true;
   });
 
-  console.log("OVERVIEW filtered admissions:", filteredRows.length);
 
   const departmentStats = {
     school: {
@@ -7455,16 +8821,21 @@ console.log("OVERVIEW filters:", safeFilters);
   let totalPartiallyPaidAdmissions = 0;
   let totalUnpaidAdmissions = 0;
   let totalNoPaymentAdmissions = 0;
-    let invoiceTimestampTotals = 0;
+  let invoiceStatusTimestampTotals = 0;
+  let paidInvoiceStatusTimestampTotals = 0;
 
   const pendingDueAdmissions = [];
   const noPaymentAdmissions = [];
   const recentBillingChanges = [];
   const recentAdmissions = [];
 
-  const page = parseInt(filters.page) || 1;
-const limit = 10;
-const offset = (page - 1) * limit;
+  const page = Math.max(
+    Number(safeFilters.page || 1),
+    1
+  );
+
+  const limit = 10;
+  const offset = (page - 1) * limit;
 
 
   const activeWords = ["active", "running", "enrolled", "paid"];
@@ -7490,28 +8861,50 @@ const offset = (page - 1) * limit;
 
     const isoMonth = yyyy !== "Unknown" ? `${yyyy}-${mm}` : "Unknown";
     const isoDay = yyyy !== "Unknown" ? `${yyyy}-${mm}-${dd}` : "Unknown";
-        const processedByName = normalizeText(row.processed_by || "") || "Not Set";
+            const processedByName =
+      normalizeText(
+        row.processed_by || ""
+      ) || "Not Set";
 
     totalAdmissions += 1;
-        const processedOld = processedByMap.get(processedByName) || {
-      name: processedByName,
-      total: 0,
-      school: 0,
-      tuition: 0,
-      quran: 0,
-      latestAdmissionDate: "",
-    };
+
+    const processedOld =
+      processedByMap.get(processedByName) || {
+        name: processedByName,
+        total: 0,
+        school: 0,
+        tuition: 0,
+        quran: 0,
+        latestDate: "",
+      };
 
     processedOld.total += 1;
-    if (dept === "school") processedOld.school += 1;
-    if (dept === "tuition") processedOld.tuition += 1;
-    if (dept === "quran") processedOld.quran += 1;
 
-    if (!processedOld.latestAdmissionDate || String(registrationDate || "") > String(processedOld.latestAdmissionDate || "")) {
-      processedOld.latestAdmissionDate = registrationDate || "";
+    if (dept === "school") {
+      processedOld.school += 1;
     }
 
-    processedByMap.set(processedByName, processedOld);
+    if (dept === "tuition") {
+      processedOld.tuition += 1;
+    }
+
+    if (dept === "quran") {
+      processedOld.quran += 1;
+    }
+
+    if (
+      !processedOld.latestDate ||
+      String(registrationDate || "") >
+        String(processedOld.latestDate || "")
+    ) {
+      processedOld.latestDate =
+        registrationDate || "";
+    }
+
+    processedByMap.set(
+      processedByName,
+      processedOld
+    );
 
     const dailyOld = dailyAdmissionMap.get(isoDay) || {
       date: isoDay,
@@ -7574,8 +8967,19 @@ const offset = (page - 1) * limit;
       paidInvoiceStatusMap.set(paidInvoiceStatusValue, old);
     }
 
-    if (invoiceStatusTimestamp) invoiceTimestampTotals += 1;
-    if (paidInvoiceStatusTimestamp) invoiceTimestampTotals += 1;
+    if (
+      overviewAccess.invoiceStatusTimestamp &&
+      invoiceStatusTimestamp
+    ) {
+      invoiceStatusTimestampTotals += 1;
+    }
+
+    if (
+      overviewAccess.paidInvoiceStatusTimestamp &&
+      paidInvoiceStatusTimestamp
+    ) {
+      paidInvoiceStatusTimestampTotals += 1;
+    }
     const hasAnyBilling = Array.isArray(billingArr) && billingArr.length > 0;
     if (hasAnyBilling) totalBilledAdmissions += 1;
 
@@ -7868,38 +9272,101 @@ const offset = (page - 1) * limit;
     const recentAdmissionsPageData = recentAdmissions.slice(offset, offset + limit);
   const totalPages = Math.max(Math.ceil(recentAdmissions.length / limit), 1);
 
-  const missingInsights = [
-    {
-      label: "Missing Processed By",
-      total: filteredRows.filter((r) => !normalizeText(r.processed_by)).length,
-      hint: "Admissions where processed_by is empty",
-    },
-    {
-      label: "Missing Registration Number",
-      total: filteredRows.filter((r) => !normalizeText(r.accounts_registration_number)).length,
-      hint: "Admissions where registration number is empty",
-    },
-    {
-      label: "Missing Family Number",
-      total: filteredRows.filter((r) => !normalizeText(r.accounts_family_number)).length,
-      hint: "Admissions where family number is empty",
-    },
-    {
-      label: "Missing Phone",
-      total: filteredRows.filter((r) => !normalizeText(r.phone || r.guardian_whatsapp)).length,
-      hint: "Admissions where contact number is empty",
-    },
-    {
-      label: "Missing Fee",
-      total: filteredRows.filter((r) => safeNumber(r.admission_fees) <= 0).length,
-      hint: "Admissions where monthly fee is empty or zero",
-    },
-    {
-      label: "Missing Currency",
-      total: filteredRows.filter((r) => !normalizeText(r.currency_code)).length,
-      hint: "Admissions where currency is empty",
-    },
-  ];
+   const missingInsights = [];
+
+  const addMissingInsight = (
+    allowed,
+    title,
+    total,
+    hint
+  ) => {
+    if (!allowed) {
+      return;
+    }
+
+    const finalTotal =
+      Number(total || 0);
+
+    missingInsights.push({
+      title,
+      total: finalTotal,
+      description:
+        `${finalTotal} — ${hint}`,
+    });
+  };
+
+  addMissingInsight(
+    overviewAccess.processedBy,
+    "Missing Processed By",
+    filteredRows.filter(
+      (row) =>
+        !normalizeText(
+          row.processed_by
+        )
+    ).length,
+    "Admissions where processed_by is empty"
+  );
+
+  addMissingInsight(
+    overviewAccess.registrationNumber,
+    "Missing Registration Number",
+    filteredRows.filter(
+      (row) =>
+        !normalizeText(
+          row.accounts_registration_number
+        )
+    ).length,
+    "Admissions where registration number is empty"
+  );
+
+  addMissingInsight(
+    overviewAccess.familyNumber,
+    "Missing Family Number",
+    filteredRows.filter(
+      (row) =>
+        !normalizeText(
+          row.accounts_family_number
+        )
+    ).length,
+    "Admissions where family number is empty"
+  );
+
+  addMissingInsight(
+    overviewAccess.phone,
+    "Missing Phone",
+    filteredRows.filter(
+      (row) =>
+        !normalizeText(
+          row.phone ||
+          row.guardian_whatsapp
+        )
+    ).length,
+    "Admissions where contact number is empty"
+  );
+
+  addMissingInsight(
+    overviewAccess.fees,
+    "Missing Fee",
+    filteredRows.filter(
+      (row) =>
+        safeNumber(
+          row.admission_fees
+        ) <= 0
+    ).length,
+    "Admissions where monthly fee is empty or zero"
+  );
+
+  addMissingInsight(
+    overviewAccess.currency,
+    "Missing Currency",
+    filteredRows.filter(
+      (row) =>
+        !normalizeText(
+          row.currency_code
+        )
+    ).length,
+    "Admissions where currency is empty"
+  );
 
   return {
     summaryCards,
@@ -7923,9 +9390,34 @@ const offset = (page - 1) * limit;
       recentAdmissionsPageData,
 currentPage: page,
 totalPages,
-      invoiceStatusTotals: invoiceStatusMap.size,
-      paidInvoiceStatusTotals: paidInvoiceStatusMap.size,
-      invoiceTimestampTotals,
+      invoiceStatusTotals:
+        overviewAccess.invoiceStatus
+          ? invoiceStatusMap.size
+          : 0,
+
+      paidInvoiceStatusTotals:
+        overviewAccess.paidInvoiceStatus
+          ? paidInvoiceStatusMap.size
+          : 0,
+
+      invoiceStatusTimestampTotals:
+        overviewAccess.invoiceStatusTimestamp
+          ? invoiceStatusTimestampTotals
+          : 0,
+
+      paidInvoiceStatusTimestampTotals:
+        overviewAccess.paidInvoiceStatusTimestamp
+          ? paidInvoiceStatusTimestampTotals
+          : 0,
+
+      invoiceTimestampTotals:
+        overviewAccess.invoiceStatusTimestamp &&
+        overviewAccess.paidInvoiceStatusTimestamp
+          ? (
+              invoiceStatusTimestampTotals +
+              paidInvoiceStatusTimestampTotals
+            )
+          : 0,
       invoiceStatusBreakdown: Array.from(invoiceStatusMap.values()).sort((a, b) => b.total - a.total),
       paidInvoiceStatusBreakdown: Array.from(paidInvoiceStatusMap.values()).sort((a, b) => b.total - a.total),
       pendingDueAdmissions,
@@ -10997,6 +12489,14 @@ const updatedRow = db
   .prepare("SELECT * FROM admissions WHERE id = ?")
   .get(id);
 
+markAccountsNumberFieldsIfChanged({
+  admissionId: id,
+  beforeRow: row,
+  afterRow: updatedRow,
+  actorUser: user,
+  fields: ["verification"],
+});
+
 const billingChanges = buildBillingAuditChanges(
   beforeBilling,
   billingJson
@@ -11228,6 +12728,8 @@ function handleSuperFullUpdate(req, res) {
     return res.status(403).send("Not allowed");
   }
 
+  const perms = getPerm(user);
+
   const id = parseInt(req.params.id, 10);
   const row = getActiveAdmissionById(id);
 
@@ -11236,6 +12738,12 @@ function handleSuperFullUpdate(req, res) {
   }
 
   const beforeRowForAudit = { ...row };
+
+  req.body = sanitizeAdmissionUpdateBodyByPermissions(
+    req.body,
+    row,
+    perms
+  );
 
  const {
   status,
@@ -11350,10 +12858,7 @@ const incomingAdmissionMonth =
 const oldAdmissionMonth = String(row.admission_month || "").trim();
 
 const canChangeAdmissionMonth =
-  user?.role === "super_admin" ||
-  (typeof perms !== "undefined" && perms?.colMonth) ||
-  (typeof canAccounts !== "undefined" && canAccounts) ||
-  (typeof canAdmissions !== "undefined" && canAdmissions);
+  canEditColumn(perms, "colMonth");
 
 const shouldApplyNotAdmittedBeforeAdmissionMonth =
   canChangeAdmissionMonth &&
@@ -11573,21 +13078,36 @@ admission_total_paid: String(receivedPaymentAfterAdmissionMonth || 0),
     admissionId: id,
     verificationNumber: updated.accounts_verification_number,
     familyNumber: updated.accounts_family_number,
-    canSyncVerification: true,
-    canSyncFamilyNumber: true,
+    canSyncVerification: canEditColumn(
+      perms,
+      "colVerificationNumber"
+    ),
+    canSyncFamilyNumber: canEditColumn(
+      perms,
+      "colFamilyNumber"
+    ),
   });
 
   const afterRow =
     getActiveAdmissionById(id) ||
     { ...row, ...updated };
 
-  markAccountsNumberNoteIfChanged({
-    admissionId: id,
-    beforeRow: beforeRowForAudit,
-    afterRow,
-    actorUser: user,
-  });
+ markAccountsNumberFieldsIfChanged({
+  admissionId: id,
+  beforeRow: beforeRowForAudit,
+  afterRow,
+  actorUser: user,
 
+/*
+ * Primary admission ke teeno account-number fields
+ * before/after comparison se independently track honge.
+ */
+  fields: [
+  "family",
+  "verification",
+  "registration",
+],
+});
   const after =
     buildPipelineSnapshotFromRow(afterRow);
 
@@ -12153,19 +13673,26 @@ if (!rows.length) rows = [row];
       const rrow = getActiveAdmissionById(full.id);
 
       if (rrow) {
-  safe.accounts = safe.accounts || {};
-  safe.accounts.verificationNumber = String(rrow.accounts_verification_number || "").trim();
-  safe.accounts_verification_number = String(rrow.accounts_verification_number || "").trim();
+        if (canViewColumn(perms, "colVerificationNumber")) {
+          safe.accounts = safe.accounts || {};
+          safe.accounts.verificationNumber = String(
+            rrow.accounts_verification_number || ""
+          ).trim();
+          safe.accounts_verification_number = String(
+            rrow.accounts_verification_number || ""
+          ).trim();
+        }
 
-  // ✅ Details page read-only: Bank should show even if colBank permission is off
-  safe.admission = safe.admission || {};
-  safe.admission.bankName = String(rrow.bank_name || "").trim();
-  safe.admission.bank_name = String(rrow.bank_name || "").trim();
-  safe.bankName = String(rrow.bank_name || "").trim();
-  safe.bank_name = String(rrow.bank_name || "").trim();
+        if (canViewColumn(perms, "colBank")) {
+          safe.admission = safe.admission || {};
+          safe.admission.bankName = String(rrow.bank_name || "").trim();
+          safe.admission.bank_name = String(rrow.bank_name || "").trim();
+          safe.bankName = String(rrow.bank_name || "").trim();
+          safe.bank_name = String(rrow.bank_name || "").trim();
+        }
 
-  attachComputedMonthFees(rrow, safe, billingYear);
-}
+        attachComputedMonthFees(rrow, safe, billingYear);
+      }
 
       return safe;
     });
@@ -12175,18 +13702,25 @@ if (!rows.length) rows = [row];
 
     const primary = maskAdmissionMapped(primaryFull, perms);
 
-    primary.accounts = primary.accounts || {};
-primary.accounts.verificationNumber = String(row.accounts_verification_number || "").trim();
-primary.accounts_verification_number = String(row.accounts_verification_number || "").trim();
+    if (canViewColumn(perms, "colVerificationNumber")) {
+      primary.accounts = primary.accounts || {};
+      primary.accounts.verificationNumber = String(
+        row.accounts_verification_number || ""
+      ).trim();
+      primary.accounts_verification_number = String(
+        row.accounts_verification_number || ""
+      ).trim();
+    }
 
-// ✅ Details page read-only: Bank should show even if colBank permission is off
-primary.admission = primary.admission || {};
-primary.admission.bankName = String(row.bank_name || "").trim();
-primary.admission.bank_name = String(row.bank_name || "").trim();
-primary.bankName = String(row.bank_name || "").trim();
-primary.bank_name = String(row.bank_name || "").trim();
+    if (canViewColumn(perms, "colBank")) {
+      primary.admission = primary.admission || {};
+      primary.admission.bankName = String(row.bank_name || "").trim();
+      primary.admission.bank_name = String(row.bank_name || "").trim();
+      primary.bankName = String(row.bank_name || "").trim();
+      primary.bank_name = String(row.bank_name || "").trim();
+    }
 
-attachComputedMonthFees(row, primary, billingYear);
+    attachComputedMonthFees(row, primary, billingYear);
 
     return res.render(viewName, {
   user,
@@ -12286,9 +13820,13 @@ const familyLabelForView =
   mode,
   admissionId: primaryRow?.id || "",
   familyNumber: familyLabelForView,
-  masterVerificationNumber: String(primaryRow?.accounts_verification_number || "").trim(),
-  masterBankName: String(primaryRow?.bank_name || "").trim(),
-  rows,
+  masterVerificationNumber: canViewColumn(perms, "colVerificationNumber")
+    ? String(primaryRow?.accounts_verification_number || "").trim()
+    : "",
+  masterBankName: canViewColumn(perms, "colBank")
+    ? String(primaryRow?.bank_name || "").trim()
+    : "",
+  rows: rows.map((row) => maskAdmissionDbRow(row, perms)),
   feeRows,
   paidRows,
   excludedRows,
@@ -13240,9 +14778,10 @@ const totalInputAmount = registrationAmount + amount;
       "saved",
     ].includes(bankDecision);
 
-    const canEditVerificationNumber =
-      user?.role === "super_admin" ||
-      perms?.colVerificationNumber === true;
+    const canEditVerificationNumber = canEditColumn(
+      perms,
+      "colVerificationNumber"
+    );
 
     if (
       totalInputAmount > 0 &&
@@ -13255,9 +14794,7 @@ const totalInputAmount = registrationAmount + amount;
       });
     }
 
-    const canEditBank =
-      user?.role === "super_admin" ||
-      perms?.colBank === true;
+    const canEditBank = canEditColumn(perms, "colBank");
 
     const cleanCollectionAccount = String(collectionAccount || "").trim();
 
@@ -13523,19 +15060,45 @@ const applied = Array.from(appliedMap.values())
     remainingAmount: registrationRemaining + remaining,
   }));
 
-const accountsNumberNoteTouchedIds =
-  !shouldUseMasterVerification && cleanVerificationNumber
-    ? applied
-        .filter((item) => Number(item.usedAmount || 0) > 0)
-        .map((item) => Number(item.admissionId || 0))
-        .filter(Boolean)
-    : [];
+/*
+ * Fee Collection helpers top-level Verification Number
+ * change kar sakte hain. Har affected admission ka
+ * before/after compare karke sirf actual verification
+ * change ka timestamp update hoga.
+ */
+for (const item of applied) {
+  const itemAdmissionId =
+    Number(item.admissionId || 0);
 
-if (accountsNumberNoteTouchedIds.length) {
-  markAccountsNumberNoteUpdated(
-    accountsNumberNoteTouchedIds,
-    user
-  );
+  if (!itemAdmissionId) {
+    continue;
+  }
+
+  const beforeRow =
+    targetRows.find(
+      (targetRow) =>
+        Number(targetRow?.id || 0) ===
+        itemAdmissionId
+    ) || {};
+
+  const afterRow =
+    getActiveAdmissionById(
+      itemAdmissionId
+    ) || {};
+
+  markAccountsNumberFieldsIfChanged({
+    admissionId:
+      itemAdmissionId,
+
+    beforeRow,
+    afterRow,
+
+    actorUser:
+      user,
+
+    fields:
+      ["verification"],
+  });
 }
 
     const refreshedRows =      mode === "family"
@@ -16205,13 +17768,18 @@ app.post("/api/admissions/update-row", checkApiKey, (req, res) => {
       `)
       .get(row.id);
 
-    markAccountsNumberNoteIfChanged({
+     markAccountsNumberFieldsIfChanged({
       admissionId: row.id,
       beforeRow: row,
       afterRow: updatedRow,
-      actorUser: user,
-    });
 
+      /*
+       * Ye API route normal requireLogin use nahi karti,
+       * is liye undefined "user" use nahi karna.
+       */
+      actorUser:
+        req.session?.user || null,
+    });
     emitAdmissionChanged(req, {
       type: "admission_update_row",
       admissionId: row.id,
@@ -17469,6 +19037,12 @@ inserted++;
 
       insertMany(parsedRows);
 
+      /*
+       * Imported legacy rows me field-wise latest timestamps
+       * missing hon to safe fallback se backfill ho jayein.
+       */
+      ensureAccountsNumberNoteColumns();
+
       safeUnlink(absPath);
 
       req.session.flash = {
@@ -17516,70 +19090,6 @@ app.use((err, req, res, next) => {
   }
 
   return next(err);
-});
-/* ==================== API SETTINGS ROUTES ==================== */
-
-app.get("/api-settings", requireLogin, requireSuperAdmin, (req, res) => {
-  try {
-    const user = req.session.user;
-    const settings = getAllApiSettings();
-
-    return res.render("api-settings", {
-      user,
-      perms: getPerm(user),
-      pageTitle: "API Settings",
-      settings,
-    });
-  } catch (err) {
-    console.error("GET /api-settings error:", err);
-    return res.status(500).send("Server error");
-  }
-});
-
-app.post("/api-settings/update", requireLogin, requireSuperAdmin, (req, res) => {
-  try {
-    const user = req.session.user;
-    const body = req.body || {};
-
-    const allowedKeys = [
-      "APP_BASE_URL",
-      "ADMISSIONS_API_KEY",
-      "N8N_WHATSAPP_WEBHOOK_URL",
-      "N8N_BILLING_WEBHOOK_URL",
-    ];
-
-    for (const key of allowedKeys) {
-      if (Object.prototype.hasOwnProperty.call(body, key)) {
-        updateApiSetting(key, body[key], user?.name || "Super Admin");
-      }
-    }
-
-    logAudit("api_settings_updated", user, {
-      details: {
-        updatedKeys: allowedKeys.filter((key) =>
-          Object.prototype.hasOwnProperty.call(body, key)
-        ),
-      },
-    });
-
-    req.session.flash = {
-      type: "success",
-      title: "API Settings Updated",
-      message: "API settings have been updated successfully.",
-    };
-
-    return res.redirect("/api-settings");
-  } catch (err) {
-    console.error("POST /api-settings/update error:", err);
-
-    req.session.flash = {
-      type: "danger",
-      title: "Update Failed",
-      message: "API settings could not be updated.",
-    };
-
-    return res.redirect("/api-settings");
-  }
 });
 /* ==================== DEVELOPER ROUTES ==================== */
 
@@ -17775,7 +19285,9 @@ app.post("/api/developer/users/create", requireDeveloperLogin, async (req, res) 
       `IVS-${crypto.randomBytes(4).toString("hex")}`;
 
     const passwordHash = await bcrypt.hash(temporaryPassword, 10);
-    const permissions = getDeveloperPermissionsFromBody(req.body, role);
+    const permissions = getDeveloperPermissionsFromBody(req.body, role, {
+      defaultViewColumns: true,
+    });
 
     const result = db.prepare(`
       INSERT INTO users
@@ -17883,7 +19395,7 @@ app.post("/api/developer/users/:id/permissions", requireDeveloperLogin, (req, re
     }
 
     const existing = db.prepare(`
-      SELECT id, name, email, role, dept
+      SELECT id, name, email, role, dept, permissions
       FROM users
       WHERE id = ?
       LIMIT 1
@@ -17896,12 +19408,19 @@ app.post("/api/developer/users/:id/permissions", requireDeveloperLogin, (req, re
       });
     }
 
-    let permissions = getDeveloperPermissionsFromBody(req.body, existing.role);
+    let permissions = getDeveloperPermissionsFromBody(
+      req.body,
+      existing.role,
+      { existingPermissions: existing.permissions }
+    );
 
     if (req.body.fullAccess === true || req.body.fullAccess === "true") {
-  permissions = Object.fromEntries(PERMISSION_KEYS.map((key) => [key, true]));
-  permissions = normalizeDeveloperControlledPermissions(permissions, existing.role);
-}
+      permissions = getDeveloperPermissionsFromBody(
+        {},
+        existing.role,
+        { fullAccess: true }
+      );
+    }
 
     db.prepare(`
       UPDATE users
@@ -19132,13 +20651,9 @@ app.get("/api/accounts-number-note", requireLogin, (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: "Could not load latest verification and registration numbers",
-      accountsNumberNote: {
-        enabled: false,
-        latestHighest: null,
-        records: [],
-        total: 0,
-      },
+      message: "Could not load accounts number summary",
+      accountsNumberNote:
+  makeEmptyAccountsNumberNoteData(false),
     });
   }
 });
@@ -19403,10 +20918,14 @@ app.post("/dashboard/admin/users/:id/edit", requireLogin, (req, res) => {
   // ✅ IMPORTANT: admin can only grant permissions that admin has
   const parentPerms = getPerm(current);
 
-  const newPerms = {};
-  for (const key of PERMISSION_KEYS) {
-    newPerms[key] = parentPerms[key] ? isOn(req.body[key]) : false;
-  }
+  const newPerms = buildPermissionsFromBody(
+    req.body,
+    row.role,
+    {
+      parentPermissions: parentPerms,
+      existingPermissions: row.permissions,
+    }
+  );
 
   const beforeUserForAudit = { ...row };
 
@@ -19747,10 +21266,14 @@ agentType = normalizeAgentTypeForDept(agentType, dept || user?.dept || "");
 
     const parentPerms = getPerm(user);
 
-    const finalPerms = {};
-    for (const key of PERMISSION_KEYS) {
-      finalPerms[key] = parentPerms[key] ? isOn(req.body[key]) : false;
-    }
+    const finalPerms = buildPermissionsFromBody(
+      req.body,
+      newRole,
+      {
+        defaultViewColumns: true,
+        parentPermissions: parentPerms,
+      }
+    );
 
     const passwordHash = await bcrypt.hash(password, 10);
 
@@ -20639,54 +22162,11 @@ const isPipelineRole = role === "sub_agent" || role === "agent";
     ? (isSchoolAccountsDeptValue(safeDept) ? "all" : "team")
     : "own";
 
- const permissions = {
-  // Columns
-  colStatus: isOn(req.body.colStatus),
-  colFeeStatus: isOn(req.body.colFeeStatus),
-  colDept: isOn(req.body.colDept),
-  colStudentName: isOn(req.body.colStudentName || req.body.colStudent),
-  colFatherName: isOn(req.body.colFatherName || req.body.colFather),
-  colFatherEmail: isOn(req.body.colFatherEmail),
-  colGrade: isOn(req.body.colGrade),
-  colTuitionGrade: isOn(req.body.colTuitionGrade),
-  colPhone: isOn(req.body.colPhone),
-  colProcessedBy: isOn(req.body.colProcessedBy),
-  colPaymentStatus: isOn(req.body.colPaymentStatus),
-  colPaidUpto: isOn(req.body.colPaidUpto),
-  colVerificationNumber: isOn(req.body.colVerificationNumber),
-  colRegistrationNumber: isOn(req.body.colRegistrationNumber),
-  colFamilyNumber: isOn(req.body.colFamilyNumber),
-  colRegistrationFee: isOn(req.body.colRegistrationFee),
-  colFees: isOn(req.body.colFees),
-  colCurrency: isOn(req.body.colCurrency),
-  colBank: isOn(req.body.colBank),
-  colMonth: isOn(req.body.colMonth),
-  colTotalFees: isOn(req.body.colTotalFees),
-  colPendingDues: isOn(req.body.colPendingDues),
-  colReceivedPayment: isOn(req.body.colReceivedPayment),
-  colComment: isOn(req.body.colComment),
-  colInvoiceStatus: isOn(req.body.colInvoiceStatus),
-colInvoiceStatusTimestamp: isOn(req.body.colInvoiceStatusTimestamp),
-colPaidInvoiceStatus: isOn(req.body.colPaidInvoiceStatus),
-colPaidInvoiceStatusTimestamp: isOn(req.body.colPaidInvoiceStatusTimestamp),
-  colActionButtons: isOn(req.body.colActionButtons),
-
-  // Buttons
-  btnEditRow: isOn(req.body.btnEditRow),
-  btnDetails: isOn(req.body.btnDetails),
-  btnUpdateRow: isOn(req.body.btnUpdateRow || req.body.canUpdateAdmissions || req.body.canUpdateAccounts),
-  btnPdf: isOn(req.body.btnPdf || req.body.canDownloadPdf),
-  btnBilling: isOn(req.body.btnBilling || req.body.canOpenBilling || req.body.canSaveBilling),
-  btnWhatsApp: isOn(req.body.btnWhatsApp || req.body.canSendWhatsApp),
-  btnUpload: isOn(req.body.btnUpload || req.body.canUploadFiles),
-  btnFiles: isOn(req.body.btnFiles),
-
-canDeleteFiles: isOn(req.body.canDeleteFiles),
-canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
-};
-
-
-
+  const permissions = buildPermissionsFromBody(
+  req.body,
+  role,
+  { defaultViewColumns: true }
+);
 
   const result = db
     .prepare(
@@ -20939,52 +22419,11 @@ const allowedAgentTypes = getAllowedAgentTypesForDept(safeDept);
     role === "admin"
       ? (isSchoolAccountsDeptValue(safeDept) ? "all" : "team")
       : "own";
- const permissions = {
-  // Columns
-  colStatus: isOn(req.body.colStatus),
-  colFeeStatus: isOn(req.body.colFeeStatus),
-  colDept: isOn(req.body.colDept),
-  colStudentName: isOn(req.body.colStudentName || req.body.colStudent),
-  colFatherName: isOn(req.body.colFatherName || req.body.colFather),
-  colFatherEmail: isOn(req.body.colFatherEmail),
-  colGrade: isOn(req.body.colGrade),
-  colTuitionGrade: isOn(req.body.colTuitionGrade),
-  colPhone: isOn(req.body.colPhone),
-  colProcessedBy: isOn(req.body.colProcessedBy),
-  colPaymentStatus: isOn(req.body.colPaymentStatus),
-  colPaidUpto: isOn(req.body.colPaidUpto),
-  colVerificationNumber: isOn(req.body.colVerificationNumber),
-  colRegistrationNumber: isOn(req.body.colRegistrationNumber),
-  colFamilyNumber: isOn(req.body.colFamilyNumber),
-  colRegistrationFee: isOn(req.body.colRegistrationFee),
-  colFees: isOn(req.body.colFees),
-  colCurrency: isOn(req.body.colCurrency),
-  colBank: isOn(req.body.colBank),
-  colMonth: isOn(req.body.colMonth),
-    colTotalFees: isOn(req.body.colTotalFees),
-  colPendingDues: isOn(req.body.colPendingDues),
-  colReceivedPayment: isOn(req.body.colReceivedPayment),
-  colComment: isOn(req.body.colComment),
-  colInvoiceStatus: isOn(req.body.colInvoiceStatus),
-colInvoiceStatusTimestamp: isOn(req.body.colInvoiceStatusTimestamp),
-colPaidInvoiceStatus: isOn(req.body.colPaidInvoiceStatus),
-colPaidInvoiceStatusTimestamp: isOn(req.body.colPaidInvoiceStatusTimestamp),
-  colActionButtons: isOn(req.body.colActionButtons),
-
-  // Buttons
-  btnEditRow: isOn(req.body.btnEditRow),
-  btnDetails: isOn(req.body.btnDetails),
-  btnUpdateRow: isOn(req.body.btnUpdateRow || req.body.canUpdateAdmissions || req.body.canUpdateAccounts),
-  btnPdf: isOn(req.body.btnPdf || req.body.canDownloadPdf),
-  btnBilling: isOn(req.body.btnBilling || req.body.canOpenBilling || req.body.canSaveBilling),
-  btnWhatsApp: isOn(req.body.btnWhatsApp || req.body.canSendWhatsApp),
-  btnUpload: isOn(req.body.btnUpload || req.body.canUploadFiles),
-
-  btnFiles: isOn(req.body.btnFiles),
-
-canDeleteFiles: isOn(req.body.canDeleteFiles),
-canDeleteAdmissions: isOn(req.body.canDeleteAdmissions),
-};
+ const permissions = buildPermissionsFromBody(
+  req.body,
+  role,
+  { existingPermissions: existingRow.permissions }
+);
 
 
   const beforeUserForAudit = { ...existingRow };
@@ -21305,50 +22744,101 @@ app.get("/dashboard/super/history", requireLogin, (req, res) => {
   });
 });
 
-app.get("/dashboard/overview", requireLogin, requireSuperAdmin, (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-const limit = 10;
-const offset = (page - 1) * limit;
-  const user = req.session.user;
-  const perms = getPerm(user);
+app.get(
+  "/dashboard/overview",
+  requireLogin,
+  requireSuperAdmin,
+  (req, res) => {
+    const user =
+      req.session.user;
 
-  const filters = {
-    startDate: req.query.startDate || "",
-    endDate: req.query.endDate || "",
-    day: req.query.day || "",
-    month: req.query.month || "",
-    year: req.query.year || "",
-    department: req.query.department || "all",
-    status: req.query.status || "all",
-    feeStatus: req.query.feeStatus || "all",
-    billingStatus: req.query.billingStatus || "all",
-    currency: req.query.currency || "all",
-        q: req.query.q || "",
-    processedBy: req.query.processedBy || "all",
-  };
+    const perms =
+      getPerm(user);
 
-  const overviewData = buildOverviewData(filters);
+    const requestedFilters = {
+      startDate:
+        req.query.startDate ||
+        req.query.fromDate ||
+        "",
 
-  return res.render("overview", {
-  user,
-  perms,
-  pageTitle: "Overview",
-  filters,
-  overviewData,
+      endDate:
+        req.query.endDate ||
+        req.query.toDate ||
+        "",
 
-  // ✅ ADD THIS
-  pagination: {
-    page: page,
-    limit: limit,
-    totalPages: 1, // temporary (baad me dynamic karenge)
-  },
-  pendingDuePagination: {
-  page: page,
-  limit: limit,
-  totalPages: 1,
-},
-});
-});
+      day:
+        req.query.day ||
+        "",
+
+      month:
+        req.query.month ||
+        "",
+
+      year:
+        req.query.year ||
+        "",
+
+      department:
+        req.query.department ||
+        "all",
+
+      status:
+        req.query.status ||
+        "all",
+
+      feeStatus:
+        req.query.feeStatus ||
+        "all",
+
+      billingStatus:
+        req.query.billingStatus ||
+        "all",
+
+      currency:
+        req.query.currency ||
+        "all",
+
+      q:
+        req.query.q ||
+        "",
+
+      processedBy:
+        req.query.processedBy ||
+        "all",
+
+      page:
+        req.query.page ||
+        "1",
+    };
+
+    const overviewData =
+      buildOverviewData(
+        requestedFilters,
+        perms
+      );
+
+    const safeFilters =
+      overviewData?.filters ||
+      clampOverviewFiltersToPermissions(
+        requestedFilters,
+        getOverviewPermissionState(perms)
+      );
+
+    return res.render(
+      "overview",
+      {
+        user,
+        perms,
+        pageTitle: "Overview",
+
+        // Sirf permission-clamped values
+        // template ko wapas bheji jayengi.
+        filters: safeFilters,
+        overviewData,
+      }
+    );
+  }
+);
 
 // Super Admin: filter main dashboard by department
 app.get("/dashboard/super/:dept", requireLogin, (req, res) => {
@@ -21458,6 +22948,12 @@ if (user.role !== "admin" && !perms.btnUpdateRow) {
   }
 
   const beforeRowForAudit = { ...row };
+
+  req.body = sanitizeAdmissionUpdateBodyByPermissions(
+    req.body,
+    row,
+    perms
+  );
 
   const {
     status,
@@ -21573,10 +23069,7 @@ const incomingAdmissionMonth =
 const oldAdmissionMonth = String(row.admission_month || "").trim();
 
 const canChangeAdmissionMonth =
-  user?.role === "super_admin" ||
-  (typeof perms !== "undefined" && perms?.colMonth) ||
-  (typeof canAccounts !== "undefined" && canAccounts) ||
-  (typeof canAdmissions !== "undefined" && canAdmissions);
+  canEditColumn(perms, "colMonth");
 
 const monthColumnChanged =
   canChangeAdmissionMonth &&
@@ -21746,21 +23239,36 @@ admission_month: canAdmissions
     admissionId: id,
     verificationNumber: updated.accounts_verification_number,
     familyNumber: updated.accounts_family_number,
-    canSyncVerification: canAccounts,
-    canSyncFamilyNumber: canAccounts,
+    canSyncVerification: canEditColumn(
+      perms,
+      "colVerificationNumber"
+    ),
+    canSyncFamilyNumber: canEditColumn(
+      perms,
+      "colFamilyNumber"
+    ),
   });
 
       const afterRow =
     getActiveAdmissionById(id) ||
     { ...row, ...updated };
 
-  markAccountsNumberNoteIfChanged({
-    admissionId: id,
-    beforeRow: beforeRowForAudit,
-    afterRow,
-    actorUser: user,
-  });
+  markAccountsNumberFieldsIfChanged({
+  admissionId: id,
+  beforeRow: beforeRowForAudit,
+  afterRow,
+  actorUser: user,
 
+ /*
+ * Primary admission ke teeno account-number fields
+ * before/after comparison se independently track honge.
+ */
+  fields: [
+  "family",
+  "verification",
+  "registration",
+],
+});
   const after =
     buildPipelineSnapshotFromRow(afterRow);
 
@@ -21835,6 +23343,12 @@ app.post("/pipeline/update/:id", requireLogin, requirePerm("btnUpdateRow"), (req
   // ✅ Only update fields that are allowed columns
   const perms = getPerm(user);
 
+  req.body = sanitizeAdmissionUpdateBodyByPermissions(
+    req.body,
+    row,
+    perms
+  );
+
   const {
   status, feeStatus, dept, student, father, father_email, grade, tuitionGrade, phone,
   paymentStatus, paidUpto, verificationNumber, registrationNumber,
@@ -21863,11 +23377,13 @@ if (duplicateReg) {
   });
 }
 
-const resolvedBankName = perms.colBank
+const canEditBank = canEditColumn(perms, "colBank");
+
+const resolvedBankName = canEditBank
   ? pickBankName(req.body, row.bank_name || "")
   : (row.bank_name || "");
 
-if (perms.colBank && resolvedBankName) {
+if (canEditBank && resolvedBankName) {
   const allowedBank = db
     .prepare("SELECT id FROM bank_options WHERE label = ?")
     .get(resolvedBankName);
@@ -21914,10 +23430,7 @@ const incomingAdmissionMonth =
 const oldAdmissionMonth = String(row.admission_month || "").trim();
 
 const canChangeAdmissionMonth =
-  user?.role === "super_admin" ||
-  (typeof perms !== "undefined" && perms?.colMonth) ||
-  (typeof canAccounts !== "undefined" && canAccounts) ||
-  (typeof canAdmissions !== "undefined" && canAdmissions);
+  canEditColumn(perms, "colMonth");
 
 const monthColumnChanged =
   canChangeAdmissionMonth &&
@@ -22067,19 +23580,35 @@ admission_month: perms.colMonth ? (month ?? row.admission_month) : row.admission
     admissionId: id,
     verificationNumber: updated.accounts_verification_number,
     familyNumber: updated.accounts_family_number,
-    canSyncVerification: perms.colVerificationNumber,
-    canSyncFamilyNumber: perms.colFamilyNumber,
+    canSyncVerification: canEditColumn(
+      perms,
+      "colVerificationNumber"
+    ),
+    canSyncFamilyNumber: canEditColumn(
+      perms,
+      "colFamilyNumber"
+    ),
   });
 
   const afterRow =
     getActiveAdmissionById(id) ||
     { ...row, ...updated };
 
-markAccountsNumberNoteIfChanged({
+markAccountsNumberFieldsIfChanged({
   admissionId: id,
   beforeRow: beforeRowForAudit,
   afterRow,
   actorUser: user,
+
+ /*
+ * Primary admission ke teeno account-number fields
+ * before/after comparison se independently track honge.
+ */
+  fields: [
+  "family",
+  "verification",
+  "registration",
+],
 });
 
 const after =
@@ -22467,10 +23996,14 @@ app.post("/dashboard/agent/users/:id/edit", requireLogin, (req, res) => {
 // Extra/tampered permissions from frontend will be ignored.
 const parentPerms = getPerm(user);
 
-const finalPerms = {};
-for (const key of PERMISSION_KEYS) {
-  finalPerms[key] = parentPerms[key] ? isOn(req.body[key]) : false;
-}
+const finalPerms = buildPermissionsFromBody(
+  req.body,
+  owned.role,
+  {
+    parentPermissions: parentPerms,
+    existingPermissions: owned.permissions,
+  }
+);
 
     db.prepare(`
       UPDATE users

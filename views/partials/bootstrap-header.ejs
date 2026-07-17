@@ -537,7 +537,7 @@ html.ivs-ready .ivs-topbar {
       transform: none;
     }
               /* =========================
-       Sidebar Latest Numbers Compact Style
+       Sidebar Highest Numbers Compact Style
        ========================= */
     .sidebar-number-note-card{
       margin: 4px 0 4px;
@@ -954,6 +954,10 @@ html.ivs-ready .ivs-topbar {
       ? accountsNumberNote
       : {
           enabled: false,
+          highestNumbers: null,
+          sidebarHighest: null,
+          latestNumbers: null,
+          notepadLatest: null,
           latestHighest: null,
           records: [],
           total: 0
@@ -967,100 +971,62 @@ html.ivs-ready .ivs-topbar {
       headerAccountsNumberNoteData.enabled
     );
 
-  const sidebarLatestAccountsNumberNote =
-    headerAccountsNumberNoteData.latestHighest || null;
+  /*
+   * Left sidebar sirf database-wide independently highest
+   * Family, Verification aur Registration numbers use karega.
+   *
+   * Ye summary kisi admission/student ke saath linked nahi hai.
+   */
+  const sidebarHighestAccountsNumbers =
+    headerAccountsNumberNoteData.highestNumbers ||
+    headerAccountsNumberNoteData.sidebarHighest ||
+    null;
+
+  const sidebarHighestFamilyNumber =
+    String(
+      sidebarHighestAccountsNumbers?.familyNumber || ''
+    ).trim();
+
+  const sidebarHighestVerificationNumber =
+    String(
+      sidebarHighestAccountsNumbers?.verificationNumber || ''
+    ).trim();
+
+  const sidebarHighestRegistrationNumber =
+    String(
+      sidebarHighestAccountsNumbers?.registrationNumber || ''
+    ).trim();
 
   const sidebarAccountsNumberNoteHasRecord =
-    !!sidebarLatestAccountsNumberNote;
+    !!(
+      sidebarHighestFamilyNumber ||
+      sidebarHighestVerificationNumber ||
+      sidebarHighestRegistrationNumber
+    );
 
-  const sidebarLatestVerificationNumber =
-    String(
-      (
-        sidebarLatestAccountsNumberNote &&
-        (
-          sidebarLatestAccountsNumberNote.verificationNumber ||
-          sidebarLatestAccountsNumberNote.rawVerificationNumber
-        )
-      ) ||
-      ''
-    ).trim() || '?';
-
-  const sidebarLatestRegistrationNumber =
-    String(
-      (
-        sidebarLatestAccountsNumberNote &&
-        (
-          sidebarLatestAccountsNumberNote.registrationNumber ||
-          sidebarLatestAccountsNumberNote.rawRegistrationNumber
-        )
-      ) ||
-      ''
-    ).trim() || '?';
-
-  const sidebarLatestFamilyNumber =
-    String(
-      (
-        sidebarLatestAccountsNumberNote &&
-        (
-          sidebarLatestAccountsNumberNote.familyNumber ||
-          sidebarLatestAccountsNumberNote.rawFamilyNumber ||
-          sidebarLatestAccountsNumberNote.accountsFamilyNumber ||
-          sidebarLatestAccountsNumberNote.accounts_family_number
-        )
-      ) ||
-      ''
-    ).trim() || '?';
-
-  const sidebarMissingVerificationNumber =
-    !sidebarAccountsNumberNoteHasRecord ||
-    sidebarLatestAccountsNumberNote.missingVerificationNumber === true ||
-    sidebarLatestVerificationNumber === '?';
-
-  const sidebarMissingRegistrationNumber =
-    !sidebarAccountsNumberNoteHasRecord ||
-    sidebarLatestAccountsNumberNote.missingRegistrationNumber === true ||
-    sidebarLatestRegistrationNumber === '?';
-
-  const sidebarMissingFamilyNumber =
-    !sidebarAccountsNumberNoteHasRecord ||
-    sidebarLatestAccountsNumberNote.missingFamilyNumber === true ||
-    sidebarLatestFamilyNumber === '?';
-
-  const sidebarLatestEntryNumber =
+  const sidebarHighestAccountsCopyText =
     (
-      sidebarLatestAccountsNumberNote &&
-      (
-        sidebarLatestAccountsNumberNote.entryNumber ||
-        sidebarLatestAccountsNumberNote.entry_number ||
-        sidebarLatestAccountsNumberNote.admissionId ||
-        sidebarLatestAccountsNumberNote.id
-      )
-    ) ||
-    '';
-
-  const sidebarLatestStudentName =
-    (
-      sidebarLatestAccountsNumberNote &&
-      (
-        sidebarLatestAccountsNumberNote.studentName ||
-        sidebarLatestAccountsNumberNote.student_name
-      )
-    ) ||
-    '';
-
-  const sidebarLatestAccountsCopyText =
-    (
-      sidebarLatestAccountsNumberNote &&
-      sidebarLatestAccountsNumberNote.copyText
+      sidebarHighestAccountsNumbers &&
+      sidebarHighestAccountsNumbers.copyText
     )
-      ? sidebarLatestAccountsNumberNote.copyText
+      ? String(
+          sidebarHighestAccountsNumbers.copyText
+        ).trim()
       : [
-          sidebarLatestEntryNumber ? `Entry: ${sidebarLatestEntryNumber}` : '',
-          sidebarLatestStudentName ? `Student: ${sidebarLatestStudentName}` : '',
-          `FAM: ${sidebarLatestFamilyNumber}`,
-          `VERIF: ${sidebarLatestVerificationNumber}`,
-          `REG: ${sidebarLatestRegistrationNumber}`
-        ].filter(Boolean).join(' | ');
+          sidebarHighestFamilyNumber
+            ? `FAM: ${sidebarHighestFamilyNumber}`
+            : '',
+
+          sidebarHighestVerificationNumber
+            ? `VERIF: ${sidebarHighestVerificationNumber}`
+            : '',
+
+          sidebarHighestRegistrationNumber
+            ? `REG: ${sidebarHighestRegistrationNumber}`
+            : ''
+        ]
+          .filter(Boolean)
+          .join(' | ');
 
   const clientUser = {
     id: u.id || null,
@@ -1087,6 +1053,10 @@ html.ivs-ready .ivs-topbar {
   window.IS_SUPER = <%- safeScriptJson(isSuper) %>;
   window.SIDEBAR_ACCOUNTS_NUMBER_NOTE = <%- safeScriptJson(headerAccountsNumberNoteData || {
     enabled: false,
+    highestNumbers: null,
+    sidebarHighest: null,
+    latestNumbers: null,
+    notepadLatest: null,
     latestHighest: null,
     records: [],
     total: 0
@@ -1279,11 +1249,11 @@ html.ivs-ready .ivs-topbar {
         <div
           class="sidebar-number-note-card"
           id="sidebarAccountsNumberNote"
-          data-copy-text="<%= sidebarLatestAccountsCopyText %>"
+          data-copy-text="<%= sidebarHighestAccountsCopyText %>"
           data-has-record="<%= sidebarAccountsNumberNoteHasRecord ? '1' : '0' %>">
 
-                   <div class="sidebar-number-note-title">
-            Latest Fam + Verif + Reg
+          <div class="sidebar-number-note-title">
+            Highest Fam + Verif + Reg
           </div>
 
           <div class="sidebar-number-note-subtitle"></div>
@@ -1298,44 +1268,37 @@ html.ivs-ready .ivs-topbar {
             class="<%= sidebarAccountsNumberNoteHasRecord ? '' : 'd-none' %>"
             id="sidebarAccountsNumberBody">
 
-            <div class="sidebar-number-note-meta" id="sidebarAccountsNumberMeta">
-              <%= [
-                sidebarLatestEntryNumber ? `Entry #${sidebarLatestEntryNumber}` : '',
-                sidebarLatestStudentName || ''
-              ].filter(Boolean).join(' | ') || 'Latest account number' %>
-            </div>
-
             <div class="sidebar-number-note-row">
               <div
-                class="sidebar-number-note-chip <%= sidebarMissingFamilyNumber ? 'missing' : '' %>"
+                class="sidebar-number-note-chip <%= sidebarHighestFamilyNumber ? '' : 'd-none' %>"
                 id="sidebarFamilyChip">
                 <span class="sidebar-number-note-chip-label">FAM</span>
                 <span
                   class="sidebar-number-note-chip-value"
-                  id="sidebarLatestFamilyNumber">
-                  <%= sidebarLatestFamilyNumber %>
+                  id="sidebarHighestFamilyNumber">
+                  <%= sidebarHighestFamilyNumber %>
                 </span>
               </div>
 
               <div
-                class="sidebar-number-note-chip <%= sidebarMissingVerificationNumber ? 'missing' : '' %>"
+                class="sidebar-number-note-chip <%= sidebarHighestVerificationNumber ? '' : 'd-none' %>"
                 id="sidebarVerifChip">
                 <span class="sidebar-number-note-chip-label">VERIF</span>
                 <span
                   class="sidebar-number-note-chip-value"
-                  id="sidebarLatestVerifNumber">
-                  <%= sidebarLatestVerificationNumber %>
+                  id="sidebarHighestVerifNumber">
+                  <%= sidebarHighestVerificationNumber %>
                 </span>
               </div>
 
               <div
-                class="sidebar-number-note-chip <%= sidebarMissingRegistrationNumber ? 'missing' : '' %>"
+                class="sidebar-number-note-chip <%= sidebarHighestRegistrationNumber ? '' : 'd-none' %>"
                 id="sidebarRegChip">
                 <span class="sidebar-number-note-chip-label">REG</span>
                 <span
                   class="sidebar-number-note-chip-value"
-                  id="sidebarLatestRegNumber">
-                  <%= sidebarLatestRegistrationNumber %>
+                  id="sidebarHighestRegNumber">
+                  <%= sidebarHighestRegistrationNumber %>
                 </span>
               </div>
             </div>
@@ -1435,148 +1398,157 @@ html.ivs-ready .ivs-topbar {
       return;
     }
 
-    const emptyEl = document.getElementById('sidebarAccountsNumberEmpty');
+      const emptyEl = document.getElementById('sidebarAccountsNumberEmpty');
     const bodyEl = document.getElementById('sidebarAccountsNumberBody');
-    const metaEl = document.getElementById('sidebarAccountsNumberMeta');
-    const familyEl = document.getElementById('sidebarLatestFamilyNumber');
-    const verifEl = document.getElementById('sidebarLatestVerifNumber');
-    const regEl = document.getElementById('sidebarLatestRegNumber');
+    const familyEl = document.getElementById('sidebarHighestFamilyNumber');
+    const verifEl = document.getElementById('sidebarHighestVerifNumber');
+    const regEl = document.getElementById('sidebarHighestRegNumber');
     const familyChip = document.getElementById('sidebarFamilyChip');
     const verifChip = document.getElementById('sidebarVerifChip');
     const regChip = document.getElementById('sidebarRegChip');
     const copyBtn = document.getElementById('sidebarAccountsNumberCopyBtn');
 
-    function normalizeLatestNote(data) {
-      const latest =
-        data && data.latestHighest
-          ? data.latestHighest
-          : null;
-
-      if (!latest) {
-        return {
-          hasRecord: false,
-          familyNumber: '?',
-          verificationNumber: '?',
-          registrationNumber: '?',
-          missingFamilyNumber: true,
-          missingVerificationNumber: true,
-          missingRegistrationNumber: true,
-          meta: '',
-          copyText: ''
-        };
-      }
-
-      const verificationNumber =
-        String(latest.verificationNumber || latest.rawVerificationNumber || '').trim() || '?';
-
-      const registrationNumber =
-        String(latest.registrationNumber || latest.rawRegistrationNumber || '').trim() || '?';
+    function normalizeHighestNote(data) {
+      const highest =
+        (
+          data &&
+          (
+            data.highestNumbers ||
+            data.sidebarHighest
+          )
+        ) ||
+        null;
 
       const familyNumber =
         String(
-          latest.familyNumber ||
-          latest.rawFamilyNumber ||
-          latest.accountsFamilyNumber ||
-          latest.accounts_family_number ||
-          ''
-        ).trim() || '?';
+          highest?.familyNumber || ''
+        ).trim();
 
-      const entryNumber =
-        latest.entryNumber ||
-        latest.entry_number ||
-        latest.admissionId ||
-        latest.id ||
-        '';
+      const verificationNumber =
+        String(
+          highest?.verificationNumber || ''
+        ).trim();
 
-      const studentName =
-        latest.studentName ||
-        latest.student_name ||
-        '';
+      const registrationNumber =
+        String(
+          highest?.registrationNumber || ''
+        ).trim();
 
-      const missingVerificationNumber =
-        latest.missingVerificationNumber === true ||
-        verificationNumber === '?';
+      const hasFamilyNumber =
+        !!familyNumber;
 
-      const missingRegistrationNumber =
-        latest.missingRegistrationNumber === true ||
-        registrationNumber === '?';
+      const hasVerificationNumber =
+        !!verificationNumber;
 
-      const missingFamilyNumber =
-        latest.missingFamilyNumber === true ||
-        familyNumber === '?';
+      const hasRegistrationNumber =
+        !!registrationNumber;
 
-      const meta = [
-        entryNumber ? `Entry #${entryNumber}` : '',
-        studentName || ''
-      ].filter(Boolean).join(' | ') || 'Latest account number';
+      const hasRecord =
+        hasFamilyNumber ||
+        hasVerificationNumber ||
+        hasRegistrationNumber;
+
+      const fallbackCopyText = [
+        hasFamilyNumber
+          ? `FAM: ${familyNumber}`
+          : '',
+
+        hasVerificationNumber
+          ? `VERIF: ${verificationNumber}`
+          : '',
+
+        hasRegistrationNumber
+          ? `REG: ${registrationNumber}`
+          : ''
+      ]
+        .filter(Boolean)
+        .join(' | ');
 
       const copyText =
-        latest.copyText ||
-        [
-          entryNumber ? `Entry: ${entryNumber}` : '',
-          studentName ? `Student: ${studentName}` : '',
-          `FAM: ${familyNumber}`,
-          `VERIF: ${verificationNumber}`,
-          `REG: ${registrationNumber}`
-        ].filter(Boolean).join(' | ');
+        String(
+          highest?.copyText ||
+          fallbackCopyText
+        ).trim();
 
       return {
-        hasRecord: true,
+        hasRecord,
         familyNumber,
         verificationNumber,
         registrationNumber,
-        missingFamilyNumber,
-        missingVerificationNumber,
-        missingRegistrationNumber,
-        meta,
+        hasFamilyNumber,
+        hasVerificationNumber,
+        hasRegistrationNumber,
         copyText
       };
     }
 
     function renderSidebarNote(data) {
-      const note = normalizeLatestNote(data || {});
+      const note =
+        normalizeHighestNote(data || {});
 
-      card.setAttribute('data-has-record', note.hasRecord ? '1' : '0');
-      card.setAttribute('data-copy-text', note.copyText || '');
+      card.setAttribute(
+        'data-has-record',
+        note.hasRecord ? '1' : '0'
+      );
+
+      card.setAttribute(
+        'data-copy-text',
+        note.copyText || ''
+      );
 
       if (emptyEl) {
-        emptyEl.classList.toggle('d-none', note.hasRecord);
+        emptyEl.classList.toggle(
+          'd-none',
+          note.hasRecord
+        );
       }
 
       if (bodyEl) {
-        bodyEl.classList.toggle('d-none', !note.hasRecord);
+        bodyEl.classList.toggle(
+          'd-none',
+          !note.hasRecord
+        );
       }
 
       if (copyBtn) {
-        copyBtn.disabled = !note.hasRecord;
-      }
-
-      if (metaEl) {
-        metaEl.textContent = note.meta || 'Latest account number';
+        copyBtn.disabled =
+          !note.hasRecord;
       }
 
       if (familyEl) {
-        familyEl.textContent = note.familyNumber;
+        familyEl.textContent =
+          note.familyNumber;
       }
 
       if (verifEl) {
-        verifEl.textContent = note.verificationNumber;
+        verifEl.textContent =
+          note.verificationNumber;
       }
 
       if (regEl) {
-        regEl.textContent = note.registrationNumber;
+        regEl.textContent =
+          note.registrationNumber;
       }
 
       if (familyChip) {
-        familyChip.classList.toggle('missing', !!note.missingFamilyNumber);
+        familyChip.classList.toggle(
+          'd-none',
+          !note.hasFamilyNumber
+        );
       }
 
       if (verifChip) {
-        verifChip.classList.toggle('missing', !!note.missingVerificationNumber);
+        verifChip.classList.toggle(
+          'd-none',
+          !note.hasVerificationNumber
+        );
       }
 
       if (regChip) {
-        regChip.classList.toggle('missing', !!note.missingRegistrationNumber);
+        regChip.classList.toggle(
+          'd-none',
+          !note.hasRegistrationNumber
+        );
       }
     }
 
@@ -1633,6 +1605,10 @@ html.ivs-ready .ivs-topbar {
 
         const noteData = data.accountsNumberNote || {
           enabled: false,
+          highestNumbers: null,
+          sidebarHighest: null,
+          latestNumbers: null,
+          notepadLatest: null,
           latestHighest: null,
           records: [],
           total: 0
@@ -1661,7 +1637,7 @@ html.ivs-ready .ivs-topbar {
         if (copied) {
           copyBtn.innerHTML = '<i class="bi bi-check2-circle"></i><span>Copied</span>';
         } else {
-          prompt('Copy latest family, verification + registration number:', text);
+          prompt('Copy highest family, verification + registration numbers:', text);
           copyBtn.innerHTML = oldHtml;
         }
 
