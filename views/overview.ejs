@@ -400,6 +400,32 @@
     color: #0f172a;
     font-size: .95rem;
   }
+
+    .processed-by-scroll {
+    max-height: 480px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: .35rem;
+    scrollbar-gutter: stable;
+  }
+
+  .processed-by-scroll::-webkit-scrollbar {
+    width: 7px;
+  }
+
+  .processed-by-scroll::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 999px;
+  }
+
+  .processed-by-scroll::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+  }
+
+  .processed-by-scroll::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
   .overview-scroll-box {
     max-height: 250px;
     overflow-y: auto;
@@ -1889,57 +1915,59 @@
             </div>
 
             <% if (processedByStats.length) { %>
-              <div class="row g-2">
-                <% processedByStats.slice(0, 12).forEach((item) => {
-                  const personName =
-                    item.name ||
-                    item.processedBy ||
-                    item.processed_by ||
-                    'Not Assigned';
-                %>
-                  <div class="col-md-6 col-xl-4">
-                    <div class="person-card">
-                      <div class="name">
-                        <i class="bi bi-person-badge me-1 text-danger"></i>
-                        <%= personName %>
-                      </div>
+              <div class="processed-by-scroll">
+                <div class="row g-2">
+                  <% processedByStats.forEach((item) => {
+                    const personName =
+                      item.name ||
+                      item.processedBy ||
+                      item.processed_by ||
+                      'Not Assigned';
+                  %>
+                    <div class="col-md-6 col-xl-4">
+                      <div class="person-card">
+                        <div class="name">
+                          <i class="bi bi-person-badge me-1 text-danger"></i>
+                          <%= personName %>
+                        </div>
 
-                      <div class="person-stats">
-                        <span>
-                          <b><%= item.total || 0 %></b>
-                          Total
-                        </span>
-
-                        <% if (P.col.dept) { %>
+                        <div class="person-stats">
                           <span>
-                            <b><%= item.school || 0 %></b>
-                            School
+                            <b><%= item.total || 0 %></b>
+                            Total
                           </span>
 
-                          <span>
-                            <b><%= item.tuition || 0 %></b>
-                            Tuition
-                          </span>
-                        <% } %>
-                      </div>
+                          <% if (P.col.dept) { %>
+                            <span>
+                              <b><%= item.school || 0 %></b>
+                              School
+                            </span>
 
-                      <div class="mt-2 d-flex justify-content-between align-items-center">
-                        <% if (P.col.dept) { %>
-                          <span class="soft-badge dark-badge">
-                            Quran:
-                            <%= item.quran || 0 %>
-                          </span>
-                        <% } %>
+                            <span>
+                              <b><%= item.tuition || 0 %></b>
+                              Tuition
+                            </span>
+                          <% } %>
+                        </div>
 
-                        <% if (canViewDateAnalytics) { %>
-                          <small class="text-muted">
-                            <%= item.latestDate || item.lastDate || '' %>
-                          </small>
-                        <% } %>
+                        <div class="mt-2 d-flex justify-content-between align-items-center">
+                          <% if (P.col.dept) { %>
+                            <span class="soft-badge dark-badge">
+                              Quran:
+                              <%= item.quran || 0 %>
+                            </span>
+                          <% } %>
+
+                          <% if (canViewDateAnalytics) { %>
+                            <small class="text-muted">
+                              <%= item.latestDate || item.lastDate || '' %>
+                            </small>
+                          <% } %>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                <% }) %>
+                  <% }) %>
+                </div>
               </div>
             <% } else { %>
               <div class="empty-state">
