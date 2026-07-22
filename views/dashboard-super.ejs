@@ -2241,11 +2241,13 @@
         <% if (showActions) { %>
           <div class="admission-card-actions">
 
-            <% if (P.btn.details) { %>
-              <a href="/dashboard/super/admission/<%= a.id %>" class="mini-action-btn mini-dark">
-                <i class="bi bi-eye"></i> Details
-              </a>
-            <% } %>
+           <% if (P.btn.details) { %>
+  <a
+    href="/dashboard/super/admission/<%= a.id %>"
+    class="mini-action-btn mini-dark js-dashboard-details-return-link">
+    <i class="bi bi-eye"></i> Details
+  </a>
+<% } %>
 
                        <% if (P.btn.edit) { %>
                            <a href="/dashboard/super/admission/<%= a.id %>/edit" class="mini-action-btn mini-red js-dashboard-edit-return-link">
@@ -2312,7 +2314,7 @@
             <% if (P.btn.files) { %>
               <a
                 href="<%= _isSuper ? '/dashboard/super/files?admission_id=' + a.id : '/admin/files?admission_id=' + a.id %>"
-                class="mini-action-btn mini-blue">
+                class="mini-action-btn mini-blue js-dashboard-files-return-link">
                 <i class="bi bi-folder2-open"></i> Files
               </a>
             <% } %>
@@ -2475,7 +2477,16 @@
 
           <select
   class="form-select form-select-sm super-pagination-limit"
-  onchange="document.documentElement.classList.add('ivs-page-leaving'); document.documentElement.classList.add('ivs-loading'); setTimeout(() => { window.location.href=this.value; }, 1000);">
+  onchange="
+    if (
+      window.IVSLoader &&
+      typeof window.IVSLoader.navigate === 'function'
+    ) {
+      window.IVSLoader.navigate(this.value);
+    } else {
+      window.location.assign(this.value);
+    }
+  ">
   <option value="<%= buildPageUrl(1, 50) %>" <%= pageLimit === 50 ? 'selected' : '' %>>50</option>
   <option value="<%= buildPageUrl(1, 100) %>" <%= pageLimit === 100 ? 'selected' : '' %>>100</option>
   <option value="<%= buildPageUrl(1, 200) %>" <%= pageLimit === 200 ? 'selected' : '' %>>200</option>
@@ -9025,6 +9036,13 @@ function applyAdmissionPipelineFileFilter(filter) {
     }
 
     function resetBillingFields(defaultFee) {
+      if (
+        typeof window.clearAdmissionsVerificationDuplicateState ===
+        'function'
+      ) {
+        window.clearAdmissionsVerificationDuplicateState();
+      }
+
       months.forEach(month => {
         const statusEl = document.querySelector(`.bill-status[data-month="${month}"]`);
         const amountEl = document.getElementById('bill_' + month);
@@ -9178,6 +9196,235 @@ if (feeLabel) {
 </script>
 
 <script>
+  /*
+   * Super Admin card Billing save.
+   * public/js/admissions.js legacy table rows ko save karta hai.
+   * Card dashboard ka save yahan handle hoga.
+   */
+  (function () {
+    const months = [
+      'january', 'february', 'march', 'april',
+      'may', 'june', 'july', 'august',
+      'september', 'october', 'november', 'december'
+    ];
+
+    function clean(value) {
+      return String(value || '').trim();
+    }
+
+    function showBillingMessage(type, title, message) {
+      if (typeof window.showUploadFlash === 'function') {
+        window.showUploadFlash(type, title, message);
+      } else {
+        alert(message || title || 'Notification');
+      }
+    }
+
+    function getVerificationInputs() {
+      return months
+        .map(month =>
+          document.getElementById('bill_verif_' + month)
+        )
+        .filter(Boolean);
+    }
+
+    function getBillingPayload() {
+      const modalEl =
+        document.getElementById('billingModal');
+
+      const yearSelect =
+        document.getElementById('billingYearSelect');
+
+      const billing = {};
+
+      months.forEach(month => {
+        const statusEl =
+          document.querySelector(
+            `.bill-status[data-month="${month}"]`
+          );
+
+        billing[month] = {
+          status: clean(statusEl?.value),
+
+          amount: clean(
+            document.getElementById(
+              'bill_' + month
+            )?.value
+          ),
+
+          feeOverride: clean(
+            document.getElementById(
+              'bill_fee_' + month
+            )?.value
+          ),
+
+          verification: clean(
+            document.getElementById(
+              'bill_verif_' + month
+            )?.value
+          ),
+
+          bank: clean(
+            document.getElementById(
+              'bill_bank_' + month
+            )?.value
+          )
+        };
+      });
+
+      return {
+        admissionId: clean(
+          modalEl?.getAttribute(
+            'data-current-admission-id'
+          )
+        ),
+
+        year: clean(
+          yearSelect?.value ||
+          new Date().getFullYear()
+        ),
+
+        billing
+      };
+    }
+
+    async function saveBillingData(payload) {
+      const response = await fetch(
+        `/api/billing/${encodeURIComponent(
+          payload.admissionId
+        )}`,
+        {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            year: payload.year,
+            billing: payload.billing
+          })
+        }
+      );
+
+      const data = await response
+        .json()
+        .catch(() => ({}));
+
+      if (!response.ok || !data.success) {
+        const billingError = new Error(
+          data.message ||
+          'Billing save failed'
+        );
+
+        billingError.responseData =
+          data && typeof data === 'object'
+            ? data
+            : {};
+
+        throw billingError;
+      }
+
+      return data;
+    }
+
+    document.addEventListener(
+      'click',
+      async function (event) {
+        const button =
+          event.target.closest('#billSaveBtn');
+
+        if (!button) return;
+
+        event.preventDefault();
+
+        const payload = getBillingPayload();
+
+        if (!payload.admissionId) {
+          showBillingMessage(
+            'danger',
+            'Missing Admission',
+            'Admission ID missing. Please close Billing and open it again.'
+          );
+
+          return;
+        }
+
+        button.disabled = true;
+
+        try {
+          await saveBillingData(payload);
+
+          if (
+            typeof window
+              .clearAdmissionsVerificationDuplicateState ===
+            'function'
+          ) {
+            window
+              .clearAdmissionsVerificationDuplicateState();
+          }
+
+          const modalEl =
+            document.getElementById('billingModal');
+
+          if (
+            modalEl &&
+            typeof bootstrap !== 'undefined'
+          ) {
+            bootstrap.Modal
+              .getInstance(modalEl)
+              ?.hide();
+          }
+
+          setTimeout(function () {
+            showBillingMessage(
+              'success',
+              'Saved',
+              'Data has been saved.'
+            );
+
+            if (
+              typeof window
+                .rebuildAdmissionFilesDropdowns ===
+              'function'
+            ) {
+              window
+                .rebuildAdmissionFilesDropdowns();
+            }
+          }, 250);
+        } catch (error) {
+          console.error(
+            'Super Billing save error:',
+            error
+          );
+
+          const duplicateHandled =
+            typeof window
+              .showAdmissionsDuplicateVerificationConflict ===
+              'function' &&
+            window
+              .showAdmissionsDuplicateVerificationConflict(
+                error,
+                getVerificationInputs()
+              );
+
+          if (!duplicateHandled) {
+            showBillingMessage(
+              'danger',
+              'Save Failed',
+              error.message ||
+              'Billing save failed.'
+            );
+          }
+        } finally {
+          button.disabled = false;
+        }
+      }
+    );
+  })();
+</script>
+
+<script>
   (function () {
     function syncBillingYearText() {
       const yearSelect = document.getElementById('billingYearSelect');
@@ -9270,6 +9517,46 @@ if (feeLabel) {
       );
     }
 
+    window.getDashboardCurrentStateUrl =
+      getDashboardReturnUrlForEdit;
+
+    function prepareDashboardReturnUrl() {
+      const returnUrl =
+        getDashboardReturnUrlForEdit();
+
+      if (!returnUrl) {
+        return "";
+      }
+
+      try {
+        /*
+         * Browser history ka current Dashboard entry
+         * bhi same active filter URL par update hoga.
+         * Is se Details/Edit/Files se history Back
+         * exact filter par return karega.
+         */
+        window.history.replaceState(
+          window.history.state,
+          "",
+          returnUrl
+        );
+
+        if (
+          typeof window.saveViewportState ===
+          "function"
+        ) {
+          window.saveViewportState();
+        }
+      } catch (err) {
+        console.error(
+          "prepareDashboardReturnUrl error:",
+          err.message
+        );
+      }
+
+      return returnUrl;
+    }
+
     function attachDashboardReturnToEditLink(link) {
       if (!link) return;
 
@@ -9279,9 +9566,14 @@ if (feeLabel) {
           window.location.origin
         );
 
+        const returnUrl =
+          prepareDashboardReturnUrl();
+
+        if (!returnUrl) return;
+
         editUrl.searchParams.set(
           "returnTo",
-          getDashboardReturnUrlForEdit()
+          returnUrl
         );
 
         link.setAttribute(
@@ -9306,6 +9598,104 @@ if (feeLabel) {
         if (!editLink) return;
 
         attachDashboardReturnToEditLink(editLink);
+      },
+      true
+    );
+
+    function attachDashboardReturnToDetailsLink(link) {
+      if (!link) return;
+
+      try {
+        const detailsUrl = new URL(
+          link.getAttribute("href") || "",
+          window.location.origin
+        );
+
+        const returnUrl =
+          prepareDashboardReturnUrl();
+
+        if (!returnUrl) return;
+
+        detailsUrl.searchParams.set(
+          "returnTo",
+          returnUrl
+        );
+
+        link.setAttribute(
+          "href",
+          detailsUrl.pathname +
+            detailsUrl.search +
+            detailsUrl.hash
+        );
+      } catch (err) {
+        console.error(
+          "attachDashboardReturnToDetailsLink error:",
+          err.message
+        );
+      }
+    }
+
+    document.addEventListener(
+      "click",
+      function (event) {
+        const detailsLink = event.target.closest(
+          ".js-dashboard-details-return-link"
+        );
+
+        if (!detailsLink) return;
+
+        attachDashboardReturnToDetailsLink(
+          detailsLink
+        );
+      },
+      true
+    );
+
+    function attachDashboardReturnToFilesLink(link) {
+      if (!link) return;
+
+      try {
+        const filesUrl = new URL(
+          link.getAttribute("href") || "",
+          window.location.origin
+        );
+
+        const returnUrl =
+          prepareDashboardReturnUrl();
+
+        if (!returnUrl) return;
+
+        filesUrl.searchParams.set(
+          "returnTo",
+          returnUrl
+        );
+
+        link.setAttribute(
+          "href",
+          filesUrl.pathname +
+            filesUrl.search +
+            filesUrl.hash
+        );
+      } catch (err) {
+        console.error(
+          "attachDashboardReturnToFilesLink error:",
+          err.message
+        );
+      }
+    }
+
+    document.addEventListener(
+      "click",
+      function (event) {
+        const filesLink = event.target.closest(
+          ".js-dashboard-files-return-link"
+        );
+
+        if (!filesLink) return;
+
+        attachDashboardReturnToFilesLink(
+          filesLink
+        );
       },
       true
     );
@@ -13166,8 +13556,43 @@ if (feeLabel) {
 
     if (updateBtn) {
       updateBtn.addEventListener("click", function () {
-        document.documentElement.classList.add("ivs-loading");
-        window.location.reload();
+        try {
+          if (
+            typeof window.getDashboardCurrentStateUrl ===
+            "function"
+          ) {
+            const refreshUrl =
+              window.getDashboardCurrentStateUrl();
+
+            if (refreshUrl) {
+              window.history.replaceState(
+                null,
+                "",
+                refreshUrl
+              );
+            }
+          }
+        } catch (err) {
+          console.error(
+            "Realtime dashboard state preserve error:",
+            err.message
+          );
+        }
+
+       if (
+  window.IVSLoader &&
+  typeof window.IVSLoader.navigate ===
+    "function"
+) {
+  window.IVSLoader.navigate(
+    window.location.href,
+    {
+      replace: true
+    }
+  );
+} else {
+  window.location.reload();
+}
       });
     }
 
@@ -13217,7 +13642,7 @@ if (feeLabel) {
       }
 
       if (typeof window.smoothDashboardReload === "function") {
-        window.smoothDashboardReload(1000);
+        window.smoothDashboardReload();
       } else {
         window.location.reload();
       }
@@ -13712,17 +14137,30 @@ document.addEventListener("click", function (e) {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     };
 
-    window.smoothDashboardReload = function (delay) {
-  if (typeof window.saveViewportState === "function") {
+    window.smoothDashboardReload = function () {
+  if (
+    typeof window.saveViewportState ===
+    "function"
+  ) {
     window.saveViewportState();
   }
 
-  document.documentElement.classList.add("ivs-page-leaving");
-  document.documentElement.classList.add("ivs-loading");
+  if (
+    window.IVSLoader &&
+    typeof window.IVSLoader.navigate ===
+      "function"
+  ) {
+    return window.IVSLoader.navigate(
+      window.location.href,
+      {
+        replace: true
+      }
+    );
+  }
 
-  setTimeout(function () {
-    window.location.reload();
-  }, Number(delay || 2000));
+  window.location.reload();
+
+  return true;
 };
 
     function restoreViewportState() {
@@ -13769,6 +14207,229 @@ document.addEventListener("click", function (e) {
         sessionStorage.removeItem(RECENT_KEY);
       }, 8000);
     });
+  })();
+</script>
+<script>
+  (function () {
+    "use strict";
+
+    /*
+     * Same dashboard script accidental duplicate load ho
+     * to multiple navigation listeners create na hon.
+     */
+    if (
+      window
+        .__SUPER_DASHBOARD_SMOOTH_NAV_INITIALIZED__
+    ) {
+      return;
+    }
+
+    window
+      .__SUPER_DASHBOARD_SMOOTH_NAV_INITIALIZED__ =
+      true;
+
+    const sidebarTimingSelector = [
+      ".js-dashboard-edit-return-link[href]",
+      ".js-dashboard-details-return-link[href]",
+      ".js-dashboard-files-return-link[href]"
+    ].join(",");
+
+    const smoothNavigationSelector = [
+      ".stat-link[href]",
+      sidebarTimingSelector,
+      ".super-pagination-wrap a.super-page-btn[href]"
+    ].join(",");
+
+    const SIDEBAR_MATCH_HOLD_MS = 650;
+    let sidebarTimedNavigationCommitted = false;
+
+    function resetSidebarTimedNavigationState() {
+      sidebarTimedNavigationCommitted = false;
+    }
+
+    /*
+     * Browser Back/Forward Cache purana JavaScript state
+     * restore karta hai. Navigation lock reset na ho to
+     * Details/Edit/Files click preventDefault ke baad ruk jata hai.
+     */
+    window.addEventListener(
+      "pagehide",
+      resetSidebarTimedNavigationState
+    );
+
+    window.addEventListener(
+      "pageshow",
+      resetSidebarTimedNavigationState
+    );
+
+    function navigateWithSidebarTiming(
+      targetUrl
+    ) {
+      if (sidebarTimedNavigationCommitted) {
+        return false;
+      }
+
+      sidebarTimedNavigationCommitted = true;
+
+      const commitNavigation = function () {
+        window.location.assign(
+          targetUrl
+        );
+      };
+
+      /*
+       * Details, Edit aur Files ke liye sidebar
+       * ke bilkul same loader timing use hogi.
+       */
+      if (
+        window.IVSLoader &&
+        typeof window.IVSLoader.show ===
+          "function"
+      ) {
+        window.IVSLoader.show({
+          persist: true
+        });
+
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            setTimeout(
+              commitNavigation,
+              SIDEBAR_MATCH_HOLD_MS
+            );
+          });
+        });
+
+        return true;
+      }
+
+      commitNavigation();
+      return true;
+    }
+
+    document.addEventListener(
+      "click",
+      function (event) {
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        ) {
+          return;
+        }
+
+        const clickedElement =
+          event.target instanceof Element
+            ? event.target
+            : event.target &&
+                event.target.parentElement;
+
+        if (!clickedElement) {
+          return;
+        }
+
+        const link =
+          clickedElement.closest(
+            smoothNavigationSelector
+          );
+
+        if (
+          !link ||
+          link.hasAttribute("download")
+        ) {
+          return;
+        }
+
+        const targetName = String(
+          link.getAttribute("target") || ""
+        )
+          .trim()
+          .toLowerCase();
+
+        /*
+         * New-tab links ko normal browser behavior
+         * ke through open hone dein.
+         */
+        if (
+          targetName &&
+          targetName !== "_self"
+        ) {
+          return;
+        }
+
+        const rawHref = String(
+          link.getAttribute("href") || ""
+        ).trim();
+
+        if (
+          !rawHref ||
+          rawHref.startsWith("#") ||
+          rawHref.startsWith("javascript:") ||
+          rawHref.startsWith("mailto:") ||
+          rawHref.startsWith("tel:")
+        ) {
+          return;
+        }
+
+        let url;
+
+        try {
+          url = new URL(
+            rawHref,
+            window.location.href
+          );
+        } catch (error) {
+          return;
+        }
+
+        /*
+         * External website links intercept nahi hongi.
+         */
+        if (
+          url.origin !==
+          window.location.origin
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+
+        /*
+         * Sirf Details, Edit aur Files links ko
+         * sidebar wala 650ms presentation hold milega.
+         */
+        if (
+          link.matches(
+            sidebarTimingSelector
+          )
+        ) {
+          navigateWithSidebarTiming(
+            url.href
+          );
+          return;
+        }
+
+        /*
+         * Existing Stats aur Pagination navigation
+         * bilkul pehle jaisi rahegi.
+         */
+        if (
+          window.IVSLoader &&
+          typeof window.IVSLoader.navigate ===
+            "function"
+        ) {
+          window.IVSLoader.navigate(
+            url.href
+          );
+        } else {
+          window.location.assign(
+            url.href
+          );
+        }
+      }
+    );
   })();
 </script>
 <script>
@@ -14084,7 +14745,7 @@ document.addEventListener("click", function (e) {
 
               setTimeout(() => {
   if (typeof window.smoothDashboardReload === "function") {
-    window.smoothDashboardReload(1000);
+    window.smoothDashboardReload();
   } else {
     window.location.reload();
   }
@@ -14107,7 +14768,7 @@ document.addEventListener("click", function (e) {
 
               setTimeout(() => {
   if (typeof window.smoothDashboardReload === "function") {
-    window.smoothDashboardReload(1000);
+    window.smoothDashboardReload();
   } else {
     window.location.reload();
   }
@@ -14269,7 +14930,7 @@ document.addEventListener("click", function (e) {
 
        setTimeout(() => {
   if (typeof window.smoothDashboardReload === "function") {
-    window.smoothDashboardReload(1000);
+    window.smoothDashboardReload();
   } else {
     window.location.reload();
   }

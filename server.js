@@ -7697,7 +7697,404 @@ function checkDuplicateRegistrationNumber(registrationNumber, currentId = null) 
     LIMIT 1
   `).get(cleanRegistrationNumber);
 }
+function splitVerificationNumbersForDuplicateCheck(value = "") {
+  const incomingValues = Array.isArray(value) ? value : [value];
+  const seen = new Set();
+  const parts = [];
 
+  for (const incomingValue of incomingValues) {
+    const rawParts = String(incomingValue ?? "")
+      .split("+")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    for (const rawPart of rawParts) {
+      const normalizedPart = rawPart
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!normalizedPart || seen.has(normalizedPart)) {
+        continue;
+      }
+
+      seen.add(normalizedPart);
+
+      parts.push({
+        value: rawPart,
+        normalized: normalizedPart,
+      });
+    }
+  }
+
+  return parts;
+}
+
+function getVerificationDuplicateFamilyRows(
+  sourceRow = {},
+  proposedFamilyNumber = undefined
+) {
+  const sourceAdmissionId = Number(sourceRow?.id || 0);
+
+  const familyNumbers = [
+    String(sourceRow?.accounts_family_number || "").trim(),
+    typeof proposedFamilyNumber !== "undefined"
+      ? String(proposedFamilyNumber || "").trim()
+      : "",
+  ].filter(Boolean);
+
+  const uniqueFamilyNumbers = [...new Set(familyNumbers)];
+
+  const fatherName = getFamilyFatherFromRow(sourceRow);
+  const phoneNumber = getFamilyPhoneFromRow(sourceRow);
+
+  const whereParts = [];
+  const params = {};
+
+  uniqueFamilyNumbers.forEach((familyNumber, index) => {
+    const paramName = `familyNumber${index}`;
+
+    whereParts.push(
+      `TRIM(COALESCE(accounts_family_number, '')) = @${paramName}`
+    );
+
+    params[paramName] = familyNumber;
+  });
+
+  if (fatherName && phoneNumber) {
+    whereParts.push(`
+      (
+        LOWER(TRIM(COALESCE(father_name, ''))) = @fatherName
+        AND ${getFamilyPhoneSqlExpression()} = @phoneNumber
+      )
+    `);
+
+    params.fatherName = fatherName;
+    params.phoneNumber = phoneNumber;
+  }
+
+  let familyRows = [];
+
+  if (whereParts.length) {
+    familyRows = db.prepare(`
+      SELECT *
+      FROM admissions
+      WHERE COALESCE(is_deleted, 0) = 0
+        AND (
+          ${whereParts.join(" OR ")}
+        )
+      ORDER BY id ASC
+    `).all(params);
+  }
+
+  if (sourceAdmissionId) {
+    const activeSourceRow =
+      getActiveAdmissionById(sourceAdmissionId) || sourceRow;
+
+    if (
+      activeSourceRow &&
+      !familyRows.some(
+        (familyRow) =>
+          Number(familyRow?.id || 0) === sourceAdmissionId
+      )
+    ) {
+      familyRows.push(activeSourceRow);
+    }
+  }
+
+  const uniqueRowsById = new Map();
+
+  for (const familyRow of familyRows) {
+    const familyRowId = Number(familyRow?.id || 0);
+
+    if (!familyRowId || uniqueRowsById.has(familyRowId)) {
+      continue;
+    }
+
+    uniqueRowsById.set(familyRowId, familyRow);
+  }
+
+  return [...uniqueRowsById.values()].sort(
+    (a, b) => Number(a.id || 0) - Number(b.id || 0)
+  );
+}
+
+function checkDuplicateVerificationNumberForFamily({
+  verificationNumber = "",
+  currentRow = null,
+  currentId = null,
+  proposedFamilyNumber = undefined,
+} = {}) {
+  const submittedParts =
+    splitVerificationNumbersForDuplicateCheck(
+      verificationNumber
+    );
+
+  if (!submittedParts.length) {
+    return null;
+  }
+
+  const sourceRow =
+    currentRow ||
+    getActiveAdmissionById(currentId) ||
+    {
+      id: Number(currentId || 0) || null,
+      accounts_family_number:
+        typeof proposedFamilyNumber !== "undefined"
+          ? String(proposedFamilyNumber || "").trim()
+          : "",
+    };
+
+  const allowedFamilyRows =
+    getVerificationDuplicateFamilyRows(
+      sourceRow,
+      proposedFamilyNumber
+    );
+
+  const allowedAdmissionIds = new Set(
+    allowedFamilyRows
+      .map((familyRow) => Number(familyRow?.id || 0))
+      .filter(Boolean)
+  );
+
+  const cleanCurrentId = Number(
+    currentId || sourceRow?.id || 0
+  );
+
+  if (cleanCurrentId) {
+    allowedAdmissionIds.add(cleanCurrentId);
+  }
+
+  const submittedPartKeys = new Set(
+    submittedParts.map((part) => part.normalized)
+  );
+
+  const existingRows = db.prepare(`
+    SELECT
+      id,
+      entry_number,
+      student_name,
+      father_name,
+      phone,
+      guardian_whatsapp,
+      accounts_family_number,
+      accounts_verification_number
+    FROM admissions
+    WHERE COALESCE(is_deleted, 0) = 0
+      AND TRIM(
+        COALESCE(
+          accounts_verification_number,
+          ''
+        )
+      ) != ''
+    ORDER BY id ASC
+  `).all();
+
+  let conflictRow = null;
+  let matchedVerificationNumber = "";
+
+  for (const existingRow of existingRows) {
+    const existingAdmissionId =
+      Number(existingRow?.id || 0);
+
+    if (
+      !existingAdmissionId ||
+      allowedAdmissionIds.has(existingAdmissionId)
+    ) {
+      continue;
+    }
+
+    const existingParts =
+      splitVerificationNumbersForDuplicateCheck(
+        existingRow.accounts_verification_number || ""
+      );
+
+    const matchedPart = existingParts.find((part) =>
+      submittedPartKeys.has(part.normalized)
+    );
+
+    if (!matchedPart) {
+      continue;
+    }
+
+    conflictRow = existingRow;
+
+    matchedVerificationNumber =
+      submittedParts.find(
+        (part) =>
+          part.normalized === matchedPart.normalized
+      )?.value ||
+      matchedPart.value ||
+      "";
+
+    break;
+  }
+
+  if (!conflictRow) {
+    return null;
+  }
+
+  const conflictFamilyRows =
+    getVerificationDuplicateFamilyRows(
+      conflictRow,
+      conflictRow.accounts_family_number
+    );
+
+  const finalConflictRows =
+    conflictFamilyRows.length
+      ? conflictFamilyRows
+      : [conflictRow];
+
+  const admissions = finalConflictRows
+    .map((familyRow) => {
+      const admissionId =
+        Number(familyRow?.id || 0);
+
+      if (!admissionId) {
+        return null;
+      }
+
+      return {
+        admissionId,
+        entryNumber:
+          familyRow.entry_number ||
+          admissionId,
+        studentName:
+          String(
+            familyRow.student_name || ""
+          ).trim(),
+      };
+    })
+    .filter(Boolean);
+
+  const familyNumber =
+    finalConflictRows
+      .map((familyRow) =>
+        String(
+          familyRow?.accounts_family_number || ""
+        ).trim()
+      )
+      .find(Boolean) || "";
+
+  const isFamily = admissions.length > 1;
+
+  const admissionsText = admissions
+    .map((admission) => {
+      const studentLabel =
+        admission.studentName ||
+        "Unnamed Student";
+
+      return `${studentLabel} (Admission ID #${admission.admissionId})`;
+    })
+    .join(", ");
+
+  let message = "";
+
+  if (isFamily) {
+    const familyLabel = familyNumber
+      ? `Family #${familyNumber}`
+      : "Auto-matched family (Family Number not assigned)";
+
+    message =
+      `Verification Number ${matchedVerificationNumber} is already assigned to another family. ` +
+      `${familyLabel}. Students: ${admissionsText}.`;
+  } else {
+    const admission =
+      admissions[0] || {
+        admissionId:
+          Number(conflictRow.id || 0),
+        studentName:
+          String(
+            conflictRow.student_name || ""
+          ).trim(),
+      };
+
+    const familyText = familyNumber
+      ? ` Family #${familyNumber}.`
+      : "";
+
+    message =
+      `Verification Number ${matchedVerificationNumber} is already assigned to a single admission. ` +
+      `Student: ${admission.studentName || "Unnamed Student"}, ` +
+      `Admission ID #${admission.admissionId}.${familyText}`;
+  }
+
+  return {
+    code:
+      "DUPLICATE_VERIFICATION_NUMBER",
+
+    field:
+      "verificationNumber",
+
+    submittedVerificationNumber:
+      String(verificationNumber || "").trim(),
+
+    matchedVerificationNumber,
+
+    duplicateType:
+      isFamily
+        ? "family"
+        : "single_admission",
+
+    isFamily,
+    isAutoMatchedFamily:
+      isFamily && !familyNumber,
+
+    familyNumber,
+
+    admissionIds:
+      admissions.map(
+        (admission) =>
+          admission.admissionId
+      ),
+
+    studentNames:
+      admissions
+        .map(
+          (admission) =>
+            admission.studentName
+        )
+        .filter(Boolean),
+
+    admissions,
+    message,
+  };
+}
+
+function sendDuplicateVerificationNumberResponse(
+  res,
+  duplicateVerification
+) {
+  return res.status(409).json({
+    success: false,
+
+    code:
+      duplicateVerification?.code ||
+      "DUPLICATE_VERIFICATION_NUMBER",
+
+    field: "verificationNumber",
+
+    message:
+      duplicateVerification?.message ||
+      "This verification number is already assigned to another admission or family.",
+
+    duplicateType:
+      duplicateVerification?.duplicateType ||
+      "single_admission",
+
+    isFamily:
+      !!duplicateVerification?.isFamily,
+
+    familyNumber:
+      duplicateVerification?.familyNumber || "",
+
+    admissions:
+      duplicateVerification?.admissions || [],
+
+    duplicateVerification:
+      duplicateVerification || null,
+  });
+}
 function findDuplicateAdmissionFromForm(row) {
   return db.prepare(`
     SELECT id, student_name
@@ -12371,34 +12768,162 @@ if (bankVal) {
 
     let latestChangedMonthKey = "";
 
-for (const m of BILLING_MONTHS) {
-  const beforeItem = beforeBilling[m.key] || {};
-  const afterItem = billingJson[m.key] || {};
+    const verificationValuesToValidate = [];
 
-  const beforeStatus = String(beforeItem.status || "").trim();
-  const beforeAmount = String(beforeItem.amount || "").trim();
-  const beforeVerification = String(beforeItem.verification || "").trim();
-  const beforeBank = String(beforeItem.bank || "").trim();
+    for (const m of BILLING_MONTHS) {
+      const beforeItem =
+        beforeBilling[m.key] || {};
 
-  const afterStatus = String(afterItem.status || "").trim();
-  const afterAmount = String(afterItem.amount || "").trim();
-  const afterVerification = String(afterItem.verification || "").trim();
-  const afterBank = String(afterItem.bank || "").trim();
+      const afterItem =
+        billingJson[m.key] || {};
 
-  const changed =
-    beforeStatus !== afterStatus ||
-    beforeAmount !== afterAmount ||
-    beforeVerification !== afterVerification ||
-    beforeBank !== afterBank ;
+      const beforeStatus =
+        String(
+          beforeItem.status || ""
+        ).trim();
 
-  if (changed) {
-    latestChangedMonthKey = m.key;
-  }
-}
+      const beforeAmount =
+        String(
+          beforeItem.amount || ""
+        ).trim();
 
-const latestVerificationForColumn = latestChangedMonthKey
-  ? String(billingJson[latestChangedMonthKey]?.verification || "").trim()
-  : String(row.accounts_verification_number || "").trim();
+      const beforeVerification =
+        String(
+          beforeItem.verification || ""
+        ).trim();
+
+      const beforeBank =
+        String(
+          beforeItem.bank || ""
+        ).trim();
+
+      const beforeRegistrationFeeVerification =
+        String(
+          beforeItem.registrationFeeVerification ||
+          ""
+        ).trim();
+
+      const afterStatus =
+        String(
+          afterItem.status || ""
+        ).trim();
+
+      const afterAmount =
+        String(
+          afterItem.amount || ""
+        ).trim();
+
+      const afterVerification =
+        String(
+          afterItem.verification || ""
+        ).trim();
+
+      const afterBank =
+        String(
+          afterItem.bank || ""
+        ).trim();
+
+      const afterRegistrationFeeVerification =
+        String(
+          afterItem.registrationFeeVerification ||
+          ""
+        ).trim();
+
+      const changed =
+        beforeStatus !== afterStatus ||
+        beforeAmount !== afterAmount ||
+        beforeVerification !== afterVerification ||
+        beforeBank !== afterBank;
+
+      if (changed) {
+        latestChangedMonthKey =
+          m.key;
+      }
+
+      if (
+        beforeVerification !==
+          afterVerification &&
+        afterVerification
+      ) {
+        verificationValuesToValidate.push(
+          afterVerification
+        );
+      }
+
+      if (
+        beforeRegistrationFeeVerification !==
+          afterRegistrationFeeVerification &&
+        afterRegistrationFeeVerification
+      ) {
+        verificationValuesToValidate.push(
+          afterRegistrationFeeVerification
+        );
+      }
+    }
+
+    const latestVerificationForColumn =
+      latestChangedMonthKey
+        ? String(
+            billingJson[
+              latestChangedMonthKey
+            ]?.verification || ""
+          ).trim()
+        : String(
+            row.accounts_verification_number ||
+            ""
+          ).trim();
+
+    if (
+      latestVerificationForColumn &&
+      latestVerificationForColumn !==
+        String(
+          row.accounts_verification_number ||
+          ""
+        ).trim()
+    ) {
+      verificationValuesToValidate.push(
+        latestVerificationForColumn
+      );
+    }
+
+    const uniqueVerificationValuesToValidate =
+      [
+        ...new Set(
+          verificationValuesToValidate
+            .map((value) =>
+              String(value || "").trim()
+            )
+            .filter(Boolean)
+        ),
+      ];
+
+    for (
+      const verificationValue
+      of uniqueVerificationValuesToValidate
+    ) {
+      const duplicateVerification =
+        checkDuplicateVerificationNumberForFamily({
+          verificationNumber:
+            verificationValue,
+
+          currentRow:
+            row,
+
+          currentId:
+            id,
+
+          proposedFamilyNumber:
+            row.accounts_family_number ||
+            "",
+        });
+
+      if (duplicateVerification) {
+        return sendDuplicateVerificationNumberResponse(
+          res,
+          duplicateVerification
+        );
+      }
+    }
 
     // ✅ now calculate dues using history + billingJson
     const dues = calcPendingDues(baseFee, billingJson, feeHistoryAfter);
@@ -12819,6 +13344,60 @@ if (resolvedBankName) {
       success: false,
       message: "This registration number is already in use. Please enter another number."
     });
+  }
+
+  const duplicateVerificationSourceRow = {
+    ...row,
+
+    father_name:
+      typeof father !== "undefined" &&
+      father !== null
+        ? String(father).trim()
+        : row.father_name,
+
+    phone:
+      typeof phone !== "undefined" &&
+      phone !== null
+        ? String(phone).trim()
+        : row.phone,
+
+    /*
+     * Final Family Number blank ho to old Family Number
+     * ko allowed family mein include nahi karna.
+     *
+     * Final Family Number available ho to existing family
+     * sync ke liye old family aur proposed family dono
+     * safely considered rahenge.
+     */
+    accounts_family_number:
+      cleanFamilyNumber
+        ? String(
+            row.accounts_family_number ||
+            ""
+          ).trim()
+        : "",
+  };
+
+  const duplicateVerification =
+    checkDuplicateVerificationNumberForFamily({
+      verificationNumber:
+        cleanVerificationNumber,
+
+      currentRow:
+        duplicateVerificationSourceRow,
+
+      currentId:
+        id,
+
+      proposedFamilyNumber:
+        cleanFamilyNumber,
+    });
+
+  if (duplicateVerification) {
+    return sendDuplicateVerificationNumberResponse(
+      res,
+      duplicateVerification
+    );
   }
   const billingJson = getBillingJsonFromRow(row);
   const oldFeeSnapshot =
@@ -14870,6 +15449,32 @@ if (cleanFamilyNumber || cleanAdmissionId) {
     success: false,
     message: "admissionId or familyNumber required",
   });
+}
+
+if (
+  totalInputAmount > 0 &&
+  !shouldUseMasterVerification
+) {
+  const duplicateVerification =
+    checkDuplicateVerificationNumberForFamily({
+      verificationNumber:
+        cleanVerificationNumber,
+      currentRow:
+        targetRows[0],
+      currentId:
+        targetRows[0]?.id || null,
+      proposedFamilyNumber:
+        cleanFamilyNumber ||
+        targetRows[0]?.accounts_family_number ||
+        "",
+    });
+
+  if (duplicateVerification) {
+    return sendDuplicateVerificationNumberResponse(
+      res,
+      duplicateVerification
+    );
+  }
 }
 
     const allPendingRows =
@@ -17743,6 +18348,82 @@ app.post("/api/admissions/update-row", checkApiKey, (req, res) => {
       }
     }
 
+    const hasVerificationNumberUpdate =
+      Object.prototype.hasOwnProperty.call(
+        cleanUpdates,
+        "accounts_verification_number"
+      );
+
+    const hasFamilyNumberUpdate =
+      Object.prototype.hasOwnProperty.call(
+        cleanUpdates,
+        "accounts_family_number"
+      );
+
+    if (hasVerificationNumberUpdate) {
+      cleanUpdates.accounts_verification_number =
+        normalizeVerificationNumberForSave(
+          cleanUpdates.accounts_verification_number
+        );
+    }
+
+    if (
+      hasVerificationNumberUpdate ||
+      hasFamilyNumberUpdate
+    ) {
+      const finalVerificationNumber =
+        hasVerificationNumberUpdate
+          ? cleanUpdates.accounts_verification_number
+          : String(
+              row.accounts_verification_number ||
+              ""
+            ).trim();
+
+      const finalFamilyNumber =
+        hasFamilyNumberUpdate
+          ? String(
+              cleanUpdates.accounts_family_number ||
+              ""
+            ).trim()
+          : String(
+              row.accounts_family_number ||
+              ""
+            ).trim();
+
+      const duplicateVerificationSourceRow = {
+        ...row,
+        ...cleanUpdates,
+
+        accounts_verification_number:
+          finalVerificationNumber,
+
+        accounts_family_number:
+          finalFamilyNumber,
+      };
+
+      const duplicateVerification =
+        checkDuplicateVerificationNumberForFamily({
+          verificationNumber:
+            finalVerificationNumber,
+
+          currentRow:
+            duplicateVerificationSourceRow,
+
+          currentId:
+            row.id,
+
+          proposedFamilyNumber:
+            finalFamilyNumber,
+        });
+
+      if (duplicateVerification) {
+        return sendDuplicateVerificationNumberResponse(
+          res,
+          duplicateVerification
+        );
+      }
+    }
+
     const setClause = Object.keys(cleanUpdates)
       .map((col) => `${col} = @${col}`)
       .join(", ");
@@ -18957,6 +19638,7 @@ app.post(
       let inserted = 0;
       let skipped = 0;
       let failed = 0;
+      const verificationConflicts = [];
 
       const insertMany = db.transaction((rows) => {
         for (const raw of rows) {
@@ -18974,12 +19656,56 @@ app.post(
 let deletedMatch = null;
 if (regNo) {
   deletedMatch = db.prepare(`
-    SELECT id
+    SELECT *
     FROM admissions
     WHERE TRIM(COALESCE(accounts_registration_number, '')) = TRIM(?)
       AND COALESCE(is_deleted, 0) = 1
     LIMIT 1
   `).get(regNo);
+}
+
+const importedVerificationNumber =
+  normalizeVerificationNumberForSave(
+    cleanRow.accounts_verification_number || ""
+  );
+
+if (
+  Object.prototype.hasOwnProperty.call(
+    cleanRow,
+    "accounts_verification_number"
+  )
+) {
+  cleanRow.accounts_verification_number =
+    importedVerificationNumber;
+}
+
+const duplicateVerification =
+  checkDuplicateVerificationNumberForFamily({
+    verificationNumber:
+      importedVerificationNumber,
+
+    currentRow: {
+      ...(deletedMatch || {}),
+      ...cleanRow,
+      id:
+        deletedMatch?.id || null,
+    },
+
+    currentId:
+      deletedMatch?.id || null,
+
+    proposedFamilyNumber:
+      cleanRow.accounts_family_number || "",
+  });
+
+if (duplicateVerification) {
+  skipped++;
+
+  verificationConflicts.push(
+    duplicateVerification.message
+  );
+
+  continue;
 }
 
 if (deletedMatch) {
@@ -19045,10 +19771,40 @@ inserted++;
 
       safeUnlink(absPath);
 
+      const verificationConflictSummary =
+        verificationConflicts
+          .slice(0, 3)
+          .join(" | ");
+
+      const remainingVerificationConflictCount =
+        Math.max(
+          0,
+          verificationConflicts.length - 3
+        );
+
       req.session.flash = {
-        type: "success",
-        title: "CSV import completed",
-        message: `Imported: ${inserted}, Skipped duplicates: ${skipped}, Failed: ${failed}`,
+        type:
+          verificationConflicts.length
+            ? "danger"
+            : "success",
+
+        title:
+          verificationConflicts.length
+            ? "CSV import completed with blocked verification duplicates"
+            : "CSV import completed",
+
+        message:
+          `Imported: ${inserted}, Skipped duplicates: ${skipped}, Failed: ${failed}` +
+          (
+            verificationConflictSummary
+              ? ` | Verification conflicts: ${verificationConflictSummary}` +
+                (
+                  remainingVerificationConflictCount
+                    ? ` | Plus ${remainingVerificationConflictCount} more conflict(s).`
+                    : ""
+                )
+              : ""
+          ),
       };
 
       return res.redirect("/db-settings");
@@ -23033,6 +23789,60 @@ if (resolvedBankName) {
     });
   }
 
+    const duplicateVerificationSourceRow = {
+    ...row,
+
+    father_name:
+      typeof father !== "undefined" &&
+      father !== null
+        ? String(father).trim()
+        : row.father_name,
+
+    phone:
+      typeof phone !== "undefined" &&
+      phone !== null
+        ? String(phone).trim()
+        : row.phone,
+
+    /*
+     * Final Family Number blank ho to old Family Number
+     * ko allowed family mein include nahi karna.
+     *
+     * Final Family Number available ho to existing family
+     * sync ke liye old family aur proposed family dono
+     * safely considered rahenge.
+     */
+    accounts_family_number:
+      cleanFamilyNumber
+        ? String(
+            row.accounts_family_number ||
+            ""
+          ).trim()
+        : "",
+  };
+
+  const duplicateVerification =
+    checkDuplicateVerificationNumberForFamily({
+      verificationNumber:
+        cleanVerificationNumber,
+
+      currentRow:
+        duplicateVerificationSourceRow,
+
+      currentId:
+        id,
+
+      proposedFamilyNumber:
+        cleanFamilyNumber,
+    });
+
+  if (duplicateVerification) {
+    return sendDuplicateVerificationNumberResponse(
+      res,
+      duplicateVerification
+    );
+  }
+
   const canAdmissions = !!perms.btnUpdateRow;
 const canAccounts  = !!perms.btnUpdateRow;
   const billingJson = getBillingJsonFromRow(row);
@@ -23375,6 +24185,52 @@ if (duplicateReg) {
     success: false,
     message: "This registration number is already in use. Please enter another number."
   });
+}
+
+const duplicateVerificationSourceRow = {
+  ...row,
+
+  father_name:
+    typeof father !== "undefined" &&
+    father !== null
+      ? String(father).trim()
+      : row.father_name,
+
+  phone:
+    typeof phone !== "undefined" &&
+    phone !== null
+      ? String(phone).trim()
+      : row.phone,
+
+  accounts_family_number:
+    cleanFamilyNumber
+      ? String(
+          row.accounts_family_number ||
+          ""
+        ).trim()
+      : "",
+};
+
+const duplicateVerification =
+  checkDuplicateVerificationNumberForFamily({
+    verificationNumber:
+      cleanVerificationNumber,
+
+    currentRow:
+      duplicateVerificationSourceRow,
+
+    currentId:
+      id,
+
+    proposedFamilyNumber:
+      cleanFamilyNumber,
+  });
+
+if (duplicateVerification) {
+  return sendDuplicateVerificationNumberResponse(
+    res,
+    duplicateVerification
+  );
 }
 
 const canEditBank = canEditColumn(perms, "colBank");
@@ -23819,54 +24675,6 @@ app.delete(
     return res.status(500).json({ success: false, message: "Delete failed" });
   }
 });
-// =========================
-// Agent: View My Sub Agents
-// =========================
-// app.get("/dashboard/agent/users", requireLogin, (req, res) => {
-//   try {
-//     const user = req.session.user;
-
-//     // ✅ only agent/sub_agent allowed
-//     const isAgent =
-//       user?.role === "agent" ||
-//       user?.role === "sub_agent" ||
-//       user?.agentType === "accounts" ||
-//       user?.agentType === "admission" ||
-//       user?.agentType === "management";
-
-//     if (!isAgent) {
-//       return res.status(403).send("Forbidden");
-//     }
-
-//     // ✅ better-sqlite3 style
-//     // show only sub agents created by this agent AND same dept
-//     const mySubAgents = db
-//       .prepare(
-//         `
-//         SELECT id, name, email, role, dept, agentType, managerId, permissions, createdAt
-//         FROM users
-//         WHERE role = 'sub_agent'
-//           AND dept = ?
-//           AND managerId = ?
-//         ORDER BY id DESC
-//         `
-//       )
-//       .all(user.dept, user.id);
-
-//     return res.render("agent-users", {
-//       user,
-//       mySubAgents,
-//       perms: req.session.perms || user.permissions || null,
-//     });
-//   } catch (err) {
-//     console.error("agent users route error:", err);
-//     return res.status(500).send("Server error");
-//   }
-// });
-// ======================= AGENT: MY SUB AGENTS =======================
-// =========================
-// AGENT: MY SUB AGENTS (CLEAN)
-// =========================
 
 // List (NO DUPLICATE)
 app.get("/dashboard/agent/users", requireLogin, (req, res) => {

@@ -829,25 +829,17 @@
 
       <div class="d-flex gap-2 flex-wrap">
         <% if (ALLOW_UPLOAD_URL) { %>
-          <button id="btnUploadUrl" type="button" class="btn btn-sm btn-dark rounded-pill px-3">
+          <button
+            id="btnUploadUrl"
+            type="button"
+            class="btn btn-sm btn-dark rounded-pill px-3">
             <i class="bi bi-link-45deg me-1"></i> Upload URL
           </button>
         <% } %>
 
-        <% if (admissionId) { %>
-          <a href="<%=
-            _isSuper
-              ? '/dashboard/super/files'
-              : (user && user.role === 'admin')
-                ? '/admin/files'
-                : '/files?admission_id=' + admissionId
-          %>"
-             class="btn btn-sm btn-outline-secondary rounded-pill px-3">
-            <i class="bi bi-arrow-left me-1"></i> Back
-          </a>
-        <% } %>
-
-        <a href="/dashboard" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+        <a
+          href="/dashboard"
+          class="btn btn-sm btn-outline-secondary rounded-pill px-3 js-files-page-dashboard-return-link">
           <i class="bi bi-grid-1x2 me-1"></i> Back to Dashboard
         </a>
       </div>
@@ -2513,5 +2505,313 @@ const url = isSuperUser(CURRENT_USER)
     });
   })();
 </script>
+<script>
+(function () {
+  "use strict";
 
+  const dashboardLinks = Array.from(
+    document.querySelectorAll(
+      ".js-files-page-dashboard-return-link"
+    )
+  );
+
+  if (!dashboardLinks.length) {
+    return;
+  }
+
+  const FILES_PAGE_NAVIGATION_HOLD_MS = 650;
+  let filesPageNavigationStarted = false;
+
+  function resetFilesPageNavigationState() {
+    filesPageNavigationStarted = false;
+  }
+
+  /*
+   * Back/Forward Cache purana navigation lock
+   * restore na kare.
+   */
+  window.addEventListener(
+    "pagehide",
+    resetFilesPageNavigationState
+  );
+
+  window.addEventListener(
+    "pageshow",
+    resetFilesPageNavigationState
+  );
+
+  function isPlainNavigationClick(event) {
+    return !!(
+      event &&
+      !event.defaultPrevented &&
+      event.button === 0 &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey
+    );
+  }
+
+  function isDashboardReturnPath(pathname) {
+    const cleanPath =
+      String(pathname || "").trim();
+
+    if (cleanPath === "/dashboard") {
+      return true;
+    }
+
+    if (!cleanPath.startsWith("/dashboard/")) {
+      return false;
+    }
+
+    /*
+     * Admission, Fee Collection aur Files pages
+     * nested Dashboard pages hain. Inko Dashboard
+     * return destination na samjha jaye.
+     */
+    const isNestedDashboardPage =
+      cleanPath.includes("/admission/") ||
+      cleanPath.includes("/fee-collection") ||
+      cleanPath.includes("/files");
+
+    return !isNestedDashboardPage;
+  }
+
+  function getSafeInternalUrl(rawUrl) {
+    const cleanUrl =
+      String(rawUrl || "").trim();
+
+    if (!cleanUrl) {
+      return "";
+    }
+
+    try {
+      const targetUrl =
+        new URL(
+          cleanUrl,
+          window.location.origin
+        );
+
+      if (
+        targetUrl.origin !==
+               window.location.origin
+      ) {
+        return "";
+      }
+
+      return targetUrl.href;
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function getSafeReturnUrl() {
+    const params =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    const rawReturnTo =
+      String(
+        params.get("returnTo") || ""
+      ).trim();
+
+    if (!rawReturnTo) {
+      return "";
+    }
+
+    try {
+      const targetUrl =
+        new URL(
+          rawReturnTo,
+          window.location.origin
+        );
+
+      const isSafe =
+        targetUrl.origin ===
+          window.location.origin &&
+        isDashboardReturnPath(
+          targetUrl.pathname
+        );
+
+      if (!isSafe) {
+        return "";
+      }
+
+      return (
+        targetUrl.pathname +
+        targetUrl.search +
+        targetUrl.hash
+      );
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function commitFilesPageNavigation(
+    callback
+  ) {
+    if (
+      filesPageNavigationStarted ||
+      typeof callback !== "function"
+    ) {
+      return false;
+    }
+
+    filesPageNavigationStarted = true;
+
+    /*
+     * Files page Back button ko sidebar jaisi
+     * loader presentation timing milegi.
+     */
+    if (
+      window.IVSLoader &&
+      typeof window.IVSLoader.show ===
+        "function"
+    ) {
+      window.IVSLoader.show({
+        persist: true
+      });
+
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          setTimeout(
+            callback,
+            FILES_PAGE_NAVIGATION_HOLD_MS
+          );
+        });
+      });
+
+      return true;
+    }
+
+    callback();
+    return true;
+  }
+
+  function goBackWithLoader() {
+    return commitFilesPageNavigation(
+      function () {
+        window.history.back();
+      }
+    );
+  }
+
+  function navigateWithLoader(targetUrl) {
+    const safeTarget =
+      getSafeInternalUrl(targetUrl);
+
+    if (!safeTarget) {
+      return false;
+    }
+
+    return commitFilesPageNavigation(
+      function () {
+        window.location.assign(
+          safeTarget
+        );
+      }
+    );
+  }
+
+  const safeReturnUrl =
+    getSafeReturnUrl();
+
+  /*
+   * Browser history unavailable ho to
+   * validated returnTo fallback use hoga.
+   */
+  if (safeReturnUrl) {
+    dashboardLinks.forEach(function (link) {
+      link.setAttribute(
+        "href",
+        safeReturnUrl
+      );
+    });
+  }
+
+  dashboardLinks.forEach(function (link) {
+    link.addEventListener(
+      "click",
+      function (event) {
+        if (!isPlainNavigationClick(event)) {
+          return;
+        }
+
+        const targetName =
+          String(
+            link.getAttribute("target") || ""
+          )
+            .trim()
+            .toLowerCase();
+
+        if (
+          targetName &&
+          targetName !== "_self"
+        ) {
+          return;
+        }
+
+        const fallbackUrl =
+          String(
+            link.getAttribute("href") || ""
+          ).trim();
+
+        /*
+         * Dashboard se same tab mein Files page
+         * open hua ho to previous exact dashboard
+         * state history se restore hogi.
+         */
+        if (
+          window.history.length > 1 &&
+          document.referrer
+        ) {
+          try {
+            const previousUrl =
+              new URL(
+                document.referrer
+              );
+
+            const cameFromDashboard =
+              previousUrl.origin ===
+                window.location.origin &&
+              isDashboardReturnPath(
+                previousUrl.pathname
+              );
+
+            if (cameFromDashboard) {
+              event.preventDefault();
+
+              goBackWithLoader();
+
+              return;
+            }
+          } catch (error) {
+            /*
+             * Referrer invalid ho to safe href
+             * fallback use hoga.
+             */
+          }
+        }
+
+        /*
+         * History usable na ho to validated href
+         * loader timing ke saath open hoga.
+         */
+        if (
+          !getSafeInternalUrl(fallbackUrl)
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+
+        navigateWithLoader(
+          fallbackUrl
+        );
+      }
+    );
+  });
+})();
+</script>
 <%- include('partials/bootstrap-footer') %>

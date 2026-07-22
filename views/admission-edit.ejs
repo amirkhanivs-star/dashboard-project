@@ -1509,10 +1509,10 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
 
           <div class="footer-actions">
             <a
-              href="<%= backUrl %>"
-              class="btn btn-light rounded-pill px-4">
-              Cancel
-            </a>
+  href="<%= backUrl %>"
+  class="btn btn-light rounded-pill px-4 js-edit-page-cancel-link">
+  Cancel
+</a>
 
             <% if (P.btn.update) { %>
               <button
@@ -1538,7 +1538,9 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
 <% if (hasFamilyEditGroup) { %>
   <div class="compact-family-footer">
     <div class="footer-actions">
-      <a href="<%= backUrl %>" class="btn btn-light rounded-pill px-4">
+      <a
+  href="<%= backUrl %>"
+  class="btn btn-light rounded-pill px-4 js-edit-page-cancel-link">
   Cancel
 </a>
 
@@ -1782,6 +1784,13 @@ const hasFamilyEditGroup = !!familyDisplayLabel && editAdmissions.length > 1;
   .compact-input:focus{
   border-color:var(--theme-main);
   box-shadow:0 0 0 3px var(--theme-focus);
+}
+
+.verification-duplicate-input,
+.verification-duplicate-input:focus{
+  border-color:#dc2626 !important;
+  background:#fff7f7 !important;
+  box-shadow:0 0 0 3px rgba(220,38,38,.14) !important;
 }
 .status-select,
 .fee-select{
@@ -2825,11 +2834,13 @@ function showUpdateModal(items, titleText, options = {}) {
 
   const {
     subtitle = 'The selected admission fields were updated successfully.',
-    showForwardButton = false
+    showForwardButton = false,
+    bodyTitle = 'Updated Columns'
   } = options;
 
   const titleEl = modalEl.querySelector('.modal-title');
   const subTitleEl = modalEl.querySelector('.modal-header .small');
+  const bodyTitleEl = modalEl.querySelector('.modal-body .fw-bold.mb-2');
 
   if (titleEl && titleText) {
     titleEl.innerHTML = titleText;
@@ -2837,6 +2848,10 @@ function showUpdateModal(items, titleText, options = {}) {
 
   if (subTitleEl) {
     subTitleEl.textContent = subtitle;
+  }
+
+  if (bodyTitleEl) {
+    bodyTitleEl.textContent = bodyTitle;
   }
 
   if (updateForwardBtn) {
@@ -2968,22 +2983,22 @@ function showUpdateModal(items, titleText, options = {}) {
     }
 
     async function submitFormAjax(form) {
-  const formData = new FormData(form);
-  const encodedData = new URLSearchParams();
+      const formData = new FormData(form);
+      const encodedData = new URLSearchParams();
 
-  for (const [key, value] of formData.entries()) {
-    encodedData.append(key, value);
-  }
+      for (const [key, value] of formData.entries()) {
+        encodedData.append(key, value);
+      }
 
-  const response = await fetch(form.action, {
-    method: form.method || 'POST',
-    body: encodedData,
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-      'Accept': 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-    }
-  });
+      const response = await fetch(form.action, {
+        method: form.method || 'POST',
+        body: encodedData,
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+        }
+      });
 
       let data = null;
 
@@ -2994,11 +3009,262 @@ function showUpdateModal(items, titleText, options = {}) {
       }
 
       if (!response.ok || !data || data.success !== true) {
-        throw new Error((data && data.message) || 'Update failed');
+        const updateError = new Error(
+          (data && data.message) || 'Update failed'
+        );
+
+        updateError.responseData =
+          data && typeof data === 'object'
+            ? data
+            : {};
+
+        throw updateError;
       }
 
       return data;
     }
+
+    function clearVerificationDuplicateState() {
+      document
+        .querySelectorAll('.verification-duplicate-input')
+        .forEach(function (input) {
+          input.classList.remove('verification-duplicate-input');
+          input.removeAttribute('aria-invalid');
+        });
+    }
+
+    function showDuplicateVerificationConflict(error) {
+      const responseData =
+        error &&
+        error.responseData &&
+        typeof error.responseData === 'object'
+          ? error.responseData
+          : {};
+
+      const detail =
+        responseData.duplicateVerification &&
+        typeof responseData.duplicateVerification === 'object'
+          ? responseData.duplicateVerification
+          : {};
+
+      const code = String(
+        responseData.code ||
+        detail.code ||
+        ''
+      ).trim();
+
+      const field = String(
+        responseData.field ||
+        detail.field ||
+        ''
+      ).trim();
+
+      if (
+        code !== 'DUPLICATE_VERIFICATION_NUMBER' &&
+        field !== 'verificationNumber'
+      ) {
+        return false;
+      }
+
+      const admissions = Array.isArray(responseData.admissions)
+        ? responseData.admissions
+        : (
+            Array.isArray(detail.admissions)
+              ? detail.admissions
+              : []
+          );
+
+      const duplicateType = String(
+        responseData.duplicateType ||
+        detail.duplicateType ||
+        ''
+      ).trim();
+
+      const isFamily =
+        responseData.isFamily === true ||
+        detail.isFamily === true ||
+        duplicateType === 'family' ||
+        admissions.length > 1;
+
+      const familyNumber = String(
+        responseData.familyNumber ||
+        detail.familyNumber ||
+        ''
+      ).trim();
+
+      const matchedVerificationNumber = String(
+        detail.matchedVerificationNumber ||
+        detail.submittedVerificationNumber ||
+        ''
+      ).trim();
+
+      const normalizedMatched =
+        matchedVerificationNumber
+          .toLowerCase()
+          .replace(/\s+/g, ' ')
+          .trim();
+
+      clearVerificationDuplicateState();
+
+      let firstConflictInput = null;
+
+      document
+        .querySelectorAll('.js-family-verification-input')
+        .forEach(function (input) {
+          const parts = String(input.value || '')
+            .split('+')
+            .map(function (part) {
+              return String(part || '')
+                .toLowerCase()
+                .replace(/\s+/g, ' ')
+                .trim();
+            })
+            .filter(Boolean);
+
+          if (
+            normalizedMatched &&
+            !parts.includes(normalizedMatched)
+          ) {
+            return;
+          }
+
+          input.classList.add('verification-duplicate-input');
+          input.setAttribute('aria-invalid', 'true');
+
+          if (!firstConflictInput) {
+            firstConflictInput = input;
+          }
+        });
+
+      if (!firstConflictInput) {
+        firstConflictInput = document.querySelector(
+          '.js-family-verification-input:not([disabled])'
+        );
+
+        if (firstConflictInput) {
+          firstConflictInput.classList.add(
+            'verification-duplicate-input'
+          );
+
+          firstConflictInput.setAttribute(
+            'aria-invalid',
+            'true'
+          );
+        }
+      }
+
+      if (firstConflictInput) {
+        firstConflictInput.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+      }
+
+      const conflictTypeLabel =
+        isFamily
+          ? 'Family'
+          : 'Single Admission';
+
+      const familyLabel =
+        familyNumber
+          ? `Family #${familyNumber}`
+          : (
+              isFamily
+                ? 'Auto-matched family (Family Number not assigned)'
+                : ''
+            );
+
+      const fields = [
+        String(
+          responseData.message ||
+          detail.message ||
+          error.message ||
+          'This verification number is already in use.'
+        ).trim(),
+
+        `Verification Number: ${
+          matchedVerificationNumber ||
+          'Entered number'
+        }`,
+
+        `Conflict Type: ${conflictTypeLabel}`
+      ];
+
+      if (familyLabel) {
+        fields.push(`Family: ${familyLabel}`);
+      }
+
+      admissions.forEach(function (admission) {
+        const studentName = String(
+          admission?.studentName ||
+          admission?.student_name ||
+          'Unnamed Student'
+        ).trim();
+
+        const admissionId = Number(
+          admission?.admissionId ||
+          admission?.id ||
+          0
+        );
+
+        const entryNumber = String(
+          admission?.entryNumber ||
+          admission?.entry_number ||
+          ''
+        ).trim();
+
+        const admissionText =
+          admissionId
+            ? `Admission ID #${admissionId}`
+            : 'Admission ID not available';
+
+        const entryText =
+          entryNumber &&
+          entryNumber !== String(admissionId || '')
+            ? ` | Entry #${entryNumber}`
+            : '';
+
+        fields.push(
+          `${studentName} | ${admissionText}${entryText}`
+        );
+      });
+
+      showUpdateModal(
+        [
+          {
+            student:
+              isFamily
+                ? 'Family Verification Conflict'
+                : 'Single Admission Verification Conflict',
+
+            fields
+          }
+        ],
+
+        '<i class="bi bi-exclamation-triangle-fill text-danger me-1"></i> Verification Number Already in Use',
+
+        {
+          subtitle:
+            'Update was blocked. The typed verification number is still in the field so you can correct it.',
+
+          showForwardButton: false,
+          bodyTitle: 'Conflict Details'
+        }
+      );
+
+      return true;
+    }
+
+    document.addEventListener('input', function (event) {
+      if (
+        event.target &&
+        event.target.matches(
+          '.js-family-verification-input'
+        )
+      ) {
+        clearVerificationDuplicateState();
+      }
+    });
 
     function getStudentName(form, index) {
       return form.querySelector('[name="student"]')?.value || ('Admission ' + (index + 1));
@@ -3068,6 +3334,12 @@ function showUpdateModal(items, titleText, options = {}) {
             nextUrl.pathname + nextUrl.search + nextUrl.hash
           );
         } catch (err) {
+          if (
+            showDuplicateVerificationConflict(err)
+          ) {
+            return;
+          }
+
           showUpdateModal(
             [
               {
@@ -3345,14 +3617,40 @@ function showUpdateModal(items, titleText, options = {}) {
         );
 
       if (shouldReturnToDashboard) {
-        window.location.href =
+        const redirectUrl =
           firstResponseData?.redirectUrl ||
           editForwardContext.dashboardReturnUrl ||
           '/dashboard';
+
+        if (
+          window.IVSLoader &&
+          typeof window.IVSLoader.navigate === 'function'
+        ) {
+          window.IVSLoader.navigate(
+            redirectUrl
+          );
+        } else {
+          window.location.assign(
+            redirectUrl
+          );
+        }
+
         return;
       }
 
-      window.location.reload();
+      if (
+        window.IVSLoader &&
+        typeof window.IVSLoader.navigate === 'function'
+      ) {
+        window.IVSLoader.navigate(
+          window.location.href,
+          {
+            replace: true
+          }
+        );
+      } else {
+        window.location.reload();
+      }
     } catch (err) {
       alert(err.message || 'Admission forward failed.');
     } finally {
@@ -4999,4 +5297,330 @@ const boxes = Array.from(scope.querySelectorAll('.field-box'));
   }
 })();
 </script>
+<script>
+(function () {
+  const cancelLinks = Array.from(
+    document.querySelectorAll(
+      '.js-edit-page-cancel-link'
+    )
+  );
+
+  if (!cancelLinks.length) {
+    return;
+  }
+
+  const RETURN_NAVIGATION_HOLD_MS = 650;
+  let returnNavigationStarted = false;
+
+  function isDashboardPath(pathname) {
+    const cleanPath =
+      String(pathname || '').trim();
+
+    if (cleanPath === '/dashboard') {
+      return true;
+    }
+
+    if (!cleanPath.startsWith('/dashboard/')) {
+      return false;
+    }
+
+    const isNestedDashboardPage =
+      cleanPath.includes('/admission/') ||
+      cleanPath.includes('/fee-collection') ||
+      cleanPath.includes('/files');
+
+    return !isNestedDashboardPage;
+  }
+
+  function isAdmissionDetailsPath(pathname) {
+    const cleanPath =
+      String(pathname || '').trim();
+
+    return /^\/dashboard\/admission\/[^/]+\/?$/
+      .test(cleanPath);
+  }
+
+  function getSafeInternalUrl(rawUrl) {
+    const cleanUrl =
+      String(rawUrl || '').trim();
+
+    if (!cleanUrl) {
+      return '';
+    }
+
+    try {
+      const targetUrl =
+        new URL(
+          cleanUrl,
+          window.location.origin
+        );
+
+      if (
+        targetUrl.origin !==
+        window.location.origin
+      ) {
+        return '';
+      }
+
+      return (
+        targetUrl.pathname +
+        targetUrl.search +
+        targetUrl.hash
+      );
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function getSafeReturnUrl() {
+    const params =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    const rawReturnTo =
+      String(
+        params.get('returnTo') || ''
+      ).trim();
+
+    if (!rawReturnTo) {
+      return '';
+    }
+
+    try {
+      const targetUrl =
+        new URL(
+          rawReturnTo,
+          window.location.origin
+        );
+
+      const isSafe =
+        targetUrl.origin ===
+          window.location.origin &&
+        isDashboardPath(
+          targetUrl.pathname
+        );
+
+      if (!isSafe) {
+        return '';
+      }
+
+      return (
+        targetUrl.pathname +
+        targetUrl.search +
+        targetUrl.hash
+      );
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function addReturnToToInternalUrl(
+    rawUrl,
+    returnUrl
+  ) {
+    const safeTarget =
+      getSafeInternalUrl(rawUrl);
+
+    if (!safeTarget || !returnUrl) {
+      return safeTarget;
+    }
+
+    try {
+      const targetUrl =
+        new URL(
+          safeTarget,
+          window.location.origin
+        );
+
+      targetUrl.searchParams.set(
+        'returnTo',
+        returnUrl
+      );
+
+      return (
+        targetUrl.pathname +
+        targetUrl.search +
+        targetUrl.hash
+      );
+    } catch (error) {
+      return safeTarget;
+    }
+  }
+
+  function navigateWithLoader(targetUrl) {
+    const target =
+      String(targetUrl || '').trim();
+
+    if (!target) {
+      return false;
+    }
+
+    if (
+      window.IVSLoader &&
+      typeof window.IVSLoader.navigate ===
+        'function'
+    ) {
+      return window.IVSLoader.navigate(
+        target
+      );
+    }
+
+    window.location.assign(target);
+    return true;
+  }
+
+  function goBackWithLoader() {
+    if (returnNavigationStarted) {
+      return false;
+    }
+
+    returnNavigationStarted = true;
+
+    if (
+      window.IVSLoader &&
+      typeof window.IVSLoader.show ===
+        'function'
+    ) {
+      window.IVSLoader.show({
+        persist: true
+      });
+
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          setTimeout(function () {
+            window.history.back();
+          }, RETURN_NAVIGATION_HOLD_MS);
+        });
+      });
+
+      return true;
+    }
+
+    window.history.back();
+    return true;
+  }
+
+  const safeReturnUrl =
+    getSafeReturnUrl();
+
+  const originalFallbackUrl =
+    getSafeInternalUrl(
+      cancelLinks[0].getAttribute('href') || ''
+    ) ||
+    '/dashboard';
+
+  let originalFallbackIsDetails = false;
+
+  try {
+    originalFallbackIsDetails =
+      isAdmissionDetailsPath(
+        new URL(
+          originalFallbackUrl,
+          window.location.origin
+        ).pathname
+      );
+  } catch (error) {
+    originalFallbackIsDetails = false;
+  }
+
+  const detailsFallbackUrl =
+    originalFallbackIsDetails
+      ? addReturnToToInternalUrl(
+          originalFallbackUrl,
+          safeReturnUrl
+        )
+      : '';
+
+  let cameFromDashboard = false;
+  let cameFromDetails = false;
+
+  if (document.referrer) {
+    try {
+      const previousUrl =
+        new URL(document.referrer);
+
+      if (
+        previousUrl.origin ===
+        window.location.origin
+      ) {
+        cameFromDashboard =
+          isDashboardPath(
+            previousUrl.pathname
+          );
+
+        cameFromDetails =
+          isAdmissionDetailsPath(
+            previousUrl.pathname
+          );
+      }
+    } catch (error) {
+      cameFromDashboard = false;
+      cameFromDetails = false;
+    }
+  }
+
+  /*
+   * Direct Dashboard → Edit flow mein Cancel ka
+   * fallback original dashboard returnTo hoga.
+   *
+   * Details → Edit flow mein Cancel ka fallback
+   * Details URL hoga aur us Details URL ke andar
+   * original dashboard returnTo preserve rahega.
+   */
+  const preferredFallbackUrl =
+    cameFromDetails &&
+    detailsFallbackUrl
+      ? detailsFallbackUrl
+      : (
+          safeReturnUrl ||
+          originalFallbackUrl
+        );
+
+  cancelLinks.forEach(function (link) {
+    link.setAttribute(
+      'href',
+      preferredFallbackUrl
+    );
+  });
+
+  cancelLinks.forEach(function (link) {
+    link.addEventListener(
+      'click',
+      function (event) {
+        const fallbackUrl =
+          String(
+            link.getAttribute('href') || ''
+          ).trim();
+
+        /*
+         * Direct Dashboard → Edit aur
+         * Details → Edit dono normal history flows
+         * browser Back se exact previous page restore
+         * karenge. History unavailable ho to safe
+         * fallback URL use hoga.
+         */
+        if (
+          window.history.length > 1 &&
+          (
+            cameFromDashboard ||
+            cameFromDetails
+          )
+        ) {
+          event.preventDefault();
+          goBackWithLoader();
+          return;
+        }
+
+        event.preventDefault();
+
+        navigateWithLoader(
+          fallbackUrl
+        );
+      }
+    );
+  });
+})();
+</script>
+
 <%- include('partials/bootstrap-footer') %>

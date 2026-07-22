@@ -1106,7 +1106,333 @@ function canSubmitAdmissionField(
     columnKey
   );
 }
+const VERIFICATION_DUPLICATE_INPUT_SELECTOR = [
+  'input[name="verificationNumber"]',
+  'input[name="verification_number"]',
+  'input[name="accounts_verification_number"]',
+  'input[name="verificationNumber2"]',
+  'input[name="secondVerificationNumber"]',
+  'input[name="accounts_verification_number_2"]',
+  'input[id^="bill_verif_"]'
+].join(",");
 
+function splitVerificationConflictTokens(value) {
+  return String(value || "")
+    .split("+")
+    .map((part) =>
+      String(part || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+    )
+    .filter(Boolean);
+}
+
+function getVerificationInputsForForm(form) {
+  if (!form) return [];
+
+  return Array.from(
+    document.querySelectorAll(
+      VERIFICATION_DUPLICATE_INPUT_SELECTOR
+    )
+  ).filter((input) => {
+    return input.form === form || form.contains(input);
+  });
+}
+
+function ensureVerificationConflictStyle() {
+  if (
+    document.getElementById(
+      "admissionsVerificationConflictStyle"
+    )
+  ) {
+    return;
+  }
+
+  const style = document.createElement("style");
+
+  style.id =
+    "admissionsVerificationConflictStyle";
+
+  style.textContent = `
+    .admissions-verification-duplicate-input,
+    .admissions-verification-duplicate-input:focus{
+      border-color:#dc2626!important;
+      background:#fff7f7!important;
+      box-shadow:0 0 0 3px rgba(220,38,38,.14)!important
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function clearAdmissionsVerificationDuplicateState() {
+  document
+    .querySelectorAll(
+      ".admissions-verification-duplicate-input"
+    )
+    .forEach((input) => {
+      input.classList.remove(
+        "admissions-verification-duplicate-input"
+      );
+
+      input.removeAttribute(
+        "aria-invalid"
+      );
+    });
+}
+
+function showAdmissionsDuplicateVerificationConflict(
+  errorOrData,
+  candidateInputs = []
+) {
+  const responseData =
+    errorOrData?.responseData &&
+    typeof errorOrData.responseData === "object"
+      ? errorOrData.responseData
+      : (
+          errorOrData &&
+          typeof errorOrData === "object"
+            ? errorOrData
+            : {}
+        );
+
+  const detail =
+    responseData.duplicateVerification &&
+    typeof responseData.duplicateVerification === "object"
+      ? responseData.duplicateVerification
+      : {};
+
+  const code = String(
+    responseData.code ||
+    detail.code ||
+    ""
+  ).trim();
+
+  const field = String(
+    responseData.field ||
+    detail.field ||
+    ""
+  ).trim();
+
+  if (
+    code !== "DUPLICATE_VERIFICATION_NUMBER" &&
+    field !== "verificationNumber"
+  ) {
+    return false;
+  }
+
+  ensureVerificationConflictStyle();
+  clearAdmissionsVerificationDuplicateState();
+
+  const admissions =
+    Array.isArray(responseData.admissions)
+      ? responseData.admissions
+      : (
+          Array.isArray(detail.admissions)
+            ? detail.admissions
+            : []
+        );
+
+  const isFamily =
+    responseData.isFamily === true ||
+    detail.isFamily === true ||
+    String(
+      responseData.duplicateType ||
+      detail.duplicateType ||
+      ""
+    ).trim() === "family" ||
+    admissions.length > 1;
+
+  const familyNumber = String(
+    responseData.familyNumber ||
+    detail.familyNumber ||
+    ""
+  ).trim();
+
+  const matchedNumber = String(
+    detail.matchedVerificationNumber ||
+    detail.submittedVerificationNumber ||
+    ""
+  ).trim();
+
+  const matchedToken =
+    splitVerificationConflictTokens(
+      matchedNumber
+    )[0] || "";
+
+  const inputs =
+    Array.from(
+      candidateInputs || []
+    ).filter(Boolean);
+
+  let firstInput = null;
+
+  inputs.forEach((input) => {
+    const inputTokens =
+      splitVerificationConflictTokens(
+        input.value
+      );
+
+    if (
+      matchedToken &&
+      !inputTokens.includes(
+        matchedToken
+      )
+    ) {
+      return;
+    }
+
+    input.classList.add(
+      "admissions-verification-duplicate-input"
+    );
+
+    input.setAttribute(
+      "aria-invalid",
+      "true"
+    );
+
+    if (!firstInput) {
+      firstInput = input;
+    }
+  });
+
+  if (!firstInput) {
+    firstInput =
+      inputs.find(
+        (input) => !input.disabled
+      ) || null;
+
+    if (firstInput) {
+      firstInput.classList.add(
+        "admissions-verification-duplicate-input"
+      );
+
+      firstInput.setAttribute(
+        "aria-invalid",
+        "true"
+      );
+    }
+  }
+
+  firstInput?.scrollIntoView({
+    behavior: "smooth",
+    block: "center"
+  });
+
+  const familyLabel =
+    familyNumber
+      ? `Family #${familyNumber}`
+      : (
+          isFamily
+            ? "Auto-matched family (Family Number not assigned)"
+            : ""
+        );
+
+  const admissionDetails =
+    admissions.map((admission) => {
+      const studentName = String(
+        admission?.studentName ||
+        admission?.student_name ||
+        "Unnamed Student"
+      ).trim();
+
+      const admissionId = Number(
+        admission?.admissionId ||
+        admission?.id ||
+        0
+      );
+
+      const entryNumber = String(
+        admission?.entryNumber ||
+        admission?.entry_number ||
+        ""
+      ).trim();
+
+      const entryText =
+        entryNumber &&
+        entryNumber !==
+          String(admissionId || "")
+          ? `, Entry #${entryNumber}`
+          : "";
+
+      return (
+        `${studentName} (` +
+        `${
+          admissionId
+            ? `Admission ID #${admissionId}`
+            : "Admission ID not available"
+        }${entryText})`
+      );
+    }).join(", ");
+
+  const messageParts = [
+    String(
+      responseData.message ||
+      detail.message ||
+      errorOrData?.message ||
+      "This Verification Number is already in use."
+    ).trim(),
+
+    `Verification Number: ${
+      matchedNumber ||
+      "Entered number"
+    }`,
+
+    `Conflict Type: ${
+      isFamily
+        ? "Family"
+        : "Single Admission"
+    }`
+  ];
+
+  if (familyLabel) {
+    messageParts.push(
+      `Family: ${familyLabel}`
+    );
+  }
+
+  if (admissionDetails) {
+    messageParts.push(
+      `${
+        isFamily
+          ? "Students"
+          : "Student"
+      }: ${admissionDetails}`
+    );
+  }
+
+  const finalMessage =
+    messageParts.join(" | ");
+
+  if (
+    typeof window.showUploadFlash ===
+    "function"
+  ) {
+    window.showUploadFlash(
+      "danger",
+      "Verification Number Already in Use",
+      finalMessage
+    );
+  } else {
+    alert(finalMessage);
+  }
+
+  return true;
+}
+
+document.addEventListener(
+  "input",
+  (event) => {
+    if (
+      event.target?.classList?.contains(
+        "admissions-verification-duplicate-input"
+      )
+    ) {
+      clearAdmissionsVerificationDuplicateState();
+    }
+  }
+);
 async function submitRowFormAjax(
   form,
   formIdOverride = ""
@@ -1236,11 +1562,27 @@ async function submitRowFormAjax(
 
     if (parsedJson) {
       if (!res.ok || data.success === false) {
-        throw new Error(data.message || "Row update failed");
+        const rowUpdateError =
+          new Error(
+            data.message ||
+            "Row update failed"
+          );
+
+        rowUpdateError.responseData =
+          data &&
+          typeof data === "object"
+            ? data
+            : {};
+
+        throw rowUpdateError;
       }
     } else if (!res.ok) {
-      throw new Error("Row update failed");
+      throw new Error(
+        "Row update failed"
+      );
     }
+
+    clearAdmissionsVerificationDuplicateState();
 
     const savedAdmissionId =
       data.admissionId ||
@@ -1276,17 +1618,36 @@ setTimeout(() => {
 }, 300);
 
   } catch (err) {
-    console.error("Row update error:", err);
+    console.error(
+      "Row update error:",
+      err
+    );
+
     hideRowSavingOverlay();
+
+    if (
+      showAdmissionsDuplicateVerificationConflict(
+        err,
+        getVerificationInputsForForm(
+          form
+        )
+      )
+    ) {
+      return;
+    }
 
     if (window.showUploadFlash) {
       window.showUploadFlash(
         "danger",
         "Update Failed",
-        err.message || "Record update failed."
+        err.message ||
+        "Record update failed."
       );
     } else {
-      alert(err.message || "Record update failed.");
+      alert(
+        err.message ||
+        "Record update failed."
+      );
     }
   }
 }
@@ -2515,6 +2876,8 @@ const bankInputs = {
 });
 
   function setAllInputsEmpty() {
+    clearAdmissionsVerificationDuplicateState();
+
     Object.keys(inputs).forEach((k) => (inputs[k].value = ""));
     Object.keys(feeInputs).forEach((k) => feeInputs[k] && (feeInputs[k].value = ""));
     Object.keys(verifInputs).forEach((k) => verifInputs[k] && (verifInputs[k].value = ""));
@@ -2815,11 +3178,44 @@ const res = await fetch(`/api/billing/${currentAdmissionId}`, {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.success) {
-        window.showUploadFlash
-          ? window.showUploadFlash("danger", "Save failed", (data && data.message) || "Save failed")
-          : alert((data && data.message) || "Save failed");
+        const billingSaveError =
+          new Error(
+            (data && data.message) ||
+            "Save failed"
+          );
+
+        billingSaveError.responseData =
+          data &&
+          typeof data === "object"
+            ? data
+            : {};
+
+        const duplicateHandled =
+          showAdmissionsDuplicateVerificationConflict(
+            billingSaveError,
+            Object.values(
+              verifInputs
+            ).filter(Boolean)
+          );
+
+        if (!duplicateHandled) {
+          window.showUploadFlash
+            ? window.showUploadFlash(
+                "danger",
+                "Save failed",
+                (data && data.message) ||
+                "Save failed"
+              )
+            : alert(
+                (data && data.message) ||
+                "Save failed"
+              );
+        }
+
         return;
       }
+
+clearAdmissionsVerificationDuplicateState();
 
     window.showUploadFlash
   ? window.showUploadFlash("success", "Saved", "Data has been saved.")
